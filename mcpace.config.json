@@ -1,0 +1,405 @@
+{
+  "name": "mcpace",
+  "version": "0.1.1",
+  "ports": {
+    "abp": 39022,
+    "hub": 12223
+  },
+  "hub": {
+    "containerName": "mcpace",
+    "image": "samanhappy/mcphub:0.12.12"
+  },
+  "abp": {
+    "package": "agent-browser-protocol",
+    "packageArgs": []
+  },
+  "packages": {
+    "mcpRemote": "mcp-remote@0.1.18"
+  },
+  "workspaces": {
+    "primary": {
+      "name": "primary",
+      "hostPath": ".",
+      "access": "rw"
+    },
+    "extras": []
+  },
+  "servers": {
+    "browser": {
+      "kind": "host-bridge",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": true,
+      "requiredCommands": [
+        "npx"
+      ],
+      "healthUrl": "http://127.0.0.1:{abpPort}/api/v1/tabs",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "filesystem": {
+      "kind": "container-stdio",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      },
+      "workspaceBinding": {
+        "defaultCwd": "none",
+        "pathArgs": "allRoots",
+        "isolateHome": false
+      }
+    },
+    "memory": {
+      "kind": "container-stdio",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "sequential-thinking": {
+      "kind": "container-stdio",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "context7": {
+      "kind": "container-stdio",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "lean-ctx": {
+      "kind": "container-stdio",
+      "required": false,
+      "defaultEnabled": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": true,
+        "installTarget": "hub-container",
+        "installMethod": "npm-global",
+        "installPackage": "lean-ctx-bin",
+        "binaryName": "lean-ctx",
+        "verifyCommand": "lean-ctx --version",
+        "postInstallMode": "runtime-enable"
+      },
+      "workspaceBinding": {
+        "defaultCwd": "primary",
+        "pathArgs": "none",
+        "isolateHome": true
+      }
+    },
+    "github": {
+      "kind": "container-stdio",
+      "required": false,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "fetch": {
+      "kind": "container-stdio",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "git": {
+      "kind": "container-stdio",
+      "required": false,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "sentry": {
+      "kind": "remote-http",
+      "required": false,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "https://mcp.sentry.dev/mcp",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "serena": {
+      "kind": "container-stdio",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      },
+      "workspaceBinding": {
+        "defaultCwd": "primary",
+        "pathArgs": "none",
+        "isolateHome": false
+      }
+    },
+    "windows-mcp": {
+      "kind": "host-bridge",
+      "required": false,
+      "platforms": [
+        "windows"
+      ],
+      "autoStart": true,
+      "requiredCommands": [
+        "uvx"
+      ],
+      "healthUrl": "http://127.0.0.1:{hostBridgePort}/mcp",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "screenpipe": {
+      "kind": "container-stdio",
+      "required": false,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "firecrawl": {
+      "kind": "external-http",
+      "required": false,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "https://mcp.firecrawl.dev",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "exa": {
+      "kind": "external-http",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "https://mcp.exa.ai/mcp",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "wireshark-mcp": {
+      "kind": "container-stdio",
+      "required": true,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    }
+  },
+  "client": {
+    "keyName": "codex-local"
+  },
+  "health": {
+    "probeTimeoutSec": 2,
+    "startupTimeoutSec": 60,
+    "offlineThreshold": 2
+  },
+  "platform": {
+    "dockerHostAlias": "host.docker.internal",
+    "windowsOnlyServers": [
+      "windows-mcp"
+    ]
+  },
+  "compatibility": {
+    "sessionGate": {
+      "enabled": true,
+      "streamProbeMs": 0,
+      "idleDelayMs": 1500,
+      "logTailLines": 400
+    }
+  }
+}

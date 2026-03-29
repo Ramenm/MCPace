@@ -1,0 +1,35 @@
+{
+  "includePaths": [
+    ".env.example",
+    "LICENSE",
+    "README.md",
+    "autostart.ps1",
+    "auth.ps1",
+    "backup.ps1",
+    "boot.ps1",
+    "check.ps1",
+    "docs",
+    "install.ps1",
+    "lib",
+    "manager.settings.json",
+    "manager.cmd",
+    "manager.sh",
+    "mcp_settings.json",
+    "mcpace.config.json",
+    "repair.ps1",
+    "reports",
+    "rotate-logs.ps1",
+    "setup-mcp-clients.ps1",
+    "smoke-test.ps1",
+    "verify-manager.ps1",
+    "start.ps1",
+    "validate-readiness.ps1",
+    "windows-mcp-host.ps1"
+  ],
+  "runtimeDirectories": [
+    "backups",
+    "data/runtime",
+    "data/server-state",
+    "logs"
+  ]
+}

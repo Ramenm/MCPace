@@ -1,0 +1,253 @@
+{
+  "mcpServers": {
+    "browser": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@0.1.18",
+        "http://host.docker.internal:39022/mcp",
+        "--allow-http",
+        "--transport",
+        "http-only"
+      ]
+    },
+    "filesystem": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "${MCPACE_PRIMARY_WORKSPACE}"
+      ]
+    },
+    "memory": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory"
+      ]
+    },
+    "sequential-thinking": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking"
+      ]
+    },
+    "context7": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp"
+      ]
+    },
+    "lean-ctx": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "lean-ctx",
+      "args": []
+    },
+    "github": {
+      "enabled": false,
+      "owner": "admin",
+      "oauth": {
+        "accessToken": "",
+        "refreshToken": ""
+      },
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-github"
+      ],
+      "env": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN:-}"
+      }
+    },
+    "fetch": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-fetch"
+      ]
+    },
+    "git": {
+      "enabled": false,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "mcp-server-git",
+        "--repository",
+        "${MCPACE_MANAGER_DATA}/git-repo"
+      ]
+    },
+    "sentry": {
+      "enabled": false,
+      "owner": "admin",
+      "type": "http",
+      "url": "https://mcp.sentry.dev/mcp",
+      "oauth": {
+        "clientId": "92cgjJEPlQMpvcgu",
+        "scopes": [
+          "org:read",
+          "project:write",
+          "team:write",
+          "event:write"
+        ],
+        "accessToken": "",
+        "refreshToken": ""
+      }
+    },
+    "serena": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "initTimeout": 180000,
+      "options": {
+        "timeout": 180000,
+        "resetTimeoutOnProgress": true,
+        "maxTotalTimeout": 300000
+      },
+      "command": "uvx",
+      "args": [
+        "-p",
+        "3.13",
+        "--from",
+        "git+https://github.com/oraios/serena",
+        "serena",
+        "start-mcp-server",
+        "--context",
+        "ide",
+        "--project",
+        "${MCPACE_PRIMARY_WORKSPACE}"
+      ]
+    },
+    "windows-mcp": {
+      "enabled": false,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@0.1.18",
+        "http://host.docker.internal:8233/mcp",
+        "--allow-http",
+        "--transport",
+        "http-only"
+      ]
+    },
+    "screenpipe": {
+      "enabled": false,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "screenpipe-mcp"
+      ]
+    },
+    "firecrawl": {
+      "enabled": false,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@0.1.18",
+        "https://mcp.firecrawl.dev/${FIRECRAWL_API_KEY:-<PUT_FIRECRAWL_API_KEY_HERE>}/v2/mcp",
+        "--transport",
+        "http-only"
+      ]
+    },
+    "exa": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote@0.1.18",
+        "https://mcp.exa.ai/mcp",
+        "--transport",
+        "http-only"
+      ]
+    },
+    "wireshark-mcp": {
+      "enabled": true,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "wireshark-mcp==1.0.0",
+        "--transport",
+        "stdio"
+      ],
+      "env": {
+        "WIRESHARK_MCP_ALLOWED_DIRS": "${WIRESHARK_MCP_ALLOWED_DIRS:-/workspace}"
+      }
+    }
+  },
+  "bearerKeys": [
+    {
+      "id": "a25b514b-dcfd-42f7-a579-0a9431f1f9eb",
+      "name": "codex-local",
+        "token": "${MCPACE_BEARER_TOKEN}",
+      "enabled": true,
+      "accessType": "all",
+      "allowedGroups": [],
+      "allowedServers": []
+    }
+  ],
+  "prompts": [],
+  "resources": [],
+  "systemConfig": {
+    "oauthServer": {
+      "enabled": true,
+      "accessTokenLifetime": 3600,
+      "refreshTokenLifetime": 1209600,
+      "authorizationCodeLifetime": 300,
+      "requireClientSecret": false,
+      "allowedScopes": [
+        "read",
+        "write"
+      ],
+      "requireState": false,
+      "dynamicRegistration": {
+        "enabled": true,
+        "allowedGrantTypes": [
+          "authorization_code",
+          "refresh_token"
+        ],
+        "requiresAuthentication": false
+      }
+    },
+    "install": {
+      "baseUrl": "http://localhost:12223"
+    }
+  },
+  "users": [
+    {
+      "username": "admin",
+      "password": "${MCPACE_ADMIN_PASSWORD_BCRYPT}",
+      "isAdmin": true
+    }
+  ]
+}
