@@ -1,0 +1,15 @@
+{
+  "maintenance": {
+    "logRetentionDays": 14,
+    "backupRetentionCount": 10,
+    "backupDir": "backups"
+  },
+  "autostart": {
+    "taskName": "MCPace Autostart",
+    "enabled": false
+  },
+  "smokeTest": {
+    "timeoutSec": 30
+  }
+}
+
