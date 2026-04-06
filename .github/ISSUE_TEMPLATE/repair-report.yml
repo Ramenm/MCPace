@@ -1,0 +1,38 @@
+name: Repair report
+description: Report a broken repository path, CI failure, or governance drift that needs repair.
+title: "[repair] "
+labels:
+  - repair
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Symptom
+      description: Describe the concrete failure.
+      placeholder: CI job fails; workflow drift; repo check reports missing ignored path
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include the failing command, workflow link, or log pointer.
+      placeholder: pwsh -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Pester -CI -Path ./tests"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: State the expected healthy behavior.
+      placeholder: Repo governance tests pass and generated state stays ignored
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: State what actually happened.
+      placeholder: Repo governance test fails because ...
+    validations:
+      required: true

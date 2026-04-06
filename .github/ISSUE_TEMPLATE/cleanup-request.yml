@@ -1,0 +1,34 @@
+name: Cleanup request
+description: Request explicit repository cleanup, refactor, or deslop work.
+title: "[cleanup] "
+labels:
+  - cleanup
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Cleanup is opt-in. Use this form only when cleanup is explicitly requested and you want that scope tracked separately from normal prepare or repair work.
+  - type: textarea
+    id: scope
+    attributes:
+      label: Cleanup scope
+      description: List the exact files, areas, or patterns that should be cleaned up.
+      placeholder: docs only; repo governance files; workflow duplication; unused scripts
+    validations:
+      required: true
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: State what must not be changed during cleanup.
+      placeholder: no behavior changes; no CI matrix expansion; no runtime contract changes
+    validations:
+      required: true
+  - type: textarea
+    id: approval
+    attributes:
+      label: Explicit approval
+      description: Paste or restate the explicit user request that authorizes cleanup.
+      placeholder: User explicitly requested cleanup of ...
+    validations:
+      required: true
