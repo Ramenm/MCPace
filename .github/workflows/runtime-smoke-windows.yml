@@ -1,0 +1,30 @@
+name: runtime-smoke-windows
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      MCPACE_BEARER_TOKEN: ci-placeholder-token
+      MCPACE_ADMIN_PASSWORD_BCRYPT: $2b$10$1hLtpWUfeMNXxJBW9KWeneA5OClk.HQy5a1z/PHIcX0l6094xgrKq
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show docker version
+        shell: pwsh
+        run: docker version
+
+      - name: Run verification harness
+        shell: pwsh
+        run: ./verify-manager.ps1 -Profile ci-runtime -JsonOutputPath reports/verification-windows.json -MarkdownOutputPath reports/verification-windows.md
+
+      - name: Upload verification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-windows
+          path: |
+            reports/verification-windows.json
+            reports/verification-windows.md

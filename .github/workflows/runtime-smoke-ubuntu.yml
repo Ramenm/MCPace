@@ -1,0 +1,28 @@
+name: runtime-smoke-ubuntu
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      MCPACE_BEARER_TOKEN: ci-placeholder-token
+      MCPACE_ADMIN_PASSWORD_BCRYPT: $2b$10$1hLtpWUfeMNXxJBW9KWeneA5OClk.HQy5a1z/PHIcX0l6094xgrKq
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show docker version
+        run: docker version
+
+      - name: Run verification harness
+        run: sh ./manager.sh verify -Profile ci-runtime -JsonOutputPath reports/verification-ubuntu.json -MarkdownOutputPath reports/verification-ubuntu.md
+
+      - name: Upload verification artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-ubuntu
+          path: |
+            reports/verification-ubuntu.json
+            reports/verification-ubuntu.md
