@@ -1,0 +1,761 @@
+{
+  "schemaVersion": "1.0",
+  "generatedAt": "2026-04-12T07:48:52.5576933+03:00",
+  "profile": "standard",
+  "overallVerdict": "pass",
+  "environment": {
+    "os": "Microsoft Windows 10.0.26200",
+    "pwsh": "7.6.0",
+    "node": "v24.14.1",
+    "dockerReady": true
+  },
+  "counts": {
+    "pass": 47,
+    "fail": 0,
+    "warn": 0,
+    "not-proven": 0,
+    "skipped": 2,
+    "not-applicable": 0
+  },
+  "results": [
+    {
+      "scenarioId": "source/pester-suite",
+      "phase": "source",
+      "scope": "current-host",
+      "preconditions": "PowerShell 7",
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -Command \"Invoke-Pester -CI -Path ./tests\"",
+      "expected": "Repository source suite passes without introducing new regressions.",
+      "actual": "exit=0; \u001b[95m\n\u001b[95mStarting discovery in 7 files.\u001b[0m\r\n\u001b[95mDiscovery found 21 tests in 445ms.\u001b[0m\r\n\u001b[95mRunning tests.\u001b[0m\r\n\u001b[32m[+] C:\\mcpace\\tests\\EffectiveSettingsContract.Tests.ps1\u001b[0m\u001b[90m 4.64s (3.79s|613ms)\u001b[0m\r\n\u001b[32m[+] C:\\mcpace\\tests\\LocalOverrides.Tests...",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 56557
+    },
+    {
+      "scenarioId": "bootstrap/windows-direct-check",
+      "phase": "bootstrap",
+      "scope": "windows-current-host",
+      "preconditions": [
+        "Windows host",
+        "PowerShell 7 installed"
+      ],
+      "command": "pwsh -NoProfile -File .\\check.ps1",
+      "expected": "Direct script execution is deterministic; execution-policy failure is recorded as a blocker.",
+      "actual": "exit=0; ABP:     RUNNING PID 19588, up 4m, endpoint reachable\r\nMCPace:  HEALTHY required path ready, servers 8/8, up 2m\r\nABP endpoint: reachable\r\nABP port owner: abp (19588)\r\nManager root: C:\\mcpace\r\nPrimary workspace: primary | host=C:\\mcpace | access=rw\r\n  contai...",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 15947
+    },
+    {
+      "scenarioId": "bootstrap/windows-bypass-check",
+      "phase": "bootstrap",
+      "scope": "windows-current-host",
+      "preconditions": [
+        "Windows host",
+        "PowerShell 7 installed"
+      ],
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\check.ps1",
+      "expected": "Bypass bootstrap path succeeds and reaches a usable stack inspection path.",
+      "actual": "exit=0; ABP:     RUNNING PID 19588, up 4m, endpoint reachable\r\nMCPace:  HEALTHY required path ready, servers 8/8, up 2m\r\nABP endpoint: reachable\r\nABP port owner: abp (19588)\r\nManager root: C:\\mcpace\r\nPrimary workspace: primary | host=C:\\mcpace | access=rw\r\n  contai...",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 14278
+    },
+    {
+      "scenarioId": "bootstrap/missing-docker",
+      "phase": "bootstrap",
+      "scope": "current-host",
+      "preconditions": "PowerShell 7 installed",
+      "command": "Assert-Prerequisites with docker hidden from PATH",
+      "expected": "Missing Docker produces a deterministic prerequisite error.",
+      "actual": "exit=0; Required command is missing: docker",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 3537
+    },
+    {
+      "scenarioId": "bootstrap/missing-node",
+      "phase": "bootstrap",
+      "scope": "current-host",
+      "preconditions": "PowerShell 7 installed",
+      "command": "Assert-Prerequisites with node hidden from PATH",
+      "expected": "Missing Node.js produces a deterministic prerequisite error.",
+      "actual": "exit=0; Required command is missing: node",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 5886
+    },
+    {
+      "scenarioId": "bootstrap/non-pwsh-shell",
+      "phase": "bootstrap",
+      "scope": "windows-current-host",
+      "preconditions": [
+        "Windows host",
+        "Windows PowerShell 5.1 available"
+      ],
+      "command": "powershell.exe -NoProfile -File .\\boot.ps1",
+      "expected": "Unsupported shell fails deterministically instead of hanging.",
+      "actual": "exit=1; �� 㤠���� �믮����� �業�਩ \"boot.ps1\", ⠪ ��� �� ᮤ�ন� ������ \"#requires\" ��� Windows PowerShell 7.0. ����室�\r\n��� ��� �믮������ �業��� ����� Windows PowerShell �� ᮮ⢥����� ⥪�饩 ���ᨨ Windows PowerShell 5.1.26100.7920\r\n.\r\n    + CategoryInfo          : ResourceUnavailabl...",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 1989
+    },
+    {
+      "scenarioId": "lifecycle/boot-idempotent",
+      "phase": "lifecycle",
+      "scope": "current-host",
+      "preconditions": [
+        "Docker ready",
+        "Node.js 18+",
+        "PowerShell 7"
+      ],
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\boot.ps1",
+      "expected": "Boot path succeeds when rerun and does not leave the stack half-broken.",
+      "actual": "exit=0; Boot start completed. Services are ready.",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 13430
+    },
+    {
+      "scenarioId": "lifecycle/check",
+      "phase": "lifecycle",
+      "scope": "current-host",
+      "preconditions": "Stack booted",
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\check.ps1",
+      "expected": "Check path exits 0 only when ABP and MCPace required path are ready.",
+      "actual": "exit=0; ABP:     RUNNING PID 19588, up 5m, endpoint reachable\r\nMCPace:  HEALTHY required path ready, servers 8/8, up 2m\r\nABP endpoint: reachable\r\nABP port owner: abp (19588)\r\nManager root: C:\\mcpace\r\nPrimary workspace: primary | host=C:\\mcpace | access=rw\r\n  contai...",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 14196
+    },
+    {
+      "scenarioId": "lifecycle/smoke",
+      "phase": "lifecycle",
+      "scope": "current-host",
+      "preconditions": [
+        "Stack booted",
+        "Valid bearer token"
+      ],
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\smoke-test.ps1",
+      "expected": "Smoke path validates MCP initialize/repeat/reconnect against the public endpoint.",
+      "actual": "exit=0; Smoke test passed. health=healthy, servers=16, tools=95, repeat-tools=95, reconnect-tools=95, resources=5, templates=0.\r\nSession: 7a03efb3-8d6e-44f2-8d66-4cbc3aef7b52",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 6971
+    },
+    {
+      "scenarioId": "lifecycle/readiness",
+      "phase": "lifecycle",
+      "scope": "current-host",
+      "preconditions": [
+        "Stack booted",
+        "Docker ready",
+        "Node.js 18+",
+        "PowerShell 7"
+      ],
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\validate-readiness.ps1",
+      "expected": "Readiness path validates live stack, portability, and Docker mount policy within the configured budget.",
+      "actual": "exit=0; ==> Checking current manager root completeness\r\n==> Running live regression suite on current manager root\r\n==> Creating external multi-root validation environment\r\n==> Checking workspace-aware effective settings\r\n==> Running portability suite in external ma...",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 115581
+    },
+    {
+      "scenarioId": "portable-layout/current-root",
+      "phase": "readiness",
+      "scope": "current-host",
+      "preconditions": "Current manager root",
+      "command": "validate-readiness.ps1 internal portable-layout check",
+      "expected": "Current manager root contains the required portable layout.",
+      "actual": "required files are present",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "live-regression/boot",
+      "phase": "readiness",
+      "scope": "current-host",
+      "preconditions": "Current manager root complete",
+      "command": "validate-readiness.ps1 internal live regression boot step",
+      "expected": "Live stack boot reaches ready state.",
+      "actual": "ABP and MCPace are ready",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "live-regression/check",
+      "phase": "readiness",
+      "scope": "current-host",
+      "preconditions": "Live regression boot passed",
+      "command": "validate-readiness.ps1 internal live regression required-path check",
+      "expected": "Current required path is ready.",
+      "actual": "required path is ready",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "live-regression/smoke",
+      "phase": "readiness",
+      "scope": "current-host",
+      "preconditions": "Live regression check passed",
+      "command": "validate-readiness.ps1 internal live regression smoke step",
+      "expected": "Current live smoke step passes.",
+      "actual": "Smoke test passed. health=healthy, servers=16, tools=115, repeat-tools=115, reconnect-tools=115, resources=6, templates=0.",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "portability/copy-manager-root",
+      "phase": "readiness",
+      "scope": "isolated-manager-root",
+      "preconditions": "Validation temp root created",
+      "command": "validate-readiness.ps1 internal manager root copy step",
+      "expected": "Portable manager root copies successfully into an isolated environment.",
+      "actual": "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-20260412073651-12ce01b2\\manager",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "portability/workspace-registry",
+      "phase": "readiness",
+      "scope": "isolated-manager-root",
+      "preconditions": "Copied manager root",
+      "command": "validate-readiness.ps1 internal workspace registry step",
+      "expected": "External primary and read-only extra workspaces resolve correctly.",
+      "actual": "external primary and ro extra resolved correctly",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "compatibility/effective-settings",
+      "phase": "readiness",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "Isolated effective settings generated"
+      ],
+      "command": "validate-readiness.ps1 internal workspace-aware effective settings step",
+      "expected": "Filesystem, serena, lean-ctx, and git transforms remain correct.",
+      "actual": "filesystem, serena, lean-ctx and git transforms are correct",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "portability/boot",
+      "phase": "readiness",
+      "scope": "isolated-manager-root",
+      "preconditions": "Copied manager root",
+      "command": "validate-readiness.ps1 internal isolated boot step",
+      "expected": "Isolated ABP and MCPace are ready.",
+      "actual": "temporary ABP and MCPace are ready",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "portability/check",
+      "phase": "readiness",
+      "scope": "isolated-manager-root",
+      "preconditions": "Isolated boot passed",
+      "command": "validate-readiness.ps1 internal isolated required-path check",
+      "expected": "Isolated required path is ready.",
+      "actual": "temporary required path is ready",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "portability/smoke",
+      "phase": "readiness",
+      "scope": "isolated-manager-root",
+      "preconditions": "Isolated required path ready",
+      "command": "validate-readiness.ps1 internal isolated smoke step",
+      "expected": "Isolated smoke step passes.",
+      "actual": "Smoke test passed. health=degraded, servers=16, tools=95, repeat-tools=95, reconnect-tools=95, resources=5, templates=0.",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "policy/rw-mount",
+      "phase": "readiness",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "Docker ready"
+      ],
+      "command": "validate-readiness.ps1 internal read-write mount probe",
+      "expected": "Docker read-write mount permits host file writes.",
+      "actual": "host file write succeeded",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "policy/ro-mount",
+      "phase": "readiness",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "Docker ready"
+      ],
+      "command": "validate-readiness.ps1 internal read-only mount probe",
+      "expected": "Docker read-only mount blocks writes with a read-only filesystem error.",
+      "actual": "docker blocked writes to read-only workspace",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-readiness-results-67e91562fb72466aa355358312861b76.json"
+      ],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "clients/launcher-config",
+      "phase": "clients",
+      "scope": "current-host",
+      "preconditions": [
+        "PowerShell 7",
+        "Client launcher generated"
+      ],
+      "command": "Get-ClientConfigJson / Write-ClientLauncher",
+      "expected": "Generic launcher-first config references only mcpace.cmd or mcpace.sh with no direct upstream server endpoints.",
+      "actual": "command=C:\\mcpace\\mcpace.cmd; args=0",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "clients/editor-profile",
+      "phase": "clients",
+      "scope": "current-host",
+      "preconditions": "PowerShell 7",
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\setup-mcp-clients.ps1 -Overwrite",
+      "expected": "Generated editor profile references only the launcher surface.",
+      "actual": "command=C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-verify-140b990f2e4d42f085c2e49c3235559a\\manager\\mcpace.cmd; args=0",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-verify-140b990f2e4d42f085c2e49c3235559a\\manager\\.vscode\\mcp.json"
+      ],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 9135
+    },
+    {
+      "scenarioId": "clients/api-health",
+      "phase": "clients",
+      "scope": "current-host",
+      "preconditions": "Stack booted",
+      "command": "GET /health",
+      "expected": "Health endpoint returns 200 and a supported health status.",
+      "actual": "status=200; health=healthy",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "clients/api-servers",
+      "phase": "clients",
+      "scope": "current-host",
+      "preconditions": [
+        "Stack booted",
+        "Valid bearer token"
+      ],
+      "command": "Authenticated GET /api/servers",
+      "expected": "Authenticated server listing succeeds and returns an array-backed data envelope.",
+      "actual": "server-count=16",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "clients/mcp-session",
+      "phase": "clients",
+      "scope": "current-host",
+      "preconditions": [
+        "Stack booted",
+        "Valid bearer token"
+      ],
+      "command": "Authenticated MCP initialize + notifications/initialized + tools/list + resources/list + reconnect",
+      "expected": "MCP session handshake, repeat request, and reconnect all succeed without session corruption.",
+      "actual": "Smoke test passed. health=healthy, servers=16, tools=95, repeat-tools=95, reconnect-tools=95, resources=5, templates=0.",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "servers/required-path",
+      "phase": "servers",
+      "scope": "current-host",
+      "preconditions": "Stack booted",
+      "command": "Get-HubServerStatuses + Get-RequiredServerConnectivity + Get-ABPState",
+      "expected": "Every required server is effectiveEnabled and connected; the browser path is reachable on the host.",
+      "actual": "abp=running; connected=filesystem,memory,sequential-thinking,context7,fetch,serena,exa,wireshark-mcp; missing=none",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "servers/optional-default-disabled",
+      "phase": "servers",
+      "scope": "current-host",
+      "preconditions": "Context generated",
+      "command": "Inspect optional server runtime entries with source defaults",
+      "expected": "Default-disabled optional servers remain explained, stable, and correctly gated.",
+      "actual": "count=6; problematic=none",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "medium",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "servers/optional-source-enabled",
+      "phase": "servers",
+      "scope": "current-host",
+      "preconditions": "Context generated",
+      "command": "Inspect optional source-enabled server runtime entries",
+      "expected": "Source-enabled optional servers remain observable with correct configured/effective state and disabled reasons when locally overridden.",
+      "actual": "entries=lean-ctx:True/True",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "medium",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "servers/optional-user-enabled/github",
+      "phase": "servers",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "User-style enable override applied"
+      ],
+      "command": "Enable optional server 'github' in isolated runtime context and verify live connection or explicit runtime gating.",
+      "expected": "If prerequisites and credentials exist, server 'github' reaches a live connected state; otherwise configuredEnabled remains true and runtime gating is explicit.",
+      "actual": "effectiveEnabled=True; status=connected",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 101654
+    },
+    {
+      "scenarioId": "servers/optional-user-enabled/git",
+      "phase": "servers",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "User-style enable override applied"
+      ],
+      "command": "Enable optional server 'git' in isolated runtime context and verify live connection or explicit runtime gating.",
+      "expected": "If prerequisites and credentials exist, server 'git' reaches a live connected state; otherwise configuredEnabled remains true and runtime gating is explicit.",
+      "actual": "effectiveEnabled=True; status=connected",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 33871
+    },
+    {
+      "scenarioId": "servers/optional-user-enabled/sentry",
+      "phase": "servers",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "User-style enable override applied"
+      ],
+      "command": "Enable optional server 'sentry' in isolated runtime context and verify live connection or explicit runtime gating.",
+      "expected": "If prerequisites and credentials exist, server 'sentry' reaches a live connected state; otherwise configuredEnabled remains true and runtime gating is explicit.",
+      "actual": "runtime-gated: oauth approval or tokens are required before the server can be enabled",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "servers/optional-user-enabled/windows-mcp",
+      "phase": "servers",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "User-style enable override applied"
+      ],
+      "command": "Enable optional server 'windows-mcp' in isolated runtime context and verify live connection or explicit runtime gating.",
+      "expected": "If prerequisites and credentials exist, server 'windows-mcp' reaches a live connected state; otherwise configuredEnabled remains true and runtime gating is explicit.",
+      "actual": "runtime-gated: MCP endpoint probe failed: Подключение не установлено, т.к. конечный компьютер отверг запрос на подключение. (127.0.0.1:8233)",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "servers/optional-user-enabled/screenpipe",
+      "phase": "servers",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "User-style enable override applied"
+      ],
+      "command": "Enable optional server 'screenpipe' in isolated runtime context and verify live connection or explicit runtime gating.",
+      "expected": "If prerequisites and credentials exist, server 'screenpipe' reaches a live connected state; otherwise configuredEnabled remains true and runtime gating is explicit.",
+      "actual": "effectiveEnabled=True; status=connected",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 33440
+    },
+    {
+      "scenarioId": "servers/optional-user-enabled/firecrawl",
+      "phase": "servers",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "User-style enable override applied"
+      ],
+      "command": "Enable optional server 'firecrawl' in isolated runtime context and verify live connection or explicit runtime gating.",
+      "expected": "If prerequisites and credentials exist, server 'firecrawl' reaches a live connected state; otherwise configuredEnabled remains true and runtime gating is explicit.",
+      "actual": "runtime-gated: required placeholder value is missing",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "persistence/auth-bootstrap",
+      "phase": "persistence",
+      "scope": "temp-state-root",
+      "preconditions": "Auth env vars cleared",
+      "command": "New-McpAceContext on temp state root",
+      "expected": "Local auth state bootstraps automatically when env auth is absent.",
+      "actual": "authState=C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-verify-persistence-9305041213764326b35e5f9977ca865e\\data\\server-state\\auth-state.json; bearerSource=bootstrap; adminSource=bootstrap",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "persistence/env-override",
+      "phase": "persistence",
+      "scope": "temp-state-root",
+      "preconditions": [
+        "Temp state root",
+        "Bearer env override set"
+      ],
+      "command": "New-McpAceContext with MCPACE_BEARER_TOKEN override",
+      "expected": "Environment override wins over local bootstrap auth without mutating repo-local runtime state.",
+      "actual": "tokenSource=env; token=verification-bearer-token",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "persistence/effective-array-shape",
+      "phase": "persistence",
+      "scope": "temp-state-root",
+      "preconditions": "Temp state root",
+      "command": "Generate effective settings and inspect array-backed fields",
+      "expected": "Generated effective settings preserve required arrays and workspace-aware transforms.",
+      "actual": "bearerKeys=1; users=1; browserArgs=6",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "blocker",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "persistence/backup",
+      "phase": "persistence",
+      "scope": "temp-state-root",
+      "preconditions": "Temp state root",
+      "command": "New-DataBackup",
+      "expected": "Backup archive is created and retention policy remains bounded.",
+      "actual": "backup=C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-verify-persistence-9305041213764326b35e5f9977ca865e\\backups\\mcpace-data-20260412-074415.zip; purged=0",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-verify-persistence-9305041213764326b35e5f9977ca865e\\backups\\mcpace-data-20260412-074415.zip"
+      ],
+      "verdict": "pass",
+      "severity": "medium",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "destructive/temp-auth-reset",
+      "phase": "destructive",
+      "scope": "temp-state-root",
+      "preconditions": [
+        "Temp state root",
+        "Non-destructive scenarios passed"
+      ],
+      "command": "Reset-LocalAuthState in temp runtime context",
+      "expected": "Auth reset changes auth material and the next context remains readable.",
+      "actual": "tokenChanged=True",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "persistence/local-overrides",
+      "phase": "persistence",
+      "scope": "temp-state-root",
+      "preconditions": "Temp state root",
+      "command": "Write and reload local server overrides",
+      "expected": "Configured enablement intent survives restarts through local overrides.",
+      "actual": "configured=True; source=local-override; effective=False",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "persistence/release-bundle",
+      "phase": "persistence",
+      "scope": "current-host",
+      "preconditions": "PowerShell 7",
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\build-release.ps1 -OutputDir <temp>",
+      "expected": "Portable release bundle is built from manifest-tracked source without runtime state leakage.",
+      "actual": "exit=0; Created release bundle: C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-verify-release-90af93294d75489aa7135222ea02a0aa\\mcpace-0.1.1.zip\r\nVersion: 0.1.1",
+      "artifacts": [
+        "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-verify-release-90af93294d75489aa7135222ea02a0aa\\mcpace-0.1.1.zip"
+      ],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 3409
+    },
+    {
+      "scenarioId": "destructive/temp-reset-hub-data",
+      "phase": "destructive",
+      "scope": "isolated-manager-root",
+      "preconditions": [
+        "Copied manager root",
+        "Isolated stack booted"
+      ],
+      "command": "pwsh -NoProfile -ExecutionPolicy Bypass -File .\\repair.ps1 -ResetHubData",
+      "expected": "Destructive repair on isolated manager root returns the stack to a healthy readable state.",
+      "actual": "repair=exit=0; True\r\nRepair completed. Both services are ready.; missing=none",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "high",
+      "durationMs": 212710
+    },
+    {
+      "scenarioId": "destructive/live-auth-reset",
+      "phase": "misc",
+      "scope": "current-host",
+      "preconditions": null,
+      "command": "",
+      "expected": "",
+      "actual": "Live destructive scenarios are disabled for standard and ci-runtime profiles.",
+      "artifacts": [],
+      "verdict": "skipped",
+      "severity": "medium",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "destructive/live-reset-hub-data",
+      "phase": "misc",
+      "scope": "current-host",
+      "preconditions": null,
+      "command": "",
+      "expected": "",
+      "actual": "Live destructive scenarios are disabled for standard and ci-runtime profiles.",
+      "artifacts": [],
+      "verdict": "skipped",
+      "severity": "medium",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "platform/windows-current-host",
+      "phase": "platform",
+      "scope": "windows-current-host",
+      "preconditions": "Windows host",
+      "command": "Current verification harness run",
+      "expected": "Windows claims are backed by the current host report.",
+      "actual": "Current audit was executed on this Windows host.",
+      "artifacts": [],
+      "verdict": "pass",
+      "severity": "medium",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "platform/ubuntu-workflow",
+      "phase": "platform",
+      "scope": "github-actions",
+      "preconditions": "runtime-smoke-ubuntu workflow exists",
+      "command": ".github/workflows/runtime-smoke-ubuntu.yml",
+      "expected": "Ubuntu runtime lane is represented as a workflow-driven support claim and report artifact producer.",
+      "actual": "Workflow references the repeatable verification entrypoint.",
+      "artifacts": [
+        "C:\\mcpace\\.github\\workflows\\runtime-smoke-ubuntu.yml"
+      ],
+      "verdict": "pass",
+      "severity": "medium",
+      "durationMs": 0
+    },
+    {
+      "scenarioId": "platform/macos-manual-gate",
+      "phase": "platform",
+      "scope": "manual-gate",
+      "preconditions": "docs/runtime-smoke-macos.md exists",
+      "command": "docs/runtime-smoke-macos.md",
+      "expected": "macOS remains explicitly documented as a manual gate and not auto-proven unless run.",
+      "actual": "Manual gate references verify-manager.ps1.",
+      "artifacts": [
+        "C:\\mcpace\\docs\\runtime-smoke-macos.md"
+      ],
+      "verdict": "pass",
+      "severity": "medium",
+      "durationMs": 0
+    }
+  ]
+}
