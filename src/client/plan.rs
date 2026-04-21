@@ -1,10 +1,11 @@
 use crate::client_catalog;
 use crate::server::ServerRecord;
 
-use super::pathing::{normalize_transport, sanitize_key};
+use super::actions::supports_client_install;
 use super::model::{
     ClientPlan, RequestStrategy, ResolvedContext, ScopeResolution, ServerCoordinationPlan,
 };
+use super::pathing::{normalize_transport, sanitize_key};
 
 pub(super) fn build_plan(
     root_path: String,
@@ -121,7 +122,7 @@ pub(super) fn build_plan(
     }
     if context.preferred_ingress == "streamable-http" {
         warnings.push(
-            "Streamable HTTP is part of the target MCP surface, but the grouped Streamable HTTP ingress is not implemented yet in this repo; treat this as a plan, not runtime proof.".to_string(),
+            "Streamable HTTP is available through the one-port local MCPace server on http://127.0.0.1:39022/mcp; keep cloud/public relay expectations separate from this localhost lane.".to_string(),
         );
     }
     if requires_hub_owned_stdio {
@@ -188,8 +189,10 @@ pub(super) fn build_plan(
         preferred_ingress_source: context.preferred_ingress_source.clone(),
         supported_ingresses,
         hub_lifecycle_implemented: true,
-        client_install_implemented: false,
-        client_export_implemented: false,
+        client_install_implemented: client_target
+            .map(|target| supports_client_install(target.id))
+            .unwrap_or(false),
+        client_export_implemented: true,
         context,
         session_binding_key,
         requires_hub_owned_stdio,
@@ -406,4 +409,3 @@ fn resolve_upstream_transport(record: &ServerRecord) -> String {
     }
     "unspecified".to_string()
 }
-

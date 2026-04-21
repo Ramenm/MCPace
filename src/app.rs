@@ -1,7 +1,7 @@
 use crate::catalog::{find, normalize, COMMANDS};
 use crate::{
-    candidates, client, doctor, hub, init, lab, profile, projects, repair, reporoot, server,
-    stdio_shim, verify,
+    candidates, client, dashboard, doctor, hub, init, lab, mcp_server, profile, projects, repair,
+    reporoot, serve, server, stdio_shim, verify,
 };
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -43,9 +43,12 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         }
         "version" => run_version(root_path.as_deref(), stdout, stderr),
         "doctor" => run_doctor(&args[1..], root_path, stdout, stderr),
+        "dashboard" => dashboard::run(&args[1..], root_path, stdout, stderr),
+        "serve" => serve::run(&args[1..], root_path, stdout, stderr),
         "init" => init::run(&args[1..], root_path, stdout, stderr),
         "hub" => hub::run(&args[1..], root_path, stdout, stderr),
         "stdio-shim" => stdio_shim::run(&args[1..], root_path, stdout, stderr),
+        "mcp-server" => mcp_server::run(&args[1..], root_path, stdout, stderr),
         "client" => client::run(&args[1..], root_path, stdout, stderr),
         "profile" => profile::run(&args[1..], root_path, stdout, stderr),
         "projects" => projects::run(&args[1..], root_path, stdout, stderr),
@@ -158,19 +161,33 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  version");
     let _ = writeln!(stdout, "  doctor [--json] [--root <path>]");
+    let _ = writeln!(
+        stdout,
+        "  dashboard [--root <path>] [--host <addr>] [--port <n>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  serve [--root <path>] [--host <addr>] [--port <n>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  serve start|stop|status [--json] [--root <path>] [--host <addr>] [--port <n>]"
+    );
     let _ = writeln!(stdout, "  init [--json] [--root <path>]");
     let _ = writeln!(stdout, "  hub up [--json] [--root <path>] [--foreground]");
     let _ = writeln!(stdout, "  hub down [--json] [--root <path>]");
     let _ = writeln!(stdout, "  hub repair [--json] [--root <path>]");
     let _ = writeln!(stdout, "  hub status [--json] [--root <path>]");
     let _ = writeln!(stdout, "  hub logs [--json] [--root <path>] [--tail <n>]");
-    let _ = writeln!(stdout, "  stdio-shim --json [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]");
     let _ = writeln!(stdout, "  profile [show] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  projects [list] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  candidates [--json] [--root <path>]");
     let _ = writeln!(stdout, "  client list [--json] [--root <path>]");
     let _ = writeln!(stdout, "  client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]");
+    let _ = writeln!(stdout, "  client install <client> [--json] [--root <path>]");
     let _ = writeln!(stdout, "  client export <client> [--json] [--root <path>] [--transport <stdio|streamable-http>] [--session-id <id>] [--project-root <path>]");
+    let _ = writeln!(stdout, "  mcp-server [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]  # internal compatibility");
+    let _ = writeln!(stdout, "  stdio-shim --json [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]  # internal bootstrap proof");
     let _ = writeln!(stdout, "  lab list [--json] [--root <path>]");
     let _ = writeln!(stdout, "  lab matrix [--json] [--root <path>]");
     let _ = writeln!(stdout, "  lab coverage [--json] [--root <path>]");
@@ -190,7 +207,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  verify readiness [--json] [--root <path>]");
     let _ = writeln!(stdout, "  repair [--json] [--root <path>]");
     let _ = writeln!(stdout, "");
-    let _ = writeln!(stdout, "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; init seeds the runtime layout, hub owns a local lifecycle/state/log/repair surface, stdio-shim now bootstraps routing context into the persistent hub as a JSON proof surface, client export emits preview-only adapter contracts, and client install plus grouped top-level release remain planned.");
+    let _ = writeln!(stdout, "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; serve is the public one-port MCPace surface on http://127.0.0.1:39022/mcp and now has start/stop/status lifecycle commands, dashboard provides the same local browser control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair surface, client install patches MCPace entries for Codex, Claude Code, Cursor, Kiro, Gemini CLI, Windsurf, GitHub Copilot CLI, and Hermes Agent, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, and grouped top-level release remains planned.");
     let _ = writeln!(
         stdout,
         "Compatibility aliases: project, servers, capabilities, check, status, readiness, probe."

@@ -19,7 +19,10 @@ pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String
                 name,
                 value,
                 source_settings.get(&normalized_name),
-                runtime_profile.server_overrides.get(&normalized_name).copied(),
+                runtime_profile
+                    .server_overrides
+                    .get(&normalized_name)
+                    .copied(),
             ) {
                 records.push(record);
             }

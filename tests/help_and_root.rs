@@ -12,9 +12,14 @@ fn help_mentions_grouped_native_read_paths() {
     assert!(text.contains("repair [--json] [--root <path>]"));
     assert!(text.contains("server capabilities"));
     assert!(text.contains("verify readiness"));
+    assert!(text.contains("dashboard"));
+    assert!(text.contains("serve"));
+    assert!(text.contains("serve start|stop|status"));
     assert!(text.contains("client list"));
     assert!(text.contains("client plan"));
+    assert!(text.contains("client install"));
     assert!(text.contains("stdio-shim"));
+    assert!(text.contains("mcp-server"));
     assert!(text.contains("lab report"));
 }
 
@@ -82,8 +87,16 @@ fn repair_command_routes_to_grouped_hub_repair() {
     let repair = run(&["repair", "--json", "--root", root.to_str().unwrap()]);
     assert!(repair.status.success(), "stderr: {}", stderr(&repair));
     let repair_text = stdout(&repair);
-    assert!(repair_text.contains(r#""hubStatus""#), "stdout: {}", repair_text);
-    assert!(repair_text.contains(r#""status": "stopped""#), "stdout: {}", repair_text);
+    assert!(
+        repair_text.contains(r#""hubStatus""#),
+        "stdout: {}",
+        repair_text
+    );
+    assert!(
+        repair_text.contains(r#""status": "stopped""#),
+        "stdout: {}",
+        repair_text
+    );
     assert!(
         fs::read_dir(&hub_dir)
             .unwrap()

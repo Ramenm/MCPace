@@ -338,23 +338,38 @@ fn run_loop(root_path: &Path, stderr: &mut dyn Write) -> i32 {
         }
     };
 
-    if let Err(error) = runtime::write_state_metadata(root_path, "starting", Some(pid), Some(start_ms), None) {
+    if let Err(error) =
+        runtime::write_state_metadata(root_path, "starting", Some(pid), Some(start_ms), None)
+    {
         let _ = writeln!(stderr, "{}", error);
         return 1;
     }
-    if let Err(error) = runtime::write_health_metadata(root_path, "starting", pid, start_ms, start_ms) {
+    if let Err(error) =
+        runtime::write_health_metadata(root_path, "starting", pid, start_ms, start_ms)
+    {
         let _ = writeln!(stderr, "{}", error);
         return 1;
     }
-    let _ = runtime::append_log(root_path, "info", "hub_starting", &[("pid", JsonValue::number(pid))]);
+    let _ = runtime::append_log(
+        root_path,
+        "info",
+        "hub_starting",
+        &[("pid", JsonValue::number(pid))],
+    );
 
     let _ = fs::remove_file(&stop_path);
 
     let mut started_logged = false;
     loop {
         let now = runtime::now_ms();
-        let lifecycle_status = if started_logged { "running" } else { "starting" };
-        if let Err(error) = runtime::write_health_metadata(root_path, lifecycle_status, pid, start_ms, now) {
+        let lifecycle_status = if started_logged {
+            "running"
+        } else {
+            "starting"
+        };
+        if let Err(error) =
+            runtime::write_health_metadata(root_path, lifecycle_status, pid, start_ms, now)
+        {
             let _ = writeln!(stderr, "{}", error);
             return 1;
         }
@@ -390,12 +405,19 @@ fn run_loop(root_path: &Path, stderr: &mut dyn Write) -> i32 {
     let stop_ms = runtime::now_ms();
     let _ = fs::remove_file(stop_path);
     let _ = fs::remove_file(runtimepaths::hub_health_path(&state_root));
-    if let Err(error) = runtime::write_state_metadata(root_path, "stopped", None, None, Some(stop_ms)) {
+    if let Err(error) =
+        runtime::write_state_metadata(root_path, "stopped", None, None, Some(stop_ms))
+    {
         let _ = writeln!(stderr, "{}", error);
         return 1;
     }
     drop(runtime_lock);
-    let _ = runtime::append_log(root_path, "info", "hub_stopped", &[("pid", JsonValue::number(pid))]);
+    let _ = runtime::append_log(
+        root_path,
+        "info",
+        "hub_stopped",
+        &[("pid", JsonValue::number(pid))],
+    );
     0
 }
 
@@ -416,12 +438,28 @@ fn write_repair_response(
     let _ = writeln!(stdout, "Hub repair completed.");
     let _ = writeln!(stdout, "Root path: {}", repair_report.root_path);
     let _ = writeln!(stdout, "State root: {}", repair_report.state_root);
-    let _ = writeln!(stdout, "Archived runtime files: {}", join_or_none(&repair_report.archived_paths));
-    let _ = writeln!(stdout, "Recreated runtime files: {}", join_or_none(&repair_report.recreated_paths));
+    let _ = writeln!(
+        stdout,
+        "Archived runtime files: {}",
+        join_or_none(&repair_report.archived_paths)
+    );
+    let _ = writeln!(
+        stdout,
+        "Recreated runtime files: {}",
+        join_or_none(&repair_report.recreated_paths)
+    );
     if !repair_report.warnings.is_empty() {
-        let _ = writeln!(stdout, "Repair notes: {}", repair_report.warnings.join(" | "));
+        let _ = writeln!(
+            stdout,
+            "Repair notes: {}",
+            repair_report.warnings.join(" | ")
+        );
     }
-    let _ = writeln!(stdout, "Final hub status: {} ({})", final_status.status, final_status.health);
+    let _ = writeln!(
+        stdout,
+        "Final hub status: {} ({})",
+        final_status.status, final_status.health
+    );
     0
 }
 

@@ -20,13 +20,9 @@ fn path_compare_key(value: &str) -> String {
 
 fn looks_like_windows_path(value: &str) -> bool {
     let bytes = value.as_bytes();
-    (bytes.len() >= 3
-        && bytes[1] == b':'
-        && bytes[0].is_ascii_alphabetic()
-        && bytes[2] == b'/')
+    (bytes.len() >= 3 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() && bytes[2] == b'/')
         || value.starts_with("//")
 }
-
 
 pub(super) fn normalize(value: &str) -> String {
     value.trim().to_ascii_lowercase()
@@ -138,4 +134,3 @@ pub(super) fn stable_hash_hex(input: &str) -> String {
     }
     format!("{:016x}", hash)
 }
-

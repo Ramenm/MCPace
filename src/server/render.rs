@@ -2,7 +2,11 @@ use super::model::ServerRecord;
 use crate::json::JsonValue;
 use std::io::Write;
 
-pub(super) fn render_list(records: &[ServerRecord], json_output: bool, stdout: &mut dyn Write) -> i32 {
+pub(super) fn render_list(
+    records: &[ServerRecord],
+    json_output: bool,
+    stdout: &mut dyn Write,
+) -> i32 {
     if json_output {
         let json = JsonValue::array(records.iter().map(ServerRecord::summary_json_value));
         let _ = writeln!(stdout, "{}", json.to_pretty_string());

@@ -95,7 +95,11 @@ pub fn run(
         let _ = writeln!(stdout, "Created: {}", report.created_paths.join(", "));
     }
     if !report.existing_paths.is_empty() {
-        let _ = writeln!(stdout, "Already existed: {}", report.existing_paths.join(", "));
+        let _ = writeln!(
+            stdout,
+            "Already existed: {}",
+            report.existing_paths.join(", ")
+        );
     }
     0
 }
@@ -246,10 +250,22 @@ fn seed_json_if_missing(
 impl InitReport {
     fn to_json_value(&self) -> JsonValue {
         let mut map = BTreeMap::new();
-        map.insert("rootPath".to_string(), JsonValue::string(self.root_path.clone()));
-        map.insert("stateRoot".to_string(), JsonValue::string(self.state_root.clone()));
-        map.insert("runtimeDir".to_string(), JsonValue::string(self.runtime_dir.clone()));
-        map.insert("hubDir".to_string(), JsonValue::string(self.hub_dir.clone()));
+        map.insert(
+            "rootPath".to_string(),
+            JsonValue::string(self.root_path.clone()),
+        );
+        map.insert(
+            "stateRoot".to_string(),
+            JsonValue::string(self.state_root.clone()),
+        );
+        map.insert(
+            "runtimeDir".to_string(),
+            JsonValue::string(self.runtime_dir.clone()),
+        );
+        map.insert(
+            "hubDir".to_string(),
+            JsonValue::string(self.hub_dir.clone()),
+        );
         map.insert(
             "projectRegistryPath".to_string(),
             JsonValue::string(self.project_registry_path.clone()),
@@ -260,7 +276,10 @@ impl InitReport {
         );
         match &self.config_version {
             Some(value) => {
-                map.insert("configVersion".to_string(), JsonValue::string(value.clone()));
+                map.insert(
+                    "configVersion".to_string(),
+                    JsonValue::string(value.clone()),
+                );
             }
             None => {
                 map.insert("configVersion".to_string(), JsonValue::Null);

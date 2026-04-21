@@ -7,7 +7,7 @@ mod pathing;
 mod plan;
 mod render;
 
-use self::actions::{run_export, run_list, run_plan};
+use self::actions::{run_export, run_install, run_list, run_plan};
 use self::args::{parse_args, write_help};
 use std::io::Write;
 use std::path::PathBuf;
@@ -33,14 +33,7 @@ pub fn run(
         "plan" => run_plan(parsed, default_root, stdout, stderr),
         "list" => run_list(parsed, default_root, stdout, stderr),
         "export" => run_export(parsed, default_root, stdout, stderr),
-        "install" => {
-            let _ = writeln!(
-                stderr,
-                "client action '{}' is planned but not implemented yet in the Rust-only repo. Use 'mcpace client list' to inspect known client targets, 'mcpace client plan' to inspect routing + arbitration, and 'mcpace client export' for a preview-only adapter contract.",
-                action,
-            );
-            2
-        }
+        "install" => run_install(parsed, default_root, stdout, stderr),
         other => {
             let _ = writeln!(
                 stderr,

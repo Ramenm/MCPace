@@ -16,16 +16,23 @@ pub(super) fn collect_status(root_path: &Path) -> Result<HubStatus, String> {
     let lease_store_path = runtimepaths::hub_leases_path(&state_root);
     let lock_path = runtimepaths::hub_lock_path(&state_root);
 
-    let registry_file = runtime::read_json_diagnostic(&runtimepaths::project_registry_path(&state_root));
+    let registry_file =
+        runtime::read_json_diagnostic(&runtimepaths::project_registry_path(&state_root));
     let lease_file = runtime::read_json_diagnostic(&lease_store_path);
     let state_file = runtime::read_json_diagnostic(&runtimepaths::hub_state_path(&state_root));
     let health_file = runtime::read_json_diagnostic(&runtimepaths::hub_health_path(&state_root));
     let lock_file = runtime::read_json_diagnostic(&lock_path);
 
-    let corrupted_files = vec![&registry_file, &lease_file, &state_file, &health_file, &lock_file]
-        .into_iter()
-        .filter_map(|diagnostic| diagnostic.corruption())
-        .collect::<Vec<CorruptedRuntimeFile>>();
+    let corrupted_files = vec![
+        &registry_file,
+        &lease_file,
+        &state_file,
+        &health_file,
+        &lock_file,
+    ]
+    .into_iter()
+    .filter_map(|diagnostic| diagnostic.corruption())
+    .collect::<Vec<CorruptedRuntimeFile>>();
 
     let state_json = state_file.value.as_ref();
     let health_json = health_file.value.as_ref();

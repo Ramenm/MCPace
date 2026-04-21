@@ -47,7 +47,9 @@ pub(super) fn assess_scenarios(
         .collect()
 }
 
-pub(super) fn capability_index(capabilities: &[CapabilityRecord]) -> BTreeMap<String, CapabilityRecord> {
+pub(super) fn capability_index(
+    capabilities: &[CapabilityRecord],
+) -> BTreeMap<String, CapabilityRecord> {
     capabilities
         .iter()
         .cloned()

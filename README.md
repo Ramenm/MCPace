@@ -8,10 +8,24 @@ prefer npm-based installation.
 
 This repo is intentionally honest about its state:
 
-- implemented today: `version`, `doctor`, `init`, `hub up/down/repair/status/logs`, `stdio-shim --json` (bootstrap-only), `profile show`, `projects list`, `candidates`, `client list`, `client plan`, `client export` (preview-only), `lab list`, `lab matrix`, `lab coverage`, `lab gaps`, `lab report`, `lab show`, `server list`, `server capabilities`, `server candidates`, `verify doctor`, `verify readiness`, `repair`;
+- implemented today: `version`, `doctor`, `dashboard`, `serve`, `init`,
+  `hub up/down/repair/status/logs`, `profile show`, `projects list`,
+  `candidates`, `client list`, `client plan`,
+  `client install` (Codex, Claude Code, Cursor, Kiro, Gemini CLI, Windsurf,
+  GitHub Copilot CLI, and Hermes Agent config patcher),
+  `client export` (HTTP-first MCPace URL contracts for local clients,
+  preview-only for blocked cloud/public surfaces), `lab list`, `lab matrix`,
+  `lab coverage`, `lab gaps`, `lab report`, `lab show`, `server list`,
+  `server capabilities`, `server candidates`, `verify doctor`,
+  `verify readiness`, `repair`;
+- internal compatibility surfaces kept for transition/debug work:
+  `stdio-shim --json` (bootstrap-only proof surface) and `mcp-server`
+  (stdio fallback lane);
 - the client catalog is now surface-aware: local, cloud, API connector, and generic surfaces are tracked separately;
 - the repo now includes a local file-backed hub lifecycle surface for bootstrap, state, health, logs, corruption repair, and bounded log retention;
-- planned next: `client install`, real config-writing `client export`, `release`, stdio ingress, HTTP ingress, and lease/scheduling enforcement;
+- planned next: real config-writing `client export` for blocked cloud/public
+  surfaces, `release`, richer upstream session fan-in, and lease/scheduling
+  enforcement;
 - stack policy is now explicit and machine-readable: Node 22/24 LTS contributor lanes, default local Node 24 via `.nvmrc` / `.node-version`, npm 10+, and a pinned Rust 1.95.0 toolchain are tracked in `docs/toolchain-policy.md` plus `reports/toolchain-support.json`;
 - **not** reconfirmed in this pass: live Docker/runtime behavior, or multi-host parity on Windows/macOS/Linux.
 
@@ -37,17 +51,32 @@ These commands are implemented directly in Rust source:
 ```bash
 mcpace version
 mcpace doctor
+mcpace dashboard
+mcpace serve --port 39022
+mcpace serve start --json
+mcpace serve status --json
+mcpace serve stop --json
 mcpace init --json
 mcpace hub status --json
 mcpace hub repair --json
 mcpace hub logs --json --tail 20
 mcpace stdio-shim --json --client-id codex --session-id demo-1 --project-root /work/project-a
+mcpace mcp-server --root /work/project-a --client-id codex
 mcpace repair --json
 mcpace profile show --json
 mcpace projects list --json
 mcpace candidates --json
 mcpace client list --json
 mcpace client plan --json --client-id codex --session-id demo-1 --project-root /work/project-a
+mcpace client install codex
+mcpace client install claude-code
+mcpace client install cursor-local
+mcpace client install kiro-ide
+mcpace client install kiro-cli
+mcpace client install gemini-cli
+mcpace client install hermes-agent
+mcpace client install windsurf
+mcpace client install github-copilot-cli
 mcpace client export codex --json
 mcpace lab matrix --json
 mcpace lab report
@@ -78,9 +107,98 @@ npm run prove:report
 That writes `reports/verification-latest.json` without pretending that missing
 Rust/runtime proof has already passed.
 
-`doctor/profile/projects/candidates/client-plan/lab/server/verify` now have native
-Rust read paths, `init` seeds the runtime layout, `hub` provides a local lifecycle/status/log/repair surface, `client list` exposes the verified/generic client target catalog with surface-aware local/cloud/API distinctions,
-and `lab` turns runtime fixtures plus capability inventory into an explicit backlog.
+`doctor/profile/projects/candidates/client-plan/lab/server/verify` now have
+native Rust read paths, `init` seeds the runtime layout, `hub` provides a
+local lifecycle/status/log/repair surface, `client list` exposes the
+verified/generic client target catalog with surface-aware local/cloud/API
+distinctions, `serve` is the public one-port MCP surface, and `lab` turns
+runtime fixtures plus capability inventory into an explicit backlog.
+
+## Local dashboard available now
+
+MCPace now includes a local browser dashboard for the CLI-first runtime. Start
+it with:
+
+```bash
+mcpace dashboard
+```
+
+MCPace prints a localhost URL such as `http://127.0.0.1:43125`. The dashboard
+shows runtime readiness, hub status, server inventory, documented client
+surfaces, recent logs, and safe quick actions for `hub up`, `hub down`, and
+`repair`.
+
+## One-port local serve mode available now
+
+If you want one local process and one port instead of a separate UI mental
+model, start MCPace like this:
+
+```bash
+mcpace serve --port 39022
+```
+
+That gives you:
+
+- `http://127.0.0.1:39022/` — browser UI
+- `http://127.0.0.1:39022/healthz` — health/readiness JSON
+- `http://127.0.0.1:39022/mcp` — local MCP HTTP endpoint
+
+This keeps the first local product surface smaller: one process, one port, one
+entry point.
+
+If you want MCPace to manage that server as a background process, use:
+
+```bash
+mcpace serve start --json
+mcpace serve status --json
+mcpace serve stop --json
+```
+
+## Local client connection path available now
+
+Local clients can now reach MCPace through one local HTTP endpoint. For Codex,
+the normal project-scoped MCPace block looks like this:
+
+```toml
+[mcp_servers.MCPace]
+url = "http://127.0.0.1:39022/mcp"
+enabled = true
+startup_timeout_sec = 20
+```
+
+If you want MCPace to write the project-scoped block for you, run:
+
+```bash
+mcpace client install codex
+```
+
+Project-scoped installs are also available for:
+
+- `mcpace client install claude-code`
+- `mcpace client install cursor-local`
+- `mcpace client install kiro-ide`
+- `mcpace client install kiro-cli`
+- `mcpace client install gemini-cli`
+
+User-scoped installs are also available for:
+
+- `mcpace client install hermes-agent`
+- `mcpace client install windsurf`
+- `mcpace client install github-copilot-cli`
+
+You can also add the same server with the Codex CLI:
+
+```bash
+codex mcp add MCPace --url http://127.0.0.1:39022/mcp
+```
+
+`client install codex` patches only the MCPace-owned block in the project
+`.codex/config.toml` file, and the preferred local shape is one running MCPace
+server on port `39022`.
+
+Internal compatibility note: `mcp-server` and `stdio-shim` still exist for
+debugging and fallback work, but they are no longer the primary local product
+surface.
 
 Compatibility aliases currently kept for a smaller migration gap:
 
@@ -134,10 +252,19 @@ The target public surface remains grouped and smaller than the legacy script set
 
 ```bash
 mcpace init
+mcpace dashboard
+mcpace serve
 mcpace hub up
 mcpace hub repair
 mcpace hub status
 mcpace client install codex
+mcpace client install claude-code
+mcpace client install cursor-local
+mcpace client install kiro-ide
+mcpace client install gemini-cli
+mcpace client install hermes-agent
+mcpace client install windsurf
+mcpace client install github-copilot-cli
 mcpace client export codex
 mcpace server list
 mcpace profile show --json
@@ -148,10 +275,13 @@ mcpace repair
 mcpace release
 ```
 
-At this stage, `init`, `hub`, bootstrap-only `stdio-shim --json`, top-level
-`repair`, and `client export` preview are implemented in source. Live
-stdio forwarding, `client install`, config-writing `client export`, and
-`release` still fail clearly as **planned but not implemented yet**.
+At this stage, `dashboard`, `serve`, `init`, `hub`, top-level `repair`,
+HTTP-first `client export`, and `client install` for Codex, Claude Code,
+Cursor, Kiro, Gemini CLI, Windsurf, GitHub Copilot CLI, and Hermes Agent are
+implemented in source. `stdio-shim --json` and `mcp-server` remain internal
+compatibility lanes. Config-writing `client export` for broader cloud/public
+client families and `release` still fail clearly as **planned but not
+implemented yet**.
 
 ## Toolchain lanes
 
@@ -213,8 +343,11 @@ Useful grouped checks after a successful Rust build:
 
 ```bash
 ./target/release/mcpace init --json
+./target/release/mcpace dashboard
+./target/release/mcpace serve --port 39022
 ./target/release/mcpace hub status --json
 ./target/release/mcpace client list --json
+./target/release/mcpace client export codex --json
 mcpace client plan --json --client-id codex --session-id demo-1 --project-root /work/project-a
 ./target/release/mcpace lab report
 ./target/release/mcpace server list --json

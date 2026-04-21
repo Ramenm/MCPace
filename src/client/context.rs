@@ -307,9 +307,7 @@ fn extend_seed(seed: &mut Vec<String>, key: &str, value: Option<&str>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        best_matching_root, clean_optional_string, resolve_session_lease, resolve_string,
-    };
+    use super::{best_matching_root, clean_optional_string, resolve_session_lease, resolve_string};
 
     #[test]
     fn resolve_string_prefers_flag_then_env_then_metadata_then_fallback() {

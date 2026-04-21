@@ -742,7 +742,7 @@
     }
   },
   "client": {
-    "keyName": "codex-local"
+    "keyName": "MCPace"
   },
   "health": {
     "probeTimeoutSec": 2,

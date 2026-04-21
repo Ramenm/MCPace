@@ -90,6 +90,8 @@ fn client_plan_json_uses_metadata_and_arbitrates_unsafe_servers() {
     assert!(text.contains(r#""sessionId": "sess-42""#));
     assert!(text.contains(r#""projectRoot": "/work/project-a""#));
     assert!(text.contains(r#""hubLifecycleImplemented": true"#));
+    assert!(text.contains(r#""clientInstallImplemented": true"#));
+    assert!(text.contains(r#""clientExportImplemented": true"#));
     assert!(text.contains(r#""requiresHubOwnedStdio": true"#));
     assert!(text.contains(r#""requestStrategy": "serialize-per-project-instance""#));
     assert!(text.contains(r#""requestStrategy": "serialize-per-instance""#));
@@ -157,7 +159,7 @@ fn client_list_json_shows_verified_catalog_and_configured_key_name() {
         r#"{
   "version": "0.3.0",
   "client": {
-    "keyName": "codex-local"
+    "keyName": "MCPace"
   },
   "servers": {}
 }"#,
@@ -167,7 +169,7 @@ fn client_list_json_shows_verified_catalog_and_configured_key_name() {
     let output = run(&["client", "list", "--json", "--root", root.to_str().unwrap()]);
     assert!(output.status.success());
     let text = stdout(&output);
-    assert!(text.contains(r#""configuredClientKeyName": "codex-local""#));
+    assert!(text.contains(r#""configuredClientKeyName": "MCPace""#));
     assert!(text.contains(r#""familyCounts": {"#));
     assert!(text.contains(r#""surfaceClassCounts": {"#));
     assert!(text.contains(r#""id": "codex""#));
@@ -182,7 +184,7 @@ fn client_list_json_shows_verified_catalog_and_configured_key_name() {
 }
 
 #[test]
-fn client_export_json_previews_local_stdio_adapter_contract() {
+fn client_export_json_prefers_local_http_contract_for_codex() {
     let temp = TempDir::new();
     let root = temp.path();
     fs::write(
@@ -190,7 +192,7 @@ fn client_export_json_previews_local_stdio_adapter_contract() {
         r#"{
   "version": "0.3.0",
   "client": {
-    "keyName": "codex-local"
+    "keyName": "MCPace"
   },
   "servers": {}
 }"#,
@@ -207,17 +209,479 @@ fn client_export_json_previews_local_stdio_adapter_contract() {
     ]);
     assert!(output.status.success());
     let text = stdout(&output);
-    assert!(text.contains(r#""mode": "preview-only""#));
+    assert!(text.contains(r#""mode": "connectable-preview""#));
     assert!(text.contains(r#""clientTargetId": "codex""#));
-    assert!(text.contains(r#""adapterKeyName": "codex-local""#));
-    assert!(text.contains(r#""exportMode": "local-stdio-launcher""#));
+    assert!(text.contains(r#""adapterKeyName": "MCPace""#));
+    assert!(text.contains(r#""preferredIngress": "streamable-http""#));
+    assert!(text.contains(r#""exportMode": "local-streamable-http""#));
     assert!(text.contains(r#""adapterContract": {"#));
+    assert!(text.contains(r#""type": "local-streamable-http""#));
+    assert!(text.contains(r#""urlTemplate": "http://127.0.0.1:39022/mcp""#));
+    assert!(text.contains(r#""canConnectToday": true"#));
+    assert!(!text.contains("preview-only"));
+}
+
+#[test]
+fn client_export_json_keeps_stdio_fallback_for_stdio_only_hosts() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&[
+        "client",
+        "export",
+        "generic-stdio",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(output.status.success());
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "generic-stdio""#));
+    assert!(text.contains(r#""exportMode": "local-stdio-launcher""#));
     assert!(text.contains(r#""type": "stdio-launcher""#));
     assert!(text.contains(r#""command": "mcpace""#));
-    assert!(text.contains(r#""args": ["#));
-    assert!(text.contains(r#""stdio-shim""#));
-    assert!(text.contains(r#""canConnectToday": false"#));
-    assert!(text.contains("live stdio forwarding path is not implemented yet"));
+    assert!(text.contains(r#""mcp-server""#));
+}
+
+#[test]
+fn client_export_json_prefers_local_http_contract_for_other_http_capable_clients() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&[
+        "client",
+        "export",
+        "cursor-local",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(output.status.success());
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "cursor-local""#));
+    assert!(text.contains(r#""preferredIngress": "streamable-http""#));
+    assert!(text.contains(r#""exportMode": "local-streamable-http""#));
+    assert!(text.contains(r#""urlTemplate": "http://127.0.0.1:39022/mcp""#));
+    assert!(text.contains(r#""canConnectToday": true"#));
+}
+
+#[test]
+fn client_install_codex_json_replaces_unmanaged_table_and_is_idempotent() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let codex_dir = root.join(".codex");
+    fs::create_dir_all(&codex_dir).unwrap();
+    fs::write(
+        codex_dir.join("config.toml"),
+        r#"[mcp_servers.other]
+command = "other"
+args = ["serve"]
+enabled = true
+
+[mcp_servers.MCPace]
+command = "old-mcpace"
+args = ["stdio-shim"]
+enabled = false
+"#,
+    )
+    .unwrap();
+
+    let first = run(&[
+        "client",
+        "install",
+        "codex",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(first.status.success(), "stderr: {}", stderr(&first));
+    let first_text = stdout(&first);
+    assert!(first_text.contains(r#""mode": "installed""#));
+    assert!(first_text.contains(r#""clientTargetId": "codex""#));
+    assert!(first_text.contains(r#""writesConfig": true"#));
+    assert!(first_text.contains(r#""changed": true"#));
+    assert!(first_text.contains(r#""replacedExistingBlock": true"#));
+    assert!(first_text.contains(r#""transport": "streamable-http""#));
+    assert!(first_text.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+
+    let config_path = codex_dir.join("config.toml");
+    let installed = fs::read_to_string(&config_path).unwrap();
+    assert!(installed.contains("# BEGIN MCPACE MANAGED BLOCK: MCPace"));
+    assert!(installed.contains("[mcp_servers.MCPace]"));
+    assert!(installed.contains(r#"url = "http://127.0.0.1:39022/mcp""#));
+    assert!(installed.contains("startup_timeout_sec = 20"));
+    assert!(installed.contains("[mcp_servers.other]"));
+    assert_eq!(installed.matches("[mcp_servers.MCPace]").count(), 1);
+
+    let second = run(&[
+        "client",
+        "install",
+        "codex",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(second.status.success(), "stderr: {}", stderr(&second));
+    let second_text = stdout(&second);
+    assert!(second_text.contains(r#""changed": false"#));
+    assert!(second_text.contains(r#""replacedExistingBlock": true"#));
+
+    let reinstalled = fs::read_to_string(&config_path).unwrap();
+    assert_eq!(installed, reinstalled);
+}
+
+#[test]
+fn client_install_rejects_unsupported_client_surface() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&[
+        "client",
+        "install",
+        "claude-api-connector",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+    assert!(stderr(&output).contains(
+        "currently supports Codex, Claude Code, Cursor, Kiro, Gemini CLI, Windsurf, GitHub Copilot CLI, and Hermes Agent"
+    ));
+}
+
+#[test]
+fn client_install_cursor_local_writes_project_json_config() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&[
+        "client",
+        "install",
+        "cursor-local",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "cursor-local""#));
+    assert!(text.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+
+    let config_path = root.join(".cursor").join("mcp.json");
+    let installed = fs::read_to_string(&config_path).unwrap();
+    assert!(installed.contains(r#""mcpServers""#));
+    assert!(installed.contains(r#""MCPace""#));
+    assert!(installed.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+}
+
+#[test]
+fn client_install_kiro_ide_writes_project_json_config() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&[
+        "client",
+        "install",
+        "kiro-ide",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "kiro-ide""#));
+    assert!(text.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+
+    let config_path = root.join(".kiro").join("settings").join("mcp.json");
+    let installed = fs::read_to_string(&config_path).unwrap();
+    assert!(installed.contains(r#""mcpServers""#));
+    assert!(installed.contains(r#""MCPace""#));
+    assert!(installed.contains(r#""disabled": false"#));
+}
+
+#[test]
+fn client_install_claude_code_writes_project_mcp_json() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&[
+        "client",
+        "install",
+        "claude-code",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "claude-code""#));
+
+    let installed = fs::read_to_string(root.join(".mcp.json")).unwrap();
+    assert!(installed.contains(r#""mcpServers""#));
+    assert!(installed.contains(r#""MCPace""#));
+    assert!(installed.contains(r#""type": "http""#));
+    assert!(installed.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+}
+
+#[test]
+fn client_install_gemini_cli_writes_project_settings_json() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&[
+        "client",
+        "install",
+        "gemini-cli",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "gemini-cli""#));
+
+    let installed = fs::read_to_string(root.join(".gemini").join("settings.json")).unwrap();
+    assert!(installed.contains(r#""mcpServers""#));
+    assert!(installed.contains(r#""MCPace""#));
+    assert!(installed.contains(r#""httpUrl": "http://127.0.0.1:39022/mcp""#));
+}
+
+#[test]
+fn client_install_windsurf_writes_user_json_config() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run_with_envs(
+        &[
+            "client",
+            "install",
+            "windsurf",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "windsurf""#));
+
+    let installed = fs::read_to_string(
+        home.path()
+            .join(".codeium")
+            .join("windsurf")
+            .join("mcp_config.json"),
+    )
+    .unwrap();
+    assert!(installed.contains(r#""mcpServers""#));
+    assert!(installed.contains(r#""MCPace""#));
+    assert!(installed.contains(r#""serverUrl": "http://127.0.0.1:39022/mcp""#));
+}
+
+#[test]
+fn client_install_copilot_cli_writes_user_json_config() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run_with_envs(
+        &[
+            "client",
+            "install",
+            "github-copilot-cli",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "github-copilot-cli""#));
+
+    let installed =
+        fs::read_to_string(home.path().join(".copilot").join("mcp-config.json")).unwrap();
+    assert!(installed.contains(r#""mcpServers""#));
+    assert!(installed.contains(r#""MCPace""#));
+    assert!(installed.contains(r#""type": "http""#));
+    assert!(installed.contains(r#""tools""#));
+    assert!(installed.contains(r#""*""#));
+}
+
+#[test]
+fn client_install_hermes_agent_writes_user_yaml_config_and_stays_idempotent() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    fs::create_dir_all(home.path().join(".hermes")).unwrap();
+    fs::write(
+        home.path().join(".hermes").join("config.yaml"),
+        r#"model: nous/hermes-3
+mcp_servers:
+  existing:
+    url: "https://mcp.example.com"
+"#,
+    )
+    .unwrap();
+
+    let first = run_with_envs(
+        &[
+            "client",
+            "install",
+            "hermes-agent",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(first.status.success(), "stderr: {}", stderr(&first));
+    let first_text = stdout(&first);
+    assert!(first_text.contains(r#""clientTargetId": "hermes-agent""#));
+    assert!(first_text.contains(r#""transport": "streamable-http""#));
+    assert!(first_text.contains(r#""changed": true"#));
+
+    let config_path = home.path().join(".hermes").join("config.yaml");
+    let installed = fs::read_to_string(&config_path).unwrap();
+    assert!(installed.contains("model: nous/hermes-3"));
+    assert!(installed.contains("mcp_servers:"));
+    assert!(installed.contains("  existing:"));
+    assert!(installed.contains("  # BEGIN MCPACE MANAGED BLOCK: MCPace"));
+    assert!(installed.contains("  MCPace:"));
+    assert!(installed.contains(r#"    url: "http://127.0.0.1:39022/mcp""#));
+    assert_eq!(installed.matches("  MCPace:").count(), 1);
+
+    let second = run_with_envs(
+        &[
+            "client",
+            "install",
+            "hermes-agent",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(second.status.success(), "stderr: {}", stderr(&second));
+    let second_text = stdout(&second);
+    assert!(second_text.contains(r#""changed": false"#));
+    assert!(second_text.contains(r#""replacedExistingBlock": true"#));
+
+    let reinstalled = fs::read_to_string(&config_path).unwrap();
+    assert_eq!(installed, reinstalled);
 }
 
 #[test]
@@ -251,6 +715,36 @@ fn client_export_json_previews_public_http_connector_contract() {
     assert!(text.contains(r#""urlTemplate": "https://YOUR-MCPACE-RELAY/mcp""#));
     assert!(text.contains("public HTTP MCP endpoint or relay"));
     assert!(text.contains("only reaches public HTTP MCP servers"));
+}
+
+#[test]
+fn client_plan_json_reports_install_support_for_hermes_agent() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.0",
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&[
+        "client",
+        "plan",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+        "--client-id",
+        "hermes-agent",
+    ]);
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""clientTargetId": "hermes-agent""#));
+    assert!(text.contains(r#""clientInstallImplemented": true"#));
+    assert!(text.contains(r#""preferredIngress": "streamable-http""#));
+    assert!(text.contains(r#""preferredIngressSource": "serve-default""#));
 }
 
 #[test]

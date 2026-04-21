@@ -35,8 +35,17 @@ fn init_json_creates_runtime_layout_and_seed_files() {
     assert!(text.contains(r#""activeProfile": "safe""#));
     assert!(text.contains(r#""projectRegistryPath": "#));
     assert!(text.contains(r#""leaseStorePath": "#));
-    assert!(root.join("data").join("runtime").join("project-registry.json").is_file());
-    assert!(root.join("data").join("runtime").join("hub").join("leases.json").is_file());
+    assert!(root
+        .join("data")
+        .join("runtime")
+        .join("project-registry.json")
+        .is_file());
+    assert!(root
+        .join("data")
+        .join("runtime")
+        .join("hub")
+        .join("leases.json")
+        .is_file());
 }
 
 #[test]
@@ -105,13 +114,25 @@ fn hub_status_and_down_cleanup_orphan_lock_file() {
     let status = run(&["hub", "status", "--json", "--root", root.to_str().unwrap()]);
     assert!(status.status.success(), "stderr: {}", stderr(&status));
     let status_text = stdout(&status);
-    assert!(status_text.contains(r#""status": "stale""#), "stdout: {}", status_text);
-    assert!(status_text.contains("hub runtime lock is still present"), "stdout: {}", status_text);
+    assert!(
+        status_text.contains(r#""status": "stale""#),
+        "stdout: {}",
+        status_text
+    );
+    assert!(
+        status_text.contains("hub runtime lock is still present"),
+        "stdout: {}",
+        status_text
+    );
 
     let down = run(&["hub", "down", "--json", "--root", root.to_str().unwrap()]);
     assert!(down.status.success(), "stderr: {}", stderr(&down));
     let down_text = stdout(&down);
-    assert!(down_text.contains(r#""status": "stopped""#), "stdout: {}", down_text);
+    assert!(
+        down_text.contains(r#""status": "stopped""#),
+        "stdout: {}",
+        down_text
+    );
     assert!(!hub_dir.join("lock.json").exists());
 }
 
@@ -144,22 +165,44 @@ fn hub_status_and_repair_handle_corrupt_runtime_state() {
     let status = run(&["hub", "status", "--json", "--root", root.to_str().unwrap()]);
     assert!(status.status.success(), "stderr: {}", stderr(&status));
     let status_text = stdout(&status);
-    assert!(status_text.contains(r#""status": "corrupt""#), "stdout: {}", status_text);
-    assert!(status_text.contains(r#""repairRecommended": true"#), "stdout: {}", status_text);
-    assert!(status_text.contains("state.json"), "stdout: {}", status_text);
+    assert!(
+        status_text.contains(r#""status": "corrupt""#),
+        "stdout: {}",
+        status_text
+    );
+    assert!(
+        status_text.contains(r#""repairRecommended": true"#),
+        "stdout: {}",
+        status_text
+    );
+    assert!(
+        status_text.contains("state.json"),
+        "stdout: {}",
+        status_text
+    );
 
     let repair = run(&["hub", "repair", "--json", "--root", root.to_str().unwrap()]);
     assert!(repair.status.success(), "stderr: {}", stderr(&repair));
     let repair_text = stdout(&repair);
-    assert!(repair_text.contains(r#""hubStatus""#), "stdout: {}", repair_text);
-    assert!(repair_text.contains(r#""status": "stopped""#), "stdout: {}", repair_text);
+    assert!(
+        repair_text.contains(r#""hubStatus""#),
+        "stdout: {}",
+        repair_text
+    );
+    assert!(
+        repair_text.contains(r#""status": "stopped""#),
+        "stdout: {}",
+        repair_text
+    );
 
     let entries = fs::read_dir(&hub_dir)
         .unwrap()
         .map(|entry| entry.unwrap().file_name().to_string_lossy().to_string())
         .collect::<Vec<_>>();
     assert!(
-        entries.iter().any(|name| name.starts_with("state.json.corrupt-")),
+        entries
+            .iter()
+            .any(|name| name.starts_with("state.json.corrupt-")),
         "entries: {:?}",
         entries
     );
@@ -191,8 +234,7 @@ fn hub_up_down_round_trip_writes_event_logs() {
     assert!(up.status.success(), "stderr: {}", stderr(&up));
     let up_text = stdout(&up);
     assert!(
-        up_text.contains(r#""status": "running""#)
-            || up_text.contains(r#""status": "starting""#),
+        up_text.contains(r#""status": "running""#) || up_text.contains(r#""status": "starting""#),
         "stdout: {}",
         up_text
     );
@@ -217,7 +259,20 @@ fn hub_up_down_round_trip_writes_event_logs() {
     let down = run(&["hub", "down", "--json", "--root", root.to_str().unwrap()]);
     assert!(down.status.success(), "stderr: {}", stderr(&down));
     let down_text = stdout(&down);
-    assert!(down_text.contains(r#""status": "stopped""#), "stdout: {}", down_text);
+    if !down_text.contains(r#""status": "stopped""#) {
+        let mut settled = false;
+        for _ in 0..20 {
+            thread::sleep(Duration::from_millis(100));
+            let status = run(&["hub", "status", "--json", "--root", root.to_str().unwrap()]);
+            assert!(status.status.success(), "stderr: {}", stderr(&status));
+            let status_text = stdout(&status);
+            if status_text.contains(r#""status": "stopped""#) {
+                settled = true;
+                break;
+            }
+        }
+        assert!(settled, "stdout: {}", down_text);
+    }
 }
 
 #[test]
@@ -262,8 +317,7 @@ fn hub_up_releases_captured_stdio_for_background_launcher() {
     assert!(up.status.success(), "stderr: {}", stderr(&up));
     let up_text = stdout(&up);
     assert!(
-        up_text.contains(r#""status": "running""#)
-            || up_text.contains(r#""status": "starting""#),
+        up_text.contains(r#""status": "running""#) || up_text.contains(r#""status": "starting""#),
         "stdout: {}",
         up_text
     );

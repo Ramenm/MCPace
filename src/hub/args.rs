@@ -86,11 +86,17 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(stdout, "");
     let _ = writeln!(stdout, "Implemented now:");
-    let _ = writeln!(stdout, "  mcpace hub up [--json] [--root <path>] [--foreground]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace hub up [--json] [--root <path>] [--foreground]"
+    );
     let _ = writeln!(stdout, "  mcpace hub down [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace hub repair [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace hub status [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace hub logs [--json] [--root <path>] [--tail <n>]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace hub logs [--json] [--root <path>] [--tail <n>]"
+    );
 }
 
 fn normalize_flag(value: &str) -> String {

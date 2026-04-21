@@ -1,7 +1,7 @@
 use crate::client;
+use crate::hub;
 use crate::json::JsonValue;
 use crate::json_helpers;
-use crate::hub;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -52,7 +52,12 @@ pub fn run(
                 root_path.display().to_string(),
             ];
             forwarded.extend(parsed.passthrough.iter().cloned());
-            client::run(&forwarded, Some(root_path.clone()), stdout_buffer, stderr_buffer)
+            client::run(
+                &forwarded,
+                Some(root_path.clone()),
+                stdout_buffer,
+                stderr_buffer,
+            )
         },
         "client plan",
     ) {
@@ -75,7 +80,12 @@ pub fn run(
                 root_path.display().to_string(),
             ];
             forwarded.extend(parsed.passthrough.iter().cloned());
-            client::run(&forwarded, Some(root_path.clone()), stdout_buffer, stderr_buffer)
+            client::run(
+                &forwarded,
+                Some(root_path.clone()),
+                stdout_buffer,
+                stderr_buffer,
+            )
         },
         "client export",
     ) {
@@ -94,7 +104,12 @@ pub fn run(
                 "--root".to_string(),
                 root_path.display().to_string(),
             ];
-            hub::run(&forwarded, Some(root_path.clone()), stdout_buffer, stderr_buffer)
+            hub::run(
+                &forwarded,
+                Some(root_path.clone()),
+                stdout_buffer,
+                stderr_buffer,
+            )
         },
         "hub up",
     ) {
@@ -113,7 +128,12 @@ pub fn run(
                 "--root".to_string(),
                 root_path.display().to_string(),
             ];
-            hub::run(&forwarded, Some(root_path.clone()), stdout_buffer, stderr_buffer)
+            hub::run(
+                &forwarded,
+                Some(root_path.clone()),
+                stdout_buffer,
+                stderr_buffer,
+            )
         },
         "hub status",
     ) {
@@ -149,22 +169,10 @@ pub fn run(
                 None => JsonValue::Null,
             },
         ),
-        (
-            "clientPlan",
-            client_plan,
-        ),
-        (
-            "adapterPreview",
-            client_export,
-        ),
-        (
-            "hubBootstrapStatus",
-            hub_bootstrap_status,
-        ),
-        (
-            "hubStatus",
-            hub_status,
-        ),
+        ("clientPlan", client_plan),
+        ("adapterPreview", client_export),
+        ("hubBootstrapStatus", hub_bootstrap_status),
+        ("hubStatus", hub_status),
         (
             "blockers",
             JsonValue::array(blockers.into_iter().map(JsonValue::string)),
@@ -220,10 +228,7 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "It reuses client planning/export logic, derives a sticky session lease, and ensures the local hub runtime is up."
     );
-    let _ = writeln!(
-        stdout,
-        "It does not yet forward live MCP stdio traffic."
-    );
+    let _ = writeln!(stdout, "It does not yet forward live MCP stdio traffic.");
 }
 
 fn run_subcommand<F>(mut runner: F, label: &str) -> Result<JsonValue, String>
@@ -255,7 +260,8 @@ where
 fn string_array_at_path(json: &JsonValue, path: &[&str]) -> Vec<String> {
     json_helpers::array_at_path(json, path)
         .map(|items| {
-            items.iter()
+            items
+                .iter()
                 .filter_map(JsonValue::as_str)
                 .map(|value| value.to_string())
                 .collect()

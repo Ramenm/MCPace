@@ -434,7 +434,6 @@ pub(super) fn write_text_plan(plan: &ClientPlan, stdout: &mut dyn Write) {
     }
 }
 
-
 pub(super) fn join_or_none(values: &[String]) -> String {
     if values.is_empty() {
         "none".to_string()
@@ -473,7 +472,6 @@ pub(super) fn join_count_map(values: &BTreeMap<String, usize>) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
-
 
 fn yes_no(value: bool) -> &'static str {
     if value {

@@ -11,7 +11,6 @@ pub(super) struct ParsedArgs {
     pub(super) error: Option<String>,
 }
 
-
 pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Usage: mcpace server <list|capabilities|candidates> [--json] [--root <path>] [--name <server>]");
     let _ = writeln!(stdout, "");

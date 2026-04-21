@@ -3,9 +3,9 @@ use crate::json_helpers;
 use std::collections::BTreeSet;
 use std::env;
 
-use super::pathing::{normalize_path, normalize_transport};
 use super::args::ParsedArgs;
 use super::model::MetadataEnvelope;
+use super::pathing::{normalize_path, normalize_transport};
 
 pub(super) fn load_metadata(parsed: &ParsedArgs) -> Result<MetadataEnvelope, String> {
     let raw = parsed
@@ -228,4 +228,3 @@ fn root_strings_from_entries(value: Option<&[JsonValue]>) -> Vec<String> {
         .filter(|value| !value.is_empty())
         .collect()
 }
-

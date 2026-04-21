@@ -273,8 +273,7 @@ fn load_project_status(root_path: Option<&Path>, tools: &[ToolStatus]) -> Projec
         config_version,
         rust_source_ready: cargo_manifest_found && cargo_ready && rustc_ready,
         npm_surface_ready: npm_workspace_found && node_ready && npm_ready,
-        runtime_prerequisites_ready: config_found
-            && (!container_tooling_required || docker_ready),
+        runtime_prerequisites_ready: config_found && (!container_tooling_required || docker_ready),
         container_tooling_ready: docker_ready,
     }
 }
@@ -313,7 +312,8 @@ fn runtime_requires_container_tooling(root_path: Option<&Path>) -> bool {
 }
 
 fn tool_found(tools: &[ToolStatus], name: &str) -> bool {
-    tools.iter()
+    tools
+        .iter()
         .find(|tool| tool.name == name)
         .map(|tool| tool.found)
         .unwrap_or(false)
@@ -321,7 +321,11 @@ fn tool_found(tools: &[ToolStatus], name: &str) -> bool {
 
 fn tool_status(name: &str, required: bool, args: &[&str]) -> ToolStatus {
     let found = command_available(name);
-    let version = if found { command_version(name, args) } else { None };
+    let version = if found {
+        command_version(name, args)
+    } else {
+        None
+    };
 
     ToolStatus {
         name: name.to_string(),

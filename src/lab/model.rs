@@ -53,7 +53,6 @@ pub(super) struct CapabilityGap {
     pub(super) impacted_surface_kinds: Vec<String>,
 }
 
-
 impl LabScenarioRecord {
     pub(super) fn to_json_value(&self) -> JsonValue {
         JsonValue::object([

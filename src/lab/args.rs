@@ -11,7 +11,6 @@ pub(super) struct ParsedArgs {
     pub(super) error: Option<String>,
 }
 
-
 pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
     let mut parsed = ParsedArgs::default();
     let mut index = 0usize;

@@ -71,18 +71,36 @@ pub(super) struct HubStatus {
 impl HubStatus {
     pub(super) fn to_json_value(&self) -> JsonValue {
         let mut map = BTreeMap::new();
-        map.insert("rootPath".to_string(), JsonValue::string(self.root_path.clone()));
-        map.insert("stateRoot".to_string(), JsonValue::string(self.state_root.clone()));
-        map.insert("runtimeDir".to_string(), JsonValue::string(self.runtime_dir.clone()));
-        map.insert("hubDir".to_string(), JsonValue::string(self.hub_dir.clone()));
-        map.insert("logPath".to_string(), JsonValue::string(self.log_path.clone()));
+        map.insert(
+            "rootPath".to_string(),
+            JsonValue::string(self.root_path.clone()),
+        );
+        map.insert(
+            "stateRoot".to_string(),
+            JsonValue::string(self.state_root.clone()),
+        );
+        map.insert(
+            "runtimeDir".to_string(),
+            JsonValue::string(self.runtime_dir.clone()),
+        );
+        map.insert(
+            "hubDir".to_string(),
+            JsonValue::string(self.hub_dir.clone()),
+        );
+        map.insert(
+            "logPath".to_string(),
+            JsonValue::string(self.log_path.clone()),
+        );
         map.insert(
             "leaseStorePath".to_string(),
             JsonValue::string(self.lease_store_path.clone()),
         );
         match &self.config_version {
             Some(value) => {
-                map.insert("configVersion".to_string(), JsonValue::string(value.clone()));
+                map.insert(
+                    "configVersion".to_string(),
+                    JsonValue::string(value.clone()),
+                );
             }
             None => {
                 map.insert("configVersion".to_string(), JsonValue::Null);
@@ -118,7 +136,10 @@ impl HubStatus {
             "readyForRuntimeOps".to_string(),
             JsonValue::bool(self.ready_for_runtime_ops),
         );
-        map.insert("serverCount".to_string(), JsonValue::number(self.server_count));
+        map.insert(
+            "serverCount".to_string(),
+            JsonValue::number(self.server_count),
+        );
         map.insert(
             "requiredServerCount".to_string(),
             JsonValue::number(self.required_server_count),
@@ -177,7 +198,11 @@ impl HubStatus {
         );
         map.insert(
             "corruptedFiles".to_string(),
-            JsonValue::array(self.corrupted_files.iter().map(CorruptedRuntimeFile::to_json_value)),
+            JsonValue::array(
+                self.corrupted_files
+                    .iter()
+                    .map(CorruptedRuntimeFile::to_json_value),
+            ),
         );
         map.insert(
             "repairRecommended".to_string(),

@@ -63,6 +63,48 @@ pub fn hub_leases_path(state_root: &Path) -> PathBuf {
     hub_dir(state_root).join("leases.json")
 }
 
+pub fn serve_dir(state_root: &Path) -> PathBuf {
+    runtime_dir(state_root).join("serve")
+}
+
+pub fn ensure_serve_dir(state_root: &Path) -> Result<PathBuf, String> {
+    let path = serve_dir(state_root);
+    std::fs::create_dir_all(&path)
+        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
+    Ok(path)
+}
+
+pub fn serve_state_path(state_root: &Path) -> PathBuf {
+    serve_dir(state_root).join("state.json")
+}
+
+pub fn serve_stdout_log_path(state_root: &Path) -> PathBuf {
+    serve_dir(state_root).join("stdout.log")
+}
+
+pub fn serve_stderr_log_path(state_root: &Path) -> PathBuf {
+    serve_dir(state_root).join("stderr.log")
+}
+
+pub fn runtime_bin_dir(state_root: &Path) -> PathBuf {
+    runtime_dir(state_root).join("bin")
+}
+
+pub fn ensure_runtime_bin_dir(state_root: &Path) -> Result<PathBuf, String> {
+    let path = runtime_bin_dir(state_root);
+    std::fs::create_dir_all(&path)
+        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
+    Ok(path)
+}
+
+pub fn serve_runner_path(state_root: &Path) -> PathBuf {
+    runtime_bin_dir(state_root).join(if cfg!(windows) {
+        "mcpace-serve.exe"
+    } else {
+        "mcpace-serve"
+    })
+}
+
 fn absolutize(root_path: &Path, path: PathBuf) -> PathBuf {
     if path.is_absolute() {
         path

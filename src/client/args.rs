@@ -1,3 +1,4 @@
+use super::actions::client_install_support_summary;
 use super::pathing::normalize;
 use std::io::Write;
 use std::path::PathBuf;
@@ -45,7 +46,8 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--client-id" | "-client-id" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("client plan requires a value after --client-id".to_string());
+                    parsed.error =
+                        Some("client plan requires a value after --client-id".to_string());
                     return parsed;
                 };
                 parsed.client_id = Some(value.to_string());
@@ -53,7 +55,8 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--session-id" | "-session-id" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("client plan requires a value after --session-id".to_string());
+                    parsed.error =
+                        Some("client plan requires a value after --session-id".to_string());
                     return parsed;
                 };
                 parsed.session_id = Some(value.to_string());
@@ -61,7 +64,8 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--project-root" | "-project-root" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("client plan requires a value after --project-root".to_string());
+                    parsed.error =
+                        Some("client plan requires a value after --project-root".to_string());
                     return parsed;
                 };
                 parsed.project_root = Some(value.to_string());
@@ -69,7 +73,8 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--transport" | "-transport" | "--ingress" | "-ingress" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("client plan requires a value after --transport".to_string());
+                    parsed.error =
+                        Some("client plan requires a value after --transport".to_string());
                     return parsed;
                 };
                 parsed.transport = Some(value.to_string());
@@ -77,7 +82,9 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--metadata-json" | "-metadata-json" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("client plan requires a JSON string after --metadata-json".to_string());
+                    parsed.error = Some(
+                        "client plan requires a JSON string after --metadata-json".to_string(),
+                    );
                     return parsed;
                 };
                 parsed.metadata_json = Some(value.to_string());
@@ -117,15 +124,21 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  mcpace client list [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace client install <client> [--json] [--root <path>]"
+    );
     let _ = writeln!(stdout, "  mcpace client export <client> [--json] [--root <path>] [--transport <stdio|streamable-http>] [--session-id <id>] [--project-root <path>] [--metadata-json <json>]");
-    let _ = writeln!(stdout, "");
-    let _ = writeln!(stdout, "Planned next:");
-    let _ = writeln!(stdout, "  mcpace client install <client>");
     let _ = writeln!(stdout, "");
     let _ = writeln!(
         stdout,
         "client list shows the currently verified/generic client target catalog."
     );
     let _ = writeln!(stdout, "client plan inspects routing context, derived session leases, and server arbitration without starting a hub runtime.");
-    let _ = writeln!(stdout, "client export emits a preview-only adapter contract and blocker list without writing client config yet.");
+    let _ = writeln!(
+        stdout,
+        "client install currently supports {}. It writes only the MCPace-owned config entry or block for that client surface.",
+        client_install_support_summary()
+    );
+    let _ = writeln!(stdout, "client export is HTTP-first: for local clients that document Streamable HTTP, it emits the MCPace URL http://127.0.0.1:39022/mcp. Stdio remains an internal compatibility fallback for clients that still need it.");
 }

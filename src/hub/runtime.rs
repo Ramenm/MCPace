@@ -15,8 +15,14 @@ pub(super) fn ensure_runtime_layout(root_path: &Path) -> Result<(), String> {
     let state_root = runtimepaths::resolve_state_root(root_path);
     runtimepaths::ensure_runtime_dir(&state_root)?;
     runtimepaths::ensure_hub_dir(&state_root)?;
-    let _ = seed_json_if_missing(&runtimepaths::project_registry_path(&state_root), default_project_registry())?;
-    let _ = seed_json_if_missing(&runtimepaths::hub_leases_path(&state_root), default_lease_store())?;
+    let _ = seed_json_if_missing(
+        &runtimepaths::project_registry_path(&state_root),
+        default_project_registry(),
+    )?;
+    let _ = seed_json_if_missing(
+        &runtimepaths::hub_leases_path(&state_root),
+        default_lease_store(),
+    )?;
     Ok(())
 }
 
@@ -60,7 +66,10 @@ pub(super) fn repair_runtime_files(root_path: &Path) -> Result<RepairReport, Str
     let mut recreated_paths = Vec::new();
     let mut warnings = Vec::new();
 
-    for diagnostic in diagnostics.iter().filter(|diagnostic| diagnostic.error.is_some()) {
+    for diagnostic in diagnostics
+        .iter()
+        .filter(|diagnostic| diagnostic.error.is_some())
+    {
         let archived_path = archive_corrupted_file(&diagnostic.path)?;
         archived_paths.push(archived_path.display().to_string());
     }
@@ -176,11 +185,19 @@ pub(super) fn write_state_metadata(
     );
     map.insert(
         "logPath".to_string(),
-        JsonValue::string(runtimepaths::hub_log_path(&state_root).display().to_string()),
+        JsonValue::string(
+            runtimepaths::hub_log_path(&state_root)
+                .display()
+                .to_string(),
+        ),
     );
     map.insert(
         "leaseStorePath".to_string(),
-        JsonValue::string(runtimepaths::hub_leases_path(&state_root).display().to_string()),
+        JsonValue::string(
+            runtimepaths::hub_leases_path(&state_root)
+                .display()
+                .to_string(),
+        ),
     );
     match pid {
         Some(value) => {
@@ -224,12 +241,12 @@ pub(super) fn write_health_metadata(
         ("status", JsonValue::string(status.to_string())),
         ("pid", JsonValue::number(pid)),
         ("startedAtMs", JsonValue::number(started_at_ms)),
-        (
-            "lastHeartbeatAtMs",
-            JsonValue::number(last_heartbeat_at_ms),
-        ),
+        ("lastHeartbeatAtMs", JsonValue::number(last_heartbeat_at_ms)),
     ]);
-    write_atomic(&runtimepaths::hub_health_path(&state_root), value.to_pretty_string())
+    write_atomic(
+        &runtimepaths::hub_health_path(&state_root),
+        value.to_pretty_string(),
+    )
 }
 
 pub(super) fn append_log(

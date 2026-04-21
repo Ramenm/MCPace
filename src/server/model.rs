@@ -36,7 +36,6 @@ pub(super) struct SourceServerRecord {
     pub(super) url: String,
 }
 
-
 impl ServerRecord {
     pub(super) fn summary_json_value(&self) -> JsonValue {
         JsonValue::object([

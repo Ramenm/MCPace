@@ -86,4 +86,3 @@ pub(crate) fn stdout(output: &Output) -> String {
 pub(crate) fn stderr(output: &Output) -> String {
     String::from_utf8(output.stderr.clone()).expect("stderr utf8")
 }
-

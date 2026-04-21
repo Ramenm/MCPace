@@ -92,18 +92,18 @@ pub fn run(
             return 1;
         }
     };
-    let report = build_report(
-        catalog,
-        resolved.active_profile,
-        resolved.selection_source,
-    );
+    let report = build_report(catalog, resolved.active_profile, resolved.selection_source);
 
     if parsed.json_output {
         let _ = writeln!(stdout, "{}", report.to_json_value().to_pretty_string());
         0
     } else {
         let _ = writeln!(stdout, "Active runtime profile: {}", report.active_profile);
-        let _ = writeln!(stdout, "Default runtime profile: {}", report.default_profile);
+        let _ = writeln!(
+            stdout,
+            "Default runtime profile: {}",
+            report.default_profile
+        );
         let _ = writeln!(stdout, "Selection source: {}", report.selection_source);
         let _ = writeln!(stdout, "Available profiles:");
         for profile in &report.profiles {
@@ -111,10 +111,7 @@ pub fn run(
             let _ = writeln!(
                 stdout,
                 " {} {} - {} (server overrides: {})",
-                marker,
-                profile.name,
-                profile.description,
-                profile.server_override_count
+                marker, profile.name, profile.description, profile.server_override_count
             );
         }
         0
@@ -340,10 +337,14 @@ fn resolve_active_profile(
     ("safe".to_string(), "fallback-safe".to_string())
 }
 
-fn read_server_overrides(root_path: &Path, active_profile: &str) -> Result<BTreeMap<String, bool>, String> {
+fn read_server_overrides(
+    root_path: &Path,
+    active_profile: &str,
+) -> Result<BTreeMap<String, bool>, String> {
     let config_path = root_path.join("mcpace.config.json");
     let json = json_helpers::read_json_file(&config_path)?;
-    let runtime_profiles = json_helpers::object_at_path(&json, &["profiles", "runtime", "profiles"]);
+    let runtime_profiles =
+        json_helpers::object_at_path(&json, &["profiles", "runtime", "profiles"]);
     let mut overrides = BTreeMap::new();
 
     if let Some(runtime_profiles) = runtime_profiles {

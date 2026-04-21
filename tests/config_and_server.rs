@@ -326,5 +326,9 @@ fn verify_readiness_json_tracks_container_runtime_prerequisites_honestly() {
     assert!(text.contains(r#""readyForReadOnlyOps": true"#));
     let container_tooling_ready = text.contains(r#""containerToolingReady": true"#);
     let runtime_prerequisites_ready = text.contains(r#""runtimePrerequisitesReady": true"#);
-    assert_eq!(runtime_prerequisites_ready, container_tooling_ready, "stdout: {}", text);
+    assert_eq!(
+        runtime_prerequisites_ready, container_tooling_ready,
+        "stdout: {}",
+        text
+    );
 }

@@ -26,6 +26,18 @@ pub const COMMANDS: &[CommandSpec] = &[
         implemented: true,
     },
     CommandSpec {
+        name: "dashboard",
+        description: "Serve a local admin dashboard for MCPace.",
+        aliases: &["ui"],
+        implemented: true,
+    },
+    CommandSpec {
+        name: "serve",
+        description: "Serve the local MCPace HTTP surface on one port.",
+        aliases: &[],
+        implemented: true,
+    },
+    CommandSpec {
         name: "profile",
         description: "Read-only runtime profile inspection.",
         aliases: &[],
@@ -83,13 +95,19 @@ pub const COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "stdio-shim",
-        description: "Bootstrap-only stdio shim proof surface.",
+        description: "Internal bootstrap-only stdio shim proof surface.",
         aliases: &["stdio_shim"],
         implemented: true,
     },
     CommandSpec {
+        name: "mcp-server",
+        description: "Internal MCP stdio compatibility surface.",
+        aliases: &["mcp_server"],
+        implemented: true,
+    },
+    CommandSpec {
         name: "client",
-        description: "Grouped client planning command with future install/export surface.",
+        description: "Grouped client planning/install/export command.",
         aliases: &["setup-clients", "setup-mcp-clients"],
         implemented: true,
     },
