@@ -1,0 +1,16 @@
+{
+  "id": "adversarial-cancel-after-restart",
+  "suite": "recovery",
+  "category": "adversarial",
+  "proofLayer": "runtime",
+  "heldOut": false,
+  "title": "Cancel after restart and stale result suppression",
+  "objective": "Drop stale responses after session reset or restart so a dead lease cannot write into a new one.",
+  "traffic": {
+    "clientArchetype": "generic-http",
+    "serverPolicies": ["shared-global", "single-writer"],
+    "signals": ["clientInfo", "transportSessionId", "cancel"]
+  },
+  "checks": ["must-drop-stale-result", "must-reset-after-session-404"],
+  "requires": ["runtime-hub-daemon", "runtime-http-ingress", "runtime-cancel-restart-guards"]
+}

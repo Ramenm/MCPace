@@ -1,0 +1,139 @@
+{
+  "version": "0.3.0",
+  "families": [
+    {
+      "id": "project-state-reporting",
+      "prevalence": "high",
+      "whyItMatters": "Maintainers repeatedly ask what is done, what is blocked, and how far the repo is from release-candidate quality.",
+      "seedTypical": [
+        "project-status-with-ranged-progress"
+      ],
+      "seedEdge": [
+        "eta-without-throughput-history"
+      ],
+      "seedAdversarial": [],
+      "seedHeldOut": [],
+      "runtimeFixtures": []
+    },
+    {
+      "id": "architecture-and-migration",
+      "prevalence": "high",
+      "whyItMatters": "This repo still needs disciplined sequencing between incremental Rust completion, runtime work, and broader scope.",
+      "seedTypical": [
+        "fork-vs-in-place-rewrite",
+        "rewrite-vs-incremental"
+      ],
+      "seedEdge": [
+        "cloud-first-overbuild",
+        "npm-wrapper-replaces-core"
+      ],
+      "seedAdversarial": [
+        "greenfield-hub-overclaim",
+        "rust-perfect-rewrite-overpromise",
+        "competitor-feature-checklist-trap"
+      ],
+      "seedHeldOut": [],
+      "runtimeFixtures": []
+    },
+    {
+      "id": "routing-and-server-arbitration",
+      "prevalence": "high",
+      "whyItMatters": "The core product promise is one local hub that routes safely across projects, sessions, and incompatible server policies.",
+      "seedTypical": [],
+      "seedEdge": [
+        "client-entrypoint-overclaim"
+      ],
+      "seedAdversarial": [
+        "unsafe-server-sharing"
+      ],
+      "seedHeldOut": [],
+      "runtimeFixtures": [
+        "typical-project-routing",
+        "typical-http-session-lane",
+        "edge-ambiguous-project-roots",
+        "edge-no-roots-meta-only",
+        "adversarial-double-owner",
+        "adversarial-unknown-policy"
+      ]
+    },
+    {
+      "id": "client-surface-compatibility",
+      "prevalence": "medium",
+      "whyItMatters": "Local, cloud, and API-connector client surfaces diverge on transport, auth, and tools/resources support.",
+      "seedTypical": [],
+      "seedEdge": [],
+      "seedAdversarial": [
+        "closed-tool-stack-overclaim"
+      ],
+      "seedHeldOut": [],
+      "runtimeFixtures": [
+        "edge-claude-api-public-http-tools-only",
+        "edge-copilot-cloud-tools-only-no-oauth",
+        "edge-cursor-cloud-agent-http-preferred",
+        "edge-kiro-cli-agent-precedence",
+        "edge-hermes-capability-aware-wrappers",
+        "edge-windsurf-tool-budget"
+      ]
+    },
+    {
+      "id": "proof-and-readiness-claims",
+      "prevalence": "high",
+      "whyItMatters": "The most damaging failure mode is to claim runtime or cross-platform readiness from source-only checks.",
+      "seedTypical": [],
+      "seedEdge": [
+        "runtime-proof-missing-prereqs",
+        "spec-version-drift"
+      ],
+      "seedAdversarial": [
+        "cross-platform-overclaim"
+      ],
+      "seedHeldOut": [],
+      "runtimeFixtures": [
+        "held-out-release-gate",
+        "adversarial-cancel-after-restart"
+      ]
+    },
+    {
+      "id": "packaging-and-release",
+      "prevalence": "medium",
+      "whyItMatters": "Source archives and package claims must stay clean, aligned, and reproducible.",
+      "seedTypical": [],
+      "seedEdge": [],
+      "seedAdversarial": [],
+      "seedHeldOut": [
+        "packaging-state-leak",
+        "trusted-publishing-overclaim"
+      ],
+      "runtimeFixtures": [
+        "typical-config-patch-safety"
+      ]
+    },
+    {
+      "id": "dependency-and-tooling-governance",
+      "prevalence": "medium",
+      "whyItMatters": "The repo aims to stay dependency-light and governance-aware while the Rust runtime is still maturing.",
+      "seedTypical": [],
+      "seedEdge": [
+        "crate-selection-without-governance"
+      ],
+      "seedAdversarial": [],
+      "seedHeldOut": [],
+      "runtimeFixtures": []
+    },
+    {
+      "id": "runtime-boundaries-and-operator-scope",
+      "prevalence": "medium",
+      "whyItMatters": "The repo needs a stable public surface and a clear boundary between contributor tooling and end-user runtime requirements.",
+      "seedTypical": [],
+      "seedEdge": [
+        "single-hub-interface-drift"
+      ],
+      "seedAdversarial": [
+        "skills-boundary",
+        "eval-showroom-benchmark-trap"
+      ],
+      "seedHeldOut": [],
+      "runtimeFixtures": []
+    }
+  ]
+}

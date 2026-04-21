@@ -1,0 +1,97 @@
+{
+  "version": "0.1.0",
+  "runtime": {
+    "mode": "local-hub",
+    "stateDir": "data/runtime",
+    "logDir": "logs",
+    "ingress": {
+      "stdioLaunchers": {
+        "enabled": true
+      },
+      "streamableHttp": {
+        "enabled": true,
+        "bind": "127.0.0.1:12223",
+        "authMode": "local-bearer"
+      }
+    }
+  },
+  "clients": {
+    "default": "cursor",
+    "supported": [
+      "cursor",
+      "vscode",
+      "generic-stdio"
+    ]
+  },
+  "profiles": {
+    "default": "safe",
+    "definitions": {
+      "safe": {
+        "description": "Required local path only.",
+        "serverIds": [
+          "browser",
+          "filesystem",
+          "fetch"
+        ]
+      }
+    }
+  },
+  "servers": [
+    {
+      "id": "browser",
+      "kind": "host-bridge",
+      "enabledByDefault": true,
+      "required": true,
+      "scope": "host-session",
+      "rootsPolicy": "none",
+      "credentialMode": "none",
+      "upstream": {
+        "mode": "url",
+        "url": "http://127.0.0.1:{abpPort}/mcp",
+        "healthCheckUrl": "http://127.0.0.1:{abpPort}/api/v1/tabs"
+      }
+    },
+    {
+      "id": "filesystem",
+      "kind": "local-stdio",
+      "enabledByDefault": true,
+      "required": true,
+      "scope": "project-local",
+      "rootsPolicy": "required",
+      "credentialMode": "none",
+      "upstream": {
+        "mode": "command",
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/server-filesystem"
+        ]
+      }
+    },
+    {
+      "id": "fetch",
+      "kind": "local-stdio",
+      "enabledByDefault": true,
+      "required": true,
+      "scope": "shared-global",
+      "rootsPolicy": "none",
+      "credentialMode": "none",
+      "upstream": {
+        "mode": "command",
+        "command": "docker",
+        "args": [
+          "exec",
+          "mcpace",
+          "fetch-server"
+        ]
+      }
+    }
+  ],
+  "projects": {
+    "discoveryRoots": [],
+    "stickySessions": true
+  },
+  "compatibility": {
+    "legacyManagerBridge": true,
+    "legacyScriptAliases": true
+  }
+}

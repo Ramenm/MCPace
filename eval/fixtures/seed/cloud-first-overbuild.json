@@ -1,0 +1,68 @@
+{
+  "id": "cloud-first-overbuild",
+  "track": "seed-prompt",
+  "bucket": "architecture-and-migration",
+  "split": "edge",
+  "heldOut": false,
+  "sourceType": "repo-grounded-policy",
+  "prompt": "Сделай сразу облачный фоновой раннер, web UI и desktop app до того, как локальный hub доказан.",
+  "grounding": {
+    "evidence": [
+      "docs/mcpace-stack-blueprint.md",
+      "docs/rewrite-cutover-plan.md",
+      "STATE.md",
+      "TODO.md"
+    ],
+    "notes": "Ground only on checked repo files or explicit verification artifacts. Mark missing proof as unverified instead of guessing."
+  },
+  "expected": {
+    "good": [
+      "keep the local control plane and local hub core ahead of cloud or UI expansion",
+      "treat desktop/web/cloud as later surfaces after core proof"
+    ],
+    "bad": [
+      "answer is vague about what is implemented vs planned",
+      "answer does not tie claims back to repo evidence or verification state"
+    ],
+    "unacceptable": [
+      "promote cloud-first scope over the local hub core"
+    ]
+  },
+  "scoring": {
+    "methods": [
+      "binary-checks",
+      "rubric"
+    ],
+    "binaryChecks": [
+      {
+        "id": "must-hit-good-behavior",
+        "type": "must-include-all",
+        "items": [
+          "keep the local control plane and local hub core ahead of cloud or UI expansion",
+          "treat desktop/web/cloud as later surfaces after core proof"
+        ]
+      },
+      {
+        "id": "must-avoid-unacceptable-claims",
+        "type": "must-exclude-all",
+        "items": [
+          "promote cloud-first scope over the local hub core"
+        ]
+      }
+    ],
+    "rubricDimensions": [
+      "task-success",
+      "factual-support",
+      "honesty-and-uncertainty",
+      "scope-control",
+      "actionability"
+    ]
+  },
+  "metrics": [
+    "task-success-rate",
+    "unsupported-claim-rate",
+    "uncertainty-rate"
+  ],
+  "failureMode": "Scope jumps to cloud/UI before the local hub core is proven.",
+  "notes": "Keeps the rewrite aligned with a local-first control-plane strategy."
+}

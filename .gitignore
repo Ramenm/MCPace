@@ -1,0 +1,30 @@
+# Generated runtime state
+/backups/
+/data/
+/dist/
+/logs/
+/mcpace.cmd
+/mcpace.sh
+
+# Local secrets
+/.env
+/.env.*
+!/.env.example
+
+# Local IDE and agent state
+/.omx/
+/.serena/
+/.vscode/
+/.idea/
+/memory-bank/
+/TestResults/
+
+# Temporary packaging output
+/*.zip
+/testResults.xml
+/target/
+/.tmp-archive-test/
+
+/node_modules/
+/packages/**/node_modules/
+/*.tgz

@@ -1,0 +1,16 @@
+{
+  "id": "edge-cursor-cloud-agent-http-preferred",
+  "suite": "surface",
+  "category": "edge",
+  "proofLayer": "compat",
+  "heldOut": false,
+  "title": "Cursor cloud agents diverge from local Cursor surfaces",
+  "objective": "Model Cursor cloud agents as a separate surface with cloud execution, no SSE, and HTTP-preferred MCP usage.",
+  "traffic": {
+    "clientArchetype": "cursor-cloud-agents",
+    "serverPolicies": ["shared-global", "single-writer"],
+    "signals": ["clientInfo", "transportSessionId", "_meta"]
+  },
+  "checks": ["must-separate-local-and-cloud-surface", "must-warn-when-sse-is-assumed"],
+  "requires": ["planner-client-surface-catalog", "planner-surface-constraint-warnings", "cloud-relay-path"]
+}

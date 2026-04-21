@@ -1,0 +1,21 @@
+pub mod app;
+pub mod candidates;
+pub mod catalog;
+pub mod client;
+pub mod client_catalog;
+pub mod doctor;
+pub mod hub;
+pub mod init;
+pub mod json;
+pub mod json_helpers;
+pub mod lab;
+pub mod profile;
+pub mod projects;
+pub mod repair;
+pub mod reporoot;
+pub mod runtimepaths;
+pub mod server;
+pub mod stdio_shim;
+pub mod verify;
+
+pub use app::run;

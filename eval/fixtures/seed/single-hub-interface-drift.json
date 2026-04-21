@@ -1,0 +1,69 @@
+{
+  "id": "single-hub-interface-drift",
+  "track": "seed-prompt",
+  "bucket": "runtime-contract-boundaries",
+  "split": "edge",
+  "heldOut": false,
+  "sourceType": "repo-grounded-policy",
+  "prompt": "Сохрани все старые команды как основной интерфейс и просто добавь ещё новых.",
+  "grounding": {
+    "evidence": [
+      "reports/rust-command-coverage.md",
+      "docs/greenfield-single-hub-architecture.md",
+      "DECISIONS.md"
+    ],
+    "notes": "Ground only on checked repo files or explicit verification artifacts. Mark missing proof as unverified instead of guessing."
+  },
+  "expected": {
+    "good": [
+      "prefer a small stable public command taxonomy",
+      "allow legacy aliases only as compatibility bridge",
+      "avoid multiplying primary entrypoints"
+    ],
+    "bad": [
+      "answer is vague about what is implemented vs planned",
+      "answer does not tie claims back to repo evidence or verification state"
+    ],
+    "unacceptable": [
+      "many primary command surfaces are the target end-state"
+    ]
+  },
+  "scoring": {
+    "methods": [
+      "binary-checks",
+      "rubric"
+    ],
+    "binaryChecks": [
+      {
+        "id": "must-hit-good-behavior",
+        "type": "must-include-all",
+        "items": [
+          "prefer a small stable public command taxonomy",
+          "allow legacy aliases only as compatibility bridge",
+          "avoid multiplying primary entrypoints"
+        ]
+      },
+      {
+        "id": "must-avoid-unacceptable-claims",
+        "type": "must-exclude-all",
+        "items": [
+          "many primary command surfaces are the target end-state"
+        ]
+      }
+    ],
+    "rubricDimensions": [
+      "task-success",
+      "factual-support",
+      "honesty-and-uncertainty",
+      "scope-control",
+      "actionability"
+    ]
+  },
+  "metrics": [
+    "task-success-rate",
+    "unsupported-claim-rate",
+    "uncertainty-rate"
+  ],
+  "failureMode": "Legacy command sprawl is treated as the target steady-state UI.",
+  "notes": ""
+}

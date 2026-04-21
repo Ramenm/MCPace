@@ -1,0 +1,16 @@
+{
+  "id": "edge-hermes-capability-aware-wrappers",
+  "suite": "surface",
+  "category": "edge",
+  "proofLayer": "compat",
+  "heldOut": false,
+  "title": "Hermes Agent capability-aware resource and prompt wrappers",
+  "objective": "Model Hermes as a local agent surface that can expose resource and prompt utility wrappers only when the upstream server actually supports those capabilities.",
+  "traffic": {
+    "clientArchetype": "hermes-agent",
+    "serverPolicies": ["shared-global", "credential-scoped"],
+    "signals": ["clientInfo", "_meta"]
+  },
+  "checks": ["must-keep-capability-aware-wrapper-model", "must-preserve-http-oauth-path"],
+  "requires": ["planner-client-surface-catalog", "lab-surface-aware-coverage", "compat-real-client-matrix"]
+}

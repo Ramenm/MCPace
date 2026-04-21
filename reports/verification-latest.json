@@ -1,0 +1,46 @@
+{
+  "version": "0.3.0",
+  "checkedAt": "2026-04-19T21:00:12.310Z",
+  "environment": {
+    "container": true,
+    "node": "v22.16.0",
+    "npm": "10.9.2",
+    "cargo": null,
+    "rustc": null
+  },
+  "sourceProof": {
+    "status": "pass",
+    "checks": [
+      "npm test"
+    ],
+    "durationMs": 4486
+  },
+  "buildProof": {
+    "status": "blocked",
+    "checks": [],
+    "reason": "cargo/rustc are not installed in this environment"
+  },
+  "runtimeProof": {
+    "status": "blocked",
+    "checks": [],
+    "reason": "no supported real-host runtime proof was executed in this container"
+  },
+  "releaseProof": {
+    "status": "partial",
+    "checks": [
+      "npm test",
+      "npm run pack:npm:dry-run",
+      "node scripts/archive-release.mjs --json"
+    ],
+    "archive": {
+      "name": "mcpace-v0.3.0-190426-210018.zip",
+      "path": "dist/mcpace-v0.3.0-190426-210018.zip",
+      "stamp": "190426-210018"
+    },
+    "missing": [
+      "GitHub Release artifact publication",
+      "published npm provenance proof",
+      "real-host runtime validation before public release claims"
+    ]
+  }
+}

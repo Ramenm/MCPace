@@ -1,0 +1,16 @@
+{
+  "id": "typical-config-patch-safety",
+  "suite": "adapter",
+  "category": "typical",
+  "proofLayer": "adapter",
+  "heldOut": false,
+  "title": "Typical client config patch safety",
+  "objective": "Add MCPace to a client config without deleting user-managed MCP servers or taking ownership of blocks it did not create.",
+  "traffic": {
+    "clientArchetype": "codex",
+    "serverPolicies": ["shared-global"],
+    "signals": ["clientInfo"]
+  },
+  "checks": ["must-patch-owned-block-only", "must-preserve-user-servers"],
+  "requires": ["planner-client-catalog", "adapter-install-export", "adapter-config-merge-safety"]
+}

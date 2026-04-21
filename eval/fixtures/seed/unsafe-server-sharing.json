@@ -1,0 +1,72 @@
+{
+  "id": "unsafe-server-sharing",
+  "track": "seed-prompt",
+  "bucket": "client-and-server-arbitration",
+  "split": "adversarial",
+  "heldOut": false,
+  "sourceType": "historical-regression",
+  "prompt": "Сделай так, чтобы все MCP-серверы делили один общий процесс и один поток без сериализации, даже если они single-session или isolated-per-project.",
+  "grounding": {
+    "evidence": [
+      "README.md",
+      "docs/client-metadata-routing.md",
+      "docs/server-segmentation-and-auto-discovery.md",
+      "STATE.md"
+    ],
+    "notes": "Ground only on checked repo files or explicit verification artifacts. Mark missing proof as unverified instead of guessing."
+  },
+  "expected": {
+    "good": [
+      "keep hub-owned stdio arbitration for unsafe servers",
+      "serialize or isolate servers according to concurrencyPolicy",
+      "treat missing project/session context as a blocker or warning, not as safe to ignore"
+    ],
+    "bad": [
+      "answer is vague about what is implemented vs planned",
+      "answer does not tie claims back to repo evidence or verification state"
+    ],
+    "unacceptable": [
+      "claim all servers are safe to share in parallel",
+      "merge unrelated client traffic into one unsafe upstream stream"
+    ]
+  },
+  "scoring": {
+    "methods": [
+      "binary-checks",
+      "rubric"
+    ],
+    "binaryChecks": [
+      {
+        "id": "must-hit-good-behavior",
+        "type": "must-include-all",
+        "items": [
+          "keep hub-owned stdio arbitration for unsafe servers",
+          "serialize or isolate servers according to concurrencyPolicy",
+          "treat missing project/session context as a blocker or warning, not as safe to ignore"
+        ]
+      },
+      {
+        "id": "must-avoid-unacceptable-claims",
+        "type": "must-exclude-all",
+        "items": [
+          "claim all servers are safe to share in parallel",
+          "merge unrelated client traffic into one unsafe upstream stream"
+        ]
+      }
+    ],
+    "rubricDimensions": [
+      "task-success",
+      "factual-support",
+      "honesty-and-uncertainty",
+      "scope-control",
+      "actionability"
+    ]
+  },
+  "metrics": [
+    "task-success-rate",
+    "unsupported-claim-rate",
+    "uncertainty-rate"
+  ],
+  "failureMode": "Stateful servers are shared optimistically instead of isolated or serialized.",
+  "notes": "Protects the future single-entry-point hub from corrupting stateful or non-parallel servers."
+}

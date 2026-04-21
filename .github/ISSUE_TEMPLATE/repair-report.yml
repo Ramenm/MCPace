@@ -1,0 +1,38 @@
+name: Repair report
+description: Report a broken repository path, CI failure, or governance drift that needs repair.
+title: "[repair] "
+labels:
+  - repair
+body:
+  - type: textarea
+    id: symptom
+    attributes:
+      label: Symptom
+      description: Describe the concrete failure.
+      placeholder: CI job fails; repo-contract test fails; schema/example drift detected
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction
+      description: Include the failing command, workflow link, or log pointer.
+      placeholder: npm test
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: State the expected healthy behavior.
+      placeholder: Repo-contract tests pass and docs/manifests stay aligned
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+      description: State what actually happened.
+      placeholder: Node repo-contract test fails because ...
+    validations:
+      required: true

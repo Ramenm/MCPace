@@ -1,0 +1,16 @@
+{
+  "id": "typical-http-session-lane",
+  "suite": "lease",
+  "category": "typical",
+  "proofLayer": "runtime",
+  "heldOut": false,
+  "title": "Typical Streamable HTTP session lane",
+  "objective": "Hold a sticky lease for an HTTP client that reconnects through the MCP session header instead of respawning a fresh local process each time.",
+  "traffic": {
+    "clientArchetype": "generic-http",
+    "serverPolicies": ["shared-global", "single-writer"],
+    "signals": ["clientInfo", "transportSessionId", "_meta"]
+  },
+  "checks": ["must-carry-http-session-id", "must-keep-derived-lease-sticky"],
+  "requires": ["planner-session-lease-derivation", "runtime-hub-daemon", "runtime-http-ingress"]
+}

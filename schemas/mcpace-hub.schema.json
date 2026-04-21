@@ -1,0 +1,310 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/mcpace-hub.schema.json",
+  "title": "MCPace Hub Configuration",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "runtime",
+    "clients",
+    "profiles",
+    "servers"
+  ],
+  "properties": {
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "stateDir",
+        "logDir",
+        "ingress"
+      ],
+      "properties": {
+        "mode": {
+          "enum": [
+            "local-hub",
+            "hybrid-hub"
+          ]
+        },
+        "stateDir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "logDir": {
+          "type": "string",
+          "minLength": 1
+        },
+        "ingress": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stdioLaunchers",
+            "streamableHttp"
+          ],
+          "properties": {
+            "stdioLaunchers": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "enabled"
+              ],
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "streamableHttp": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "enabled",
+                "bind",
+                "authMode"
+              ],
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
+                },
+                "bind": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "authMode": {
+                  "enum": [
+                    "none",
+                    "local-bearer"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "clients": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default",
+        "supported"
+      ],
+      "properties": {
+        "default": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supported": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        }
+      }
+    },
+    "profiles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "default",
+        "definitions"
+      ],
+      "properties": {
+        "default": {
+          "type": "string",
+          "minLength": 1
+        },
+        "definitions": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "description",
+              "serverIds"
+            ],
+            "properties": {
+              "description": {
+                "type": "string",
+                "minLength": 1
+              },
+              "serverIds": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "servers": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "enabledByDefault",
+          "required",
+          "scope",
+          "rootsPolicy",
+          "credentialMode",
+          "upstream"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          },
+          "kind": {
+            "enum": [
+              "local-stdio",
+              "local-http",
+              "remote-http",
+              "host-bridge"
+            ]
+          },
+          "enabledByDefault": {
+            "type": "boolean"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "scope": {
+            "enum": [
+              "shared-global",
+              "project-local",
+              "credential-scoped",
+              "host-session"
+            ]
+          },
+          "rootsPolicy": {
+            "enum": [
+              "inherit",
+              "required",
+              "none"
+            ]
+          },
+          "credentialMode": {
+            "enum": [
+              "none",
+              "token",
+              "oauth",
+              "api-key",
+              "db-connection"
+            ]
+          },
+          "upstream": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "command",
+                  "url"
+                ]
+              },
+              "command": {
+                "type": "string",
+                "minLength": 1
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "url": {
+                "type": "string",
+                "minLength": 1
+              },
+              "healthCheckUrl": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "mode": {
+                      "const": "command"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "command",
+                    "args"
+                  ]
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "mode": {
+                      "const": "url"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "url"
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    "projects": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "discoveryRoots": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "stickySessions": {
+          "type": "boolean"
+        }
+      }
+    },
+    "compatibility": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "legacyManagerBridge": {
+          "type": "boolean"
+        },
+        "legacyScriptAliases": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

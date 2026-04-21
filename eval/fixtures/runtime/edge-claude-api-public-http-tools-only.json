@@ -1,0 +1,16 @@
+{
+  "id": "edge-claude-api-public-http-tools-only",
+  "suite": "surface",
+  "category": "edge",
+  "proofLayer": "compat",
+  "heldOut": false,
+  "title": "Claude API connector requires public HTTP and tools-only behavior",
+  "objective": "Do not model the Claude API MCP connector like a local client: it needs public HTTP MCP and only exposes tools.",
+  "traffic": {
+    "clientArchetype": "claude-api-connector",
+    "serverPolicies": ["shared-global", "single-writer"],
+    "signals": ["clientInfo", "transportSessionId"]
+  },
+  "checks": ["must-warn-public-http-only", "must-treat-surface-as-tools-only"],
+  "requires": ["planner-client-surface-catalog", "planner-surface-constraint-warnings", "compat-tools-only-surface-model", "cloud-relay-path"]
+}

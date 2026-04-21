@@ -1,0 +1,16 @@
+{
+  "id": "held-out-release-gate",
+  "suite": "release",
+  "category": "held-out",
+  "proofLayer": "release",
+  "heldOut": true,
+  "title": "Held-out runtime release gate",
+  "objective": "Reserve a project-aware runtime scenario for the release gate so daily iteration cannot overfit the visible set.",
+  "traffic": {
+    "clientArchetype": "generic-http",
+    "serverPolicies": ["project-local", "single-session"],
+    "signals": ["clientInfo", "roots", "transportSessionId", "_meta"]
+  },
+  "checks": ["must-stay-held-out", "must-not-release-with-runtime-gap"],
+  "requires": ["held-out-release-fixture-lane", "runtime-hub-daemon", "runtime-http-ingress", "runtime-exclusive-lease-enforcement"]
+}

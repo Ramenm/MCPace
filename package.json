@@ -1,0 +1,43 @@
+{
+  "name": "mcpace-workspace",
+  "version": "0.3.0",
+  "private": true,
+  "workspaces": [
+    "packages/npm/*"
+  ],
+  "engines": {
+    "node": ">=22.0.0",
+    "npm": ">=10.0.0"
+  },
+  "scripts": {
+    "lint:npm": "node --check packages/npm/cli/bin/mcpace.js && node --check packages/npm/cli/lib/platform.js && node --check packages/npm/cli/lib/resolve-binary.js && node --check packages/npm/cli/lib/runtime.js && node --check scripts/archive-release.mjs && node --check scripts/verify-ubuntu-docker-fast.mjs && node --check scripts/verify-ubuntu-docker-e2e.mjs && node --check scripts/verify-ubuntu-docker-full.mjs && node --check tests/node/repo-contract.test.js && node --check tests/node/docs-contract.test.js && node --check tests/node/schema-examples.test.js && node --check tests/node/fixtures-contract.test.js && node --check tests/node/stack-contract.test.js && node --check tests/node/archive-contract.test.js && node --check tests/node/evidence-contract.test.js && node --check tests/node/eval-contract.test.js && node --check scripts/proof-report.mjs && node --check tests/node/proof-report.test.js",
+    "test:repo": "node --test tests/node/*.test.js",
+    "test:npm": "node --test packages/npm/cli/test/*.test.mjs",
+    "test:rust": "cargo test",
+    "test:rust:launcher:host": "cargo test --test hub_runtime hub_up_releases_captured_stdio_for_background_launcher -- --exact",
+    "test:rust:launcher:ubuntu-docker": "node scripts/verify-ubuntu-docker-fast.mjs --json",
+    "test:e2e:ubuntu-docker": "node scripts/verify-ubuntu-docker-e2e.mjs --json",
+    "test:full:ubuntu-docker": "node scripts/verify-ubuntu-docker-full.mjs --json",
+    "build:rust:release": "cargo build --release",
+    "pack:npm:dry-run": "npm pack --workspace @mcpace/cli --json --dry-run",
+    "prove:local": "npm run prove:source && npm run prove:rust-host",
+    "test": "npm run lint:npm && npm run test:repo && npm run test:npm",
+    "prove:source": "npm test && npm run pack:npm:dry-run",
+    "prove:report": "node scripts/proof-report.mjs --json --write",
+    "prove:rust-host": "cargo test && cargo build --release",
+    "archive:release": "node scripts/archive-release.mjs --json"
+  },
+  "packageManager": "npm@11.12.1",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "^22.0.0 || ^24.0.0",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": "^10.0.0 || ^11.0.0",
+      "onFail": "error"
+    }
+  }
+}

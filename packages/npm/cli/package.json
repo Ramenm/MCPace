@@ -1,0 +1,34 @@
+{
+  "name": "@mcpace/cli",
+  "version": "0.3.0",
+  "description": "Thin npm launcher for the MCPace native Rust binary.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "mcpace": "bin/mcpace.js"
+  },
+  "files": [
+    "bin",
+    "lib",
+    "README.md"
+  ],
+  "exports": {
+    ".": "./lib/resolve-binary.js",
+    "./resolve-binary": "./lib/resolve-binary.js",
+    "./platform": "./lib/platform.js",
+    "./runtime": "./lib/runtime.js"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "mcpace",
+    "mcp",
+    "cli",
+    "rust",
+    "launcher"
+  ]
+}

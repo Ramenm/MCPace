@@ -1,0 +1,16 @@
+{
+  "id": "edge-kiro-cli-agent-precedence",
+  "suite": "adapter",
+  "category": "edge",
+  "proofLayer": "adapter",
+  "heldOut": false,
+  "title": "Kiro CLI agent-level MCP config precedence",
+  "objective": "Respect agent > workspace > user precedence when install/export eventually patches Kiro CLI config surfaces.",
+  "traffic": {
+    "clientArchetype": "kiro-cli",
+    "serverPolicies": ["shared-global"],
+    "signals": ["clientInfo"]
+  },
+  "checks": ["must-preserve-agent-precedence", "must-not-clobber-workspace-config"],
+  "requires": ["planner-client-surface-catalog", "adapter-install-export", "adapter-config-merge-safety"]
+}

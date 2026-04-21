@@ -1,0 +1,16 @@
+{
+  "id": "edge-no-roots-meta-only",
+  "suite": "context",
+  "category": "edge",
+  "proofLayer": "planner",
+  "heldOut": false,
+  "title": "Edge case with no roots and only richer context hints",
+  "objective": "Use cwd and optional _meta hints without pretending that chat or session semantics are stronger than the client actually provides.",
+  "traffic": {
+    "clientArchetype": "generic-stdio",
+    "serverPolicies": ["project-local", "single-writer"],
+    "signals": ["clientInfo", "_meta", "cwd"]
+  },
+  "checks": ["must-derive-lease-scope", "must-not-claim-chat-isolation"],
+  "requires": ["planner-context-resolution", "planner-roots-and-meta", "planner-session-lease-derivation", "planner-project-routing"]
+}
