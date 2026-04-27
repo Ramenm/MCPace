@@ -146,7 +146,11 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  mcpace serve stop [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace serve status [--json] [--root <path>]");
     let _ = writeln!(stdout, "");
-    let _ = writeln!(stdout, "serve is the public one-port MCPace surface. The default local MCP endpoint is http://127.0.0.1:39022/mcp.");
+    let _ = writeln!(
+        stdout,
+        "serve is the public one-port MCPace surface. The default local MCP endpoint is {}.",
+        runtimepaths::default_local_mcp_url()
+    );
 }
 
 fn run_start(
@@ -161,8 +165,10 @@ fn run_start(
         return 1;
     };
 
-    let host = parsed.host.unwrap_or_else(|| "127.0.0.1".to_string());
-    let port = parsed.port.unwrap_or(39022);
+    let host = parsed
+        .host
+        .unwrap_or_else(|| runtimepaths::DEFAULT_LOCAL_HOST.to_string());
+    let port = parsed.port.unwrap_or(runtimepaths::DEFAULT_LOCAL_MCP_PORT);
     let canonical_root = canonicalize_or_original(&root_path);
     let state_root = runtimepaths::resolve_state_root(&canonical_root);
     if let Err(error) = runtimepaths::ensure_runtime_dir(&state_root) {
@@ -229,7 +235,7 @@ fn run_start(
         }
     };
 
-    let child = match spawn_background(
+    let pid = match spawn_background(
         &runner_path,
         &canonical_root,
         &host,
@@ -249,8 +255,8 @@ fn run_start(
         state_root: sanitize_display(&state_root),
         host: host.clone(),
         port,
-        url: format!("http://{}:{}/mcp", host, port),
-        pid: child.id(),
+        url: http_url(&host, port, "/mcp"),
+        pid,
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runner_path),
         stdout_log_path: sanitize_display(&stdout_log_path),
@@ -362,10 +368,10 @@ fn collect_status(
     let should_probe = state.is_some() || host_override.is_some() || port_override.is_some();
     let host = host_override
         .or_else(|| state.as_ref().map(|value| value.host.clone()))
-        .unwrap_or_else(|| "127.0.0.1".to_string());
+        .unwrap_or_else(|| runtimepaths::DEFAULT_LOCAL_HOST.to_string());
     let port = port_override
         .or_else(|| state.as_ref().map(|value| value.port))
-        .unwrap_or(39022);
+        .unwrap_or(runtimepaths::DEFAULT_LOCAL_MCP_PORT);
     let running = should_probe && health_check(&host, port).unwrap_or(false);
     let mut warnings = Vec::new();
     let status = if running {
@@ -385,7 +391,7 @@ fn collect_status(
         state_root: sanitize_display(&state_root),
         host: host.clone(),
         port,
-        url: format!("http://{}:{}/mcp", host, port),
+        url: http_url(&host, port, "/mcp"),
         status,
         pid: state.as_ref().map(|value| value.pid).filter(|_| running),
         started_at_ms: state
@@ -543,7 +549,7 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
             .get("url")
             .and_then(JsonValue::as_str)
             .map(|value| value.to_string())
-            .unwrap_or_else(|| format!("http://{}:{}/mcp", host, port)),
+            .unwrap_or_else(|| http_url(&host, port, "/mcp")),
         pid,
         started_at_ms,
         runner_path: json
@@ -565,12 +571,15 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
 }
 
 fn health_check(host: &str, port: u16) -> Result<bool, String> {
-    let mut addrs = (host, port).to_socket_addrs().map_err(|error| {
-        format!(
-            "failed to resolve serve address {}:{}: {}",
-            host, port, error
-        )
-    })?;
+    let probe_host = probe_host(host);
+    let mut addrs = (probe_host.as_str(), port)
+        .to_socket_addrs()
+        .map_err(|error| {
+            format!(
+                "failed to resolve serve address {}:{}: {}",
+                probe_host, port, error
+            )
+        })?;
     let Some(addr) = addrs.next() else {
         return Ok(false);
     };
@@ -588,9 +597,34 @@ fn wait_for_health(host: &str, port: u16, attempts: usize, delay: Duration) -> R
         thread::sleep(delay);
     }
     Err(format!(
-        "serve did not become healthy on http://{}:{}/healthz in time",
-        host, port
+        "serve did not become healthy on {} in time",
+        http_url(host, port, "/healthz")
     ))
+}
+
+fn http_url(host: &str, port: u16, path: &str) -> String {
+    format!("http://{}:{}{}", host_for_url(host), port, path)
+}
+
+fn host_for_url(host: &str) -> String {
+    let trimmed = host.trim();
+    let unbracketed = trimmed.trim_start_matches('[').trim_end_matches(']');
+    let connectable = match unbracketed {
+        "" | "0.0.0.0" | "::" => runtimepaths::DEFAULT_LOCAL_HOST,
+        other => other,
+    };
+    if connectable.contains(':') {
+        return format!("[{}]", connectable);
+    }
+    connectable.to_string()
+}
+
+fn probe_host(host: &str) -> String {
+    let trimmed = host.trim().trim_start_matches('[').trim_end_matches(']');
+    match trimmed {
+        "" | "0.0.0.0" | "::" => runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn canonicalize_or_original(path: &Path) -> PathBuf {
@@ -598,17 +632,33 @@ fn canonicalize_or_original(path: &Path) -> PathBuf {
 }
 
 fn resolve_runner_source() -> Result<PathBuf, std::io::Error> {
+    if let Some(path) = std::env::var_os("MCPACE_RUNNER_PATH") {
+        let explicit = PathBuf::from(path);
+        if explicit.is_file() {
+            return Ok(explicit);
+        }
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!(
+                "MCPACE_RUNNER_PATH does not point to a file: {}",
+                explicit.display()
+            ),
+        ));
+    }
+
     let current = std::env::current_exe()?;
+    let current_is_dependency_test_binary = current
+        .parent()
+        .and_then(|parent| parent.file_name())
+        .map(|value| value == "deps")
+        .unwrap_or(false);
+
     if current
         .file_stem()
         .and_then(|value| value.to_str())
         .map(|value| value.starts_with("mcpace"))
         .unwrap_or(false)
-        && !current
-            .parent()
-            .and_then(|parent| parent.file_name())
-            .map(|value| value == "deps")
-            .unwrap_or(false)
+        && !current_is_dependency_test_binary
     {
         return Ok(current);
     }
@@ -625,6 +675,10 @@ fn resolve_runner_source() -> Result<PathBuf, std::io::Error> {
         });
     match fallback {
         Some(path) if path.is_file() => Ok(path),
+        _ if current_is_dependency_test_binary => Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "mcpace serve runner binary is not available; build target/debug/mcpace or set MCPACE_RUNNER_PATH",
+        )),
         _ => Ok(current),
     }
 }
@@ -674,28 +728,12 @@ fn spawn_background(
     port: u16,
     stdout_file: File,
     stderr_file: File,
-) -> Result<std::process::Child, String> {
+) -> Result<u32, String> {
     #[cfg(windows)]
     {
-        use std::os::windows::process::CommandExt;
-        use std::process::{Command, Stdio};
-
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
-
-        return Command::new(runner_path)
-            .arg("serve")
-            .arg("--root")
-            .arg(root_path)
-            .arg("--host")
-            .arg(host)
-            .arg("--port")
-            .arg(port.to_string())
-            .stdin(Stdio::null())
-            .stdout(Stdio::from(stdout_file))
-            .stderr(Stdio::from(stderr_file))
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|error| format!("failed to start MCPace serve runtime: {}", error));
+        drop(stdout_file);
+        drop(stderr_file);
+        return spawn_background_windows(runner_path, root_path, host, port);
     }
 
     #[cfg(unix)]
@@ -703,7 +741,7 @@ fn spawn_background(
         use std::os::unix::process::CommandExt;
         use std::process::{Command, Stdio};
 
-        unsafe extern "C" {
+        extern "C" {
             fn setsid() -> i32;
         }
 
@@ -731,6 +769,7 @@ fn spawn_background(
 
         return command
             .spawn()
+            .map(|child| child.id())
             .map_err(|error| format!("failed to start MCPace serve runtime: {}", error));
     }
 
@@ -738,11 +777,35 @@ fn spawn_background(
     Err("background serve launch is not implemented for this platform".to_string())
 }
 
+#[cfg(windows)]
+fn spawn_background_windows(
+    runner_path: &Path,
+    root_path: &Path,
+    host: &str,
+    port: u16,
+) -> Result<u32, String> {
+    use std::ffi::OsString;
+
+    let args = vec![
+        OsString::from("serve"),
+        OsString::from("--root"),
+        root_path.as_os_str().to_os_string(),
+        OsString::from("--host"),
+        OsString::from(host),
+        OsString::from("--port"),
+        OsString::from(port.to_string()),
+    ];
+    crate::windows_process::spawn_detached_no_window(runner_path, &args, Some(root_path))
+        .map_err(|error| format!("failed to start MCPace serve runtime: {}", error))
+}
+
 fn kill_process(pid: u32) -> Result<(), String> {
     #[cfg(windows)]
     {
-        let output = std::process::Command::new("taskkill")
-            .args(["/PID", &pid.to_string(), "/T", "/F"])
+        let mut command = std::process::Command::new("taskkill");
+        command.args(["/PID", &pid.to_string(), "/T", "/F"]);
+        crate::windows_process::configure_no_window(&mut command);
+        let output = command
             .output()
             .map_err(|error| format!("failed to stop serve process {}: {}", pid, error))?;
         if output.status.success() {
@@ -799,7 +862,7 @@ mod tests {
         fs::write(
             root.join("mcpace.config.json"),
             r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",
@@ -822,8 +885,32 @@ mod tests {
     }
 
     #[test]
+    fn serve_url_and_probe_hosts_handle_ipv6_and_wildcards() {
+        assert_eq!(
+            http_url("127.0.0.1", 39022, "/mcp"),
+            "http://127.0.0.1:39022/mcp"
+        );
+        assert_eq!(http_url("::1", 39022, "/mcp"), "http://[::1]:39022/mcp");
+        assert_eq!(
+            http_url("[::1]", 39022, "/healthz"),
+            "http://[::1]:39022/healthz"
+        );
+        assert_eq!(
+            http_url("0.0.0.0", 39022, "/mcp"),
+            "http://127.0.0.1:39022/mcp"
+        );
+        assert_eq!(http_url("::", 39022, "/mcp"), "http://127.0.0.1:39022/mcp");
+        assert_eq!(probe_host("0.0.0.0"), runtimepaths::DEFAULT_LOCAL_HOST);
+        assert_eq!(probe_host("::"), runtimepaths::DEFAULT_LOCAL_HOST);
+    }
+
+    #[test]
     fn serve_start_status_stop_round_trip() {
         let root = temp_root();
+        if resolve_runner_source().is_err() {
+            let _ = fs::remove_dir_all(root);
+            return;
+        }
         write_minimal_config(&root);
         let port = free_port();
         let mut stdout = Vec::new();

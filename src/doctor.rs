@@ -1,9 +1,12 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
 use std::collections::BTreeMap;
-use std::env;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+
+const VERSION_COMMAND_TIMEOUT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, Clone)]
 pub struct Report {
@@ -337,50 +340,66 @@ fn tool_status(name: &str, required: bool, args: &[&str]) -> ToolStatus {
 
 fn command_version(name: &str, args: &[&str]) -> Option<String> {
     let path = find_command_path(name)?;
-    let output = Command::new(path).args(args).output().ok()?;
+    let mut command = if cfg!(windows) && should_run_through_cmd(&path) {
+        let mut command = Command::new("cmd.exe");
+        command.arg("/d").arg("/s").arg("/c").arg(name);
+        command
+    } else {
+        Command::new(path)
+    };
+    #[cfg(windows)]
+    crate::windows_process::configure_no_window(&mut command);
+    command.args(args);
+    let output = command_output_with_timeout(&mut command, VERSION_COMMAND_TIMEOUT)?;
     if !output.status.success() {
         return None;
     }
     parse_first_line(&output.stdout)
 }
 
-fn find_command_path(name: &str) -> Option<PathBuf> {
-    let candidate = Path::new(name);
-    if candidate.is_absolute() || name.contains(std::path::MAIN_SEPARATOR) {
-        return is_runnable_path(candidate).then(|| candidate.to_path_buf());
-    }
-
-    let path_value = env::var_os("PATH")?;
-    for directory in env::split_paths(&path_value) {
-        let direct = directory.join(name);
-        if is_runnable_path(&direct) {
-            return Some(direct);
-        }
-
-        if cfg!(windows) {
-            let pathext = env::var_os("PATHEXT")
-                .map(|value| value.to_string_lossy().to_string())
-                .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_string());
-            for extension in pathext.split(';').filter(|entry| !entry.trim().is_empty()) {
-                let trimmed = extension.trim();
-                let suffix = if trimmed.starts_with('.') {
-                    trimmed.to_string()
-                } else {
-                    format!(".{}", trimmed)
-                };
-                let with_extension = directory.join(format!("{}{}", name, suffix));
-                if is_runnable_path(&with_extension) {
-                    return Some(with_extension);
+fn command_output_with_timeout(command: &mut Command, timeout: Duration) -> Option<Output> {
+    let mut child = command
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .ok()?;
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(_status)) => return child.wait_with_output().ok(),
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return None;
                 }
+                thread::sleep(Duration::from_millis(25));
+            }
+            Err(_) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return None;
             }
         }
     }
-
-    None
 }
 
-fn is_runnable_path(path: &Path) -> bool {
-    path.is_file()
+fn is_windows_shell_script(path: &Path) -> bool {
+    path.extension()
+        .and_then(|extension| extension.to_str())
+        .map(|extension| {
+            let normalized = extension.trim().to_ascii_lowercase();
+            normalized == "cmd" || normalized == "bat"
+        })
+        .unwrap_or(false)
+}
+
+fn should_run_through_cmd(path: &Path) -> bool {
+    is_windows_shell_script(path) || path.extension().is_none()
+}
+
+fn find_command_path(name: &str) -> Option<PathBuf> {
+    which::which(name).ok()
 }
 
 fn parse_first_line(bytes: &[u8]) -> Option<String> {

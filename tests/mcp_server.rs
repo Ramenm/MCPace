@@ -9,7 +9,7 @@ fn write_minimal_config(root: &std::path::Path) {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "client": {
     "keyName": "MCPace"
   },
@@ -108,6 +108,48 @@ fn mcp_server_completes_initialize_and_lists_tools() {
     assert!(line.contains(r#""name":"doctor""#), "line: {}", line);
     assert!(line.contains(r#""name":"client_plan""#), "line: {}", line);
     assert!(line.contains(r#""name":"client_export""#), "line: {}", line);
+    assert!(
+        line.contains(r#""name":"runtime_leases""#),
+        "line: {}",
+        line
+    );
+    assert!(
+        line.contains(r#""name":"runtime_acquire""#),
+        "line: {}",
+        line
+    );
+    assert!(line.contains(r#""name":"runtime_renew""#), "line: {}", line);
+    assert!(
+        line.contains(r#""name":"runtime_release""#),
+        "line: {}",
+        line
+    );
+    assert!(
+        line.contains(r#""name":"upstream_tools""#),
+        "line: {}",
+        line
+    );
+    assert!(
+        line.contains(r#""name":"upstream_catalog""#),
+        "line: {}",
+        line
+    );
+    assert!(
+        line.contains(r#""name":"upstream_probe""#),
+        "line: {}",
+        line
+    );
+    assert!(line.contains(r#""name":"upstream_call""#), "line: {}", line);
+    assert!(
+        line.contains(r#""name":"upstream_batch""#),
+        "line: {}",
+        line
+    );
+    assert!(
+        line.contains(r#""name":"browser_status""#),
+        "line: {}",
+        line
+    );
 
     writeln!(
         stdin,

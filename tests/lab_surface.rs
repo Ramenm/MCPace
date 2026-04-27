@@ -11,7 +11,7 @@ fn lab_coverage_json_reports_surface_classes_and_constraints() {
     fs::write(
         root.join("eval").join("runtime-capabilities.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "features": [
     {
       "id": "planner-client-surface-catalog",
@@ -109,7 +109,7 @@ fn lab_report_json_turns_runtime_fixtures_into_gap_backlog() {
     fs::write(
         root.join("eval").join("runtime-capabilities.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "features": [
     {
       "id": "planner-context-resolution",
@@ -200,7 +200,7 @@ fn lab_show_json_returns_specific_scenario_and_outstanding_requirements() {
     fs::write(
         root.join("eval").join("runtime-capabilities.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "features": [
     {
       "id": "runtime-stdio-shim",

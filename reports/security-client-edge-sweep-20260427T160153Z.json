@@ -1,0 +1,316 @@
+{
+  "generatedAt": "2026-04-27T16:01:34.903Z",
+  "repoRoot": "C:\\Users\\rmatv\\Projects\\mcpace",
+  "endpoint": "http://127.0.0.1:39022/mcp",
+  "checks": [
+    {
+      "name": "healthz_runtime_ready",
+      "ok": true,
+      "elapsedMs": 3181,
+      "status": 200,
+      "readyForRuntimeOps": true,
+      "readyForReadOnlyOps": true,
+      "effectiveEnabledServerCount": 10,
+      "serverCount": 24
+    },
+    {
+      "name": "origin_rejects_prefix_spoofing",
+      "ok": true,
+      "elapsedMs": 15,
+      "results": [
+        {
+          "origin": "http://127.0.0.1.evil.example",
+          "status": 400,
+          "rejected": true
+        },
+        {
+          "origin": "http://localhost.evil.example",
+          "status": 400,
+          "rejected": true
+        },
+        {
+          "origin": "http://127.0.0.1@evil.example",
+          "status": 400,
+          "rejected": true
+        }
+      ]
+    },
+    {
+      "name": "origin_allows_loopback_and_null",
+      "ok": true,
+      "elapsedMs": 23,
+      "results": [
+        {
+          "origin": "http://127.0.0.1:39022",
+          "status": 200,
+          "allowed": true
+        },
+        {
+          "origin": "http://localhost:39022",
+          "status": 200,
+          "allowed": true
+        },
+        {
+          "origin": "https://127.0.0.1:39022",
+          "status": 200,
+          "allowed": true
+        },
+        {
+          "origin": "http://[::1]:39022",
+          "status": 200,
+          "allowed": true
+        },
+        {
+          "origin": "null",
+          "status": 200,
+          "allowed": true
+        }
+      ]
+    },
+    {
+      "name": "malformed_json_returns_jsonrpc_parse_error",
+      "ok": true,
+      "elapsedMs": 3,
+      "status": 400,
+      "code": -32700,
+      "message": "invalid JSON-RPC body: key must be a string at line 1 column 3"
+    },
+    {
+      "name": "get_mcp_sse_is_405",
+      "ok": true,
+      "elapsedMs": 2,
+      "status": 405
+    },
+    {
+      "name": "initialized_notification_is_accepted",
+      "ok": true,
+      "elapsedMs": 2,
+      "status": 202,
+      "bodyLength": 0
+    },
+    {
+      "name": "unknown_method_returns_method_not_found",
+      "ok": true,
+      "elapsedMs": 3,
+      "status": 200,
+      "code": -32601
+    },
+    {
+      "name": "browser_real_batch_after_security_restart",
+      "ok": true,
+      "elapsedMs": 6702,
+      "bridgeOk": true,
+      "upstreamOkCount": 5,
+      "sawMarker": true
+    },
+    {
+      "name": "filesystem_read_package_after_restart",
+      "ok": true,
+      "elapsedMs": 2097,
+      "bridgeOk": true,
+      "upstreamOk": true
+    },
+    {
+      "name": "context7_current_schema_call",
+      "ok": true,
+      "elapsedMs": 3437,
+      "bridgeOk": true,
+      "upstreamOk": true
+    },
+    {
+      "name": "service_autostart_hidden_windows_contract",
+      "ok": true,
+      "elapsedMs": 30,
+      "enabled": true,
+      "backend": "auto-launch/windows-current-user-registry",
+      "launchMode": "windows-hidden-wscript-launcher",
+      "appPath": "C:\\WINDOWS\\System32\\wscript.exe",
+      "autostartScriptPath": "C:\\Users\\rmatv\\Projects\\mcpace\\data\\runtime\\service\\mcpace-autostart.vbs",
+      "scriptHidden": true
+    },
+    {
+      "name": "client_install_all_idempotent_and_paths_exist",
+      "ok": true,
+      "elapsedMs": 47,
+      "installedCount": 9,
+      "failed": [],
+      "pathChecks": [
+        {
+          "id": "claude-code",
+          "path": "C:\\Users\\rmatv\\.claude.json",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        },
+        {
+          "id": "codex",
+          "path": "C:\\Users\\rmatv\\.codex\\config.toml",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        },
+        {
+          "id": "cursor-local",
+          "path": "C:\\Users\\rmatv\\.cursor\\mcp.json",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        },
+        {
+          "id": "gemini-cli",
+          "path": "C:\\Users\\rmatv\\.gemini\\settings.json",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        },
+        {
+          "id": "github-copilot-cli",
+          "path": "C:\\Users\\rmatv\\.copilot\\mcp-config.json",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        },
+        {
+          "id": "hermes-agent",
+          "path": "C:\\Users\\rmatv\\.hermes\\config.yaml",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        },
+        {
+          "id": "kiro-cli",
+          "path": "C:\\Users\\rmatv\\.kiro\\settings\\mcp.json",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        },
+        {
+          "id": "kiro-ide",
+          "path": "C:\\Users\\rmatv\\.kiro\\settings\\mcp.json",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        },
+        {
+          "id": "windsurf",
+          "path": "C:\\Users\\rmatv\\.codeium\\windsurf\\mcp_config.json",
+          "exists": true,
+          "url": "http://127.0.0.1:39022/mcp",
+          "changed": false
+        }
+      ]
+    },
+    {
+      "name": "installed_client_configs_parse_or_contain_mcpace",
+      "ok": true,
+      "elapsedMs": 2,
+      "results": [
+        {
+          "id": "claude-code",
+          "path": "C:\\Users\\rmatv\\.claude.json",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        },
+        {
+          "id": "codex",
+          "path": "C:\\Users\\rmatv\\.codex\\config.toml",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        },
+        {
+          "id": "cursor-local",
+          "path": "C:\\Users\\rmatv\\.cursor\\mcp.json",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        },
+        {
+          "id": "gemini-cli",
+          "path": "C:\\Users\\rmatv\\.gemini\\settings.json",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        },
+        {
+          "id": "github-copilot-cli",
+          "path": "C:\\Users\\rmatv\\.copilot\\mcp-config.json",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        },
+        {
+          "id": "hermes-agent",
+          "path": "C:\\Users\\rmatv\\.hermes\\config.yaml",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        },
+        {
+          "id": "kiro-ide",
+          "path": "C:\\Users\\rmatv\\.kiro\\settings\\mcp.json",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        },
+        {
+          "id": "windsurf",
+          "path": "C:\\Users\\rmatv\\.codeium\\windsurf\\mcp_config.json",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        },
+        {
+          "id": "codex-toml-text",
+          "path": "C:\\Users\\rmatv\\.codex\\config.toml",
+          "parseOk": true,
+          "hasMcp": true,
+          "hasUrl": true
+        }
+      ]
+    },
+    {
+      "name": "codex_mcp_list_still_sees_mcpace",
+      "ok": true,
+      "elapsedMs": 305,
+      "mcpace": {
+        "name": "MCPace",
+        "enabled": true,
+        "disabled_reason": null,
+        "transport": {
+          "type": "streamable_http",
+          "url": "http://127.0.0.1:39022/mcp",
+          "bearer_token_env_var": null,
+          "http_headers": null,
+          "env_http_headers": null
+        },
+        "startup_timeout_sec": 20,
+        "tool_timeout_sec": null,
+        "auth_status": "unsupported"
+      }
+    },
+    {
+      "name": "cleanup_no_mcp_helpers_left",
+      "ok": true,
+      "elapsedMs": 833,
+      "helperCount": 0,
+      "helpers": []
+    },
+    {
+      "name": "port_39022_single_listener",
+      "ok": true,
+      "elapsedMs": 1667,
+      "listeners": [
+        {
+          "LocalAddress": "127.0.0.1",
+          "LocalPort": 39022,
+          "OwningProcess": 60772,
+          "State": 2
+        }
+      ]
+    }
+  ],
+  "ok": true,
+  "durationMs": 18349
+}

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 #[cfg(windows)]
-use std::path::PathBuf;
+use std::ffi::OsString;
 
 pub(super) fn spawn_background(exe: &Path, root_path: &Path) -> Result<(), String> {
     #[cfg(windows)]
@@ -23,7 +23,7 @@ fn unix_spawn_background(exe: &Path, root_path: &Path) -> Result<(), String> {
     use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
 
-    unsafe extern "C" {
+    extern "C" {
         fn setsid() -> i32;
     }
 
@@ -54,39 +54,13 @@ fn unix_spawn_background(exe: &Path, root_path: &Path) -> Result<(), String> {
 
 #[cfg(windows)]
 fn windows_spawn_background(exe: &Path, root_path: &Path) -> Result<(), String> {
-    use std::process::Command;
-
-    let powershell = resolve_powershell().unwrap_or_else(|| PathBuf::from("powershell.exe"));
-    let script = format!(
-        "Start-Process -FilePath '{}' -ArgumentList @('hub','run','--root','{}') -WindowStyle Hidden",
-        powershell_quote(exe),
-        powershell_quote(root_path)
-    );
-
-    Command::new(powershell)
-        .arg("-NoProfile")
-        .arg("-NonInteractive")
-        .arg("-WindowStyle")
-        .arg("Hidden")
-        .arg("-Command")
-        .arg(script)
-        .spawn()
+    let args = vec![
+        OsString::from("hub"),
+        OsString::from("run"),
+        OsString::from("--root"),
+        root_path.as_os_str().to_os_string(),
+    ];
+    crate::windows_process::spawn_detached_no_window(exe, &args, Some(root_path))
         .map(|_| ())
         .map_err(|error| format!("failed to start hub runtime: {}", error))
-}
-
-#[cfg(windows)]
-fn resolve_powershell() -> Option<PathBuf> {
-    std::env::var_os("SystemRoot").map(|root| {
-        PathBuf::from(root)
-            .join("System32")
-            .join("WindowsPowerShell")
-            .join("v1.0")
-            .join("powershell.exe")
-    })
-}
-
-#[cfg(windows)]
-fn powershell_quote(path: &Path) -> String {
-    path.display().to_string().replace('\'', "''")
 }

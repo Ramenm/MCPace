@@ -27,6 +27,7 @@
     "mcpace.config.json",
     "package.json",
     "packages",
+    "release-targets.json",
     "release-manifest.json",
     "reports",
     "rust-toolchain.toml",
@@ -41,5 +42,8 @@
     "data/runtime",
     "data/server-state",
     "logs"
+  ],
+  "optionalIncludePaths": [
+    "packages/npm/cli/vendor"
   ]
 }

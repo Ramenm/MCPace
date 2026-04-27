@@ -3,8 +3,23 @@
     "browser": {
       "enabled": true,
       "owner": "admin",
-      "type": "http",
-      "url": "http://host.docker.internal:39022/mcp"
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "agent-browser-protocol@0.1.10",
+        "--mcp"
+      ],
+      "initTimeout": 180000,
+      "options": {
+        "timeout": 180000,
+        "resetTimeoutOnProgress": true,
+        "maxTotalTimeout": 300000
+      },
+      "env": {
+        "ABP_HEADLESS": "0",
+        "ABP_DISABLE_PAUSE": "1"
+      }
     },
     "filesystem": {
       "enabled": true,
@@ -65,7 +80,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-github"
+        "@modelcontextprotocol/server-github@2025.4.8"
       ],
       "env": {
         "GITHUB_PERSONAL_ACCESS_TOKEN": "${GITHUB_PERSONAL_ACCESS_TOKEN:-}"
@@ -88,7 +103,7 @@
       "args": [
         "mcp-server-git",
         "--repository",
-        "${MCPACE_MANAGER_DATA}/git-repo"
+        "${MCPACE_PRIMARY_WORKSPACE}"
       ]
     },
     "sentry": {
@@ -215,7 +230,7 @@
       "args": [
         "mcp-server-sqlite",
         "--db-path",
-        "${MCPACE_MANAGER_DATA}/sqlite/mcpace.db"
+        "${MCPACE_MANAGER_DATA}/mcpace.sqlite"
       ]
     },
     "postgres": {
@@ -225,7 +240,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-postgres",
+        "@modelcontextprotocol/server-postgres@0.6.2",
         "${MCPACE_POSTGRES_URL:-postgresql://postgres:postgres@host.docker.internal:5432/postgres}"
       ]
     },
@@ -236,10 +251,39 @@
       "command": "npx",
       "args": [
         "-y",
-        "@brave/brave-search-mcp-server"
+        "@brave/brave-search-mcp-server@2.0.80",
+        "--brave-api-key",
+        "${BRAVE_API_KEY:-}"
+      ]
+    },
+    "notion": {
+      "enabled": false,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@notionhq/notion-mcp-server@2.2.1",
+        "--transport",
+        "stdio"
       ],
       "env": {
-        "BRAVE_API_KEY": "${BRAVE_API_KEY:-<PUT_BRAVE_API_KEY_HERE>}"
+        "NOTION_TOKEN": "${NOTION_TOKEN:-}"
+      }
+    },
+    "playwright": {
+      "enabled": false,
+      "owner": "admin",
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@0.0.70",
+        "--headless",
+        "--isolated"
+      ],
+      "env": {
+        "PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD": "1"
       }
     },
     "everything": {
@@ -249,7 +293,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@modelcontextprotocol/server-everything"
+        "@modelcontextprotocol/server-everything@2026.1.26"
       ]
     }
   },
@@ -299,3 +343,9 @@
     }
   ]
 }
+
+
+
+
+
+

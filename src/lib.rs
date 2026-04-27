@@ -10,6 +10,7 @@ pub mod init;
 pub mod json;
 pub mod json_helpers;
 pub mod lab;
+pub mod mcp_protocol;
 pub mod mcp_server;
 pub mod profile;
 pub mod projects;
@@ -18,7 +19,13 @@ pub mod reporoot;
 pub mod runtimepaths;
 pub mod serve;
 pub mod server;
+pub mod service;
+pub mod setup;
 pub mod stdio_shim;
+pub mod update;
+pub mod upstream;
 pub mod verify;
+#[cfg(windows)]
+pub(crate) mod windows_process;
 
 pub use app::run;

@@ -18,9 +18,16 @@
 
 ```bash
 npm test
-npm run pack:npm:dry-run
-node scripts/archive-release.mjs --json --output-dir dist
+npm run verify:npm-pack
+npm run build:release-artifacts
 ```
+
+## Release automation scaffolding now in repo
+
+- `.github/workflows/release.yml` builds a canonical source release bundle, uploads it, and smoke-checks staged host binaries on Ubuntu/Windows/macOS
+- `scripts/build-release-artifacts.mjs` writes a cleaned source bundle with the archive, verification report, checksums, and `release-artifacts.json`, and syncs `reports/verification-latest.json` when it performs the proof run itself
+- `scripts/generate-checksums.mjs` writes `SHA256SUMS.txt` for source or vendored-binary artifact directories
+- `scripts/verify-npm-pack.mjs` asserts the npm tarball contract instead of trusting `npm pack --dry-run` output by inspection
 
 ## Still required before public release claims
 
@@ -36,14 +43,16 @@ cargo build --release
 # later: npm publish provenance validation
 ```
 
-## Source archive builder
+## Canonical local source bundle
 
-Use the canonical source archive builder to create a clean zip with one meaningful
-root directory and no caches/build junk:
+Use the canonical bundle builder to create a clean source release directory in
+`dist/` with one fresh archive, a matching verification snapshot, checksums, and
+an artifact manifest:
 
 ```bash
-npm run archive:release
+npm run build:release-artifacts
 ```
 
-The builder derives the project name from the repo manifests, keeps the current
-repo version unless overridden, and emits `<project-name>-v<version>-<ddmmyy-hhmmss>.zip`.
+Under the hood the bundle builder still uses `scripts/archive-release.mjs` to
+create `<project-name>-v<version>-<ddmmyy-hhmmss>.zip`, but it also avoids stale
+`dist/` entries from polluting the release checksums.

@@ -1,0 +1,187 @@
+{
+  "generatedAt": "2026-04-27T16:19:36.150Z",
+  "repoRoot": "C:\\Users\\rmatv\\Projects\\mcpace",
+  "endpoint": "http://127.0.0.1:39022/mcp",
+  "checks": [
+    {
+      "name": "healthz_ready_after_restart",
+      "ok": true,
+      "elapsedMs": 7123,
+      "status": 200,
+      "readyForRuntimeOps": true,
+      "effectiveEnabledServerCount": 10,
+      "serverCount": 24
+    },
+    {
+      "name": "dashboard_mutating_actions_reject_cross_origin",
+      "ok": true,
+      "elapsedMs": 13,
+      "results": [
+        {
+          "action": "hub-up",
+          "status": 403,
+          "rejected": true
+        },
+        {
+          "action": "hub-down",
+          "status": 403,
+          "rejected": true
+        },
+        {
+          "action": "repair",
+          "status": 403,
+          "rejected": true
+        }
+      ]
+    },
+    {
+      "name": "mcp_rejects_cross_origin_prefix_spoofing",
+      "ok": true,
+      "elapsedMs": 11,
+      "results": [
+        {
+          "origin": "http://127.0.0.1.evil.example",
+          "status": 400,
+          "rejected": true
+        },
+        {
+          "origin": "http://localhost.evil.example",
+          "status": 400,
+          "rejected": true
+        },
+        {
+          "origin": "http://127.0.0.1@evil.example",
+          "status": 400,
+          "rejected": true
+        }
+      ]
+    },
+    {
+      "name": "mcp_loopback_origin_tools_list",
+      "ok": true,
+      "elapsedMs": 3,
+      "status": 200,
+      "toolCount": 14
+    },
+    {
+      "name": "mcp_protocol_edges",
+      "ok": true,
+      "elapsedMs": 11,
+      "malformedStatus": 400,
+      "malformedCode": -32700,
+      "initializedStatus": 202,
+      "unknownCode": -32601
+    },
+    {
+      "name": "upstream_probe_all_after_restart",
+      "ok": true,
+      "elapsedMs": 50701,
+      "okCount": 10,
+      "failedCount": 0,
+      "skippedCount": 14,
+      "serverCount": 24
+    },
+    {
+      "name": "browser_batch_after_restart",
+      "ok": true,
+      "elapsedMs": 7130,
+      "bridgeOk": true,
+      "upstreamOkCount": 5,
+      "sawMarker": true
+    },
+    {
+      "name": "filesystem_context7_fetch_minimal_calls",
+      "ok": true,
+      "elapsedMs": 16852,
+      "filesystemOk": true,
+      "context7Ok": true,
+      "fetchOk": true
+    },
+    {
+      "name": "serve_start_idempotent",
+      "ok": true,
+      "elapsedMs": 107,
+      "status": "running",
+      "pid": 59004,
+      "warnings": []
+    },
+    {
+      "name": "service_status_hidden_and_client_install_idempotent",
+      "ok": true,
+      "elapsedMs": 318,
+      "serviceEnabled": true,
+      "launchMode": "windows-hidden-wscript-launcher",
+      "installedCount": 9,
+      "changedCount": 0,
+      "failed": []
+    },
+    {
+      "name": "config_json_surfaces_parse_and_align",
+      "ok": true,
+      "elapsedMs": 3,
+      "parsed": [
+        {
+          "file": "mcp_settings.json",
+          "ok": true
+        },
+        {
+          "file": "mcpace.config.json",
+          "ok": true
+        },
+        {
+          "file": "server-candidates.json",
+          "ok": true
+        },
+        {
+          "file": "release-targets.json",
+          "ok": true
+        },
+        {
+          "file": "release-manifest.json",
+          "ok": true
+        }
+      ],
+      "settingsServerCount": 24,
+      "configServerCount": 24,
+      "missingInConfig": []
+    },
+    {
+      "name": "codex_mcp_list_and_current_session_discovery_truth",
+      "ok": true,
+      "elapsedMs": 1006,
+      "mcpace": {
+        "name": "MCPace",
+        "enabled": true,
+        "disabled_reason": null,
+        "transport": {
+          "type": "streamable_http",
+          "url": "http://127.0.0.1:39022/mcp",
+          "bearer_token_env_var": null,
+          "http_headers": null,
+          "env_http_headers": null
+        },
+        "startup_timeout_sec": 20,
+        "tool_timeout_sec": null,
+        "auth_status": "unsupported"
+      },
+      "note": "current already-open Codex session may still need restart to expose tools"
+    },
+    {
+      "name": "cleanup_no_helpers_single_listener_no_docker_verify_artifacts",
+      "ok": true,
+      "elapsedMs": 6847,
+      "helperCount": 0,
+      "listeners": [
+        {
+          "LocalAddress": "127.0.0.1",
+          "LocalPort": 39022,
+          "OwningProcess": 59004,
+          "State": 2
+        }
+      ],
+      "dockerVerifyImages": []
+    }
+  ],
+  "ok": true,
+  "durationMs": 90125
+}

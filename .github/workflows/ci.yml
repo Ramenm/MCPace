@@ -40,6 +40,9 @@ jobs:
       - name: Run source and launcher tests
         run: npm test
 
+      - name: Verify platform package manifests
+        run: npm run verify:platform-packages
+
   package-dry-run:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -51,7 +54,9 @@ jobs:
           node-version-file: .nvmrc
 
       - name: Validate npm package dry-run
-        run: npm run pack:npm:dry-run
+        run: |
+          npm run verify:platform-packages
+          npm run pack:npm:dry-run
 
   rust-build-validation:
     runs-on: ${{ matrix.os }}
@@ -66,16 +71,52 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
           components: rustfmt, clippy
 
-      - name: Run Rust tests
-        run: cargo test
+      - name: Run Rust tests suite-by-suite
+        run: npm run test:rust:ci
 
       - name: Build release binary
         run: cargo build --release
+
+
+  rust-lifecycle-validation:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            suite: test:hub_runtime
+          - os: ubuntu-latest
+            suite: test:mcp_server
+          - os: ubuntu-latest
+            suite: test:stdio_shim
+          - os: windows-latest
+            suite: test:hub_runtime
+          - os: macos-latest
+            suite: test:hub_runtime
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Run isolated Rust lifecycle suite
+        run: node scripts/run-rust-tests.mjs --json --suite ${{ matrix.suite }}
 
   launcher-fast-hosted:
     runs-on: ${{ matrix.os }}

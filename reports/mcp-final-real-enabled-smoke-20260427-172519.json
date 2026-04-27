@@ -1,0 +1,846 @@
+{
+  "generatedAt": "2026-04-27T17:26:27.3548831+03:00",
+  "reportPath": "C:\\Users\\rmatv\\Projects\\mcpace\\reports\\mcp-final-real-enabled-smoke-20260427-172519.json",
+  "events": [
+    {
+      "name": "upstream_probe_all",
+      "at": "2026-04-27T17:25:47.8735771+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 28554,
+        "resultIsError": false,
+        "structured": {
+          "failedCount": 0,
+          "mode": "probe",
+          "ok": true,
+          "okCount": 10,
+          "results": [
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "brave-search",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 3587,
+              "enabled": true,
+              "name": "browser",
+              "ok": true,
+              "resolvedCommand": "C:\\Program Files\\nodejs\\npx.CMD",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 21,
+              "toolNames": [
+                "browser_action",
+                "browser_scroll",
+                "browser_navigate",
+                "browser_screenshot",
+                "browser_wait",
+                "browser_tabs",
+                "browser_javascript",
+                "browser_text",
+                "browser_dialog",
+                "browser_downloads",
+                "browser_files",
+                "browser_select_picker",
+                "browser_get_status",
+                "cdp_mode",
+                "browser_shutdown",
+                "browser_slider",
+                "browser_clear_text",
+                "respond_to_permission",
+                "browser_network",
+                "browser_curl",
+                "browser_console"
+              ]
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 2879,
+              "enabled": true,
+              "name": "context7",
+              "ok": true,
+              "resolvedCommand": "C:\\Program Files\\nodejs\\npx.CMD",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 2,
+              "toolNames": [
+                "resolve-library-id",
+                "query-docs"
+              ]
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "everything",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 3403,
+              "enabled": true,
+              "name": "exa",
+              "ok": true,
+              "resolvedCommand": "C:\\Program Files\\nodejs\\npx.CMD",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 2,
+              "toolNames": [
+                "web_search_exa",
+                "web_fetch_exa"
+              ]
+            },
+            {
+              "command": "uvx",
+              "elapsedMs": 3150,
+              "enabled": true,
+              "name": "fetch",
+              "ok": true,
+              "resolvedCommand": "c:\\users\\rmatv\\.local\\bin\\uvx.EXE",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 1,
+              "toolNames": [
+                "fetch"
+              ]
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 2136,
+              "enabled": true,
+              "name": "filesystem",
+              "ok": true,
+              "resolvedCommand": "C:\\Program Files\\nodejs\\npx.CMD",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 11,
+              "toolNames": [
+                "read_file",
+                "read_multiple_files",
+                "write_file",
+                "edit_file",
+                "create_directory",
+                "list_directory",
+                "directory_tree",
+                "move_file",
+                "search_files",
+                "get_file_info",
+                "list_allowed_directories"
+              ]
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "firecrawl",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "uvx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "git",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "github",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "lean-ctx",
+              "elapsedMs": 919,
+              "enabled": true,
+              "name": "lean-ctx",
+              "ok": true,
+              "resolvedCommand": "C:\\Users\\rmatv\\AppData\\Roaming\\npm\\lean-ctx.CMD",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 9,
+              "toolNames": [
+                "ctx_read",
+                "ctx_multi_read",
+                "ctx_tree",
+                "ctx_shell",
+                "ctx_search",
+                "ctx_edit",
+                "ctx_session",
+                "ctx_knowledge",
+                "ctx_discover_tools"
+              ]
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 2432,
+              "enabled": true,
+              "name": "memory",
+              "ok": true,
+              "resolvedCommand": "C:\\Program Files\\nodejs\\npx.CMD",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 9,
+              "toolNames": [
+                "create_entities",
+                "create_relations",
+                "add_observations",
+                "delete_entities",
+                "delete_observations",
+                "delete_relations",
+                "read_graph",
+                "search_nodes",
+                "open_nodes"
+              ]
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "notion",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "pdf",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "playwright",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "postgres",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "screenpipe",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": null,
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "sentry",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "http",
+              "status": "disabled",
+              "toolCount": null,
+              "url": "https://mcp.sentry.dev/mcp"
+            },
+            {
+              "command": "npx",
+              "elapsedMs": 2302,
+              "enabled": true,
+              "name": "sequential-thinking",
+              "ok": true,
+              "resolvedCommand": "C:\\Program Files\\nodejs\\npx.CMD",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 1,
+              "toolNames": [
+                "sequentialthinking"
+              ]
+            },
+            {
+              "command": "uvx",
+              "elapsedMs": 4983,
+              "enabled": true,
+              "name": "serena",
+              "ok": true,
+              "resolvedCommand": "c:\\users\\rmatv\\.local\\bin\\uvx.EXE",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 19,
+              "toolNames": [
+                "replace_content",
+                "search_for_pattern",
+                "get_symbols_overview",
+                "find_symbol",
+                "find_referencing_symbols",
+                "replace_symbol_body",
+                "insert_after_symbol",
+                "insert_before_symbol",
+                "rename_symbol",
+                "safe_delete_symbol",
+                "write_memory",
+                "read_memory",
+                "list_memories",
+                "delete_memory",
+                "rename_memory",
+                "edit_memory",
+                "check_onboarding_performed",
+                "onboarding",
+                "initial_instructions"
+              ]
+            },
+            {
+              "command": "uvx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "sqlite",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": "uvx",
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "time",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "stdio",
+              "status": "disabled",
+              "toolCount": null,
+              "url": null
+            },
+            {
+              "command": null,
+              "elapsedMs": 0,
+              "enabled": false,
+              "error": "disabled",
+              "name": "windows-mcp",
+              "ok": false,
+              "resolvedCommand": null,
+              "runtimeCallable": false,
+              "sourceType": "http",
+              "status": "disabled",
+              "toolCount": null,
+              "url": "http://host.docker.internal:8233/mcp"
+            },
+            {
+              "command": "uvx",
+              "elapsedMs": 2658,
+              "enabled": true,
+              "name": "wireshark-mcp",
+              "ok": true,
+              "resolvedCommand": "c:\\users\\rmatv\\.local\\bin\\uvx.EXE",
+              "runtimeCallable": true,
+              "sourceType": "stdio",
+              "status": "listed-tools",
+              "timeoutMs": 30000,
+              "toolCount": 47,
+              "toolNames": [
+                "wireshark_list_interfaces",
+                "wireshark_capture",
+                "wireshark_filter_save",
+                "wireshark_stats_protocol_hierarchy",
+                "wireshark_stats_endpoints",
+                "wireshark_stats_conversations",
+                "wireshark_stats_io_graph",
+                "wireshark_stats_expert_info",
+                "wireshark_stats_service_response_time",
+                "wireshark_get_packet_list",
+                "wireshark_get_packet_details",
+                "wireshark_get_packet_bytes",
+                "wireshark_get_packet_context",
+                "wireshark_read_packets",
+                "wireshark_extract_fields",
+                "wireshark_list_ips",
+                "wireshark_search_packets",
+                "wireshark_follow_stream",
+                "wireshark_get_file_info",
+                "wireshark_merge_pcaps",
+                "wireshark_decode_payload",
+                "wireshark_plot_traffic",
+                "wireshark_plot_protocols",
+                "wireshark_security_audit",
+                "wireshark_quick_analysis",
+                "wireshark_get_capabilities",
+                "wireshark_editcap_trim",
+                "wireshark_editcap_split",
+                "wireshark_editcap_time_shift",
+                "wireshark_editcap_deduplicate",
+                "wireshark_text2pcap_import",
+                "wireshark_analyze_suspicious_traffic",
+                "wireshark_analyze_tcp_health",
+                "wireshark_check_threats",
+                "wireshark_detect_arp_spoofing",
+                "wireshark_detect_dns_tunnel",
+                "wireshark_detect_dos_attack",
+                "wireshark_detect_port_scan",
+                "wireshark_export_objects",
+                "wireshark_extract_credentials",
+                "wireshark_extract_dhcp_info",
+                "wireshark_extract_dns_queries",
+                "wireshark_extract_http_requests",
+                "wireshark_extract_smtp_emails",
+                "wireshark_extract_tls_handshakes",
+                "wireshark_verify_ssl_decryption",
+                "wireshark_open_file"
+              ]
+            }
+          ],
+          "serverCount": 24,
+          "skippedCount": 14,
+          "summary": "Probed configured upstream MCP servers from mcp_settings.json without hardcoded server names. Callable stdio servers are launched, tools/list is requested, and helper processes are cleaned up after each probe."
+        }
+      }
+    },
+    {
+      "name": "browser_batch_navigate_text_shutdown",
+      "at": "2026-04-27T17:25:52.3492724+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 4465,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "callCount": 3,
+          "ok": true,
+          "results": [
+            {
+              "index": 0,
+              "ok": true,
+              "tool": "browser_navigate",
+              "upstreamIsError": false,
+              "upstreamOk": true,
+              "upstreamResult": {
+                "content": [
+                  {
+                    "text": "{\r\n   \"action_id\": \"MB2CQI\",\r\n   \"cursor\": {\r\n      \"cursor_type\": \"pointer\",\r\n      \"x\": 632.0,\r\n      \"y\": 352.5\r\n   },\r\n   \"events\": [ {\r\n      \"data\": {\r\n         \"frame_id\": \"EC05E4E3C3B7939B97C60BA5EB10A479\",\r\n         \"is_main_frame\": false,\r\n         \"tab_id\": \"BE4F95BE0CC39DD313FF37110537D036\",\r\n         \"url\": \"about:blank\"\r\n      },\r\n      \"type\": \"navigation\",\r\n      \"virtual_time_ms\": 1.777299951204e+12\r\n   }, {\r\n      \"data\": {\r\n         \"frame_id\": \"BE4F95BE0CC39DD313FF37110537D036\",\r\n         \"is_main_frame\": true,\r\n         \"tab_id\": \"BE4F95BE0CC39DD313FF37110537D036\",\r\n         \"url\": \"data:text/html,\\u003Ctitle>MCPace%20final%20all\\u003C/title>\\u003Cmain>MCPace all-enabled smoke ok\\u003C/main>\"\r\n      },\r\n      \"type\": \"navigation\",\r\n      \"virtual_time_ms\": 1.777299951264e+12\r\n   } ],\r\n   \"network\": {\r\n      \"completed\": 44,\r\n      \"pending\": 0,\r\n      \"total\": 44\r\n   },\r\n   \"profiling\": {\r\n      \"action_ms\": 2,\r\n      \"after_screenshot_ms\": 61,\r\n      \"before_screenshot_ms\": 82,\r\n      \"force_redraw_ms\": 12,\r\n      \"pause_ms\": 0,\r\n      \"queue_wait_ms\": 0,\r\n      \"resume_ms\": 0,\r\n      \"total_ms\": 1205,\r\n      \"wait_ms\": 1017\r\n   },\r\n   \"result\": {\r\n      \"status\": \"navigated\",\r\n      \"url\": \"data:text/html,\\u003Ctitle>MCPace%20final%20all\\u003C/title>\\u003Cmain>MCPace all-enabled smoke ok\\u003C/main>\"\r\n   },\r\n   \"screenshot\": {\r\n      \"format\": \"webp\",\r\n      \"height\": 705,\r\n      \"virtual_time_ms\": 1.777299952335e+12,\r\n      \"width\": 1264\r\n   },\r\n   \"scroll\": {\r\n      \"pageHeight\": 705.0,\r\n      \"pageWidth\": 1264.0,\r\n      \"scrollX\": 0.0,\r\n      \"scrollY\": 0.0,\r\n      \"viewportHeight\": 705.0,\r\n      \"viewportWidth\": 1264.0\r\n   },\r\n   \"tab_id\": \"BE4F95BE0CC39DD313FF37110537D036\",\r\n   \"timing\": {\r\n      \"action_completed_ms\": 1.777299951243e+12,\r\n      \"action_started_ms\": 1.77729995113e+12,\r\n      \"duration_ms\": 1130,\r\n      \"wait_completed_ms\": 1.77729995226e+12\r\n   }\r\n}\r\n",
+                    "type": "text"
+                  },
+                  {
+                    "data": "UklGRmgOAABXRUJQVlA4IFwOAACQ6QCdASrwBMECPm02m0mkIyKhIDloCIANiWlu4XdhHxwdTIsebj9A/+x9P/oAc8T6CPOZ9GP/aewB/Vf7r7AH6O+mr7Fn+QyY/wB/K+z7+y+Dv4L8f/cPx+2270G/hf1l++f039weQH3hfs345fAF+K/xT+2fmN/YOEKAB+K/yb/Cf2TwUP2T8o/cD6Z/6D1Gfzj/QfmdzA3yT+4+wB/I/69/wP73+KH0ffuX+1/v3mj/L/63/wP7Z+6v0B/x/+df63+5/vb/o/m99gf7Vex1+yH/zAL0QDcSpux5B0dc+WPJvaLY+l23QQDRZdtvi127F5fzhdtwVlQwx478XrYu29iUWPXbc4vlBjx8sWogu24YNByXbdDSnS55OQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99YL2+imlwdl6IpABbIHqIABVQBdvXQFd9GNx0AHEY58gBBWAMmAAPOBRGiAOLThCAFOE3xSAAMsWazagMuLFUkaAQcLtaSHRBdpUCyXa8XJyHvtk5D32ych77ZOQ99snIe+2TkQFWOoIE5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2ThSzrPXlCcO+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtqcogWS7Xi5OQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZOQ99snIe+2TkPfbJyHvtk5D32ych77ZO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",
+                    "mimeType": "image/webp",
+                    "type": "image"
+                  }
+                ]
+              }
+            },
+            {
+              "index": 1,
+              "ok": true,
+              "tool": "browser_text",
+              "upstreamIsError": false,
+              "upstreamOk": true,
+              "upstreamResult": {
+                "content": [
+                  {
+                    "text": "{\r\n   \"text\": \"MCPace all-enabled smoke ok\"\r\n}\r\n",
+                    "type": "text"
+                  }
+                ]
+              }
+            },
+            {
+              "index": 2,
+              "ok": true,
+              "tool": "browser_shutdown",
+              "upstreamIsError": false,
+              "upstreamOk": true,
+              "upstreamResult": {
+                "content": [
+                  {
+                    "text": "{\r\n   \"message\": \"Browser shutdown initiated\",\r\n   \"success\": true\r\n}\r\n",
+                    "type": "text"
+                  }
+                ]
+              }
+            }
+          ],
+          "server": "browser",
+          "timeoutMs": 180000,
+          "upstreamFailedCount": 0,
+          "upstreamOk": true,
+          "upstreamOkCount": 3
+        }
+      }
+    },
+    {
+      "name": "filesystem_allowed_dirs",
+      "at": "2026-04-27T17:25:54.8305589+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 2478,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "filesystem",
+          "timeoutMs": 120000,
+          "tool": "list_allowed_directories",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "Allowed directories:\n\\\\?\\C:\\Users\\rmatv\\Projects\\mcpace",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "memory_search_empty",
+      "at": "2026-04-27T17:25:56.9599229+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 2127,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "memory",
+          "timeoutMs": 120000,
+          "tool": "search_nodes",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "{\n  \"entities\": [],\n  \"relations\": []\n}",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "sequential_thinking",
+      "at": "2026-04-27T17:26:00.5635519+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 3602,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "sequential-thinking",
+          "timeoutMs": 120000,
+          "tool": "sequentialthinking",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "{\n  \"thoughtNumber\": 1,\n  \"totalThoughts\": 1,\n  \"nextThoughtNeeded\": false,\n  \"branches\": [],\n  \"thoughtHistoryLength\": 1\n}",
+                "type": "text"
+              }
+            ],
+            "structuredContent": {
+              "branches": [],
+              "nextThoughtNeeded": false,
+              "thoughtHistoryLength": 1,
+              "thoughtNumber": 1,
+              "totalThoughts": 1
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "context7_resolve_react",
+      "at": "2026-04-27T17:26:05.6623571+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 5097,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "context7",
+          "timeoutMs": 120000,
+          "tool": "resolve-library-id",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "Available Libraries:\n\n- Title: React\n- Context7-compatible library ID: /reactjs/react.dev\n- Description: React.dev is the official documentation website for React, a JavaScript library for building user interfaces, providing guides, API references, and tutorials.\n- Code Snippets: 4908\n- Source Reputation: High\n- Benchmark Score: 82.99\n----------\n- Title: React\n- Context7-compatible library ID: /websites/react_dev\n- Description: React is a JavaScript library for building user interfaces. It allows developers to create interactive web and native applications using reusable components, enabling efficient and scalable UI development.\n- Code Snippets: 2910\n- Source Reputation: High\n- Benchmark Score: 91.4\n----------\n- Title: React\n- Context7-compatible library ID: /facebook/react\n- Description: The library for web and native user interfaces.\n- Code Snippets: 3461\n- Source Reputation: High\n- Benchmark Score: 68.05\n- Versions: v18_3_1, v19_1_1, v19_2_0, v17.0.2\n----------\n- Title: React\n- Context7-compatible library ID: /websites/react_dev_reference_react\n- Description: React is a JavaScript library for building user interfaces using reusable components with reactive data binding and server-side rendering capabilities.\n- Code Snippets: 1039\n- Source Reputation: High\n- Benchmark Score: 91.15\n----------\n- Title: React\n- Context7-compatible library ID: /websites/react_dev_reference\n- Description: React is a JavaScript library for building user interfaces with reusable components, hooks, and APIs for managing state and side effects.\n- Code Snippets: 1421\n- Source Reputation: High\n- Benchmark Score: 82.53",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "fetch_example",
+      "at": "2026-04-27T17:26:09.1550851+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 3490,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "fetch",
+          "timeoutMs": 120000,
+          "tool": "fetch",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "Contents of https://example.com/:\nExample Domain\n\n# Example Domain\n\nThis domain is for use in documentation examples without needing permission. Avoid use in operations.\n\nLearn more",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    },
+    {
+      "name": "exa_search",
+      "at": "2026-04-27T17:26:14.8281724+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 5672,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "exa",
+          "timeoutMs": 120000,
+          "tool": "web_search_exa",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "_meta": {
+                  "searchTime": 1903.1
+                },
+                "text": "Title: Official MCP Registry - Model Context Protocol\nURL: https://registry.modelcontextprotocol.io/\nPublished: N/A\nAuthor: N/A\nHighlights:\nOfficial MCP Registry\n\n## Recently Updated\n\nSearching...\n\nShow only latest versions\n\nLoading servers...\n\nRetry\n\nPrevious Next\n\n### API Base URL\n\nProduction (registry.modelcontextprotocol.io) Staging (staging.registry.modelcontextprotocol.io) Local (localhost:8080) Custom\n\nCancel Apply",
+                "type": "text"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "lean_ctx_tree",
+      "at": "2026-04-27T17:26:16.9230579+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 2093,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "lean-ctx",
+          "timeoutMs": 120000,
+          "tool": "ctx_tree",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "--- AUTO CONTEXT ---\nINDEXING IN PROGRESS\n\nThe knowledge graph for this project is being built in the background.\nProject: C:/Users/rmatv/Projects/mcpace\n\nBecause this is a large project, the initial scan may take a moment.\nPlease try this command again in 1-2 minutes.\n--- END AUTO CONTEXT ---\n\nCODEOWNERS\nCONTRIBUTING.md\nCargo.lock\nCargo.toml\nDECISIONS.md\nLICENSE\nREADME.md\nSOURCE_ARCHIVE_NOTE.txt\nSTATE.md\nTODO.md\ndata/ (6)\n  runtime/ (6)\n    bin/ (1)\n    hub/ (2)\n    project-registry.json\n    serve/ (1)\n    service/ (1)\ndeny.toml\ndocs/ (43)\n  README.md\n  adjacent-tools-landscape.md\n  adr/ (1)\n    0002-project-aware-client-instances.md\n  architecture-boundaries.md\n  client-metadata-routing.md\n  client-surface-matrix.md\n  codex-mcpace-guide.md\n  distribution-modes.md\n  eval-plan.md\n  github-repo-kit.md\n  go-migration-plan.md\n  greenfield-options-matrix.md\n  greenfield-single-hub-architecture.md\n  host-setup.md\n  install-autostart-distribution.md\n  legacy-powershell-removal.md\n  library-simplification-audit.md\n  mcp-spec-alignment.md\n  mcpace-stack-blueprint.md\n  product-truth-and-beta-gate.md\n  product-truth.json\n  project-registry-v1.md\n  recovery-runbook.md\n  release-automation.md\n  release-engineering.md\n  rewrite-cutover-plan.md\n  rfc-zero-touch-multi-project-routing.md\n  runtime-lab.md\n  runtime-profiles.md\n  rust-library-evaluation.md\n  rust-migration-plan.md\n  rust-npm-distribution-strategy.md\n  rust-rewrite-architecture.md\n  rust-tooling-policy.md\n  server-segmentation-and-auto-discovery.md\n  technology-decision.md\n  technology-evaluation.md\n  test-strategy.md\n  toolchain-policy.md\n  unified-client-hub-flow.md\n  universal-mcp-runtime-north-star.md\n  universal-runtime-policy.md\n  verification-matrix.md\neval/ (42)\n  README.md\n  dataset-plan.json\n  fixtures/ (37)\n    runtime/ (16)\n    seed/ (21)\n  runtime-capabilities.json\n  scenario-matrix.json\n  scoring-rubric.json\nexamples/ (2)\n  mcpace-hub.minimal.json\n  mcpace-hub.workstation.json\nmanager.settings.json\nmcp_settings.json\nmcpace.config.json\nmemory-bank/ (6)\n  activeContext.md\n  productContext.md\n  progress.md\n  projectbrief.md\n  systemPatterns.md\n  techContext.md\npackage.json\npackages/ (35)\n  npm/ (35)\n    cli/ (11)\n    cli-darwin-arm64/ (4)\n    cli-darwin-x64/ (4)\n    cli-linux-arm64-gnu/ (4)\n    cli-linux-x64-gnu/ (4)\n    cli-win32-arm64-msvc/ (4)\n    cli-win32-x64-msvc/ (4)\nrelease-manifest.json\nrelease-targets.json\nreports/ (10)\n  automation-pass-2026-04-19.md\n  client-surface-spec-research-2026-04-17.md\n  mcp-current-upstream-real-calls-20260427-165554.json\n  mcp-real-smoke-20260427-165024.json\n  rust-command-coverage.json\n  rust-command-coverage.md\n  summary.md\n  tombstones.md\n  toolchain-support.json\n  verification-latest.json\nrust-toolchain.toml\nschemas/ (1)\n  mcpace-hub.schema.json\nscripts/ (24)\n  archive-release.mjs\n  build-release-artifacts.mjs\n  generate-checksums.mjs\n  github-release-matrix.mjs\n  lib/ (4)\n    client-catalog.mjs\n    npm-platform-packages.mjs\n    project-metadata.mjs\n    release-targets.mjs\n  proof-report.mjs\n  publish-npm-artifacts.mjs\n  run-rust-tests.mjs\n  stage-platform-package-binary.mjs\n  stage-vendored-binary.mjs\n  sync-platform-packages.mjs\n  verify-image.Dockerfile\n  verify-npm-pack.mjs\n  verify-platform-packages.mjs\n  verify-publish-readiness.mjs\n  verify-release-checksums.mjs\n  verify-release-targets.mjs\n  verify-ubuntu-docker-e2e.mjs\n  verify-ubuntu-docker-fast.mjs\n  verify-ubuntu-docker-full.mjs\n  verify-vendored-binary.mjs\nserver-candidates.json\nsrc/ (57)\n  app.rs\n  candidates.rs\n  catalog.rs\n  client/ (8)\n    actions.rs\n    args.rs\n    context.rs\n    metadata.rs\n    model.rs\n    pathing.rs\n    plan.rs\n    render.rs\n  client.rs\n  client_catalog.rs\n  dashboard.rs\n  doctor.rs\n  hub/ (7)\n    args.rs\n    launcher.rs\n    leases.rs\n    lifecycle.rs\n    model.rs\n    runtime.rs\n    status.rs\n  hub.rs\n  init.rs\n  json.rs\n  json_helpers.rs\n  lab/ (5)\n    analysis.rs\n    args.rs\n    loader.rs\n    model.rs\n    render.rs\n  lab.rs\n  lib.rs\n  main.rs\n  mcp_protocol.rs\n  mcp_server.rs\n  profile.rs\n  projects.rs\n  repair.rs\n  reporoot.rs\n  runtimepaths.rs\n  serve.rs\n  server/ (4)\n    args.rs\n    loader.rs\n    model.rs\n    render.rs\n  server.rs\n  service.rs\n  setup.rs\n  stdio_shim.rs\n  update.rs\n  upstream.rs\n  verify/ (3)\n    args.rs\n    model.rs\n    render.rs\n  verify.rs\n  windows_process.rs\ntarget/ (8948)\n  CACHEDIR.TAG\n  debug/ (8727)\n    deps/ (264)\n    examples/ (0)\n    incremental/ (8041)\n    libmcpace.d\n    libmcpace.rlib\n    mcpace.d\n    mcpace.exe\n    mcpace.pdb\n  release/ (219)\n    deps/ (77)\n    examples/ (0)\n    incremental/ (0)\n    libmcpace.d\n    libmcpace.rlib\n    mcpace.d\n    mcpace.exe\n    mcpace.pdb\n  tmp/ (0)\ntests/ (34)\n  client_surface.rs\n  common/ (1)\n    mod.rs\n  config_and_server.rs\n  help_and_root.rs\n  hub_leases.rs\n  hub_runtime.rs\n  lab_surface.rs\n  mcp_server.rs\n  node/ (23)\n    archive-contract.test.js\n    build-release-artifacts.test.js\n    command-coverage-contract.test.js\n    docs-contract.test.js\n    eval-contract.test.js\n    evidence-contract.test.js\n    fixtures-contract.test.js\n    generate-checksums.test.js\n    github-release-matrix-contract.test.js\n    helpers.js\n    platform-packages-contract.test.js\n    product-truth-contract.test.js\n    proof-report.test.js\n    release-targets-contract.test.js\n    release-workflow-contract.test.js\n    repo-contract.test.js\n    rust-test-runner-contract.test.js\n    schema-examples.test.js\n    stack-contract.test.js\n    stage-vendored-binary.test.js\n    verify-npm-pack.test.js\n    verify-release-checksums.test.js\n    verify-vendored-binary.test.js\n  service.rs\n  setup.rs\n  stdio_shim.rs\n[271 tok saved (14%)]\n[saved 262 tokens vs native ls]\n[Archived: 5402 chars (1637 tok). Retrieve: ctx_expand(id=\"dec498b95807368b\")]",
+                "type": "text"
+              }
+            ],
+            "isError": false
+          }
+        }
+      }
+    },
+    {
+      "name": "serena_onboarding_check",
+      "at": "2026-04-27T17:26:21.5350548+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 4611,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "serena",
+          "timeoutMs": 180000,
+          "tool": "check_onboarding_performed",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "Onboarding not performed yet (no memories available). You should perform onboarding by calling the `onboarding` tool before proceeding with the task.  If you have not read the 'Serena Instructions Manual', do so now.",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "result": "Onboarding not performed yet (no memories available). You should perform onboarding by calling the `onboarding` tool before proceeding with the task.  If you have not read the 'Serena Instructions Manual', do so now."
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "wireshark_capabilities",
+      "at": "2026-04-27T17:26:24.5681120+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 3032,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": true,
+          "server": "wireshark-mcp",
+          "timeoutMs": 120000,
+          "tool": "wireshark_get_capabilities",
+          "upstreamIsError": false,
+          "upstreamOk": true,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "{\"success\": true, \"data\": {\"tshark\": {\"available\": false, \"path\": \"tshark\", \"requirement\": \"required\", \"purpose\": \"Core packet analysis and protocol dissection\"}, \"capinfos\": {\"available\": false, \"path\": null, \"requirement\": \"recommended\", \"purpose\": \"Capture-file metadata and summary statistics\"}, \"mergecap\": {\"available\": false, \"path\": null, \"requirement\": \"recommended\", \"purpose\": \"Capture-file merging\"}, \"editcap\": {\"available\": false, \"path\": null, \"requirement\": \"optional\", \"purpose\": \"Capture trimming, splitting, time shifting, and deduplication\"}, \"dumpcap\": {\"available\": false, \"path\": null, \"requirement\": \"optional\", \"purpose\": \"Preferred backend for live capture\"}, \"text2pcap\": {\"available\": false, \"path\": null, \"requirement\": \"optional\", \"purpose\": \"Import ASCII/hex dumps into capture files\"}, \"_meta\": {\"required\": [\"tshark\"], \"recommended\": [\"capinfos\", \"mergecap\"], \"optional\": [\"editcap\", \"dumpcap\", \"text2pcap\"], \"capture_backend\": \"tshark\"}}}",
+                "type": "text"
+              }
+            ],
+            "isError": false,
+            "structuredContent": {
+              "result": "{\"success\": true, \"data\": {\"tshark\": {\"available\": false, \"path\": \"tshark\", \"requirement\": \"required\", \"purpose\": \"Core packet analysis and protocol dissection\"}, \"capinfos\": {\"available\": false, \"path\": null, \"requirement\": \"recommended\", \"purpose\": \"Capture-file metadata and summary statistics\"}, \"mergecap\": {\"available\": false, \"path\": null, \"requirement\": \"recommended\", \"purpose\": \"Capture-file merging\"}, \"editcap\": {\"available\": false, \"path\": null, \"requirement\": \"optional\", \"purpose\": \"Capture trimming, splitting, time shifting, and deduplication\"}, \"dumpcap\": {\"available\": false, \"path\": null, \"requirement\": \"optional\", \"purpose\": \"Preferred backend for live capture\"}, \"text2pcap\": {\"available\": false, \"path\": null, \"requirement\": \"optional\", \"purpose\": \"Import ASCII/hex dumps into capture files\"}, \"_meta\": {\"required\": [\"tshark\"], \"recommended\": [\"capinfos\", \"mergecap\"], \"optional\": [\"editcap\", \"dumpcap\", \"text2pcap\"], \"capture_backend\": \"tshark\"}}}"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "context7_invalid_args_negative_control",
+      "at": "2026-04-27T17:26:27.3542120+03:00",
+      "data": {
+        "ok": true,
+        "elapsedMs": 2785,
+        "resultIsError": false,
+        "structured": {
+          "bridgeOk": true,
+          "ok": false,
+          "server": "context7",
+          "timeoutMs": 120000,
+          "tool": "resolve-library-id",
+          "upstreamIsError": true,
+          "upstreamOk": false,
+          "upstreamResult": {
+            "content": [
+              {
+                "text": "MCP error -32602: Input validation error: Invalid arguments for tool resolve-library-id: [\n  {\n    \"expected\": \"string\",\n    \"code\": \"invalid_type\",\n    \"path\": [\n      \"libraryName\"\n    ],\n    \"message\": \"Invalid input: expected string, received undefined\"\n  }\n]",
+                "type": "text"
+              }
+            ],
+            "isError": true
+          }
+        }
+      }
+    }
+  ]
+}

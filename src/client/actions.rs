@@ -2,52 +2,71 @@ use super::args::ParsedArgs;
 use super::context::resolve_context;
 use super::metadata::load_metadata;
 use super::plan::build_plan;
-use super::render::{count_static, join_count_map, join_static_or_none, write_text_plan};
-use crate::client_catalog::{ClientTarget, CLIENT_TARGETS};
+use super::render::{count_static, join_count_map, join_or_none, write_text_plan};
+use crate::client_catalog::{
+    self, client_install_support_summary as catalog_client_install_support_summary,
+    client_install_support_summary_for_targets, ClientInstallKindRecord as ClientInstallKind,
+    ClientTargetRecord as ClientTarget, JsonMcpServerShapeRecord as JsonMcpServerShape,
+};
 use crate::doctor;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
+use crate::runtimepaths;
 use crate::server;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-const LOCAL_MCP_URL: &str = "http://127.0.0.1:39022/mcp";
-const CLIENT_INSTALL_SUPPORTED_TARGETS: &[&str] = &[
-    "codex",
-    "claude-code",
-    "cursor-local",
-    "kiro-ide",
-    "kiro-cli",
-    "gemini-cli",
-    "github-copilot-cli",
-    "windsurf",
-    "hermes-agent",
-];
-
-pub(super) fn supports_client_install(target_id: &str) -> bool {
-    CLIENT_INSTALL_SUPPORTED_TARGETS.contains(&target_id)
+fn local_mcp_url() -> String {
+    runtimepaths::default_local_mcp_url()
 }
 
 pub(super) fn client_install_support_summary() -> String {
-    "Codex, Claude Code, Cursor, Kiro, Gemini CLI, Windsurf, GitHub Copilot CLI, and Hermes Agent"
-        .to_string()
+    catalog_client_install_support_summary()
 }
 
 pub(super) fn run_list(
     parsed: ParsedArgs,
     default_root: Option<PathBuf>,
     stdout: &mut dyn Write,
-    _stderr: &mut dyn Write,
+    stderr: &mut dyn Write,
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let config_version = root_path.as_deref().and_then(doctor::read_config_version);
     let configured_client_key_name = root_path.as_deref().and_then(read_client_key_name);
+    let registry = match client_catalog::load_registry(root_path.as_deref()) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = writeln!(stderr, "{}", error);
+            return 1;
+        }
+    };
 
-    let family_counts = count_static(CLIENT_TARGETS.iter().map(|target| target.family_id));
-    let surface_class_counts =
-        count_static(CLIENT_TARGETS.iter().map(|target| target.surface_class));
+    let family_counts = count_static(
+        registry
+            .targets
+            .iter()
+            .map(|target| target.family_id.clone()),
+    );
+    let surface_class_counts = count_static(
+        registry
+            .targets
+            .iter()
+            .map(|target| target.surface_class.clone()),
+    );
+    let proof_tier_counts = count_static(
+        registry
+            .targets
+            .iter()
+            .map(|target| target.proof_tier.clone()),
+    );
+    let install_supported_target_ids = registry
+        .targets
+        .iter()
+        .filter(|target| target.supports_client_install())
+        .map(|target| target.id.clone())
+        .collect::<Vec<_>>();
 
     if parsed.json_output {
         let json = JsonValue::object([
@@ -66,6 +85,14 @@ pub(super) fn run_list(
                 },
             ),
             (
+                "catalogSources",
+                JsonValue::array(registry.sources.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "catalogWarnings",
+                JsonValue::array(registry.warnings.iter().cloned().map(JsonValue::string)),
+            ),
+            (
                 "familyCounts",
                 JsonValue::object(
                     family_counts
@@ -82,19 +109,46 @@ pub(super) fn run_list(
                 ),
             ),
             (
+                "proofTierCounts",
+                JsonValue::object(
+                    proof_tier_counts
+                        .iter()
+                        .map(|(key, value)| (key.clone(), JsonValue::number(*value))),
+                ),
+            ),
+            (
+                "installSupportedTargetIds",
+                JsonValue::array(
+                    install_supported_target_ids
+                        .iter()
+                        .cloned()
+                        .map(JsonValue::string),
+                ),
+            ),
+            (
                 "targets",
-                JsonValue::array(CLIENT_TARGETS.iter().map(ClientTarget::to_json_value)),
+                JsonValue::array(registry.targets.iter().map(ClientTarget::to_json_value)),
             ),
         ]);
         let _ = writeln!(stdout, "{}", json.to_pretty_string());
         return 0;
     }
 
-    let _ = writeln!(stdout, "Known client targets: {}", CLIENT_TARGETS.len());
+    let _ = writeln!(stdout, "Known client targets: {}", registry.targets.len());
     let _ = writeln!(
         stdout,
         "Configured adapter key name: {}",
         configured_client_key_name.as_deref().unwrap_or("none")
+    );
+    let _ = writeln!(
+        stdout,
+        "Catalog sources: {}",
+        join_or_none(&registry.sources)
+    );
+    let _ = writeln!(
+        stdout,
+        "Catalog warnings: {}",
+        join_or_none(&registry.warnings)
     );
     let _ = writeln!(stdout, "Families: {}", join_count_map(&family_counts));
     let _ = writeln!(
@@ -102,40 +156,62 @@ pub(super) fn run_list(
         "Surface classes: {}",
         join_count_map(&surface_class_counts)
     );
-    for target in CLIENT_TARGETS {
+    let _ = writeln!(
+        stdout,
+        "Proof tiers: {}",
+        join_count_map(&proof_tier_counts)
+    );
+    let _ = writeln!(
+        stdout,
+        "Install patchers: {}",
+        client_install_support_summary_for_targets(&registry.targets)
+    );
+    for target in &registry.targets {
+        let install_label = target
+            .install_support()
+            .map(|support| support.kind.as_str())
+            .unwrap_or("manual");
         let _ = writeln!(
             stdout,
-            "- {} [{} / {} / {}] format={} ingress={} scopes={}",
+            "- {} [{} / {} / {} / {}] format={} ingress={} scopes={} install={}",
             target.id,
             target.maturity,
             target.surface_class,
             target.surface_kind,
+            target.proof_tier(),
             target.config_format,
-            join_static_or_none(target.supported_ingresses),
-            join_static_or_none(target.native_scopes)
+            join_or_none(&target.supported_ingresses),
+            join_or_none(&target.native_scopes),
+            install_label,
         );
         let _ = writeln!(
             stdout,
-            "    family={} paths={}",
+            "    family={} proofTier={} source={} installSupport={} paths={}",
             target.family_id,
-            join_static_or_none(target.config_paths)
+            target.proof_tier(),
+            target.source,
+            target
+                .install_support()
+                .map(|value| value.kind.as_str())
+                .unwrap_or("manual"),
+            join_or_none(&target.config_paths)
         );
         let _ = writeln!(
             stdout,
             "    precedence={}",
-            join_static_or_none(target.config_precedence)
+            join_or_none(&target.config_precedence)
         );
         let _ = writeln!(
             stdout,
             "    features={}",
-            join_static_or_none(target.documented_features)
+            join_or_none(&target.documented_features)
         );
         let _ = writeln!(
             stdout,
             "    constraints={}",
-            join_static_or_none(target.documented_constraints)
+            join_or_none(&target.documented_constraints)
         );
-        let _ = writeln!(stdout, "    notes={}", join_static_or_none(target.notes));
+        let _ = writeln!(stdout, "    notes={}", join_or_none(&target.notes));
     }
     0
 }
@@ -152,41 +228,55 @@ pub(super) fn run_plan(
         return 1;
     };
 
-    let server_records = match server::load_server_records(&root_path) {
-        Ok(records) => records,
+    let json = match build_plan_json(parsed.clone(), &root_path) {
+        Ok(value) => value,
         Err(error) => {
             let _ = writeln!(stderr, "{}", error);
             return 1;
         }
     };
 
-    let metadata = match load_metadata(&parsed) {
-        Ok(value) => value,
-        Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
-            return 2;
-        }
-    };
-
-    let mut context = resolve_context(&parsed, &metadata);
-    if let Some(client_target) = crate::client_catalog::find(&context.client_id) {
-        prefer_local_http_when_supported(&parsed, &mut context, client_target, "serve-default");
-    }
-    let plan = build_plan(
-        root_path.display().to_string(),
-        doctor::read_config_version(&root_path),
-        read_client_key_name(&root_path),
-        context,
-        &server_records,
-    );
-
     if parsed.json_output {
-        let _ = writeln!(stdout, "{}", plan.to_json_value().to_pretty_string());
+        let _ = writeln!(stdout, "{}", json.to_pretty_string());
         return 0;
     }
 
+    let plan = match build_plan_struct(parsed, &root_path) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = writeln!(stderr, "{}", error);
+            return 1;
+        }
+    };
     write_text_plan(&plan, stdout);
     0
+}
+
+pub(super) fn build_plan_json(parsed: ParsedArgs, root_path: &Path) -> Result<JsonValue, String> {
+    build_plan_struct(parsed, root_path).map(|plan| plan.to_json_value())
+}
+
+fn build_plan_struct(
+    parsed: ParsedArgs,
+    root_path: &Path,
+) -> Result<super::model::ClientPlan, String> {
+    let server_records = server::load_server_records(root_path)?;
+    let registry = client_catalog::load_registry(Some(root_path))?;
+    let metadata = load_metadata(&parsed)?;
+
+    let mut context = resolve_context(&parsed, &metadata);
+    let client_target = client_catalog::find_in_targets(&registry.targets, &context.client_id);
+    if let Some(client_target) = client_target {
+        prefer_local_http_when_supported(&parsed, &mut context, client_target, "serve-default");
+    }
+    Ok(build_plan(
+        root_path.display().to_string(),
+        doctor::read_config_version(root_path),
+        read_client_key_name(root_path),
+        context,
+        client_target,
+        &server_records,
+    ))
 }
 
 pub(super) fn run_export(
@@ -199,6 +289,14 @@ pub(super) fn run_export(
     let Some(root_path) = root_path else {
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
         return 1;
+    };
+
+    let registry = match client_catalog::load_registry(Some(&root_path)) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = writeln!(stderr, "{}", error);
+            return 1;
+        }
     };
 
     let metadata = match load_metadata(&parsed) {
@@ -215,7 +313,8 @@ pub(super) fn run_export(
         )));
         context.project_root_source = "export-root".to_string();
     }
-    let client_target = match crate::client_catalog::find(&context.client_id) {
+    let client_target = match client_catalog::find_in_targets(&registry.targets, &context.client_id)
+    {
         Some(value) => value,
         None => {
             let _ = writeln!(
@@ -241,6 +340,7 @@ pub(super) fn run_export(
         doctor::read_config_version(&root_path),
         read_client_key_name(&root_path),
         context,
+        Some(client_target),
         &server_records,
     );
 
@@ -266,6 +366,23 @@ pub(super) fn run_install(
         return 1;
     };
 
+    let registry = match client_catalog::load_registry(Some(&root_path)) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = writeln!(stderr, "{}", error);
+            return 1;
+        }
+    };
+
+    if parsed
+        .client_id
+        .as_deref()
+        .map(|value| value.eq_ignore_ascii_case("all"))
+        .unwrap_or(false)
+    {
+        return run_install_all(parsed, root_path, &registry, stdout, stderr);
+    }
+
     let metadata = match load_metadata(&parsed) {
         Ok(value) => value,
         Err(error) => {
@@ -280,7 +397,8 @@ pub(super) fn run_install(
         )));
         context.project_root_source = "install-root".to_string();
     }
-    let client_target = match crate::client_catalog::find(&context.client_id) {
+    let client_target = match client_catalog::find_in_targets(&registry.targets, &context.client_id)
+    {
         Some(value) => value,
         None => {
             let _ = writeln!(
@@ -306,6 +424,7 @@ pub(super) fn run_install(
         doctor::read_config_version(&root_path),
         read_client_key_name(&root_path),
         context,
+        Some(client_target),
         &server_records,
     );
 
@@ -332,6 +451,116 @@ pub(super) fn run_install(
 
     result.write_text(stdout);
     0
+}
+
+fn run_install_all(
+    parsed: ParsedArgs,
+    root_path: PathBuf,
+    registry: &client_catalog::ClientRegistry,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let server_records = match server::load_server_records(&root_path) {
+        Ok(records) => records,
+        Err(error) => {
+            let _ = writeln!(stderr, "{}", error);
+            return 1;
+        }
+    };
+    let mut installed = Vec::new();
+    let mut failed = Vec::new();
+    let mut skipped = Vec::new();
+
+    for target in registry
+        .targets
+        .iter()
+        .filter(|target| client_catalog::normalize(&target.surface_class) == "local")
+    {
+        if !target.supports_client_install() {
+            skipped.push(format!("{}: manual/no patcher", target.id));
+            continue;
+        }
+
+        let mut target_args = parsed.clone();
+        target_args.client_id = Some(target.id.clone());
+        let metadata = match load_metadata(&target_args) {
+            Ok(value) => value,
+            Err(error) => {
+                failed.push((target.id.clone(), error));
+                continue;
+            }
+        };
+        let mut context = resolve_context(&target_args, &metadata);
+        if context.project_root.is_none() {
+            context.project_root = Some(sanitize_path_for_display(&canonicalize_or_original(
+                &root_path,
+            )));
+            context.project_root_source = "install-root".to_string();
+        }
+        prefer_local_http_when_supported(&target_args, &mut context, target, "serve-default");
+
+        let plan = build_plan(
+            root_path.display().to_string(),
+            doctor::read_config_version(&root_path),
+            read_client_key_name(&root_path),
+            context,
+            Some(target),
+            &server_records,
+        );
+
+        let install = match ClientInstallPlan::from_plan(&root_path, target, &plan) {
+            Ok(value) => value,
+            Err(error) => {
+                failed.push((target.id.clone(), error));
+                continue;
+            }
+        };
+        match install.write() {
+            Ok(value) => installed.push(value),
+            Err(error) => failed.push((target.id.clone(), error)),
+        }
+    }
+
+    if parsed.json_output {
+        let json = JsonValue::object([
+            ("mode", JsonValue::string("installed-all")),
+            (
+                "installed",
+                JsonValue::array(installed.iter().map(ClientInstallResult::to_json_value)),
+            ),
+            (
+                "skipped",
+                JsonValue::array(skipped.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "failed",
+                JsonValue::array(failed.iter().map(|(target, error)| {
+                    JsonValue::object([
+                        ("clientTargetId", JsonValue::string(target.clone())),
+                        ("error", JsonValue::string(error.clone())),
+                    ])
+                })),
+            ),
+        ]);
+        let _ = writeln!(stdout, "{}", json.to_pretty_string());
+    } else {
+        let _ = writeln!(stdout, "Client install all complete");
+        for result in &installed {
+            result.write_text(stdout);
+        }
+        if !skipped.is_empty() {
+            let _ = writeln!(stdout, "Skipped: {}", join_or_none(&skipped));
+        }
+        for (target, error) in &failed {
+            let _ = writeln!(stderr, "{}: {}", target, error);
+        }
+    }
+
+    if failed.is_empty() {
+        0
+    } else {
+        1
+    }
 }
 
 fn read_client_key_name(root_path: &Path) -> Option<String> {
@@ -372,6 +601,8 @@ struct ClientExportPreview {
     mode: String,
     can_connect_today: bool,
     writes_config: bool,
+    recommended_install_scope: Option<String>,
+    recommended_install_path: Option<String>,
     adapter_contract: AdapterContractPreview,
     blockers: Vec<String>,
     warnings: Vec<String>,
@@ -389,9 +620,9 @@ struct AdapterContractPreview {
 }
 
 enum ClientInstallConfig {
-    CodexToml,
+    TomlManagedTable,
     JsonMcpServers { server_config: JsonValue },
-    HermesYaml,
+    YamlMcpServers,
 }
 
 struct ClientInstallPlan {
@@ -399,6 +630,7 @@ struct ClientInstallPlan {
     display_name: String,
     adapter_key_name: String,
     config_path: PathBuf,
+    config_scope: String,
     server_url: String,
     config: ClientInstallConfig,
     warnings: Vec<String>,
@@ -409,6 +641,7 @@ struct ClientInstallResult {
     display_name: String,
     adapter_key_name: String,
     config_path: String,
+    config_scope: String,
     transport: String,
     server_url: String,
     changed: bool,
@@ -425,6 +658,12 @@ impl ClientExportPreview {
             .clone()
             .unwrap_or_else(|| format!("{}-adapter", target.family_id));
         let export_mode = resolve_export_mode(target, plan);
+        let recommended_install_scope = target
+            .preferred_install_scope()
+            .map(|value| value.to_string());
+        let recommended_install_path = target
+            .preferred_install_config_path()
+            .map(|value| value.to_string());
 
         let blockers = match export_mode.as_str() {
             "local-stdio-launcher" | "local-streamable-http" => Vec::new(),
@@ -437,21 +676,37 @@ impl ClientExportPreview {
         };
 
         let next_actions = match export_mode.as_str() {
-            "local-streamable-http" if supports_client_install(target.id) => {
+            "local-streamable-http" if target.supports_client_install() => {
+                let scope = recommended_install_scope
+                    .as_deref()
+                    .unwrap_or("recommended");
+                let path = recommended_install_path
+                    .as_deref()
+                    .unwrap_or("documented install path");
                 vec![
                 format!(
-                    "Run 'mcpace client install {} --root <path>' to patch the MCPace entry in {} automatically.",
+                    "Run 'mcpace client install {} --root <path>' to patch the MCPace entry in {} automatically using the shared {} scope.",
                     target.id,
-                    preferred_install_config_path(target)
+                    path,
+                    scope
                 ),
                 format!(
-                    "Keep one MCPace server running on port 39022 so {} always points at the same localhost MCP URL.",
+                    "MCPace defaults to the shared {} scope for {} so one localhost MCPace server can be reused across projects.",
+                    scope,
+                    target.display_name
+                ),
+                format!(
+                    "Keep one MCPace server running on port {} so {} always points at the same localhost MCP URL.",
+                    runtimepaths::DEFAULT_LOCAL_MCP_PORT,
                     target.display_name
                 ),
             ]
             }
             "local-streamable-http" => vec![
-                "Run 'mcpace serve --port 39022' and point this client at the one MCPace URL.".to_string(),
+                format!(
+                    "Run 'mcpace serve --port {}' and point this client at the one MCPace URL.",
+                    runtimepaths::DEFAULT_LOCAL_MCP_PORT
+                ),
                 "Keep export as the source of truth for the HTTP MCPace contract until that client gets a dedicated config patcher.".to_string(),
             ],
             "local-stdio-launcher" => vec![
@@ -468,25 +723,13 @@ impl ClientExportPreview {
         };
 
         ClientExportPreview {
-            client_target_id: target.id.to_string(),
-            display_name: target.display_name.to_string(),
+            client_target_id: target.id.clone(),
+            display_name: target.display_name.clone(),
             adapter_key_name,
-            config_format: target.config_format.to_string(),
-            config_paths: target
-                .config_paths
-                .iter()
-                .map(|value| (*value).to_string())
-                .collect(),
-            config_precedence: target
-                .config_precedence
-                .iter()
-                .map(|value| (*value).to_string())
-                .collect(),
-            native_scopes: target
-                .native_scopes
-                .iter()
-                .map(|value| (*value).to_string())
-                .collect(),
+            config_format: target.config_format.clone(),
+            config_paths: target.config_paths.clone(),
+            config_precedence: target.config_precedence.clone(),
+            native_scopes: target.native_scopes.clone(),
             preferred_ingress: plan.preferred_ingress.clone(),
             export_mode: export_mode.clone(),
             entrypoint_mode: plan.entrypoint_mode.clone(),
@@ -505,6 +748,8 @@ impl ClientExportPreview {
                 "local-stdio-launcher" | "local-streamable-http"
             ),
             writes_config: false,
+            recommended_install_scope,
+            recommended_install_path,
             adapter_contract: build_adapter_contract(target, plan, &export_mode),
             blockers,
             warnings: plan.warnings.clone(),
@@ -576,6 +821,28 @@ impl ClientExportPreview {
             "writesConfig".to_string(),
             JsonValue::bool(self.writes_config),
         );
+        match &self.recommended_install_scope {
+            Some(value) => {
+                map.insert(
+                    "recommendedInstallScope".to_string(),
+                    JsonValue::string(value.clone()),
+                );
+            }
+            None => {
+                map.insert("recommendedInstallScope".to_string(), JsonValue::Null);
+            }
+        }
+        match &self.recommended_install_path {
+            Some(value) => {
+                map.insert(
+                    "recommendedInstallPath".to_string(),
+                    JsonValue::string(value.clone()),
+                );
+            }
+            None => {
+                map.insert("recommendedInstallPath".to_string(), JsonValue::Null);
+            }
+        }
         map.insert(
             "adapterContract".to_string(),
             self.adapter_contract.to_json_value(),
@@ -633,6 +900,16 @@ impl ClientExportPreview {
             yes_no(self.can_connect_today)
         );
         let _ = writeln!(stdout, "Writes config: {}", yes_no(self.writes_config));
+        let _ = writeln!(
+            stdout,
+            "Recommended install scope: {}",
+            self.recommended_install_scope.as_deref().unwrap_or("none")
+        );
+        let _ = writeln!(
+            stdout,
+            "Recommended install path: {}",
+            self.recommended_install_path.as_deref().unwrap_or("none")
+        );
         self.adapter_contract.write_text(stdout);
         let _ = writeln!(stdout, "Blockers: {}", join_or_none(&self.blockers));
         let _ = writeln!(stdout, "Warnings: {}", join_or_none(&self.warnings));
@@ -642,96 +919,35 @@ impl ClientExportPreview {
 
 impl ClientInstallPlan {
     fn from_plan(
-        root_path: &Path,
+        _root_path: &Path,
         target: &ClientTarget,
         plan: &super::model::ClientPlan,
     ) -> Result<Self, String> {
-        let canonical_root = canonicalize_or_original(root_path);
         let adapter_key_name = plan
             .configured_client_key_name
             .clone()
             .unwrap_or_else(|| "MCPace".to_string());
-        let (config_path, config) = match target.id {
-            "codex" => (
-                canonical_root.join(".codex").join("config.toml"),
-                ClientInstallConfig::CodexToml,
-            ),
-            "claude-code" => (
-                canonical_root.join(".mcp.json"),
-                ClientInstallConfig::JsonMcpServers {
-                    server_config: JsonValue::object([
-                        ("type", JsonValue::string("http")),
-                        ("url", JsonValue::string(LOCAL_MCP_URL)),
-                    ]),
-                },
-            ),
-            "cursor-local" => (
-                canonical_root.join(".cursor").join("mcp.json"),
-                ClientInstallConfig::JsonMcpServers {
-                    server_config: JsonValue::object([("url", JsonValue::string(LOCAL_MCP_URL))]),
-                },
-            ),
-            "kiro-ide" | "kiro-cli" => (
-                canonical_root
-                    .join(".kiro")
-                    .join("settings")
-                    .join("mcp.json"),
-                ClientInstallConfig::JsonMcpServers {
-                    server_config: JsonValue::object([
-                        ("url", JsonValue::string(LOCAL_MCP_URL)),
-                        ("disabled", JsonValue::bool(false)),
-                    ]),
-                },
-            ),
-            "gemini-cli" => (
-                canonical_root.join(".gemini").join("settings.json"),
-                ClientInstallConfig::JsonMcpServers {
-                    server_config: JsonValue::object([(
-                        "httpUrl",
-                        JsonValue::string(LOCAL_MCP_URL),
-                    )]),
-                },
-            ),
-            "github-copilot-cli" => (
-                resolve_user_install_path(".copilot", "mcp-config.json")?,
-                ClientInstallConfig::JsonMcpServers {
-                    server_config: JsonValue::object([
-                        ("type", JsonValue::string("http")),
-                        ("url", JsonValue::string(LOCAL_MCP_URL)),
-                        ("tools", JsonValue::array([JsonValue::string("*")])),
-                    ]),
-                },
-            ),
-            "windsurf" => (
-                resolve_user_install_path(".codeium\\windsurf", "mcp_config.json")?,
-                ClientInstallConfig::JsonMcpServers {
-                    server_config: JsonValue::object([(
-                        "serverUrl",
-                        JsonValue::string(LOCAL_MCP_URL),
-                    )]),
-                },
-            ),
-            "hermes-agent" => (
-                resolve_user_install_path(".hermes", "config.yaml")?,
-                ClientInstallConfig::HermesYaml,
-            ),
-            other => {
-                return Err(format!(
-                    "client install currently supports {}; '{}' remains manual for now",
-                    client_install_support_summary(),
-                    other,
-                ))
-            }
+        let Some(install_support) = target.install_support() else {
+            return Err(format!(
+                "client install currently supports {}; '{}' remains manual for now",
+                client_install_support_summary(),
+                target.id,
+            ));
         };
 
+        let config_path = resolve_install_path(&install_support.preferred_config_path)?;
+        let config_scope = install_support.preferred_scope.clone();
+        let config = install_config_for_target(target)?;
+
         Ok(Self {
-            client_target_id: target.id.to_string(),
-            display_name: target.display_name.to_string(),
+            client_target_id: target.id.clone(),
+            display_name: target.display_name.clone(),
             adapter_key_name,
             config_path,
-            server_url: LOCAL_MCP_URL.to_string(),
+            config_scope,
+            server_url: local_mcp_url(),
             config,
-            warnings: install_warnings_from_plan(plan),
+            warnings: install_warnings_from_plan(plan, target),
         })
     }
 
@@ -766,11 +982,11 @@ impl ClientInstallPlan {
         };
         let created_config_file = existing.is_empty() && !self.config_path.is_file();
         let update = match &self.config {
-            ClientInstallConfig::CodexToml => {
+            ClientInstallConfig::TomlManagedTable => {
                 let newline = detect_newline(&existing);
                 let managed_block =
-                    build_codex_managed_block(&self.adapter_key_name, &self.server_url, newline);
-                upsert_codex_managed_block(
+                    build_toml_managed_block(&self.adapter_key_name, &self.server_url, newline);
+                upsert_toml_managed_block(
                     &existing,
                     &self.adapter_key_name,
                     &managed_block,
@@ -783,7 +999,7 @@ impl ClientInstallPlan {
                 server_config.clone(),
                 &self.config_path,
             )?,
-            ClientInstallConfig::HermesYaml => upsert_hermes_mcp_server(
+            ClientInstallConfig::YamlMcpServers => upsert_yaml_mcp_server(
                 &existing,
                 &self.adapter_key_name,
                 &self.server_url,
@@ -807,6 +1023,7 @@ impl ClientInstallPlan {
             display_name: self.display_name.clone(),
             adapter_key_name: self.adapter_key_name.clone(),
             config_path: sanitize_path_for_display(&self.config_path),
+            config_scope: self.config_scope.clone(),
             transport: "streamable-http".to_string(),
             server_url: self.server_url.clone(),
             changed,
@@ -832,6 +1049,7 @@ impl ClientInstallResult {
                 JsonValue::string(self.adapter_key_name.clone()),
             ),
             ("configPath", JsonValue::string(self.config_path.clone())),
+            ("configScope", JsonValue::string(self.config_scope.clone())),
             ("transport", JsonValue::string(self.transport.clone())),
             ("url", JsonValue::string(self.server_url.clone())),
             ("writesConfig", JsonValue::bool(true)),
@@ -861,6 +1079,7 @@ impl ClientInstallResult {
         );
         let _ = writeln!(stdout, "Adapter key: {}", self.adapter_key_name);
         let _ = writeln!(stdout, "Config path: {}", self.config_path);
+        let _ = writeln!(stdout, "Config scope: {}", self.config_scope);
         let _ = writeln!(stdout, "Transport: {}", self.transport);
         let _ = writeln!(stdout, "URL: {}", self.server_url);
         let _ = writeln!(stdout, "Changed config: {}", yes_no(self.changed));
@@ -953,12 +1172,51 @@ fn resolve_export_mode(target: &ClientTarget, plan: &super::model::ClientPlan) -
 
 fn preferred_install_config_path(target: &ClientTarget) -> &str {
     target
-        .config_paths
-        .iter()
-        .find(|path| path.starts_with('.'))
-        .or_else(|| target.config_paths.first())
-        .copied()
+        .preferred_install_config_path()
         .unwrap_or("client config")
+}
+
+fn preferred_install_scope(target: &ClientTarget) -> &str {
+    target.preferred_install_scope().unwrap_or("project")
+}
+
+fn build_json_install_server_config(shape: JsonMcpServerShape) -> JsonValue {
+    let mut entries = Vec::new();
+    if shape.include_type_http {
+        entries.push(("type".to_string(), JsonValue::string("http")));
+    }
+    entries.push((
+        shape.url_field.to_string(),
+        JsonValue::string(local_mcp_url()),
+    ));
+    if shape.include_tools_star {
+        entries.push((
+            "tools".to_string(),
+            JsonValue::array([JsonValue::string("*")]),
+        ));
+    }
+    if shape.include_disabled_false {
+        entries.push(("disabled".to_string(), JsonValue::bool(false)));
+    }
+    JsonValue::object(entries)
+}
+
+fn install_config_for_target(target: &ClientTarget) -> Result<ClientInstallConfig, String> {
+    let Some(install_support) = target.install_support() else {
+        return Err(format!(
+            "client install currently supports {}; '{}' remains manual for now",
+            client_install_support_summary(),
+            target.id,
+        ));
+    };
+
+    match install_support.kind {
+        ClientInstallKind::TomlMcpServersManagedTable => Ok(ClientInstallConfig::TomlManagedTable),
+        ClientInstallKind::JsonMcpServers(shape) => Ok(ClientInstallConfig::JsonMcpServers {
+            server_config: build_json_install_server_config(shape),
+        }),
+        ClientInstallKind::YamlMcpServersManagedSection => Ok(ClientInstallConfig::YamlMcpServers),
+    }
 }
 
 fn build_adapter_contract(
@@ -973,25 +1231,25 @@ fn build_adapter_contract(
             args: Vec::new(),
             url_template: Some("https://YOUR-MCPACE-RELAY/mcp".to_string()),
             metadata_carrier: "public HTTP request metadata plus MCP session headers".to_string(),
-            session_model: "HTTP session with Mcp-Session-Id and relay-owned auth context".to_string(),
+            session_model: "planned public HTTP session plus relay-owned auth context; real hosted proof still required".to_string(),
             notes: vec![
                 format!(
                     "{} only reaches public HTTP MCP servers, so MCPace needs a relay/public ingress instead of a local launcher.",
                     target.display_name
                 ),
-                "The cloud/API connector path should keep one visible MCPace URL even when upstream servers stay mixed behind the runtime.".to_string(),
+                "The cloud/API connector path keeps one visible MCPace URL as the goal, but relay/auth/runtime proof is still pending for this lane.".to_string(),
             ],
         },
         "local-streamable-http" => AdapterContractPreview {
             kind: "local-streamable-http".to_string(),
             command: None,
             args: Vec::new(),
-            url_template: Some(LOCAL_MCP_URL.to_string()),
+            url_template: Some(local_mcp_url()),
             metadata_carrier: "localhost HTTP request metadata plus session headers".to_string(),
-            session_model: "sticky local HTTP session keyed by client/session/project".to_string(),
+            session_model: "connectable localhost HTTP endpoint; sticky session ownership is still preview until runtime proof lands".to_string(),
             notes: vec![
-                "Use one localhost MCPace URL so the client never needs direct knowledge of upstream MCP servers.".to_string(),
-                "Run one MCPace server on port 39022 and let every HTTP-capable local client point at that same endpoint.".to_string(),
+                "Use one localhost MCPace URL so the client can target a single MCPace endpoint while upstream routing proof is still in progress.".to_string(),
+                "Today this lane proves connectability to /mcp; full session reuse, ownership, and upstream-runtime guarantees remain preview.".to_string(),
             ],
         },
         _ => AdapterContractPreview {
@@ -1002,18 +1260,18 @@ fn build_adapter_contract(
                 "--root".to_string(),
                 sanitize_launcher_root_path(&plan.root_path),
                 "--client-id".to_string(),
-                target.id.to_string(),
+                target.id.clone(),
             ],
             url_template: None,
             metadata_carrier:
                 "MCP initialize params, roots, cwd, and optional _meta context hints".to_string(),
-            session_model: "sticky stdio lease derived from external session id or planned fallback".to_string(),
+            session_model: "preview stdio launcher contract; live lease/session forwarding is still pending runtime proof".to_string(),
             notes: vec![
                 format!(
                     "{} should see one MCPace launcher entry instead of one config block per upstream MCP server.",
                     target.display_name
                 ),
-                "The live MCP server lets local clients connect to MCPace through one stable stdio command.".to_string(),
+                "This preview keeps one stable stdio launcher command, but bootstrap-only proof should not be treated as completed live forwarding yet.".to_string(),
             ],
         },
     }
@@ -1034,18 +1292,28 @@ fn canonicalize_or_original(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
-fn resolve_user_install_path(relative_dir: &str, file_name: &str) -> Result<PathBuf, String> {
+fn resolve_install_path(default_config_path: &str) -> Result<PathBuf, String> {
     let home = user_home_dir().ok_or_else(|| {
         "failed to resolve the current user's home directory for user-scoped client config"
             .to_string()
     })?;
+
+    let relative = default_config_path
+        .strip_prefix("~/")
+        .or_else(|| default_config_path.strip_prefix("~\\"))
+        .ok_or_else(|| {
+            format!(
+                "client install default config path '{}' is not user-home based yet",
+                default_config_path
+            )
+        })?;
+
     let mut path = home;
-    for segment in relative_dir.split(['/', '\\']) {
+    for segment in relative.split(['/', '\\']) {
         if !segment.is_empty() {
             path.push(segment);
         }
     }
-    path.push(file_name);
     Ok(path)
 }
 
@@ -1067,10 +1335,10 @@ fn empty_json_object() -> JsonValue {
     JsonValue::object::<String, Vec<(String, JsonValue)>>(Vec::new())
 }
 
-fn build_codex_managed_block(adapter_key_name: &str, server_url: &str, newline: &str) -> String {
+fn build_toml_managed_block(adapter_key_name: &str, server_url: &str, newline: &str) -> String {
     let lines = vec![
         format!("# BEGIN MCPACE MANAGED BLOCK: {}", adapter_key_name),
-        "# This block is managed by `mcpace client install codex`.".to_string(),
+        "# This block is managed by `mcpace client install`.".to_string(),
         format!("[mcp_servers.{}]", format_toml_table_key(adapter_key_name)),
         format!("url = {}", toml_basic_string(server_url)),
         "enabled = true".to_string(),
@@ -1081,7 +1349,11 @@ fn build_codex_managed_block(adapter_key_name: &str, server_url: &str, newline: 
     lines.join(newline)
 }
 
-fn build_hermes_entry_block(adapter_key_name: &str, server_url: &str, newline: &str) -> String {
+fn build_yaml_mcp_servers_entry_block(
+    adapter_key_name: &str,
+    server_url: &str,
+    newline: &str,
+) -> String {
     let lines = vec![
         format!("  # BEGIN MCPACE MANAGED BLOCK: {}", adapter_key_name),
         format!("  {}:", adapter_key_name),
@@ -1095,7 +1367,7 @@ fn build_hermes_entry_block(adapter_key_name: &str, server_url: &str, newline: &
     lines.join(newline)
 }
 
-struct CodexConfigUpdate {
+struct ClientConfigUpdate {
     contents: String,
     replaced_existing_block: bool,
 }
@@ -1105,7 +1377,7 @@ fn upsert_json_mcp_server(
     adapter_key_name: &str,
     server_config: JsonValue,
     config_path: &Path,
-) -> Result<CodexConfigUpdate, String> {
+) -> Result<ClientConfigUpdate, String> {
     let mut root = if existing.trim().is_empty() {
         JsonValue::object::<String, Vec<(String, JsonValue)>>(Vec::new())
     } else {
@@ -1144,35 +1416,35 @@ fn upsert_json_mcp_server(
     let replaced_existing_block = servers_object.contains_key(adapter_key_name);
     servers_object.insert(adapter_key_name.to_string(), server_config);
 
-    Ok(CodexConfigUpdate {
+    Ok(ClientConfigUpdate {
         contents: root.to_pretty_string(),
         replaced_existing_block,
     })
 }
 
-fn upsert_codex_managed_block(
+fn upsert_toml_managed_block(
     existing: &str,
     adapter_key_name: &str,
     managed_block: &str,
     config_path: &Path,
-) -> Result<CodexConfigUpdate, String> {
+) -> Result<ClientConfigUpdate, String> {
     if let Some((start, end)) = find_managed_block(existing, adapter_key_name, config_path)? {
         let mut updated = String::new();
         updated.push_str(&existing[..start]);
         updated.push_str(managed_block);
         updated.push_str(&existing[end..]);
-        return Ok(CodexConfigUpdate {
+        return Ok(ClientConfigUpdate {
             contents: updated,
             replaced_existing_block: true,
         });
     }
 
-    if let Some((start, end)) = find_codex_table_block(existing, adapter_key_name) {
+    if let Some((start, end)) = find_toml_mcp_servers_table_block(existing, adapter_key_name) {
         let mut updated = String::new();
         updated.push_str(&existing[..start]);
         updated.push_str(managed_block);
         updated.push_str(&existing[end..]);
-        return Ok(CodexConfigUpdate {
+        return Ok(ClientConfigUpdate {
             contents: updated,
             replaced_existing_block: true,
         });
@@ -1189,27 +1461,27 @@ fn upsert_codex_managed_block(
         }
     }
     updated.push_str(managed_block);
-    Ok(CodexConfigUpdate {
+    Ok(ClientConfigUpdate {
         contents: updated,
         replaced_existing_block: false,
     })
 }
 
-fn upsert_hermes_mcp_server(
+fn upsert_yaml_mcp_server(
     existing: &str,
     adapter_key_name: &str,
     server_url: &str,
     config_path: &Path,
-) -> Result<CodexConfigUpdate, String> {
+) -> Result<ClientConfigUpdate, String> {
     let newline = detect_newline(existing);
-    let entry_block = build_hermes_entry_block(adapter_key_name, server_url, newline);
+    let entry_block = build_yaml_mcp_servers_entry_block(adapter_key_name, server_url, newline);
 
     if let Some((start, end)) = find_managed_block(existing, adapter_key_name, config_path)? {
         let mut updated = String::new();
         updated.push_str(&existing[..start]);
         updated.push_str(&entry_block);
         updated.push_str(&existing[end..]);
-        return Ok(CodexConfigUpdate {
+        return Ok(ClientConfigUpdate {
             contents: updated,
             replaced_existing_block: true,
         });
@@ -1225,7 +1497,7 @@ fn upsert_hermes_mcp_server(
             updated.push_str(&existing[..entry_start]);
             updated.push_str(&entry_block);
             updated.push_str(&existing[entry_end..]);
-            return Ok(CodexConfigUpdate {
+            return Ok(ClientConfigUpdate {
                 contents: updated,
                 replaced_existing_block: true,
             });
@@ -1238,7 +1510,7 @@ fn upsert_hermes_mcp_server(
         }
         updated.push_str(&entry_block);
         updated.push_str(&existing[section_end..]);
-        return Ok(CodexConfigUpdate {
+        return Ok(ClientConfigUpdate {
             contents: updated,
             replaced_existing_block: false,
         });
@@ -1256,7 +1528,7 @@ fn upsert_hermes_mcp_server(
     updated.push_str("mcp_servers:");
     updated.push_str(newline);
     updated.push_str(&entry_block);
-    Ok(CodexConfigUpdate {
+    Ok(ClientConfigUpdate {
         contents: updated,
         replaced_existing_block: false,
     })
@@ -1293,7 +1565,10 @@ fn find_managed_block(
     Ok(Some((start, end)))
 }
 
-fn find_codex_table_block(existing: &str, adapter_key_name: &str) -> Option<(usize, usize)> {
+fn find_toml_mcp_servers_table_block(
+    existing: &str,
+    adapter_key_name: &str,
+) -> Option<(usize, usize)> {
     let candidates = table_header_candidates(adapter_key_name);
     let mut start = None;
     let mut offset = 0usize;
@@ -1453,7 +1728,10 @@ fn yaml_double_quoted_string(value: &str) -> String {
     toml_basic_string(value)
 }
 
-fn install_warnings_from_plan(plan: &super::model::ClientPlan) -> Vec<String> {
+fn install_warnings_from_plan(
+    plan: &super::model::ClientPlan,
+    target: &ClientTarget,
+) -> Vec<String> {
     let mut warnings = plan
         .warnings
         .iter()
@@ -1465,17 +1743,15 @@ fn install_warnings_from_plan(plan: &super::model::ClientPlan) -> Vec<String> {
         })
         .cloned()
         .collect::<Vec<_>>();
+    warnings.push(format!(
+        "MCPace installs {} into the shared {} scope by default at {} so one localhost MCPace server can be reused across projects.",
+        target.display_name,
+        preferred_install_scope(target),
+        preferred_install_config_path(target)
+    ));
     warnings.sort();
     warnings.dedup();
     warnings
-}
-
-fn join_or_none(values: &[String]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join("; ")
-    }
 }
 
 fn yes_no(value: bool) -> &'static str {

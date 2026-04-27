@@ -1,0 +1,143 @@
+name: release-dry-run
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/release*.yml'
+      - 'Cargo.*'
+      - 'src/**'
+      - 'packages/npm/**'
+      - 'scripts/**'
+      - 'release-*.json'
+      - 'package.json'
+      - 'tests/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-dry-run-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  source-and-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      native_matrix: ${{ steps.release-matrices.outputs.native_matrix }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Generate release matrices from release-targets.json
+        id: release-matrices
+        run: node scripts/github-release-matrix.mjs --github-output "$GITHUB_OUTPUT"
+
+      - name: Verify release targets and npm contracts
+        run: |
+          npm run verify:release-targets
+          npm run verify:platform-packages
+          npm test
+
+      - name: Verify generated platform package manifests are committed
+        run: |
+          npm run sync:platform-packages
+          git diff --exit-code -- package.json release-targets.json packages/npm
+
+      - name: Build source release artifact bundle
+        run: npm run build:release-artifacts
+
+      - name: Pack main npm launcher
+        run: |
+          node -e "require('node:fs').mkdirSync('dist/npm', { recursive: true })"
+          npm pack --workspace "@mcpace/cli" --json --pack-destination dist/npm
+
+      - name: Upload dry-run source and main package artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-source-and-main
+          path: |
+            dist/**
+
+
+  runtime-lifecycle-proof:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    needs: source-and-contracts
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            suite: test:hub_runtime
+          - os: ubuntu-24.04
+            suite: test:mcp_server
+          - os: ubuntu-24.04
+            suite: test:stdio_shim
+          - os: macos-15
+            suite: test:hub_runtime
+          - os: windows-2025
+            suite: test:hub_runtime
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Run isolated Rust lifecycle suite
+        run: node scripts/run-rust-tests.mjs --json --suite ${{ matrix.suite }}
+
+  native-platform-proof:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    needs: source-and-contracts
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.source-and-contracts.outputs.native_matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          targets: ${{ matrix.rust_target }}
+
+      - name: Run Rust tests suite-by-suite on native host
+        run: npm run test:rust:ci
+
+      - name: Build release binary for target
+        run: cargo build --release --target ${{ matrix.rust_target }} --locked
+
+      - name: Stage and verify vendored binary
+        run: |
+          node scripts/stage-vendored-binary.mjs --json --target-key ${{ matrix.target_key }} --binary-path target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} --clear-target-dir
+          node scripts/verify-vendored-binary.mjs --json --target-key ${{ matrix.target_key }}
+
+      - name: Stage, verify, and pack platform npm package
+        run: |
+          node scripts/stage-platform-package-binary.mjs --json --target-key ${{ matrix.target_key }} --binary-path target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} --clear-bin-dir
+          node scripts/verify-platform-packages.mjs --json --target-key ${{ matrix.target_key }} --require-binaries --pack-dry-run
+          node -e "require('node:fs').mkdirSync('dist/npm', { recursive: true })"
+          npm pack "packages/npm/cli-${{ matrix.target_key }}" --json --pack-destination dist/npm
+
+      - name: Upload dry-run native artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dry-run-native-${{ matrix.target_key }}
+          path: |
+            packages/npm/cli/vendor/${{ matrix.target_key }}/**
+            packages/npm/cli-${{ matrix.target_key }}/bin/**
+            dist/npm/*.tgz

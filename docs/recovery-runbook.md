@@ -10,7 +10,7 @@
 
 ```bash
 npm test
-npm run pack:npm:dry-run
+npm run verify:npm-pack
 ```
 
 ## Build checks on a Rust host

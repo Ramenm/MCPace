@@ -1,13 +1,29 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { SUPPORTED_TARGETS as RELEASE_SUPPORTED_TARGETS } from './targets.js';
 
-export const SUPPORTED_TARGETS = [
-  { key: 'darwin-x64', platform: 'darwin', arch: 'x64', triple: 'x86_64-apple-darwin' },
-  { key: 'darwin-arm64', platform: 'darwin', arch: 'arm64', triple: 'aarch64-apple-darwin' },
-  { key: 'linux-x64-gnu', platform: 'linux', arch: 'x64', libc: 'gnu', triple: 'x86_64-unknown-linux-gnu' },
-  { key: 'linux-arm64-gnu', platform: 'linux', arch: 'arm64', libc: 'gnu', triple: 'aarch64-unknown-linux-gnu' },
-  { key: 'win32-x64-msvc', platform: 'win32', arch: 'x64', triple: 'x86_64-pc-windows-msvc' }
-];
+const DEFAULT_PLATFORM_PROBE_TIMEOUT_MS = 3000;
+const PLATFORM_PROBE_TIMEOUT_MS = parseTimeoutEnv(
+  'MCPACE_PLATFORM_PROBE_TIMEOUT_MS',
+  DEFAULT_PLATFORM_PROBE_TIMEOUT_MS
+);
+
+function parseTimeoutEnv(name, fallback) {
+  const parsed = Number.parseInt(process.env[name] || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+export const SUPPORTED_TARGETS = Object.freeze(
+  RELEASE_SUPPORTED_TARGETS.map((target) => Object.freeze({ ...target }))
+);
+
+export function binaryNameForPlatform(platform = process.platform) {
+  return platform === 'win32' ? 'mcpace.exe' : 'mcpace';
+}
+
+export function binaryNameForTarget(target) {
+  return target?.binaryName ?? binaryNameForPlatform(target?.platform ?? process.platform);
+}
 
 export function detectLibc(platform = process.platform) {
   if (platform !== 'linux') {
@@ -23,7 +39,11 @@ export function detectLibc(platform = process.platform) {
   }
 
   try {
-    const output = execFileSync('ldd', ['--version'], { encoding: 'utf8' });
+    const output = execFileSync('ldd', ['--version'], {
+      encoding: 'utf8',
+      timeout: PLATFORM_PROBE_TIMEOUT_MS,
+      windowsHide: true
+    });
     if (/musl/i.test(output)) {
       return 'musl';
     }
@@ -53,19 +73,38 @@ export function currentTargetKey(
   return [platform, arch, libc].filter(Boolean).join('-');
 }
 
+function targetLibcProbe(target) {
+  if (!target) {
+    return null;
+  }
+  if (target.libcProbe) {
+    return target.libcProbe;
+  }
+  if (Array.isArray(target.libc)) {
+    return target.libc.includes('musl') ? 'musl' : 'gnu';
+  }
+  return target.libc || null;
+}
+
 export function detectTarget(
   platform = process.platform,
   arch = process.arch,
   libc = platform === 'linux' ? detectLibc(platform) : null
 ) {
-  return SUPPORTED_TARGETS.find((entry) => entry.platform === platform && entry.arch === arch && (!entry.libc || entry.libc === libc)) ?? null;
+  return SUPPORTED_TARGETS.find((entry) => {
+    if (entry.platform !== platform || entry.arch !== arch) {
+      return false;
+    }
+    const expectedLibc = targetLibcProbe(entry);
+    return !expectedLibc || expectedLibc === libc;
+  }) ?? null;
 }
 
 export function packageNamesForTarget(target) {
   if (!target) {
     return [];
   }
-  return [`@mcpace/cli-${target.key}`];
+  return [target.packageName ?? target.npmPackage ?? `@mcpace/cli-${target.key}`];
 }
 
 export function describeSupportedTargets() {

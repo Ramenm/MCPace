@@ -269,8 +269,56 @@ impl ServerCoordinationPlan {
                 JsonValue::string(self.upstream_transport.clone()),
             ),
             (
+                "processPartition",
+                JsonValue::string(self.process_partition.clone()),
+            ),
+            (
                 "processScopeKey",
                 JsonValue::string(self.process_scope_key.clone()),
+            ),
+            (
+                "projectBindingKey",
+                match &self.project_binding_key {
+                    Some(value) => JsonValue::string(value.clone()),
+                    None => JsonValue::Null,
+                },
+            ),
+            (
+                "worktreeBindingKey",
+                match &self.worktree_binding_key {
+                    Some(value) => JsonValue::string(value.clone()),
+                    None => JsonValue::Null,
+                },
+            ),
+            (
+                "conflictDomain",
+                JsonValue::string(self.conflict_domain.clone()),
+            ),
+            (
+                "hostLockKey",
+                match &self.host_lock_key {
+                    Some(value) => JsonValue::string(value.clone()),
+                    None => JsonValue::Null,
+                },
+            ),
+            (
+                "browserProfileKey",
+                match &self.browser_profile_key {
+                    Some(value) => JsonValue::string(value.clone()),
+                    None => JsonValue::Null,
+                },
+            ),
+            (
+                "parallelismLimit",
+                JsonValue::number(self.parallelism_limit),
+            ),
+            (
+                "schedulerLane",
+                JsonValue::string(self.scheduler_lane.clone()),
+            ),
+            (
+                "startupStrategy",
+                JsonValue::string(self.startup_strategy.clone()),
             ),
             (
                 "requestStrategy",
@@ -418,7 +466,32 @@ pub(super) fn write_text_plan(plan: &ClientPlan, stdout: &mut dyn Write) {
             server.concurrency_policy,
             server.upstream_transport
         );
+        let _ = writeln!(stdout, "    processPartition={}", server.process_partition);
         let _ = writeln!(stdout, "    process={}", server.process_scope_key);
+        let _ = writeln!(
+            stdout,
+            "    projectBinding={}",
+            server.project_binding_key.as_deref().unwrap_or("none")
+        );
+        let _ = writeln!(
+            stdout,
+            "    worktreeBinding={}",
+            server.worktree_binding_key.as_deref().unwrap_or("none")
+        );
+        let _ = writeln!(stdout, "    conflictDomain={}", server.conflict_domain);
+        let _ = writeln!(
+            stdout,
+            "    hostLock={}",
+            server.host_lock_key.as_deref().unwrap_or("none")
+        );
+        let _ = writeln!(
+            stdout,
+            "    browserProfile={}",
+            server.browser_profile_key.as_deref().unwrap_or("none")
+        );
+        let _ = writeln!(stdout, "    parallelismLimit={}", server.parallelism_limit);
+        let _ = writeln!(stdout, "    schedulerLane={}", server.scheduler_lane);
+        let _ = writeln!(stdout, "    startupStrategy={}", server.startup_strategy);
         let _ = writeln!(stdout, "    requestStrategy={}", server.request_strategy);
         let _ = writeln!(
             stdout,
@@ -439,14 +512,6 @@ pub(super) fn join_or_none(values: &[String]) -> String {
         "none".to_string()
     } else {
         values.join("; ")
-    }
-}
-
-pub(super) fn join_static_or_none(values: &[&str]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join(", ")
     }
 }
 

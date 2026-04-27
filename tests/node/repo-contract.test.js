@@ -31,12 +31,24 @@ test('repo contains no ps1 files or shell bridge wrappers', () => {
 test('release manifest excludes removed shell artifacts and keeps current roots', () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'release-manifest.json'), 'utf8'));
   const includePaths = manifest.includePaths;
+  const optionalIncludePaths = manifest.optionalIncludePaths || [];
   for (const forbidden of ['manager.ps1', 'manager.sh', 'manager.cmd', 'verify-manager.ps1', 'build-release.ps1', 'lib']) {
     assert.equal(includePaths.includes(forbidden), false, forbidden);
   }
   for (const required of ['src', 'packages', 'schemas', 'tests', 'scripts', 'TODO.md', 'STATE.md', 'DECISIONS.md']) {
     assert.equal(includePaths.includes(required), true, required);
   }
+  assert.equal(optionalIncludePaths.includes('packages/npm/cli/vendor'), true);
+
+  const npmPackage = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'packages', 'npm', 'cli', 'package.json'), 'utf8')
+  );
+  assert.equal((npmPackage.files || []).includes('vendor'), true);
+  assert.equal((npmPackage.files || []).includes('LICENSE'), true);
+  assert.equal(
+    fs.readFileSync(path.join(repoRoot, 'packages', 'npm', 'cli', 'LICENSE'), 'utf8'),
+    fs.readFileSync(path.join(repoRoot, 'LICENSE'), 'utf8')
+  );
 });
 
 test('versions stay aligned across manifests and reports', () => {
@@ -51,11 +63,12 @@ test('versions stay aligned across manifests and reports', () => {
   assert.equal(coverageVersion, rootPkgVersion);
 });
 
-test('Cargo manifest stays dependency-light for offline Linux proof', () => {
+test('Cargo manifest uses reviewed runtime dependencies instead of ad-hoc parser/platform code', () => {
   const cargoToml = fs.readFileSync(path.join(repoRoot, 'Cargo.toml'), 'utf8');
   assert.match(cargoToml, /\[dependencies\]/);
-  assert.doesNotMatch(cargoToml, /serde/);
-  assert.doesNotMatch(cargoToml, /serde_json/);
+  assert.match(cargoToml, /^auto-launch\s*=/m);
+  assert.match(cargoToml, /^serde_json\s*=/m);
+  assert.match(cargoToml, /^which\s*=/m);
   assert.doesNotMatch(cargoToml, /assert_cmd/);
   assert.doesNotMatch(cargoToml, /predicates/);
   assert.doesNotMatch(cargoToml, /tempfile/);
@@ -63,7 +76,9 @@ test('Cargo manifest stays dependency-light for offline Linux proof', () => {
 
 test('CI workflow includes Rust build and test validation', () => {
   const workflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
-  assert.match(workflow, /cargo test/);
+  assert.match(workflow, /npm run test:rust:ci/);
+  assert.match(workflow, /rust-lifecycle-validation/);
+  assert.match(workflow, /node scripts\/run-rust-tests\.mjs --json --suite/);
   assert.match(workflow, /cargo build --release/);
   assert.match(workflow, /ubuntu-latest/);
   assert.match(workflow, /windows-latest/);

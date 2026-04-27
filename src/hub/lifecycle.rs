@@ -32,11 +32,10 @@ pub(super) fn run_up(
         return status::write_status_response(&current_status, json_output, stdout);
     }
     if current_status.status == "stale" {
-        let _ = writeln!(
-            stderr,
-            "hub runtime state is stale; run 'mcpace hub down' to clean it up before starting again"
-        );
-        return 1;
+        if let Err(error) = runtime::mark_stopped(root_path) {
+            let _ = writeln!(stderr, "{}", error);
+            return 1;
+        }
     }
     if current_status.status == "corrupt" {
         let _ = writeln!(
@@ -75,7 +74,7 @@ pub(super) fn run_up(
     for _ in 0..60 {
         thread::sleep(Duration::from_millis(50));
         match status::collect_status(root_path) {
-            Ok(status_value) if status::is_live_status(&status_value.status) => {
+            Ok(status_value) if status_value.status == "running" => {
                 return status::write_status_response(&status_value, json_output, stdout)
             }
             Ok(_) => {}
@@ -90,7 +89,7 @@ pub(super) fn run_up(
             return 1;
         }
     };
-    if status::is_live_status(&fallback_status.status) {
+    if fallback_status.status == "running" {
         return status::write_status_response(&fallback_status, json_output, stdout);
     }
 

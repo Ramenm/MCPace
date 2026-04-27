@@ -3,13 +3,32 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import { deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
 const DEFAULT_IMAGE_TAG = 'mcpace-verify:local';
 const DEFAULT_CPUS = '1.0';
 const DEFAULT_MEMORY = '768m';
 const DEFAULT_PIDS_LIMIT = '256';
+const DEFAULT_DOCKER_BUILD_TIMEOUT_MS = 600000;
+const DEFAULT_DOCKER_RUN_TIMEOUT_MS = 1200000;
+const DOCKER_BUILD_TIMEOUT_MS = parseTimeoutEnv(
+  'MCPACE_DOCKER_BUILD_TIMEOUT_MS',
+  DEFAULT_DOCKER_BUILD_TIMEOUT_MS
+);
+const DOCKER_RUN_TIMEOUT_MS = parseTimeoutEnv(
+  'MCPACE_DOCKER_RUN_TIMEOUT_MS',
+  DEFAULT_DOCKER_RUN_TIMEOUT_MS
+);
+
+function parseTimeoutEnv(name, fallback) {
+  const parsed = Number.parseInt(process.env[name] || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function cleanChildEnv() {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  return env;
+}
 
 function parseArgs(argv) {
   const parsed = {
@@ -69,11 +88,18 @@ function stageWorkspace() {
   return stagingRoot;
 }
 
-function runChecked(command, args, options) {
-  const result = spawnSync(command, args, { encoding: 'utf8', ...options });
+function runChecked(command, args, options = {}) {
+  const result = spawnSync(command, args, {
+    encoding: 'utf8',
+    env: cleanChildEnv(),
+    windowsHide: true,
+    ...options
+  });
   if (result.status !== 0) {
     const details = [
-      result.error?.message,
+      result.error?.code === 'ETIMEDOUT'
+        ? `${command} timed out after ${options.timeout}ms`
+        : result.error?.message,
       result.stdout?.trim() ? `stdout:\n${result.stdout.trim()}` : '',
       result.stderr?.trim() ? `stderr:\n${result.stderr.trim()}` : ''
     ]
@@ -86,13 +112,14 @@ function runChecked(command, args, options) {
 }
 
 function buildAndRun({ imageTag, cpus, memory, pidsLimit }) {
+  const expectedVersion = deriveProjectVersion();
   const stagingRoot = stageWorkspace();
   const startedAt = Date.now();
   try {
     runChecked(
       'docker',
       ['build', '-f', 'Dockerfile.verify', '-t', imageTag, '.'],
-      { cwd: stagingRoot }
+      { cwd: stagingRoot, timeout: DOCKER_BUILD_TIMEOUT_MS }
     );
 
     const shellScript = `
@@ -102,7 +129,7 @@ printf '== build release ==\\n'
 cargo build --release >/tmp/mcpace-build.log 2>&1
 printf '== version ==\\n'
 ./target/release/mcpace version > /tmp/mcpace-version.txt
-grep -Eq '^0\\.3\\.0$' /tmp/mcpace-version.txt
+grep -Eq '^${expectedVersion.replace(/\./g, '\\.')}$' /tmp/mcpace-version.txt
 printf '== doctor ==\\n'
 ./target/release/mcpace doctor --json > /tmp/mcpace-doctor.json
 grep -Eq '"configFound": true' /tmp/mcpace-doctor.json
@@ -110,9 +137,10 @@ grep -Eq '"rustSourceReady": true' /tmp/mcpace-doctor.json
 grep -Eq '"npmSurfaceReady": true' /tmp/mcpace-doctor.json
 printf '== client list ==\\n'
 ./target/release/mcpace client list --json > /tmp/mcpace-client-list.json
-grep -Eq '"id": "codex"' /tmp/mcpace-client-list.json
+SMOKE_CLIENT_ID=$(node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('/tmp/mcpace-client-list.json','utf8')); const targets=Array.isArray(data.targets)?data.targets:[]; const chosen=targets.find((target)=>target.proofTier==='tier-1' && target.surfaceClass==='local' && target.installSupported===true) || targets.find((target)=>target.surfaceClass==='local' && target.installSupported===true) || targets[0]; if(!chosen){process.exit(1);} process.stdout.write(chosen.id);")
+test -n "$SMOKE_CLIENT_ID"
 printf '== client plan ==\\n'
-./target/release/mcpace client plan --json --client-id codex --session-id docker-e2e --project-root /work > /tmp/mcpace-client-plan.json
+./target/release/mcpace client plan --json --client-id "$SMOKE_CLIENT_ID" --session-id docker-e2e --project-root /work > /tmp/mcpace-client-plan.json
 grep -Eq '"requiresHubOwnedStdio": true' /tmp/mcpace-client-plan.json
 printf '== server list ==\\n'
 ./target/release/mcpace server list --json > /tmp/mcpace-server-list.json
@@ -174,7 +202,7 @@ cat /tmp/mcpace-down.json
         '-lc',
         shellScript
       ],
-      { cwd: repoRoot }
+      { cwd: repoRoot, timeout: DOCKER_RUN_TIMEOUT_MS }
     );
 
     return {
@@ -183,6 +211,8 @@ cat /tmp/mcpace-down.json
       memory,
       pidsLimit,
       durationMs: Date.now() - startedAt,
+      buildTimeoutMs: DOCKER_BUILD_TIMEOUT_MS,
+      runTimeoutMs: DOCKER_RUN_TIMEOUT_MS,
       stdout: runResult.stdout || '',
       stderr: runResult.stderr || ''
     };
@@ -205,6 +235,8 @@ function main() {
             memory: report.memory,
             pidsLimit: report.pidsLimit,
             durationMs: report.durationMs,
+            buildTimeoutMs: report.buildTimeoutMs,
+            runTimeoutMs: report.runTimeoutMs,
             status: 0
           },
           null,

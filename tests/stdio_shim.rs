@@ -7,7 +7,7 @@ fn write_minimal_config(root: &std::path::Path) {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "client": {
     "keyName": "MCPace"
   },

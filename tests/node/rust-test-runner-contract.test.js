@@ -1,0 +1,36 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { read, readJson } = require('./helpers');
+
+test('Rust CI test runner executes suites one at a time with timeout cleanup', () => {
+  const script = read(path.join('scripts', 'run-rust-tests.mjs'));
+  assert.match(script, /discoverIntegrationSuites/);
+  assert.match(script, /PRIORITY_INTEGRATION_SUITES/);
+  assert.match(script, /orderedIntegrationSuites/);
+  assert.match(script, /LIFECYCLE_SUITE_NAMES/);
+  assert.match(script, /--profile/);
+  assert.match(script, /non-lifecycle/);
+  assert.match(script, /MCPACE_RUST_TEST_TIMEOUT_MS/);
+  assert.match(script, /--timeout-ms/);
+  assert.match(script, /cargo', \['test', '--lib', '--locked'/);
+  assert.match(script, /cargo', \['test', '--test', suite, '--locked'/);
+  assert.match(script, /cargo', \['test', '--doc', '--locked'/);
+  assert.match(script, /killChildTree/);
+  assert.match(script, /child\.on\('exit'/);
+  assert.match(script, /forceResolveTimer/);
+  assert.match(script, /process\.kill\(-child\.pid, 'SIGTERM'\)/);
+});
+
+test('npm scripts expose the suite-isolated Rust runner for CI', () => {
+  const pkg = readJson('package.json');
+  assert.equal(pkg.scripts['test:rust'], 'node scripts/run-rust-tests.mjs');
+  assert.equal(pkg.scripts['test:rust:ci'], 'node scripts/run-rust-tests.mjs --json --profile non-lifecycle');
+  assert.equal(pkg.scripts['test:rust:full'], 'node scripts/run-rust-tests.mjs --json --profile full');
+  assert.equal(pkg.scripts['test:linux-npm-install:docker'], 'node scripts/verify-linux-npm-install-docker.mjs --json');
+  assert.equal(pkg.scripts['verify:macos-proof-lanes'], 'node scripts/verify-macos-proof-lanes.mjs --json');
+  assert.match(pkg.scripts['prove:rust-host'], /npm run test:rust:ci/);
+  assert.match(pkg.scripts['lint:npm'], /node --check scripts\/run-rust-tests\.mjs/);
+  assert.match(pkg.scripts['lint:npm'], /node --check scripts\/verify-linux-npm-install-docker\.mjs/);
+  assert.match(pkg.scripts['lint:npm'], /node --check scripts\/verify-macos-proof-lanes\.mjs/);
+});

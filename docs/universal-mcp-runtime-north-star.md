@@ -5,6 +5,13 @@ operator tricks. You connect any supported client once, and `MCPace` handles
 server lifecycle, transport compatibility, local auth state, health checks,
 and project-aware routing behind one stable contract.
 
+> [!IMPORTANT]
+> This is a **north-star / roadmap** document, not a present-tense support
+> claim. The current-cycle public promise is narrower: one local MCPace
+> endpoint, selected local client install paths, and honest diagnostics. Keep
+> that narrower contract aligned with `docs/product-truth-and-beta-gate.md`,
+> `README.md`, `STATE.md`, and `eval/runtime-capabilities.json`.
+
 ## Product definition
 
 `MCPace` exists to remove MCP connection pain for end users and team operators.
@@ -147,9 +154,13 @@ packaging lanes.
 
 Choose **Option 3: hybrid runtime platform**, but stage it carefully.
 
-The product thesis should be:
+For the current cycle, keep the shipped product promise **local-first**. Hybrid
+remote/bundle lanes stay north-star work until the local runtime slice has real
+ingress, ownership, stale-result protection, and host proof.
 
-`MCPace` is universal MCP connection layer. It gives users one easy way to
+The long-term product thesis should still be:
+
+`MCPace` is a universal MCP connection layer. It gives users one easy way to
 connect clients, then adapts delivery mode to server class.
 
 That means:

@@ -17,19 +17,30 @@ A second implementation would double parity, testing, release, and security work
 
 - one root npm workspace;
 - one thin launcher package: `@mcpace/cli`;
-- manual binary resolution through dev paths or an explicit env override.
+- manual binary resolution through dev paths or an explicit env override;
+- optional vendored binaries under `packages/npm/cli/vendor/<target>/` for self-contained host-built artifacts without postinstall downloads.
 
 ### Phase 2
 
 - optional platform packages such as `@mcpace/cli-linux-x64-gnu`;
-- `@mcpace/cli` resolves the right package when present.
+- `@mcpace/cli` resolves vendored binaries first, then the right package when present.
+- user-level autostart remains owned by the Rust CLI (`mcpace service ...`) so
+  package managers only need to put the binary on disk and in `PATH`.
 
 ### Phase 3
 
 - trusted npm publishing from CI, once release proof exists and npm/GitHub support is verified on the real pipeline.
+
+### Phase 4
+
+- Homebrew formula for macOS/Linux;
+- WinGet manifest for Windows;
+- Debian/Ubuntu `.deb` and optional APT repository once signing, upgrade, and
+  uninstall tests exist.
 
 ## Non-goals
 
 - postinstall downloaders;
 - TypeScript build chain before the launcher actually needs compilation;
 - npm as a substitute for GitHub Release binaries.
+- package-manager scripts that duplicate the Rust autostart implementation.

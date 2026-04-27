@@ -18,11 +18,11 @@ This file tracks removed or intentionally excluded surfaces so release/recovery 
 
 ## Intentionally still not claimed as done
 
-- `client install/export`
 - top-level grouped `release`
 - local `stdio` ingress
 - local Streamable HTTP ingress
 - exclusive lease enforcement
 - cancel/stale-result runtime guards
+- config-writing `client export` for blocked/public surfaces
 - real-host runtime proof
 - published npm provenance proof

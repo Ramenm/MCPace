@@ -1,8 +1,8 @@
 {
   "name": "mcpace",
-  "version": "0.3.0",
+  "version": "0.3.6",
   "ports": {
-    "abp": 39022,
+    "abp": 15678,
     "hub": 12223
   },
   "hub": {
@@ -13,8 +13,10 @@
     }
   },
   "abp": {
-    "package": "agent-browser-protocol",
-    "packageArgs": []
+    "package": "agent-browser-protocol@0.1.10",
+    "packageArgs": [
+      "--mcp"
+    ]
   },
   "packages": {
     "mcpRemote": "mcp-remote@0.1.18"
@@ -51,6 +53,12 @@
             },
             "firecrawl": {
               "enabled": true
+            },
+            "notion": {
+              "enabled": true
+            },
+            "playwright": {
+              "enabled": true
             }
           }
         },
@@ -74,6 +82,12 @@
             },
             "everything": {
               "enabled": true
+            },
+            "notion": {
+              "enabled": true
+            },
+            "playwright": {
+              "enabled": true
             }
           }
         }
@@ -96,16 +110,24 @@
   "servers": {
     "browser": {
       "kind": "host-bridge",
-      "transportPreference": "http",
+      "transportPreference": "stdio-http-bridge",
       "supportedTransports": [
-        "http",
-        "stdio-http-bridge"
+        "stdio-http-bridge",
+        "http"
       ],
       "policy": {
         "scopeClass": "shared-global",
         "concurrencyPolicy": "single-writer",
         "stateBinding": "host-session",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "browser-host",
+        "projectRootMode": "optional",
+        "worktreeBinding": "workspace-roots",
+        "browserProfileMode": "project-session",
+        "hostLock": "browser-profile",
+        "startupStrategy": "lazy-per-profile",
+        "routingGroup": "browser"
       },
       "required": true,
       "platforms": [
@@ -117,7 +139,7 @@
       "requiredCommands": [
         "npx"
       ],
-      "healthUrl": "http://127.0.0.1:{abpPort}/api/v1/tabs",
+      "healthUrl": "http://127.0.0.1:15678/api/v1/tabs",
       "installer": {
         "autoInstall": false,
         "installTarget": "none",
@@ -134,7 +156,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "workspace-roots",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 4,
+        "conflictDomain": "filesystem-roots",
+        "projectRootMode": "optional",
+        "worktreeBinding": "workspace-roots",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-workspace",
+        "routingGroup": "workspace"
       },
       "required": true,
       "platforms": [
@@ -166,7 +196,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "runtime-memory",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 0,
+        "conflictDomain": "shared-readers",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-shared",
+        "routingGroup": "shared"
       },
       "required": true,
       "platforms": [
@@ -193,7 +231,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "ephemeral",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 0,
+        "conflictDomain": "shared-readers",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-shared",
+        "routingGroup": "shared"
       },
       "required": true,
       "platforms": [
@@ -220,7 +266,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "ephemeral",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 0,
+        "conflictDomain": "shared-readers",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-shared",
+        "routingGroup": "shared"
       },
       "required": true,
       "platforms": [
@@ -247,7 +301,15 @@
         "scopeClass": "project-local",
         "concurrencyPolicy": "isolated-per-project",
         "stateBinding": "project-index",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "lean-ctx-project",
+        "projectRootMode": "required",
+        "worktreeBinding": "project-root",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-project",
+        "routingGroup": "project"
       },
       "required": false,
       "defaultEnabled": true,
@@ -280,7 +342,15 @@
         "scopeClass": "credential-scoped",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "credential-profile",
-        "credentialBinding": "token"
+        "credentialBinding": "token",
+        "parallelismLimit": 4,
+        "conflictDomain": "github-credential",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-credential",
+        "routingGroup": "credential"
       },
       "required": false,
       "platforms": [
@@ -307,7 +377,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "ephemeral",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 0,
+        "conflictDomain": "shared-readers",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-shared",
+        "routingGroup": "shared"
       },
       "required": true,
       "platforms": [
@@ -334,7 +412,15 @@
         "scopeClass": "project-local",
         "concurrencyPolicy": "isolated-per-project",
         "stateBinding": "repo-path",
-        "credentialBinding": "optional-token"
+        "credentialBinding": "optional-token",
+        "parallelismLimit": 1,
+        "conflictDomain": "git-project",
+        "projectRootMode": "required",
+        "worktreeBinding": "project-root",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-project",
+        "routingGroup": "project"
       },
       "required": false,
       "platforms": [
@@ -365,7 +451,15 @@
         "scopeClass": "credential-scoped",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "credential-profile",
-        "credentialBinding": "oauth"
+        "credentialBinding": "oauth",
+        "parallelismLimit": 4,
+        "conflictDomain": "sentry-credential",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-credential",
+        "routingGroup": "credential"
       },
       "required": false,
       "platforms": [
@@ -392,7 +486,15 @@
         "scopeClass": "project-local",
         "concurrencyPolicy": "isolated-per-project",
         "stateBinding": "project-index",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "serena-project",
+        "projectRootMode": "required",
+        "worktreeBinding": "project-root",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-project",
+        "routingGroup": "project"
       },
       "required": true,
       "platforms": [
@@ -429,7 +531,15 @@
         "scopeClass": "shared-exclusive",
         "concurrencyPolicy": "single-session",
         "stateBinding": "host-desktop",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "windows-desktop",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "desktop-session",
+        "startupStrategy": "singleton-host",
+        "routingGroup": "desktop"
       },
       "required": false,
       "platforms": [
@@ -456,7 +566,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "single-writer",
         "stateBinding": "host-service",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "host-screenpipe",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "host-service",
+        "startupStrategy": "singleton-host",
+        "routingGroup": "desktop"
       },
       "required": false,
       "platforms": [
@@ -488,7 +606,15 @@
         "scopeClass": "credential-scoped",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "credential-profile",
-        "credentialBinding": "api-key"
+        "credentialBinding": "api-key",
+        "parallelismLimit": 4,
+        "conflictDomain": "firecrawl-credential",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-credential",
+        "routingGroup": "credential"
       },
       "required": false,
       "platforms": [
@@ -520,7 +646,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "ephemeral",
-        "credentialBinding": "service-managed"
+        "credentialBinding": "service-managed",
+        "parallelismLimit": 0,
+        "conflictDomain": "shared-readers",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-shared",
+        "routingGroup": "shared"
       },
       "required": true,
       "platforms": [
@@ -547,7 +681,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "filesystem-access",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "wireshark-host-captures",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "capture-session",
+        "startupStrategy": "singleton-host",
+        "routingGroup": "desktop"
       },
       "required": true,
       "platforms": [
@@ -574,7 +716,15 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "ephemeral",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 0,
+        "conflictDomain": "shared-readers",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-shared",
+        "routingGroup": "shared"
       },
       "required": false,
       "platforms": [
@@ -601,7 +751,15 @@
         "scopeClass": "project-local",
         "concurrencyPolicy": "isolated-per-project",
         "stateBinding": "file-path",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "pdf-project",
+        "projectRootMode": "required",
+        "worktreeBinding": "project-root",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-project",
+        "routingGroup": "project"
       },
       "required": false,
       "platforms": [
@@ -633,7 +791,15 @@
         "scopeClass": "project-local",
         "concurrencyPolicy": "isolated-per-project",
         "stateBinding": "db-file-path",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "sqlite-project",
+        "projectRootMode": "required",
+        "worktreeBinding": "project-root",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-project",
+        "routingGroup": "project"
       },
       "required": false,
       "platforms": [
@@ -665,7 +831,15 @@
         "scopeClass": "credential-scoped",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "credential-profile",
-        "credentialBinding": "db-connection"
+        "credentialBinding": "db-connection",
+        "parallelismLimit": 4,
+        "conflictDomain": "postgres-credential",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-credential",
+        "routingGroup": "credential"
       },
       "required": false,
       "platforms": [
@@ -692,7 +866,15 @@
         "scopeClass": "credential-scoped",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "credential-profile",
-        "credentialBinding": "api-key"
+        "credentialBinding": "api-key",
+        "parallelismLimit": 4,
+        "conflictDomain": "brave-search-credential",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-credential",
+        "routingGroup": "credential"
       },
       "required": false,
       "platforms": [
@@ -719,7 +901,85 @@
         "scopeClass": "shared-global",
         "concurrencyPolicy": "multi-reader",
         "stateBinding": "ephemeral",
-        "credentialBinding": "none"
+        "credentialBinding": "none",
+        "parallelismLimit": 0,
+        "conflictDomain": "shared-readers",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-shared",
+        "routingGroup": "shared"
+      },
+      "required": false,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "notion": {
+      "kind": "container-stdio",
+      "policy": {
+        "scopeClass": "credential-scoped",
+        "concurrencyPolicy": "multi-reader",
+        "stateBinding": "credential-profile",
+        "credentialBinding": "token",
+        "parallelismLimit": 4,
+        "conflictDomain": "notion-credential",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "none",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-credential",
+        "routingGroup": "credential"
+      },
+      "required": false,
+      "platforms": [
+        "windows",
+        "linux",
+        "macos"
+      ],
+      "autoStart": false,
+      "requiredCommands": [],
+      "healthUrl": "",
+      "installer": {
+        "autoInstall": false,
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "binaryName": "",
+        "verifyCommand": "",
+        "postInstallMode": "none"
+      }
+    },
+    "playwright": {
+      "kind": "container-stdio",
+      "policy": {
+        "scopeClass": "project-local",
+        "concurrencyPolicy": "isolated-per-project",
+        "stateBinding": "ephemeral-browser-session",
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "playwright-browser-session",
+        "projectRootMode": "optional",
+        "worktreeBinding": "none",
+        "browserProfileMode": "isolated",
+        "hostLock": "none",
+        "startupStrategy": "lazy-per-project",
+        "routingGroup": "browser"
       },
       "required": false,
       "platforms": [
@@ -762,5 +1022,10 @@
       "idleDelayMs": 1500,
       "logTailLines": 400
     }
+  },
+  "clientCatalog": {
+    "paths": [],
+    "targets": [],
+    "description": "Optional external client target catalog. Built-ins remain a fallback; entries here or MCPACE_CLIENT_CATALOG can add/override clients without recompiling."
   }
 }

@@ -31,8 +31,10 @@ CI workflow, and the docs together.
 - `rustfmt` and `clippy` travel with the pinned toolchain;
 - the crate still uses **edition 2021** today; do not flip to edition 2024 until
   Linux, Windows, and macOS build proof is rerun and recorded;
-- the manifest intentionally stays dependency-light so source proof does not
-  depend on a large online dependency graph.
+- the manifest should stay dependency-disciplined rather than dependency-free:
+  small, popular, audited crates are preferred when they delete handwritten
+  parser/platform code, but large framework additions still need explicit
+  migration proof.
 
 ## CI policy
 

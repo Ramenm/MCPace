@@ -2,7 +2,6 @@ mod common;
 
 use common::*;
 use std::fs;
-use std::process::Command;
 use std::sync::mpsc;
 use std::thread;
 use std::time::Duration;
@@ -15,7 +14,7 @@ fn init_json_creates_runtime_layout_and_seed_files() {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",
@@ -56,7 +55,7 @@ fn hub_status_json_reports_stopped_state_before_start() {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",
@@ -86,7 +85,7 @@ fn hub_status_and_down_cleanup_orphan_lock_file() {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",
@@ -137,6 +136,58 @@ fn hub_status_and_down_cleanup_orphan_lock_file() {
 }
 
 #[test]
+fn hub_up_recovers_orphan_lock_before_starting() {
+    let temp = TempDir::new();
+    let root = temp.path();
+
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "profiles": {
+    "runtime": {
+      "default": "safe",
+      "profiles": {
+        "safe": { "description": "Safe", "serverOverrides": {} }
+      }
+    }
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let hub_dir = root.join("data").join("runtime").join("hub");
+    fs::create_dir_all(&hub_dir).unwrap();
+    fs::write(
+        hub_dir.join("lock.json"),
+        r#"{
+  "pid": 4242,
+  "startedAtMs": 1
+}"#,
+    )
+    .unwrap();
+
+    let up = run(&["hub", "up", "--json", "--root", root.to_str().unwrap()]);
+    assert!(
+        up.status.success(),
+        "stdout:\n{}\nstderr:\n{}",
+        stdout(&up),
+        stderr(&up)
+    );
+    let up_text = stdout(&up);
+    assert!(
+        up_text.contains(r#""status": "running""#),
+        "stdout:\n{}\nstderr:\n{}",
+        up_text,
+        stderr(&up)
+    );
+
+    let down = run(&["hub", "down", "--json", "--root", root.to_str().unwrap()]);
+    assert!(down.status.success(), "stderr: {}", stderr(&down));
+}
+
+#[test]
 fn hub_status_and_repair_handle_corrupt_runtime_state() {
     let temp = TempDir::new();
     let root = temp.path();
@@ -144,7 +195,7 @@ fn hub_status_and_repair_handle_corrupt_runtime_state() {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",
@@ -216,7 +267,7 @@ fn hub_up_down_round_trip_writes_event_logs() {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",
@@ -283,7 +334,7 @@ fn hub_up_releases_captured_stdio_for_background_launcher() {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",
@@ -309,7 +360,6 @@ fn hub_up_releases_captured_stdio_for_background_launcher() {
         Ok(output) => output,
         Err(_) => {
             let _ = run(&["hub", "down", "--json", "--root", root_string.as_str()]);
-            kill_mcpace_processes();
             panic!("captured `mcpace hub up` did not exit within the timeout");
         }
     };
@@ -324,18 +374,4 @@ fn hub_up_releases_captured_stdio_for_background_launcher() {
 
     let down = run(&["hub", "down", "--json", "--root", root_string.as_str()]);
     assert!(down.status.success(), "stderr: {}", stderr(&down));
-}
-
-fn kill_mcpace_processes() {
-    #[cfg(windows)]
-    {
-        let _ = Command::new("taskkill")
-            .args(["/IM", "mcpace.exe", "/T", "/F"])
-            .output();
-    }
-
-    #[cfg(unix)]
-    {
-        let _ = Command::new("pkill").args(["-f", "mcpace"]).output();
-    }
 }

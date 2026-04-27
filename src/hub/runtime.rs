@@ -412,9 +412,10 @@ fn default_project_registry() -> JsonValue {
 
 fn default_lease_store() -> JsonValue {
     JsonValue::object([
-        ("version", JsonValue::number(1)),
+        ("version", JsonValue::number(2)),
         ("leases", JsonValue::Object(BTreeMap::new())),
         ("sessions", JsonValue::Object(BTreeMap::new())),
+        ("updatedAtMs", JsonValue::number(now_ms())),
     ])
 }
 

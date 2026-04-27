@@ -2,10 +2,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
-import { currentTargetKey, describeSupportedTargets, detectTarget, packageNamesForTarget } from './platform.js';
+import {
+  binaryNameForPlatform,
+  binaryNameForTarget,
+  currentTargetKey,
+  describeSupportedTargets,
+  detectTarget,
+  packageNamesForTarget
+} from './platform.js';
 
 const require = createRequire(import.meta.url);
-const BIN_NAME = process.platform === 'win32' ? 'mcpace.exe' : 'mcpace';
+const BIN_NAME = binaryNameForPlatform();
 
 function isExecutable(filePath) {
   try {
@@ -14,6 +21,11 @@ function isExecutable(filePath) {
   } catch {
     return false;
   }
+}
+
+function packageRootFromHere() {
+  const currentFile = fileURLToPath(import.meta.url);
+  return path.resolve(path.dirname(currentFile), '..');
 }
 
 function repoRootFromHere() {
@@ -27,6 +39,26 @@ function candidateDevBinaryPaths(repoRoot) {
     path.join(repoRoot, 'target', 'debug', BIN_NAME),
     path.join(repoRoot, 'dist', BIN_NAME)
   ];
+}
+
+function candidateVendoredBinaryPaths(repoRoot, packageRoot, target) {
+  if (!target) {
+    return [];
+  }
+
+  const binName = binaryNameForTarget(target);
+  const unique = new Set();
+  return [
+    path.join(packageRoot, 'vendor', target.key, binName),
+    path.join(repoRoot, 'packages', 'npm', 'cli', 'vendor', target.key, binName)
+  ].filter((candidate) => {
+    const normalized = path.normalize(candidate);
+    if (unique.has(normalized)) {
+      return false;
+    }
+    unique.add(normalized);
+    return true;
+  });
 }
 
 function resolveExplicitEnvPath() {
@@ -53,12 +85,22 @@ function resolveDevBinary(repoRoot) {
   return null;
 }
 
+function resolveVendoredBinary(repoRoot, packageRoot, target) {
+  for (const candidate of candidateVendoredBinaryPaths(repoRoot, packageRoot, target)) {
+    if (fs.existsSync(candidate) && (process.platform === 'win32' || isExecutable(candidate))) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
 function resolveFromInstalledBinaryPackage(target) {
+  const binName = binaryNameForTarget(target);
   for (const pkgName of packageNamesForTarget(target)) {
     try {
       const pkgJsonPath = require.resolve(`${pkgName}/package.json`);
       const dir = path.dirname(pkgJsonPath);
-      const candidate = path.join(dir, 'bin', BIN_NAME);
+      const candidate = path.join(dir, 'bin', binName);
       if (fs.existsSync(candidate) && (process.platform === 'win32' || isExecutable(candidate))) {
         return candidate;
       }
@@ -76,6 +118,7 @@ export function resolveBinary(options = {}) {
   }
 
   const repoRoot = options.repoRoot ? path.resolve(options.repoRoot) : repoRootFromHere();
+  const packageRoot = options.packageRoot ? path.resolve(options.packageRoot) : packageRootFromHere();
   if (!options.ignoreDevBinary) {
     const devBinary = resolveDevBinary(repoRoot);
     if (devBinary) {
@@ -83,7 +126,14 @@ export function resolveBinary(options = {}) {
     }
   }
 
-  const target = detectTarget();
+  const target = options.target ?? detectTarget();
+  if (!options.ignoreVendoredBinary) {
+    const vendoredBinary = resolveVendoredBinary(repoRoot, packageRoot, target);
+    if (vendoredBinary) {
+      return vendoredBinary;
+    }
+  }
+
   const packagedBinary = resolveFromInstalledBinaryPackage(target);
   if (packagedBinary) {
     return packagedBinary;
@@ -93,7 +143,7 @@ export function resolveBinary(options = {}) {
   const targetKey = target?.key ?? currentTargetKey();
   throw new Error(
     `Unable to resolve the mcpace binary for target ${targetKey}. ` +
-      `Set MCPACE_BINARY_PATH, build the Rust binary locally, or install a supported package. ` +
+      `Set MCPACE_BINARY_PATH, build the Rust binary locally, stage a vendored binary, or install a supported package. ` +
       `Supported targets: ${supported}.`
   );
 }

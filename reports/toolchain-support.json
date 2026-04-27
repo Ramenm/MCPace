@@ -70,6 +70,8 @@
   },
   "release": {
     "archiveBuilderScript": "scripts/archive-release.mjs",
-    "archiveRootPattern": "<project-name>-v<version>-<ddmmyy-hhmmss>"
+    "archiveRootPattern": "<project-name>-v<version>-<ddmmyy-hhmmss>",
+    "vendoredBinaryStageScript": "scripts/stage-vendored-binary.mjs",
+    "vendoredBinaryVerifyScript": "scripts/verify-vendored-binary.mjs"
   }
 }

@@ -1,9 +1,10 @@
 use super::actions::client_install_support_summary;
 use super::pathing::normalize;
+use crate::runtimepaths;
 use std::io::Write;
 use std::path::PathBuf;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(super) struct ParsedArgs {
     pub(super) action: Option<String>,
     pub(super) json_output: bool,
@@ -126,7 +127,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  mcpace client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]");
     let _ = writeln!(
         stdout,
-        "  mcpace client install <client> [--json] [--root <path>]"
+        "  mcpace client install <client|all> [--json] [--root <path>]"
     );
     let _ = writeln!(stdout, "  mcpace client export <client> [--json] [--root <path>] [--transport <stdio|streamable-http>] [--session-id <id>] [--project-root <path>] [--metadata-json <json>]");
     let _ = writeln!(stdout, "");
@@ -137,8 +138,12 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "client plan inspects routing context, derived session leases, and server arbitration without starting a hub runtime.");
     let _ = writeln!(
         stdout,
-        "client install currently supports {}. It writes only the MCPace-owned config entry or block for that client surface.",
+        "client install currently supports {}. Use client install all to patch every catalog-declared local client that has an install writer. It writes only the MCPace-owned config entry or block and defaults to the broadest documented shared scope for that client surface.",
         client_install_support_summary()
     );
-    let _ = writeln!(stdout, "client export is HTTP-first: for local clients that document Streamable HTTP, it emits the MCPace URL http://127.0.0.1:39022/mcp. Stdio remains an internal compatibility fallback for clients that still need it.");
+    let _ = writeln!(
+        stdout,
+        "client export is HTTP-first: for local clients that document Streamable HTTP, it emits the MCPace URL {}. Stdio remains an internal compatibility fallback for clients that still need it.",
+        runtimepaths::default_local_mcp_url()
+    );
 }

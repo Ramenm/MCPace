@@ -1,0 +1,98 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const path = require('node:path');
+const { read } = require('./helpers');
+
+test('release dry-run workflow proves source and platform package lanes without publishing', () => {
+  const workflow = read(path.join('.github', 'workflows', 'release-dry-run.yml'));
+  assert.match(workflow, /name: release-dry-run/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /source-and-contracts:/);
+  assert.match(workflow, /native_matrix:/);
+  assert.match(workflow, /node scripts\/github-release-matrix\.mjs --github-output/);
+  assert.match(workflow, /matrix: \${\{ fromJson\(needs\.source-and-contracts\.outputs\.native_matrix\) \}\}/);
+  assert.match(workflow, /native-platform-proof:/);
+  assert.match(workflow, /runtime-lifecycle-proof:/);
+  assert.match(workflow, /node scripts\/run-rust-tests\.mjs --json --suite/);
+  assert.match(workflow, /npm run test:rust:ci/);
+  assert.match(workflow, /npm run build:release-artifacts/);
+  assert.match(workflow, /node scripts\/stage-platform-package-binary\.mjs --json/);
+  assert.match(workflow, /node scripts\/verify-platform-packages\.mjs --json/);
+  assert.doesNotMatch(workflow, /target_key: linux-x64-gnu/);
+  assert.doesNotMatch(workflow, /target_key: darwin-x64/);
+  assert.doesNotMatch(workflow, /npm publish/);
+});
+
+test('release workflow creates attestable assets and only drafts a GitHub Release on tags or explicit dispatch', () => {
+  const workflow = read(path.join('.github', 'workflows', 'release.yml'));
+  assert.match(workflow, /name: release-artifacts/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /tags:\n\s+- 'v\*\.\*\.\*'/);
+  assert.match(workflow, /id-token: write/);
+  assert.match(workflow, /attestations: write/);
+  assert.match(workflow, /source-release:/);
+  assert.match(workflow, /native_matrix:/);
+  assert.match(workflow, /node scripts\/github-release-matrix\.mjs --github-output/);
+  assert.match(workflow, /matrix: \${\{ fromJson\(needs\.source-release\.outputs\.native_matrix\) \}\}/);
+  assert.match(workflow, /native-platform-release:/);
+  assert.match(workflow, /runtime-lifecycle-release-proof:/);
+  assert.match(workflow, /node scripts\/run-rust-tests\.mjs --json --suite/);
+  assert.match(workflow, /npm run test:rust:ci/);
+  assert.match(workflow, /github-draft-release:/);
+  assert.match(workflow, /runtime-lifecycle-release-proof/);
+  assert.match(workflow, /release_tag:/);
+  assert.match(workflow, /dist\/release-upload/);
+  assert.match(workflow, /mcpace-\$\{target_key\}/);
+  assert.match(workflow, /actions\/attest@v4/);
+  assert.match(workflow, /node scripts\/stage-vendored-binary\.mjs --json/);
+  assert.match(workflow, /node scripts\/verify-vendored-binary\.mjs --json/);
+  assert.match(workflow, /node scripts\/stage-platform-package-binary\.mjs --json/);
+  assert.match(workflow, /node scripts\/verify-platform-packages\.mjs --json/);
+  assert.doesNotMatch(workflow, /target_key: linux-x64-gnu/);
+  assert.doesNotMatch(workflow, /target_key: darwin-x64/);
+  assert.match(workflow, /gh release create/);
+  assert.match(workflow, /--draft/);
+});
+
+test('npm publish workflow is manually gated for trusted publishing from prebuilt release tarballs', () => {
+  const workflow = read(path.join('.github', 'workflows', 'publish-npm.yml'));
+  assert.match(workflow, /name: publish-npm/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /id-token: write/);
+  assert.match(workflow, /environment: npm-publish/);
+  assert.match(workflow, /npm install -g npm@\^11\.5\.1/);
+  assert.match(workflow, /gh release download/);
+  assert.match(workflow, /node scripts\/verify-release-checksums\.mjs --json --artifact-dir dist\/npm/);
+  assert.match(workflow, /node scripts\/sync-platform-packages\.mjs --json --repository-url/);
+  assert.match(workflow, /node scripts\/verify-publish-readiness\.mjs --json/);
+  assert.match(workflow, /node scripts\/publish-npm-artifacts\.mjs --json --artifact-dir dist\/npm/);
+});
+
+test('full docker proof script derives the expected binary version dynamically', () => {
+  const script = read(path.join('scripts', 'verify-ubuntu-docker-full.mjs'));
+  assert.match(script, /deriveProjectVersion/);
+  assert.doesNotMatch(script, /0\\\.3\\\.0/);
+  assert.ok(script.includes("expectedVersion.replace(/\\./g, '\\\\.')"));
+});
+
+test('linux npm install docker proof validates local tarballs without publishing', () => {
+  const script = read(path.join('scripts', 'verify-linux-npm-install-docker.mjs'));
+  assert.match(script, /sync-platform-packages\.mjs --json/);
+  assert.match(script, /stage-platform-package-binary\.mjs --json --target-key/);
+  assert.match(script, /verify-platform-packages\.mjs --json --target-key/);
+  assert.match(script, /npm pack "packages\/npm\/cli-\$TARGET_KEY" --json/);
+  assert.match(script, /npm install --ignore-scripts --no-audit --no-fund/);
+  assert.match(script, /\.\/node_modules\/\.bin\/mcpace version/);
+  assert.doesNotMatch(script, /npm publish/);
+});
+
+test('macOS proof-lane verifier keeps no-local-mac coverage explicit', () => {
+  const script = read(path.join('scripts', 'verify-macos-proof-lanes.mjs'));
+  assert.match(script, /darwin-x64/);
+  assert.match(script, /darwin-arm64/);
+  assert.match(script, /macos-15-intel/);
+  assert.match(script, /macos-15/);
+  assert.match(script, /MacOSLaunchMode::LaunchAgent/);
+  assert.match(script, /--cargo-check/);
+  assert.doesNotMatch(script, /npm publish/);
+});

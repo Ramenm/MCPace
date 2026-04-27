@@ -15,26 +15,41 @@ function listJson(relativeDir) {
     .sort();
 }
 
-test('runtime capability inventory parses and separates implemented vs planned work', () => {
+test('runtime capability inventory parses and separates implementation status from public claim status', () => {
   const value = readJson('eval/runtime-capabilities.json');
   const rootVersion = readJson('package.json').version;
   assert.equal(value.version, rootVersion);
+  assert.ok(value.claimStatusLegend);
   assert.ok(Array.isArray(value.features));
   assert.ok(value.features.length >= 10);
 
   const statuses = new Set();
+  const claimStatuses = new Set();
   for (const feature of value.features) {
     assert.match(feature.id, /^[a-z0-9][a-z0-9-]*$/);
     assert.equal(typeof feature.area, 'string');
     assert.equal(typeof feature.title, 'string');
     assert.ok(['implemented', 'planned', 'missing'].includes(feature.status));
+    assert.ok([
+      'supported',
+      'supported-local-only',
+      'control-plane-only',
+      'bootstrap-only',
+      'connectable-preview',
+      'requires-host-proof',
+      'planned'
+    ].includes(feature.claimStatus));
     assert.ok(['p0', 'p1', 'p2'].includes(feature.priority));
     assert.ok(Array.isArray(feature.evidence));
     statuses.add(feature.status);
+    claimStatuses.add(feature.claimStatus);
   }
 
   assert.ok(statuses.has('implemented'));
   assert.ok(statuses.has('planned'));
+  assert.ok(claimStatuses.has('control-plane-only'));
+  assert.ok(claimStatuses.has('bootstrap-only'));
+  assert.ok(claimStatuses.has('connectable-preview'));
 });
 
 test('runtime lab fixtures parse and separate typical, edge, adversarial, and held-out cases', () => {

@@ -108,6 +108,43 @@ fn normalize_server_record(
     let source_enabled = source_record.map(|record| record.enabled).unwrap_or(false);
     let effective_enabled = profile_enabled && source_enabled;
 
+    let scope_class = policy_string(policy, "scopeClass", "");
+    let concurrency_policy = policy_string(policy, "concurrencyPolicy", "");
+    let state_binding = policy_string(policy, "stateBinding", "");
+    let credential_binding = policy_string(policy, "credentialBinding", "");
+    let parallelism_limit = policy_usize(
+        policy,
+        "parallelismLimit",
+        default_parallelism_limit(&concurrency_policy),
+    );
+    let conflict_domain = policy_string(policy, "conflictDomain", name);
+    let project_root_mode = policy_string(
+        policy,
+        "projectRootMode",
+        default_project_root_mode(&scope_class, &concurrency_policy),
+    );
+    let worktree_binding = policy_string(
+        policy,
+        "worktreeBinding",
+        default_worktree_binding(&scope_class, &state_binding),
+    );
+    let browser_profile_mode = policy_string(policy, "browserProfileMode", "none");
+    let host_lock = policy_string(
+        policy,
+        "hostLock",
+        default_host_lock(&scope_class, &state_binding),
+    );
+    let startup_strategy = policy_string(
+        policy,
+        "startupStrategy",
+        default_startup_strategy(&scope_class, &concurrency_policy, &state_binding),
+    );
+    let routing_group = policy_string(
+        policy,
+        "routingGroup",
+        default_routing_group(&scope_class, &state_binding, &browser_profile_mode),
+    );
+
     Some(ServerRecord {
         name: name.to_string(),
         kind: object
@@ -141,30 +178,18 @@ fn normalize_server_record(
         required_commands: json_helpers::strings_from_array(
             object.get("requiredCommands").and_then(JsonValue::as_array),
         ),
-        scope_class: policy
-            .and_then(|policy| policy.get("scopeClass"))
-            .and_then(JsonValue::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-        concurrency_policy: policy
-            .and_then(|policy| policy.get("concurrencyPolicy"))
-            .and_then(JsonValue::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-        state_binding: policy
-            .and_then(|policy| policy.get("stateBinding"))
-            .and_then(JsonValue::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-        credential_binding: policy
-            .and_then(|policy| policy.get("credentialBinding"))
-            .and_then(JsonValue::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
+        scope_class,
+        concurrency_policy,
+        state_binding,
+        credential_binding,
+        parallelism_limit,
+        conflict_domain,
+        project_root_mode,
+        worktree_binding,
+        browser_profile_mode,
+        host_lock,
+        startup_strategy,
+        routing_group,
         health_url: object
             .get("healthUrl")
             .and_then(JsonValue::as_str)
@@ -206,4 +231,93 @@ fn normalize_server_record(
             .trim()
             .to_string(),
     })
+}
+
+fn policy_string(
+    policy: Option<&BTreeMap<String, JsonValue>>,
+    key: &str,
+    fallback: &str,
+) -> String {
+    policy
+        .and_then(|policy| policy.get(key))
+        .and_then(JsonValue::as_str)
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn policy_usize(policy: Option<&BTreeMap<String, JsonValue>>, key: &str, fallback: usize) -> usize {
+    policy
+        .and_then(|policy| policy.get(key))
+        .and_then(JsonValue::as_i64)
+        .filter(|value| *value >= 0)
+        .map(|value| value as usize)
+        .unwrap_or(fallback)
+}
+
+fn default_parallelism_limit(concurrency_policy: &str) -> usize {
+    match concurrency_policy {
+        "multi-reader" => 0,
+        "isolated-per-project" | "single-writer" | "single-session" => 1,
+        _ => 1,
+    }
+}
+
+fn default_project_root_mode<'a>(scope_class: &'a str, concurrency_policy: &'a str) -> &'a str {
+    if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
+        "required"
+    } else {
+        "optional"
+    }
+}
+
+fn default_worktree_binding<'a>(scope_class: &'a str, state_binding: &'a str) -> &'a str {
+    if scope_class == "project-local" || matches!(state_binding, "repo" | "file" | "db" | "project")
+    {
+        "project-root"
+    } else {
+        "none"
+    }
+}
+
+fn default_host_lock<'a>(scope_class: &'a str, state_binding: &'a str) -> &'a str {
+    if scope_class == "shared-exclusive" || state_binding == "host-desktop" {
+        "host-session"
+    } else if state_binding == "host-session" {
+        "instance"
+    } else {
+        "none"
+    }
+}
+
+fn default_startup_strategy<'a>(
+    scope_class: &'a str,
+    concurrency_policy: &'a str,
+    state_binding: &'a str,
+) -> &'a str {
+    if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
+        "lazy-per-project"
+    } else if scope_class == "shared-exclusive" || state_binding == "host-desktop" {
+        "singleton-host"
+    } else if state_binding == "host-session" {
+        "lazy-per-profile"
+    } else {
+        "lazy-shared"
+    }
+}
+
+fn default_routing_group<'a>(
+    scope_class: &'a str,
+    state_binding: &'a str,
+    browser_profile_mode: &'a str,
+) -> &'a str {
+    if state_binding == "host-session" || browser_profile_mode != "none" {
+        "browser"
+    } else if scope_class == "shared-exclusive" || state_binding == "host-desktop" {
+        "desktop"
+    } else if scope_class == "project-local" {
+        "project"
+    } else {
+        "shared"
+    }
 }

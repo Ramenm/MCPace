@@ -1,7 +1,9 @@
 use crate::catalog::{find, normalize, COMMANDS};
+use crate::client_catalog::client_install_support_summary;
+use crate::runtimepaths;
 use crate::{
     candidates, client, dashboard, doctor, hub, init, lab, mcp_server, profile, projects, repair,
-    reporoot, serve, server, stdio_shim, verify,
+    reporoot, serve, server, service, setup, stdio_shim, update, verify,
 };
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -43,6 +45,8 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         }
         "version" => run_version(root_path.as_deref(), stdout, stderr),
         "doctor" => run_doctor(&args[1..], root_path, stdout, stderr),
+        "setup" => setup::run(&args[1..], root_path, stdout, stderr),
+        "service" => service::run(&args[1..], root_path, stdout, stderr),
         "dashboard" => dashboard::run(&args[1..], root_path, stdout, stderr),
         "serve" => serve::run(&args[1..], root_path, stdout, stderr),
         "init" => init::run(&args[1..], root_path, stdout, stderr),
@@ -57,6 +61,7 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         "server" => server::run(&args[1..], root_path, stdout, stderr),
         "verify" => verify::run(&args[1..], root_path, stdout, stderr),
         "repair" => repair::run(&args[1..], root_path, stdout, stderr),
+        "update" => update::run(&args[1..], stdout, stderr),
         "release" => run_planned(resolved, stderr),
         _ => {
             let _ = writeln!(stderr, "unknown command: {}", args[0]);
@@ -163,6 +168,14 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  doctor [--json] [--root <path>]");
     let _ = writeln!(
         stdout,
+        "  setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--skip-client-install]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  service install|status|uninstall|print [--json] [--root <path>] [--host <addr>] [--port <n>] [--dry-run] [--no-enable]"
+    );
+    let _ = writeln!(
+        stdout,
         "  dashboard [--root <path>] [--host <addr>] [--port <n>]"
     );
     let _ = writeln!(
@@ -179,12 +192,25 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  hub repair [--json] [--root <path>]");
     let _ = writeln!(stdout, "  hub status [--json] [--root <path>]");
     let _ = writeln!(stdout, "  hub logs [--json] [--root <path>] [--tail <n>]");
+    let _ = writeln!(stdout, "  hub lease list [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  hub lease acquire --server <name> [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--ttl-ms <n>]");
+    let _ = writeln!(
+        stdout,
+        "  hub lease renew --lease-id <id> [--json] [--root <path>] [--ttl-ms <n>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  hub lease release --lease-id <id> [--json] [--root <path>]"
+    );
     let _ = writeln!(stdout, "  profile [show] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  projects [list] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  candidates [--json] [--root <path>]");
     let _ = writeln!(stdout, "  client list [--json] [--root <path>]");
     let _ = writeln!(stdout, "  client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]");
-    let _ = writeln!(stdout, "  client install <client> [--json] [--root <path>]");
+    let _ = writeln!(
+        stdout,
+        "  client install <client|all> [--json] [--root <path>]"
+    );
     let _ = writeln!(stdout, "  client export <client> [--json] [--root <path>] [--transport <stdio|streamable-http>] [--session-id <id>] [--project-root <path>]");
     let _ = writeln!(stdout, "  mcp-server [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]  # internal compatibility");
     let _ = writeln!(stdout, "  stdio-shim --json [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]  # internal bootstrap proof");
@@ -206,8 +232,14 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  verify doctor [--json] [--root <path>]");
     let _ = writeln!(stdout, "  verify readiness [--json] [--root <path>]");
     let _ = writeln!(stdout, "  repair [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  update check [--json] [--source none|env|npm] [--latest-version <semver>] [--package <name>]");
     let _ = writeln!(stdout, "");
-    let _ = writeln!(stdout, "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; serve is the public one-port MCPace surface on http://127.0.0.1:39022/mcp and now has start/stop/status lifecycle commands, dashboard provides the same local browser control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair surface, client install patches MCPace entries for Codex, Claude Code, Cursor, Kiro, Gemini CLI, Windsurf, GitHub Copilot CLI, and Hermes Agent, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, and grouped top-level release remains planned.");
+    let _ = writeln!(
+        stdout,
+        "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes /healthz plus /mcp in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/stop/status lifecycle commands, dashboard provides the same local browser control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and grouped top-level release remains planned.",
+        runtimepaths::default_local_mcp_url(),
+        client_install_support_summary()
+    );
     let _ = writeln!(
         stdout,
         "Compatibility aliases: project, servers, capabilities, check, status, readiness, probe."

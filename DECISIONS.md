@@ -264,3 +264,46 @@ Use a machine-generated verification snapshot (`reports/verification-latest.json
 
 Revisit when real Rust-host and runtime automation are available and should be folded into the same report script instead of staying blocked/not-run.
 
+
+---
+
+## D-010 — Public promise stays narrower than the north star until live runtime proof exists
+
+**Decision**
+
+For the current cycle, the public product promise is **one local MCPace
+endpoint, selected local client install paths, and honest diagnostics**. Do not
+market the current repo state as an already-proven universal runtime, hybrid
+platform, or team-wide control plane.
+
+**Rationale**
+
+- the repo is currently strongest in planning, install/export control-plane
+  work, and source-proof loops
+- `serve` and `/mcp` are connectable today, but ingress/session/lease/stale
+  behavior is not yet proven at the same level as the control plane
+- the north-star document is useful, but it can create present-tense overclaim
+  unless the current-cycle promise is written down separately
+
+**Alternatives considered**
+
+- **Lead with universal runtime now**: better-sounding pitch, but it outruns the
+  proof that exists in repo artifacts today.
+- **Say only “experimental project”**: safe, but too vague to guide product,
+  support, and release decisions.
+- **Split local and remote into two products immediately**: premature before the
+  local runtime slice is proven.
+
+**Consequences**
+
+- `serve` is the primary user-facing entry point; `hub` is internal lifecycle
+  machinery and `dashboard` is optional
+- README, `STATE.md`, and the capability inventory must distinguish
+  `supported`, `supported-local-only`, `control-plane-only`,
+  `bootstrap-only`, `connectable-preview`, `requires-host-proof`, and `planned`
+- tier-1 proof focus stays on local surfaces before breadth expands further
+
+**Revisit when**
+
+Revisit after local HTTP ingress, lease ownership, stale-result guards, and
+real-host traces exist for the tier-1 surfaces.

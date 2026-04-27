@@ -3,10 +3,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+import {
+  deriveProjectName,
+  deriveProjectVersion,
+  readJson,
+  repoRoot
+} from './lib/project-metadata.mjs';
 const DEFAULT_OUTPUT_DIR = path.join(repoRoot, 'dist');
+const DEFAULT_ARCHIVE_COMMAND_TIMEOUT_MS = 120000;
+const ARCHIVE_COMMAND_TIMEOUT_MS = parseTimeoutEnv(
+  'MCPACE_ARCHIVE_COMMAND_TIMEOUT_MS',
+  DEFAULT_ARCHIVE_COMMAND_TIMEOUT_MS
+);
 const FORBIDDEN_SEGMENTS = new Set([
   '.git',
   'node_modules',
@@ -16,12 +24,15 @@ const FORBIDDEN_SEGMENTS = new Set([
   '__MACOSX'
 ]);
 
-function readJson(relativePath) {
-  return JSON.parse(fs.readFileSync(path.join(repoRoot, relativePath), 'utf8'));
+function parseTimeoutEnv(name, fallback) {
+  const parsed = Number.parseInt(process.env[name] || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function readText(relativePath) {
-  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
+function cleanChildEnv() {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  return env;
 }
 
 function parseArgs(argv) {
@@ -59,52 +70,6 @@ function parseArgs(argv) {
   return parsed;
 }
 
-function extractTomlPackageName(text) {
-  const match = text.match(/^name\s*=\s*"([^"]+)"/m);
-  return match ? match[1] : null;
-}
-
-function extractTomlVersion(text) {
-  const match = text.match(/^version\s*=\s*"([^"]+)"/m);
-  return match ? match[1] : null;
-}
-
-function toKebabCase(value) {
-  return String(value)
-    .trim()
-    .toLowerCase()
-    .replace(/^@/, '')
-    .replace(/\//g, '-')
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .replace(/-workspace$/, '')
-    .replace(/-cli$/, '') || 'mcpace';
-}
-
-function deriveProjectName() {
-  const cargoName = extractTomlPackageName(readText('Cargo.toml'));
-  if (cargoName) {
-    return toKebabCase(cargoName);
-  }
-
-  const rootPkgName = readJson('package.json').name;
-  if (rootPkgName) {
-    return toKebabCase(rootPkgName);
-  }
-
-  const readme = readText('README.md');
-  const heading = readme.match(/^#\s+(.+)$/m);
-  return toKebabCase(heading ? heading[1] : 'mcpace');
-}
-
-function deriveVersion() {
-  return (
-    extractTomlVersion(readText('Cargo.toml')) ||
-    readJson('package.json').version ||
-    '0.1.0'
-  );
-}
-
 function formatStamp(value) {
   if (value) {
     if (!/^\d{6}-\d{6}$/.test(value)) {
@@ -128,6 +93,31 @@ function shouldSkipPath(relativePath) {
   return relativePath
     .split(path.sep)
     .some((segment) => FORBIDDEN_SEGMENTS.has(segment));
+}
+
+function normalizeManifestPaths(value, fieldName) {
+  if (value == null) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== 'string' || !entry.trim())) {
+    throw new Error(`release manifest ${fieldName} must be an array of non-empty strings`);
+  }
+  return value;
+}
+
+function collectManifestIncludePaths(manifest) {
+  const includePaths = normalizeManifestPaths(manifest.includePaths, 'includePaths');
+  const optionalIncludePaths = normalizeManifestPaths(
+    manifest.optionalIncludePaths,
+    'optionalIncludePaths'
+  );
+  const includedOptionalPaths = optionalIncludePaths.filter((relative) =>
+    fs.existsSync(path.join(repoRoot, relative))
+  );
+  return {
+    includePaths: [...includePaths, ...includedOptionalPaths],
+    includedOptionalPaths
+  };
 }
 
 function copyTree(sourcePath, destinationPath, relativePath = '') {
@@ -175,8 +165,9 @@ function stageArchive(rootName, includePaths) {
 
 function buildArchive(parsed) {
   const manifest = readJson('release-manifest.json');
+  const manifestPaths = collectManifestIncludePaths(manifest);
   const projectName = parsed.projectName || deriveProjectName();
-  const version = parsed.version || deriveVersion();
+  const version = parsed.version || deriveProjectVersion();
   const stamp = formatStamp(parsed.stamp);
   const rootName = `${projectName}-v${version}-${stamp}`;
   const archiveName = `${rootName}.zip`;
@@ -188,7 +179,7 @@ function buildArchive(parsed) {
     fs.rmSync(archivePath, { force: true });
   }
 
-  const { stagingParent } = stageArchive(rootName, manifest.includePaths);
+  const { stagingParent } = stageArchive(rootName, manifestPaths.includePaths);
   const zipResult = createArchive(stagingParent, rootName, archivePath);
   const cleanup = () => fs.rmSync(stagingParent, { recursive: true, force: true });
 
@@ -206,14 +197,18 @@ function buildArchive(parsed) {
     rootName,
     archiveName,
     archivePath,
-    includeCount: manifest.includePaths.length
+    includeCount: manifestPaths.includePaths.length,
+    includedOptionalPaths: manifestPaths.includedOptionalPaths
   };
 }
 
 function createArchive(stagingParent, rootName, archivePath) {
   const zipResult = spawnSync('zip', ['-qr', archivePath, rootName], {
     cwd: stagingParent,
-    encoding: 'utf8'
+    encoding: 'utf8',
+    env: cleanChildEnv(),
+    timeout: ARCHIVE_COMMAND_TIMEOUT_MS,
+    windowsHide: true
   });
 
   if (zipResult.status === 0 || process.platform !== 'win32') {
@@ -235,14 +230,19 @@ function createArchive(stagingParent, rootName, archivePath) {
     ],
     {
       cwd: stagingParent,
-      encoding: 'utf8'
+      encoding: 'utf8',
+      env: cleanChildEnv(),
+      timeout: ARCHIVE_COMMAND_TIMEOUT_MS,
+      windowsHide: true
     }
   );
 }
 
 function readProcessFailure(result, fallbackMessage) {
   if (result.error instanceof Error) {
-    return result.error.message;
+    return result.error.code === 'ETIMEDOUT'
+      ? `archive command timed out after ${ARCHIVE_COMMAND_TIMEOUT_MS}ms`
+      : result.error.message;
   }
 
   const stderr =

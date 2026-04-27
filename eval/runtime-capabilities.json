@@ -1,5 +1,14 @@
 {
-  "version": "0.3.0",
+  "version": "0.3.6",
+  "claimStatusLegend": {
+    "supported": "Safe to describe as working now inside the current repo proof boundary.",
+    "supported-local-only": "Working for documented local lanes, but not a broad cross-surface guarantee.",
+    "control-plane-only": "Read/lifecycle/control behavior exists, but not the live runtime semantics implied by the larger capability name.",
+    "bootstrap-only": "Bootstrap or attach proof exists, but not live forwarding.",
+    "connectable-preview": "Users can reach a visible MCPace endpoint or contract, but runtime/session/host proof is still incomplete.",
+    "requires-host-proof": "Source-level behavior exists, but the support claim waits on real supported hosts.",
+    "planned": "Not yet strong enough to expose as working behavior."
+  },
   "features": [
     {
       "id": "planner-client-catalog",
@@ -13,7 +22,8 @@
         "src/client.rs",
         "schemas/mcpace-hub.schema.json"
       ],
-      "nextStep": "Keep the catalog current and move install/export logic into manifest-driven patchers instead of runtime brand branches."
+      "nextStep": "Keep the catalog current and move install/export logic into manifest-driven patchers instead of runtime brand branches.",
+      "claimStatus": "supported"
     },
     {
       "id": "planner-client-surface-catalog",
@@ -27,7 +37,8 @@
         "docs/client-surface-matrix.md",
         "reports/client-surface-spec-research-2026-04-17.md"
       ],
-      "nextStep": "Keep adding documented surfaces and retire assumptions that one product name implies one transport/auth model."
+      "nextStep": "Keep adding documented surfaces and retire assumptions that one product name implies one transport/auth model.",
+      "claimStatus": "supported"
     },
     {
       "id": "planner-context-resolution",
@@ -40,7 +51,8 @@
         "src/client.rs",
         "docs/client-metadata-routing.md"
       ],
-      "nextStep": "Reuse this logic from the future hub instead of duplicating it."
+      "nextStep": "Reuse this logic from the future hub instead of duplicating it.",
+      "claimStatus": "supported"
     },
     {
       "id": "planner-roots-and-meta",
@@ -54,7 +66,8 @@
         "docs/client-metadata-routing.md",
         "tests/client_surface.rs"
       ],
-      "nextStep": "Preserve the same contract in the future stdio shim and HTTP ingress."
+      "nextStep": "Preserve the same contract in the future stdio shim and HTTP ingress.",
+      "claimStatus": "supported"
     },
     {
       "id": "planner-session-lease-derivation",
@@ -67,7 +80,8 @@
         "src/client.rs",
         "tests/client_surface.rs"
       ],
-      "nextStep": "Carry the derived lease model forward into the live hub and ingress layers."
+      "nextStep": "Carry the derived lease model forward into the live hub and ingress layers.",
+      "claimStatus": "supported"
     },
     {
       "id": "planner-project-routing",
@@ -81,7 +95,8 @@
         "docs/client-metadata-routing.md",
         "tests/client_surface.rs"
       ],
-      "nextStep": "Mirror these rules in the live hub and session registry."
+      "nextStep": "Mirror these rules in the live hub and session registry.",
+      "claimStatus": "supported"
     },
     {
       "id": "planner-credential-partition",
@@ -94,7 +109,8 @@
         "src/client.rs",
         "tests/client_surface.rs"
       ],
-      "nextStep": "Feed this with real credential profile identities once the runtime owns auth flows."
+      "nextStep": "Feed this with real credential profile identities once the runtime owns auth flows.",
+      "claimStatus": "supported"
     },
     {
       "id": "planner-conservative-server-policy",
@@ -108,7 +124,8 @@
         "docs/server-segmentation-and-auto-discovery.md",
         "tests/client_surface.rs"
       ],
-      "nextStep": "Keep the same conservative defaults when the live hub starts reusing instances."
+      "nextStep": "Keep the same conservative defaults when the live hub starts reusing instances.",
+      "claimStatus": "supported"
     },
     {
       "id": "planner-surface-constraint-warnings",
@@ -122,7 +139,8 @@
         "src/client_catalog.rs",
         "tests/client_surface.rs"
       ],
-      "nextStep": "Keep the warning layer honest and promote only those constraints that become runtime-enforced behavior."
+      "nextStep": "Keep the warning layer honest and promote only those constraints that become runtime-enforced behavior.",
+      "claimStatus": "supported"
     },
     {
       "id": "lab-runtime-fixtures",
@@ -135,7 +153,8 @@
         "eval/fixtures/runtime",
         "tests/node/fixtures-contract.test.js"
       ],
-      "nextStep": "Keep adding real regressions from future traces and failures."
+      "nextStep": "Keep adding real regressions from future traces and failures.",
+      "claimStatus": "supported"
     },
     {
       "id": "lab-surface-aware-coverage",
@@ -149,7 +168,8 @@
         "docs/runtime-lab.md",
         "tests/lab_surface.rs"
       ],
-      "nextStep": "Use this surface breakdown to prioritize cloud/local divergence work instead of only counting scenarios."
+      "nextStep": "Use this surface breakdown to prioritize cloud/local divergence work instead of only counting scenarios.",
+      "claimStatus": "supported"
     },
     {
       "id": "held-out-release-fixture-lane",
@@ -162,7 +182,8 @@
         "eval/fixtures/runtime",
         "docs/eval-plan.md"
       ],
-      "nextStep": "Keep at least one release-only scenario blocked from daily optimization."
+      "nextStep": "Keep at least one release-only scenario blocked from daily optimization.",
+      "claimStatus": "supported"
     },
     {
       "id": "runtime-hub-daemon",
@@ -170,14 +191,17 @@
       "title": "Live hub daemon lifecycle",
       "status": "implemented",
       "priority": "p0",
-      "summary": "The repo now ships `init` plus `hub up/down/status/logs` with file-backed state, health, stop-signal handling, and structured event logs.",
+      "summary": "The repo ships `init` plus `hub up/down/status/logs/repair` with file-backed state and health, but it still lacks live ingress, session ownership, and lease enforcement.",
       "evidence": [
         "src/init.rs",
         "src/hub.rs",
-        "src/runtimepaths.rs",
+        "src/hub/lifecycle.rs",
+        "src/hub/status.rs",
+        "tests/hub_runtime.rs",
         "reports/rust-command-coverage.json"
       ],
-      "nextStep": "Layer stdio/HTTP ingress, session/instance ownership, and lease enforcement on top of the current lifecycle shell."
+      "nextStep": "Layer stdio/HTTP ingress, session/instance ownership, and lease enforcement on top of the current lifecycle shell.",
+      "claimStatus": "control-plane-only"
     },
     {
       "id": "runtime-stdio-shim",
@@ -185,12 +209,14 @@
       "title": "stdio shim that normalizes initialize metadata",
       "status": "planned",
       "priority": "p0",
-      "summary": "The repo does not yet ship a stdio shim that injects cwd/_meta hints and forwards to a persistent daemon.",
+      "summary": "`mcpace stdio-shim --json` exists as a bootstrap-only proof surface that normalizes context, derives a sticky lease, reuses planner/export logic, and ensures the persistent hub is up, but it does not forward live MCP stdio traffic.",
       "evidence": [
-        "README.md",
-        "TODO.md"
+        "src/stdio_shim.rs",
+        "tests/stdio_shim.rs",
+        "README.md"
       ],
-      "nextStep": "Add mcpace stdio-shim so stdio hosts do not need a thick runtime per launch."
+      "nextStep": "Promote the existing bootstrap surface into live stdio forwarding without forking planning logic.",
+      "claimStatus": "bootstrap-only"
     },
     {
       "id": "runtime-http-ingress",
@@ -198,12 +224,16 @@
       "title": "Local Streamable HTTP ingress with session handling",
       "status": "planned",
       "priority": "p0",
-      "summary": "The repo does not yet expose a live Streamable HTTP endpoint, Origin handling, or MCP session lifecycle.",
+      "summary": "`mcpace serve` and the local `/mcp` endpoint already expose a connectable MCPace HTTP surface, but session lifecycle, upstream fan-in, and real-host proof for a full Streamable HTTP runtime are still incomplete.",
       "evidence": [
-        "README.md",
-        "docs/mcp-spec-alignment.md"
+        "src/dashboard.rs",
+        "src/mcp_server.rs",
+        "tests/mcp_server.rs",
+        "tests/client_surface.rs",
+        "README.md"
       ],
-      "nextStep": "Add a local HTTP ingress that owns session creation, Mcp-Session-Id handling, and safe localhost-only defaults."
+      "nextStep": "Turn the current connectable local `/mcp` surface into a session-aware ingress with real-host proof and explicit ownership semantics.",
+      "claimStatus": "connectable-preview"
     },
     {
       "id": "runtime-exclusive-lease-enforcement",
@@ -216,7 +246,8 @@
         "src/client.rs",
         "docs/server-segmentation-and-auto-discovery.md"
       ],
-      "nextStep": "Implement a lease manager with owner tracking, heartbeat and timeout, and clear takeover rules."
+      "nextStep": "Implement a lease manager with owner tracking, heartbeat and timeout, and clear takeover rules.",
+      "claimStatus": "planned"
     },
     {
       "id": "runtime-cancel-restart-guards",
@@ -229,7 +260,8 @@
         "docs/mcp-spec-alignment.md",
         "docs/test-strategy.md"
       ],
-      "nextStep": "Track in-flight requests per lease, propagate cancellation, and drop results that belong to dead sessions."
+      "nextStep": "Track in-flight requests per lease, propagate cancellation, and drop results that belong to dead sessions.",
+      "claimStatus": "planned"
     },
     {
       "id": "runtime-health-supervisor",
@@ -237,12 +269,15 @@
       "title": "Health supervision and restart policy",
       "status": "planned",
       "priority": "p1",
-      "summary": "There is no live supervisor for start failures, degraded instances, or backoff-based restarts.",
+      "summary": "Hub health/state files and readiness views exist, but there is no live instance supervisor with backoff, degraded/draining transitions, or restart policy.",
       "evidence": [
-        "docs/greenfield-single-hub-architecture.md",
+        "src/hub/lifecycle.rs",
+        "src/hub/status.rs",
+        "tests/hub_runtime.rs",
         "docs/verification-matrix.md"
       ],
-      "nextStep": "Add per-instance state, restart backoff, and drain/degraded transitions."
+      "nextStep": "Add per-instance state, restart backoff, and drain/degraded transitions.",
+      "claimStatus": "control-plane-only"
     },
     {
       "id": "adapter-install-export",
@@ -250,13 +285,15 @@
       "title": "Client install and export flows",
       "status": "planned",
       "priority": "p1",
-      "summary": "The repo can inspect client surfaces, but cannot yet patch or export real client configs.",
+      "summary": "Local `client install` writes MCPace-managed config for selected local surfaces, and `client export` emits connectable MCPace contracts plus preview blockers for other lanes, but a broader manifest-driven config-writing export path is not complete yet.",
       "evidence": [
+        "src/client/actions.rs",
+        "tests/client_surface.rs",
         "README.md",
-        "src/client.rs",
-        "src/client_catalog.rs"
+        "reports/rust-command-coverage.json"
       ],
-      "nextStep": "Implement client install and export as manifest-driven config patchers instead of hard-coded brand logic in the runtime core."
+      "nextStep": "Split install proof from broader export work and extend config-writing export only after ingress/runtime proof stabilizes.",
+      "claimStatus": "supported-local-only"
     },
     {
       "id": "adapter-config-merge-safety",
@@ -264,12 +301,14 @@
       "title": "Safe config merge and owned-block patching",
       "status": "planned",
       "priority": "p1",
-      "summary": "No code yet proves that install and export will preserve user-managed MCP entries and only mutate the MCPace-owned block.",
+      "summary": "Current local installers replace only the MCPace-managed block and stay idempotent in covered fixtures, but broader merge safety, dry-run/diff, rollback, and blocked/public export lanes are not proven yet.",
       "evidence": [
-        "docs/release-engineering.md",
+        "src/client/actions.rs",
+        "tests/client_surface.rs",
         "docs/test-strategy.md"
       ],
-      "nextStep": "Add merge tests against real-looking client configs before shipping installers."
+      "nextStep": "Add dry-run/diff/rollback plus more real config fixtures before broadening config-writing export.",
+      "claimStatus": "supported-local-only"
     },
     {
       "id": "compat-real-client-matrix",
@@ -283,7 +322,8 @@
         "docs/client-surface-matrix.md",
         "docs/test-strategy.md"
       ],
-      "nextStep": "Build a compatibility lane that captures initialize, session, roots, and auth traces from real hosts and turns them into held-out regressions."
+      "nextStep": "Build a compatibility lane that captures initialize, session, roots, and auth traces from real hosts and turns them into held-out regressions.",
+      "claimStatus": "planned"
     },
     {
       "id": "compat-tools-only-surface-model",
@@ -291,12 +331,15 @@
       "title": "Tools-only surface enforcement",
       "status": "planned",
       "priority": "p1",
-      "summary": "Cloud/API connector surfaces like Claude API MCP connector and Copilot cloud agent need stronger runtime feature gating than warnings alone.",
+      "summary": "The surface catalog and `client plan` warn about tools-only, public-http-only, and no-remote-oauth limits, but install/export/runtime do not yet enforce those constraints end-to-end.",
       "evidence": [
         "docs/client-surface-matrix.md",
-        "reports/client-surface-spec-research-2026-04-17.md"
+        "src/client_catalog.rs",
+        "src/client.rs",
+        "tests/client_surface.rs"
       ],
-      "nextStep": "Teach install/export and the future runtime to withhold resources/prompts where the surface is documented as tools-only."
+      "nextStep": "Carry tools-only/public-http constraints from planning into install/export and runtime gates, then add real-host traces.",
+      "claimStatus": "control-plane-only"
     },
     {
       "id": "compat-tool-budget-awareness",
@@ -304,12 +347,14 @@
       "title": "Tool-budget-aware export and enablement",
       "status": "planned",
       "priority": "p2",
-      "summary": "Some surfaces have documented tool-count budgets; MCPace should eventually budget exposure instead of enabling every discovered tool.",
+      "summary": "Tool-budget surfaces are cataloged and warned about, but MCPace does not yet budget or rank tool exposure automatically.",
       "evidence": [
         "docs/client-surface-matrix.md",
-        "reports/client-surface-spec-research-2026-04-17.md"
+        "src/client_catalog.rs",
+        "src/client.rs"
       ],
-      "nextStep": "Track per-surface tool budgets and build export heuristics that can keep high-value tools within those limits."
+      "nextStep": "Track per-surface tool budgets and build export heuristics that keep high-value tools within those limits.",
+      "claimStatus": "control-plane-only"
     },
     {
       "id": "cloud-relay-path",
@@ -323,7 +368,8 @@
         "docs/distribution-modes.md",
         "docs/client-surface-matrix.md"
       ],
-      "nextStep": "Design a separate relay or public HTTP lane after the local correctness slice is proven."
+      "nextStep": "Design a separate relay or public HTTP lane after the local correctness slice is proven.",
+      "claimStatus": "planned"
     }
   ]
 }

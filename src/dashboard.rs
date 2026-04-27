@@ -1,6 +1,8 @@
 use crate::app;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
+use crate::runtimepaths;
+use crate::upstream;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
@@ -21,7 +23,7 @@ impl Default for ParsedArgs {
         Self {
             help: false,
             root_override: None,
-            host: "127.0.0.1".to_string(),
+            host: runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
             port: 0,
             max_requests: None,
             error: None,
@@ -82,7 +84,7 @@ fn run_internal(
         return 0;
     }
     if matches!(surface, ServeSurface::UnifiedServe) && parsed.port == 0 {
-        parsed.port = 39022;
+        parsed.port = runtimepaths::DEFAULT_LOCAL_MCP_PORT;
     }
 
     let root_path = parsed.root_override.clone().or(default_root);
@@ -216,6 +218,12 @@ struct HttpRequest {
     query: String,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
+}
+
+enum McpHttpResponse {
+    Json(JsonValue),
+    JsonStatus(&'static str, JsonValue),
+    Accepted,
 }
 
 fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut dyn Write) -> i32 {
@@ -353,6 +361,10 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             write_json_response(&mut stream, "200 OK", &payload)?;
         }
         ("GET", "/mcp") => {
+            if accepts(&request, "text/event-stream") {
+                write_empty_response(&mut stream, "405 Method Not Allowed")?;
+                return Ok(());
+            }
             let payload = JsonValue::object([
                 ("ok", JsonValue::bool(true)),
                 (
@@ -372,10 +384,27 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             write_json_response(&mut stream, "200 OK", &payload)?;
         }
         ("POST", "/mcp") => {
-            let payload = handle_mcp_http_request(&request, config)?;
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            let response = match handle_mcp_http_request(&request, config) {
+                Ok(value) => value,
+                Err(error) => McpHttpResponse::JsonStatus(
+                    "400 Bad Request",
+                    mcp_error_response(JsonValue::Null, -32700, error),
+                ),
+            };
+            match response {
+                McpHttpResponse::Json(payload) => {
+                    write_json_response(&mut stream, "200 OK", &payload)?
+                }
+                McpHttpResponse::JsonStatus(status, payload) => {
+                    write_json_response(&mut stream, status, &payload)?
+                }
+                McpHttpResponse::Accepted => write_empty_response(&mut stream, "202 Accepted")?,
+            }
         }
         ("POST", "/api/actions/hub-up") => {
+            if reject_forbidden_origin(&mut stream, &request)? {
+                return Ok(());
+            }
             let payload = action_response(
                 "hub-up",
                 run_json_command(&config.root_path, &["hub", "up", "--json"])?,
@@ -383,6 +412,9 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             write_json_response(&mut stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/hub-down") => {
+            if reject_forbidden_origin(&mut stream, &request)? {
+                return Ok(());
+            }
             let payload = action_response(
                 "hub-down",
                 run_json_command(&config.root_path, &["hub", "down", "--json"])?,
@@ -390,6 +422,9 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             write_json_response(&mut stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/repair") => {
+            if reject_forbidden_origin(&mut stream, &request)? {
+                return Ok(());
+            }
             let payload = action_response(
                 "repair",
                 run_json_command(&config.root_path, &["repair", "--json"])?,
@@ -439,17 +474,26 @@ fn action_response(action: &str, result: JsonValue) -> JsonValue {
 fn handle_mcp_http_request(
     request: &HttpRequest,
     config: &DashboardConfig,
-) -> Result<JsonValue, String> {
+) -> Result<McpHttpResponse, String> {
     validate_origin(request)?;
     let body_text = std::str::from_utf8(&request.body)
         .map_err(|error| format!("invalid UTF-8 request body: {}", error))?;
     let message =
         parse_str(body_text.trim()).map_err(|error| format!("invalid JSON-RPC body: {}", error))?;
-    let id = json_helpers::value_at_path(&message, &["id"])
-        .cloned()
-        .unwrap_or(JsonValue::Null);
-    let method = json_helpers::string_at_path(&message, &["method"])
-        .ok_or_else(|| "missing JSON-RPC method".to_string())?;
+    let id = json_helpers::value_at_path(&message, &["id"]).cloned();
+    let method = json_helpers::string_at_path(&message, &["method"]);
+
+    if id.is_none() {
+        if method.is_some() || json_helpers::value_at_path(&message, &["result"]).is_some() {
+            return Ok(McpHttpResponse::Accepted);
+        }
+        if json_helpers::value_at_path(&message, &["error"]).is_some() {
+            return Ok(McpHttpResponse::Accepted);
+        }
+    }
+
+    let id = id.unwrap_or(JsonValue::Null);
+    let method = method.ok_or_else(|| "missing JSON-RPC method".to_string())?;
 
     match method {
         "initialize" => {
@@ -460,7 +504,7 @@ fn handle_mcp_http_request(
                 _ => "2025-11-25",
             };
 
-            Ok(JsonValue::object([
+            Ok(McpHttpResponse::Json(JsonValue::object([
                 ("jsonrpc", JsonValue::string("2.0")),
                 ("id", id),
                 (
@@ -478,54 +522,56 @@ fn handle_mcp_http_request(
                         (
                             "instructions",
                             JsonValue::string(
-                                "Use MCPace over HTTP on this local port. For runtime lifecycle work, call the MCPace hub tools explicitly.",
+                            "Use MCPace over HTTP on this local port. Management tools are native here; configured stdio upstreams are discovered from mcp_settings.json, cataloged with upstream_catalog, probed with upstream_probe, listed with upstream_tools, called once through upstream_call, or called as a single state-preserving sequence through upstream_batch. HTTP-only upstreams remain explicit diagnostics until a real proxy is configured.",
                             ),
                         ),
                     ]),
                 ),
-            ]))
+            ])))
         }
-        "ping" => Ok(JsonValue::object([
+        "ping" => Ok(McpHttpResponse::Json(JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("id", id),
             ("result", empty_object()),
-        ])),
-        "tools/list" => Ok(JsonValue::object([
+        ]))),
+        "tools/list" => Ok(McpHttpResponse::Json(JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("id", id),
             (
                 "result",
                 JsonValue::object([("tools", JsonValue::array(http_tool_definitions()))]),
             ),
-        ])),
+        ]))),
         "tools/call" => {
             let tool_name = json_helpers::string_at_path(&message, &["params", "name"])
                 .ok_or_else(|| "tools/call requires a tool name".to_string())?;
             let args = json_helpers::value_at_path(&message, &["params", "arguments"])
                 .cloned()
                 .unwrap_or_else(empty_object);
-            let structured = run_http_tool(&config.root_path, tool_name, &args)?;
-            let text = structured.to_pretty_string();
-            Ok(JsonValue::object([
-                ("jsonrpc", JsonValue::string("2.0")),
-                ("id", id),
-                (
-                    "result",
+            let (structured, is_error) = match run_http_tool(&config.root_path, tool_name, &args) {
+                Ok(value) => (value, false),
+                Err(error) => (
                     JsonValue::object([
+                        ("ok", JsonValue::bool(false)),
+                        ("tool", JsonValue::string(tool_name)),
+                        ("error", JsonValue::string(error)),
                         (
-                            "content",
-                            JsonValue::array([JsonValue::object([
-                                ("type", JsonValue::string("text")),
-                                ("text", JsonValue::string(text)),
-                            ])]),
+                            "supportedTools",
+                            JsonValue::array(http_tool_definitions().into_iter().filter_map(
+                                |tool| {
+                                    tool.get("name")
+                                        .and_then(JsonValue::as_str)
+                                        .map(JsonValue::string)
+                                },
+                            )),
                         ),
-                        ("structuredContent", structured),
-                        ("isError", JsonValue::bool(false)),
                     ]),
+                    true,
                 ),
-            ]))
+            };
+            Ok(mcp_tool_result(id, structured, is_error))
         }
-        _ => Ok(JsonValue::object([
+        _ => Ok(McpHttpResponse::Json(JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("id", id),
             (
@@ -538,18 +584,61 @@ fn handle_mcp_http_request(
                     ),
                 ]),
             ),
-        ])),
+        ]))),
     }
+}
+
+fn mcp_tool_result(id: JsonValue, structured: JsonValue, is_error: bool) -> McpHttpResponse {
+    let text = structured.to_pretty_string();
+    McpHttpResponse::Json(JsonValue::object([
+        ("jsonrpc", JsonValue::string("2.0")),
+        ("id", id),
+        (
+            "result",
+            JsonValue::object([
+                (
+                    "content",
+                    JsonValue::array([JsonValue::object([
+                        ("type", JsonValue::string("text")),
+                        ("text", JsonValue::string(text)),
+                    ])]),
+                ),
+                ("structuredContent", structured),
+                ("isError", JsonValue::bool(is_error)),
+            ]),
+        ),
+    ]))
+}
+
+fn mcp_error_response(id: JsonValue, code: i64, message: impl Into<String>) -> JsonValue {
+    JsonValue::object([
+        ("jsonrpc", JsonValue::string("2.0")),
+        ("id", id),
+        (
+            "error",
+            JsonValue::object([
+                ("code", JsonValue::number(code)),
+                ("message", JsonValue::string(message.into())),
+            ]),
+        ),
+    ])
+}
+
+fn reject_forbidden_origin(stream: &mut TcpStream, request: &HttpRequest) -> Result<bool, String> {
+    let Err(error) = validate_origin(request) else {
+        return Ok(false);
+    };
+    let payload = JsonValue::object([
+        ("ok", JsonValue::bool(false)),
+        ("error", JsonValue::string(error)),
+    ]);
+    write_json_response(stream, "403 Forbidden", &payload)?;
+    Ok(true)
 }
 
 fn validate_origin(request: &HttpRequest) -> Result<(), String> {
     if let Some((_, origin)) = request.headers.iter().find(|(key, _)| key == "origin") {
-        let allowed = origin.starts_with("http://127.0.0.1")
-            || origin.starts_with("http://localhost")
-            || origin.starts_with("https://127.0.0.1")
-            || origin.starts_with("https://localhost")
-            || origin == "null";
-        if !allowed {
+        if !is_allowed_local_origin(origin.trim()) {
             return Err(format!(
                 "origin '{}' is not allowed for local MCPace serve mode",
                 origin
@@ -559,19 +648,342 @@ fn validate_origin(request: &HttpRequest) -> Result<(), String> {
     Ok(())
 }
 
+fn is_allowed_local_origin(origin: &str) -> bool {
+    if origin == "null" {
+        return true;
+    }
+    let Some(authority) = origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+    else {
+        return false;
+    };
+    if authority.is_empty() || authority.contains('/') || authority.contains('@') {
+        return false;
+    }
+
+    let Some(host) = origin_host(authority) else {
+        return false;
+    };
+    host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "[::1]"
+}
+
+fn origin_host(authority: &str) -> Option<&str> {
+    if authority.starts_with('[') {
+        let end = authority.find(']')?;
+        let host = &authority[..=end];
+        let suffix = &authority[end + 1..];
+        if suffix.is_empty() || valid_port_suffix(suffix) {
+            return Some(host);
+        }
+        return None;
+    }
+
+    if authority.matches(':').count() > 1 {
+        return None;
+    }
+    match authority.rsplit_once(':') {
+        Some((host, port)) if !host.is_empty() && valid_port(port) => Some(host),
+        Some(_) => None,
+        None => Some(authority),
+    }
+}
+
+fn valid_port_suffix(value: &str) -> bool {
+    value.strip_prefix(':').map(valid_port).unwrap_or(false)
+}
+
+fn valid_port(value: &str) -> bool {
+    !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
+}
+
+fn accepts(request: &HttpRequest, media_type: &str) -> bool {
+    request
+        .headers
+        .iter()
+        .filter(|(key, _)| key == "accept")
+        .any(|(_, value)| {
+            value.split(',').any(|item| {
+                item.trim()
+                    .split(';')
+                    .next()
+                    .unwrap_or_default()
+                    .trim()
+                    .eq_ignore_ascii_case(media_type)
+            })
+        })
+}
+
 fn http_tool_definitions() -> Vec<JsonValue> {
     vec![
         http_tool("doctor", "Inspect MCPace readiness"),
         http_tool("hub_status", "Inspect hub status"),
         http_tool("hub_up", "Start the hub"),
         http_tool("hub_down", "Stop the hub"),
+        http_tool("hub_repair", "Repair stopped or stale hub state"),
         http_tool("hub_logs", "Read hub logs"),
         http_tool("server_list", "List configured servers"),
+        http_tool(
+            "runtime_diagnostics",
+            "Explain MCPace runtime and upstream tool availability",
+        ),
+        http_tool_with_schema(
+            "upstream_tools",
+            "List callable tools for one configured stdio upstream MCP server",
+            JsonValue::object([
+                (
+                    "server",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Configured upstream server name from mcp_settings.json. Omit to return inventory without launching anything.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional per-call timeout from 1000 to 300000 ms."),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Bypass the short in-process tools/list cache and refresh from the upstream server.",
+                            ),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
+        ),
+        http_tool_with_schema(
+            "upstream_catalog",
+            "List configured upstream MCP tools as a flat server-qualified catalog with concise descriptions",
+            JsonValue::object([
+                (
+                    "server",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Optional configured upstream server name. Omit to discover all configured upstream tool summaries.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional per-server catalog timeout from 1000 to 300000 ms."),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Bypass the short in-process tools/list cache and refresh from the upstream server.",
+                            ),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
+        ),
+        http_tool_with_schema(
+            "upstream_probe",
+            "Probe configured upstream MCP servers with short successful tools/list cache reuse",
+            JsonValue::object([
+                (
+                    "server",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Optional configured upstream server name. Omit to probe all configured servers.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Optional per-server probe timeout from 1000 to 300000 ms. Default probe timeout is capped so one broken future server cannot stall the whole check.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Bypass the short successful tools/list cache and force a fresh upstream probe.",
+                            ),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
+        ),
+        http_tool_with_schema(
+            "upstream_call",
+            "Call a tool on a configured stdio upstream server",
+            JsonValue::object([
+                (
+                    "server",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        ("description", JsonValue::string("Configured upstream server name.")),
+                    ]),
+                ),
+                (
+                    "tool",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        ("description", JsonValue::string("Upstream tool name.")),
+                    ]),
+                ),
+                (
+                    "arguments",
+                    JsonValue::object([
+                        ("type", JsonValue::string("object")),
+                        (
+                            "description",
+                            JsonValue::string("Arguments to pass to the upstream tool."),
+                        ),
+                        ("additionalProperties", JsonValue::bool(true)),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional per-call timeout from 1000 to 300000 ms."),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec!["server", "tool"],
+        ),
+        http_tool_with_schema(
+            "upstream_batch",
+            "Call multiple tools on one configured stdio upstream server in a single state-preserving session",
+            JsonValue::object([
+                (
+                    "server",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        ("description", JsonValue::string("Configured upstream server name.")),
+                    ]),
+                ),
+                (
+                    "calls",
+                    JsonValue::object([
+                        ("type", JsonValue::string("array")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Ordered upstream calls to execute after one initialize handshake. Use this for stateful servers such as browser automation.",
+                            ),
+                        ),
+                        (
+                            "items",
+                            JsonValue::object([
+                                ("type", JsonValue::string("object")),
+                                (
+                                    "properties",
+                                    JsonValue::object([
+                                        (
+                                            "tool",
+                                            JsonValue::object([
+                                                ("type", JsonValue::string("string")),
+                                                (
+                                                    "description",
+                                                    JsonValue::string("Upstream tool name."),
+                                                ),
+                                            ]),
+                                        ),
+                                        (
+                                            "arguments",
+                                            JsonValue::object([
+                                                ("type", JsonValue::string("object")),
+                                                (
+                                                    "description",
+                                                    JsonValue::string(
+                                                        "Arguments to pass to the upstream tool.",
+                                                    ),
+                                                ),
+                                                ("additionalProperties", JsonValue::bool(true)),
+                                            ]),
+                                        ),
+                                    ]),
+                                ),
+                                (
+                                    "required",
+                                    JsonValue::array([JsonValue::string("tool")]),
+                                ),
+                                ("additionalProperties", JsonValue::bool(false)),
+                            ]),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional total batch timeout from 1000 to 300000 ms."),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec!["server", "calls"],
+        ),
+        http_tool("browser_status", "Explain browser MCP bridge status"),
         http_tool("client_list", "List known client targets"),
     ]
 }
 
 fn http_tool(name: &str, description: &str) -> JsonValue {
+    http_tool_with_schema(name, description, empty_object(), vec![])
+}
+
+fn http_tool_with_schema(
+    name: &str,
+    description: &str,
+    properties: JsonValue,
+    required: Vec<&str>,
+) -> JsonValue {
     JsonValue::object([
         ("name", JsonValue::string(name)),
         ("title", JsonValue::string(description)),
@@ -580,7 +992,11 @@ fn http_tool(name: &str, description: &str) -> JsonValue {
             "inputSchema",
             JsonValue::object([
                 ("type", JsonValue::string("object")),
-                ("properties", empty_object()),
+                ("properties", properties),
+                (
+                    "required",
+                    JsonValue::array(required.into_iter().map(JsonValue::string)),
+                ),
                 ("additionalProperties", JsonValue::bool(false)),
             ]),
         ),
@@ -593,6 +1009,7 @@ fn run_http_tool(root_path: &PathBuf, name: &str, args: &JsonValue) -> Result<Js
         "hub_status" => run_json_command(root_path, &["hub", "status", "--json"]),
         "hub_up" => run_json_command(root_path, &["hub", "up", "--json"]),
         "hub_down" => run_json_command(root_path, &["hub", "down", "--json"]),
+        "hub_repair" => run_json_command(root_path, &["hub", "repair", "--json"]),
         "hub_logs" => {
             let tail = json_helpers::value_at_path(args, &["tail"])
                 .and_then(JsonValue::as_i64)
@@ -609,9 +1026,235 @@ fn run_http_tool(root_path: &PathBuf, name: &str, args: &JsonValue) -> Result<Js
             )
         }
         "server_list" => run_json_command(root_path, &["server", "list", "--json"]),
+        "runtime_diagnostics" => runtime_diagnostics(root_path),
+        "upstream_tools" => {
+            let server = json_helpers::string_at_path(args, &["server"]);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            upstream::list_tools(root_path, server, timeout_ms, refresh)
+        }
+        "upstream_probe" => {
+            let server = json_helpers::string_at_path(args, &["server"]);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            upstream::probe_servers(root_path, server, timeout_ms, refresh)
+        }
+        "upstream_catalog" => {
+            let server = json_helpers::string_at_path(args, &["server"]);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            upstream::catalog_tools(root_path, server, timeout_ms, refresh)
+        }
+        "upstream_call" => {
+            let server = json_helpers::string_at_path(args, &["server"])
+                .ok_or_else(|| "upstream_call requires a 'server' string".to_string())?;
+            let tool = json_helpers::string_at_path(args, &["tool"])
+                .ok_or_else(|| "upstream_call requires a 'tool' string".to_string())?;
+            let arguments = json_helpers::value_at_path(args, &["arguments"])
+                .cloned()
+                .unwrap_or_else(empty_object);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            upstream::call_tool(root_path, server, tool, &arguments, timeout_ms)
+        }
+        "upstream_batch" => {
+            let server = json_helpers::string_at_path(args, &["server"])
+                .ok_or_else(|| "upstream_batch requires a 'server' string".to_string())?;
+            let raw_calls = json_helpers::array_at_path(args, &["calls"])
+                .ok_or_else(|| "upstream_batch requires a 'calls' array".to_string())?;
+            let mut calls = Vec::new();
+            for (index, raw_call) in raw_calls.iter().enumerate() {
+                let tool = json_helpers::string_at_path(raw_call, &["tool"])
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                    .ok_or_else(|| {
+                        format!("upstream_batch calls[{}] requires a non-empty 'tool'", index)
+                    })?
+                    .to_string();
+                let arguments = json_helpers::value_at_path(raw_call, &["arguments"])
+                    .cloned()
+                    .unwrap_or_else(empty_object);
+                calls.push(upstream::UpstreamToolCall { tool, arguments });
+            }
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            upstream::call_tools(root_path, server, &calls, timeout_ms)
+        }
+        "browser_status" => upstream::browser_status(root_path),
         "client_list" => run_json_command(root_path, &["client", "list", "--json"]),
-        other => Err(format!("unsupported MCPace HTTP tool '{}'", other)),
+        other => Err(format!(
+            "unsupported MCPace HTTP tool '{}'. This HTTP endpoint exposes MCPace management tools and stdio upstream access through upstream_catalog/upstream_probe/upstream_tools/upstream_call/upstream_batch. Direct upstream tool names are not advertised; call upstream_catalog for concise descriptions, upstream_tools for one server's full schemas, then upstream_call or upstream_batch. Call runtime_diagnostics for exact status.",
+            other
+        )),
     }
+}
+
+fn runtime_diagnostics(root_path: &PathBuf) -> Result<JsonValue, String> {
+    let doctor = run_json_command(root_path, &["doctor", "--json"])?;
+    let hub_status = run_json_command(root_path, &["hub", "status", "--json"])?;
+    let server_capabilities = run_json_command(root_path, &["server", "capabilities", "--json"])?;
+    let upstream_inventory = upstream::configured_inventory(root_path).unwrap_or_else(|error| {
+        JsonValue::object([
+            ("ok", JsonValue::bool(false)),
+            ("error", JsonValue::string(error)),
+            ("servers", JsonValue::array([])),
+        ])
+    });
+    let server_items = server_capabilities.as_array().unwrap_or(&[]);
+    let server_diagnostics = server_items
+        .iter()
+        .map(server_runtime_diagnostic)
+        .collect::<Vec<_>>();
+    let effective_enabled_count = server_items
+        .iter()
+        .filter(|server| json_helpers::bool_at_path(server, &["effectiveEnabled"]).unwrap_or(false))
+        .count();
+    let exposed_tools = http_tool_definitions()
+        .into_iter()
+        .filter_map(|tool| {
+            tool.get("name")
+                .and_then(JsonValue::as_str)
+                .map(JsonValue::string)
+        })
+        .collect::<Vec<_>>();
+
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(true)),
+        (
+            "surface",
+            JsonValue::string("mcpace-management-http-mcp"),
+        ),
+        (
+            "summary",
+            JsonValue::string(
+                "MCPace HTTP MCP is reachable. This build exposes management tools plus explicit stdio upstream access through upstream_catalog/upstream_probe/upstream_tools/upstream_call/upstream_batch; direct upstream tool names are intentionally not advertised.",
+            ),
+        ),
+        ("doctor", doctor),
+        ("hub", hub_status),
+        (
+            "upstreamForwarding",
+            JsonValue::object([
+                ("implemented", JsonValue::bool(true)),
+                ("stdioBridgeImplemented", JsonValue::bool(true)),
+                (
+                    "callableConfiguredStdioServerCount",
+                    json_helpers::value_at_path(
+                        &upstream_inventory,
+                        &["callableConfiguredStdioServerCount"],
+                    )
+                    .cloned()
+                    .unwrap_or_else(|| JsonValue::number(0)),
+                ),
+                (
+                    "reason",
+                    JsonValue::string(
+                        "MCPace forwards resolvable configured stdio upstreams through upstream_tools/upstream_call and uses upstream_batch for stateful multi-call sessions. upstream_catalog lists concise tool descriptions and upstream_probe checks configured servers without hardcoded names while reporting missing commands or broken future servers cleanly. Non-stdio HTTP upstream fan-out remains explicit blocked diagnostics.",
+                    ),
+                ),
+            ]),
+        ),
+        ("upstreamInventory", upstream_inventory),
+        (
+            "managementTools",
+            JsonValue::object([
+                ("count", JsonValue::number(exposed_tools.len())),
+                ("names", JsonValue::array(exposed_tools)),
+            ]),
+        ),
+        (
+            "configuredServers",
+            JsonValue::object([
+                ("count", JsonValue::number(server_items.len())),
+                ("effectiveEnabledCount", JsonValue::number(effective_enabled_count)),
+                ("items", JsonValue::array(server_diagnostics)),
+            ]),
+        ),
+        (
+            "nextSafeAction",
+            JsonValue::string(
+                "Use upstream_probe to check all configured upstream MCP servers, then upstream_tools with a specific stdio server, then upstream_call for stateless calls or upstream_batch for stateful sequences. Use browser_status for browser bridge truth; direct upstream tool names are intentionally not advertised.",
+            ),
+        ),
+    ]))
+}
+
+fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
+    let name = json_helpers::string_at_path(server, &["name"]).unwrap_or("unknown");
+    let kind = json_helpers::string_at_path(server, &["kind"]).unwrap_or("unknown");
+    let source_type = json_helpers::string_at_path(server, &["sourceType"]).unwrap_or("");
+    let effective_enabled =
+        json_helpers::bool_at_path(server, &["effectiveEnabled"]).unwrap_or(false);
+    let required = json_helpers::bool_at_path(server, &["required"]).unwrap_or(false);
+    let auto_start = json_helpers::bool_at_path(server, &["autoStart"]).unwrap_or(false);
+    let runtime_callable = effective_enabled && source_type == "stdio";
+    let (status, reason) = if !effective_enabled {
+        (
+            "disabled",
+            "server is disabled by source/profile/default configuration",
+        )
+    } else if runtime_callable {
+        (
+            "callable-stdio-bridge",
+            "enabled stdio upstream can be listed with upstream_tools and called with upstream_call",
+        )
+    } else if name == "browser" || kind == "host-bridge" {
+        (
+            "blocked-preview-host-bridge",
+            "browser/host-bridge policy is configured, but MCPace does not currently launch or proxy a real browser bridge through this HTTP adapter",
+        )
+    } else if kind == "container-stdio" {
+        (
+            "blocked-nonstdio-or-missing-command",
+            "this entry is not currently callable through the stdio bridge; check upstreamInventory for command/source details",
+        )
+    } else if kind == "external-http" || kind == "remote-http" {
+        (
+            "blocked-preview-http-upstream",
+            "external/remote HTTP server policy is configured, but live HTTP upstream fan-out is not implemented in this HTTP adapter",
+        )
+    } else {
+        (
+            "blocked-preview-unknown-upstream",
+            "this upstream kind is configured as inventory only and is not exposed as a callable MCP tool by this HTTP adapter",
+        )
+    };
+
+    JsonValue::object([
+        ("name", JsonValue::string(name)),
+        ("kind", JsonValue::string(kind)),
+        ("effectiveEnabled", JsonValue::bool(effective_enabled)),
+        ("required", JsonValue::bool(required)),
+        ("autoStart", JsonValue::bool(auto_start)),
+        ("runtimeCallable", JsonValue::bool(runtime_callable)),
+        ("exposedAsMcpTool", JsonValue::bool(false)),
+        ("status", JsonValue::string(status)),
+        ("reason", JsonValue::string(reason)),
+        ("sourceType", JsonValue::string(source_type)),
+        (
+            "healthUrl",
+            JsonValue::string(json_helpers::string_at_path(server, &["healthUrl"]).unwrap_or("")),
+        ),
+        (
+            "requiredCommands",
+            json_helpers::value_at_path(server, &["requiredCommands"])
+                .cloned()
+                .unwrap_or_else(|| JsonValue::array([])),
+        ),
+    ])
 }
 
 fn run_json_command(root_path: &PathBuf, args: &[&str]) -> Result<JsonValue, String> {
@@ -665,6 +1308,10 @@ fn write_text_response(
     body: &str,
 ) -> Result<(), String> {
     write_response(stream, status, content_type, body.as_bytes())
+}
+
+fn write_empty_response(stream: &mut TcpStream, status: &str) -> Result<(), String> {
+    write_response(stream, status, "text/plain; charset=utf-8", &[])
 }
 
 fn write_response(
@@ -1488,7 +2135,7 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
 
 #[cfg(test)]
 mod tests {
-    use super::{build_overview_json, serve_listener};
+    use super::{build_overview_json, is_allowed_local_origin, serve_listener};
     use std::fs;
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
@@ -1499,7 +2146,7 @@ mod tests {
         fs::write(
             root.join("mcpace.config.json"),
             r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "client": {
     "keyName": "MCPace"
   },
@@ -1543,6 +2190,42 @@ mod tests {
         assert!(object.contains_key("servers"));
         assert!(object.contains_key("clients"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn origin_validation_allows_only_exact_loopback_hosts() {
+        for origin in [
+            "null",
+            "http://127.0.0.1",
+            "http://127.0.0.1:39022",
+            "https://127.0.0.1:39022",
+            "http://localhost",
+            "http://localhost:39022",
+            "https://LOCALHOST:39022",
+            "http://[::1]",
+            "http://[::1]:39022",
+        ] {
+            assert!(
+                is_allowed_local_origin(origin),
+                "origin should be allowed: {origin}"
+            );
+        }
+
+        for origin in [
+            "",
+            "file://local",
+            "http://127.0.0.1.evil.example",
+            "http://localhost.evil.example",
+            "http://127.0.0.1@evil.example",
+            "http://evil.example/127.0.0.1",
+            "http://[::1].evil.example",
+            "http://[::1]:not-a-port",
+        ] {
+            assert!(
+                !is_allowed_local_origin(origin),
+                "origin should be rejected: {origin}"
+            );
+        }
     }
 
     #[test]
@@ -1608,7 +2291,7 @@ mod tests {
                 listener,
                 super::DashboardConfig {
                     root_path: server_root,
-                    max_requests: Some(3),
+                    max_requests: Some(8),
                     surface: super::ServeSurface::UnifiedServe,
                 },
                 &mut stderr,
@@ -1632,7 +2315,7 @@ mod tests {
         let mut stream = TcpStream::connect(addr).unwrap();
         write!(
             stream,
-            "POST /mcp HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             addr,
             initialize.len(),
             initialize
@@ -1642,12 +2325,50 @@ mod tests {
         assert!(mcp_response.contains("\"protocolVersion\": \"2025-11-25\""));
         assert!(mcp_response.contains("\"serverInfo\""));
 
+        let initialized = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
+        let mut initialized_response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            addr,
+            initialized.len(),
+            initialized
+        )
+        .unwrap();
+        stream.read_to_string(&mut initialized_response).unwrap();
+        assert!(
+            initialized_response.starts_with("HTTP/1.1 202 Accepted"),
+            "initialized response: {}",
+            initialized_response
+        );
+        assert!(
+            initialized_response.contains("Content-Length: 0"),
+            "initialized response: {}",
+            initialized_response
+        );
+
+        let mut sse_get_response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "GET /mcp HTTP/1.1\r\nHost: {}\r\nAccept: text/event-stream\r\nConnection: close\r\n\r\n",
+            addr
+        )
+        .unwrap();
+        stream.read_to_string(&mut sse_get_response).unwrap();
+        assert!(
+            sse_get_response.starts_with("HTTP/1.1 405 Method Not Allowed"),
+            "sse GET response: {}",
+            sse_get_response
+        );
+
         let tools_list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
         let mut tools_response = String::new();
         let mut stream = TcpStream::connect(addr).unwrap();
         write!(
             stream,
-            "POST /mcp HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             addr,
             tools_list.len(),
             tools_list
@@ -1656,6 +2377,135 @@ mod tests {
         stream.read_to_string(&mut tools_response).unwrap();
         assert!(tools_response.contains("\"doctor\""));
         assert!(tools_response.contains("\"hub_status\""));
+        assert!(tools_response.contains("\"hub_repair\""));
+        assert!(tools_response.contains("\"runtime_diagnostics\""));
+        assert!(tools_response.contains("\"upstream_tools\""));
+        assert!(tools_response.contains("\"upstream_catalog\""));
+        assert!(tools_response.contains("\"upstream_probe\""));
+        assert!(tools_response.contains("\"upstream_call\""));
+        assert!(tools_response.contains("\"upstream_batch\""));
+        assert!(tools_response.contains("\"browser_status\""));
+
+        let unsupported_call = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"browser","arguments":{}}}"#;
+        let mut unsupported_response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            addr,
+            unsupported_call.len(),
+            unsupported_call
+        )
+        .unwrap();
+        stream.read_to_string(&mut unsupported_response).unwrap();
+        assert!(
+            unsupported_response.contains("\"isError\": true"),
+            "unsupported response: {}",
+            unsupported_response
+        );
+        assert!(
+            unsupported_response.contains(
+                "upstream_catalog/upstream_probe/upstream_tools/upstream_call/upstream_batch"
+            ),
+            "unsupported response: {}",
+            unsupported_response
+        );
+
+        let diagnostics_call = r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"runtime_diagnostics","arguments":{}}}"#;
+        let mut diagnostics_response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            addr,
+            diagnostics_call.len(),
+            diagnostics_call
+        )
+        .unwrap();
+        stream.read_to_string(&mut diagnostics_response).unwrap();
+        assert!(
+            diagnostics_response.contains("\"upstreamForwarding\""),
+            "diagnostics response: {}",
+            diagnostics_response
+        );
+        assert!(
+            diagnostics_response.contains("\"implemented\": true"),
+            "diagnostics response: {}",
+            diagnostics_response
+        );
+
+        let malformed_body = "{ definitely-not-json";
+        let mut malformed_response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            addr,
+            malformed_body.len(),
+            malformed_body
+        )
+        .unwrap();
+        stream.read_to_string(&mut malformed_response).unwrap();
+        assert!(
+            malformed_response.starts_with("HTTP/1.1 400 Bad Request"),
+            "malformed response: {}",
+            malformed_response
+        );
+        assert!(
+            malformed_response.contains("\"code\": -32700"),
+            "malformed response: {}",
+            malformed_response
+        );
+        assert!(
+            malformed_response.contains("invalid JSON-RPC body"),
+            "malformed response: {}",
+            malformed_response
+        );
+
+        assert_eq!(handle.join().unwrap(), 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dashboard_actions_reject_cross_origin_posts() {
+        let root = temp_root();
+        write_minimal_config(&root);
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let mut stderr = Vec::new();
+            serve_listener(
+                listener,
+                super::DashboardConfig {
+                    root_path: server_root,
+                    max_requests: Some(1),
+                    surface: super::ServeSurface::Dashboard,
+                },
+                &mut stderr,
+            )
+        });
+
+        let mut response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "POST /api/actions/repair HTTP/1.1\r\nHost: {}\r\nOrigin: http://localhost.evil.example\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+            addr
+        )
+        .unwrap();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(
+            response.starts_with("HTTP/1.1 403 Forbidden"),
+            "action response: {}",
+            response
+        );
+        assert!(
+            response.contains("not allowed for local MCPace serve mode"),
+            "action response: {}",
+            response
+        );
 
         assert_eq!(handle.join().unwrap(), 0);
         let _ = fs::remove_dir_all(root);

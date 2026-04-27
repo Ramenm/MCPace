@@ -1,0 +1,24 @@
+{
+  "generatedAt": "2026-04-27T15:15:55.7166388Z",
+  "command": "npm run test:linux-npm-install:docker",
+  "note": "Summary persisted from the immediately preceding successful verifier run; no publish command was executed.",
+  "status": "pass",
+  "result": {
+    "imageTag": "mcpace-verify-linux-npm-install:local",
+    "targetKey": "linux-x64-gnu",
+    "cpus": "1.0",
+    "memory": "1g",
+    "pidsLimit": "256",
+    "durationMs": 86237,
+    "installSummary": {
+      "version": "0.3.6",
+      "mainPackage": "@mcpace/cli",
+      "platformPackage": "@mcpace/cli-linux-x64-gnu",
+      "platformVersion": "0.3.6"
+    }
+  },
+  "cleanup": {
+    "dockerImageLeftBehind": false,
+    "dockerContainerLeftBehind": false
+  }
+}

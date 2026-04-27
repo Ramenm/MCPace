@@ -17,6 +17,14 @@ pub struct ServerRecord {
     pub concurrency_policy: String,
     pub state_binding: String,
     pub credential_binding: String,
+    pub parallelism_limit: usize,
+    pub conflict_domain: String,
+    pub project_root_mode: String,
+    pub worktree_binding: String,
+    pub browser_profile_mode: String,
+    pub host_lock: String,
+    pub startup_strategy: String,
+    pub routing_group: String,
     pub health_url: String,
     pub source_enabled: bool,
     pub source_type: String,
@@ -63,6 +71,35 @@ impl ServerRecord {
                 "credentialBinding",
                 JsonValue::string(self.credential_binding.clone()),
             ),
+            (
+                "parallelismLimit",
+                JsonValue::number(self.parallelism_limit),
+            ),
+            (
+                "conflictDomain",
+                JsonValue::string(self.conflict_domain.clone()),
+            ),
+            (
+                "projectRootMode",
+                JsonValue::string(self.project_root_mode.clone()),
+            ),
+            (
+                "worktreeBinding",
+                JsonValue::string(self.worktree_binding.clone()),
+            ),
+            (
+                "browserProfileMode",
+                JsonValue::string(self.browser_profile_mode.clone()),
+            ),
+            ("hostLock", JsonValue::string(self.host_lock.clone())),
+            (
+                "startupStrategy",
+                JsonValue::string(self.startup_strategy.clone()),
+            ),
+            (
+                "routingGroup",
+                JsonValue::string(self.routing_group.clone()),
+            ),
         ])
     }
 
@@ -95,6 +132,53 @@ impl ServerRecord {
                         .cloned()
                         .map(JsonValue::string),
                 ),
+            ),
+            (
+                "routingPolicy",
+                JsonValue::object([
+                    ("scopeClass", JsonValue::string(self.scope_class.clone())),
+                    (
+                        "concurrencyPolicy",
+                        JsonValue::string(self.concurrency_policy.clone()),
+                    ),
+                    (
+                        "stateBinding",
+                        JsonValue::string(self.state_binding.clone()),
+                    ),
+                    (
+                        "credentialBinding",
+                        JsonValue::string(self.credential_binding.clone()),
+                    ),
+                    (
+                        "parallelismLimit",
+                        JsonValue::number(self.parallelism_limit),
+                    ),
+                    (
+                        "conflictDomain",
+                        JsonValue::string(self.conflict_domain.clone()),
+                    ),
+                    (
+                        "projectRootMode",
+                        JsonValue::string(self.project_root_mode.clone()),
+                    ),
+                    (
+                        "worktreeBinding",
+                        JsonValue::string(self.worktree_binding.clone()),
+                    ),
+                    (
+                        "browserProfileMode",
+                        JsonValue::string(self.browser_profile_mode.clone()),
+                    ),
+                    ("hostLock", JsonValue::string(self.host_lock.clone())),
+                    (
+                        "startupStrategy",
+                        JsonValue::string(self.startup_strategy.clone()),
+                    ),
+                    (
+                        "routingGroup",
+                        JsonValue::string(self.routing_group.clone()),
+                    ),
+                ]),
             ),
             ("healthUrl", JsonValue::string(self.health_url.clone())),
             ("sourceEnabled", JsonValue::bool(self.source_enabled)),

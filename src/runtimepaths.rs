@@ -1,6 +1,23 @@
 use std::env;
 use std::path::{Path, PathBuf};
 
+pub const DEFAULT_LOCAL_HOST: &str = "127.0.0.1";
+pub const DEFAULT_LOCAL_MCP_PORT: u16 = 39022;
+
+pub fn default_local_mcp_url() -> String {
+    format!(
+        "http://{}:{}/mcp",
+        DEFAULT_LOCAL_HOST, DEFAULT_LOCAL_MCP_PORT
+    )
+}
+
+pub fn default_local_health_url() -> String {
+    format!(
+        "http://{}:{}/healthz",
+        DEFAULT_LOCAL_HOST, DEFAULT_LOCAL_MCP_PORT
+    )
+}
+
 pub fn resolve_state_root(root_path: &Path) -> PathBuf {
     let env_override = env::var_os("MCPACE_STATE_ROOT").map(PathBuf::from);
     absolutize_or_root(root_path, env_override)
@@ -61,6 +78,10 @@ pub fn hub_lock_path(state_root: &Path) -> PathBuf {
 
 pub fn hub_leases_path(state_root: &Path) -> PathBuf {
     hub_dir(state_root).join("leases.json")
+}
+
+pub fn hub_lease_lock_path(state_root: &Path) -> PathBuf {
+    hub_dir(state_root).join("leases.lock")
 }
 
 pub fn serve_dir(state_root: &Path) -> PathBuf {

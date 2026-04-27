@@ -11,6 +11,19 @@ const DEFAULT_TEST = 'hub_up_releases_captured_stdio_for_background_launcher';
 const DEFAULT_CPUS = '1.0';
 const DEFAULT_MEMORY = '768m';
 const DEFAULT_PIDS_LIMIT = '256';
+const DEFAULT_DOCKER_TIMEOUT_MS = 600000;
+const DOCKER_TIMEOUT_MS = parseTimeoutEnv('MCPACE_DOCKER_TIMEOUT_MS', DEFAULT_DOCKER_TIMEOUT_MS);
+
+function parseTimeoutEnv(name, fallback) {
+  const parsed = Number.parseInt(process.env[name] || '', 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+function cleanChildEnv() {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  return env;
+}
 
 function parseArgs(argv) {
   const parsed = {
@@ -87,7 +100,10 @@ function runDockerCheck({ image, testName, cpus, memory, pidsLimit }) {
       ],
       {
         encoding: 'utf8',
-        cwd: repoRoot
+        cwd: repoRoot,
+        env: cleanChildEnv(),
+        timeout: DOCKER_TIMEOUT_MS,
+        windowsHide: true
       }
     );
 
@@ -99,10 +115,16 @@ function runDockerCheck({ image, testName, cpus, memory, pidsLimit }) {
       pidsLimit,
       stagingRoot,
       durationMs: Date.now() - startedAt,
+      timeoutMs: DOCKER_TIMEOUT_MS,
+      timedOut: result.error?.code === 'ETIMEDOUT',
       status: result.status,
       stdout: result.stdout || '',
       stderr: result.stderr || '',
-      error: result.error ? result.error.message : null
+      error: result.error?.code === 'ETIMEDOUT'
+        ? `docker verification timed out after ${DOCKER_TIMEOUT_MS}ms`
+        : result.error
+          ? result.error.message
+          : null
     };
   } finally {
     fs.rmSync(stagingRoot, { recursive: true, force: true });
@@ -132,6 +154,8 @@ function main() {
             memory: report.memory,
             pidsLimit: report.pidsLimit,
             durationMs: report.durationMs,
+            timeoutMs: report.timeoutMs,
+            timedOut: report.timedOut,
             status: report.status
           },
           null,

@@ -54,6 +54,7 @@ Run in CI before publication:
 
 - artifact manifest validation
 - release bundle validation
+- vendored binary bundle validation when a host binary is staged
 - npm publish dry-run and provenance checks
 - cross-host Rust build/test matrix
 

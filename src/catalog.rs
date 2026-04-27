@@ -26,6 +26,19 @@ pub const COMMANDS: &[CommandSpec] = &[
         implemented: true,
     },
     CommandSpec {
+        name: "setup",
+        description:
+            "Start MCPace, install supported local clients, and smoke-test the MCP endpoint.",
+        aliases: &["quickstart", "bootstrap", "one-click"],
+        implemented: true,
+    },
+    CommandSpec {
+        name: "service",
+        description: "Install or inspect user-level autostart for the MCPace endpoint.",
+        aliases: &["autostart", "startup"],
+        implemented: true,
+    },
+    CommandSpec {
         name: "dashboard",
         description: "Serve a local admin dashboard for MCPace.",
         aliases: &["ui"],
@@ -115,6 +128,12 @@ pub const COMMANDS: &[CommandSpec] = &[
         name: "repair",
         description: "Grouped repair/maintenance command.",
         aliases: &["backup", "rotate-logs", "windows-mcp-lease", "auth"],
+        implemented: true,
+    },
+    CommandSpec {
+        name: "update",
+        description: "Check external package-manager update guidance without self-updating.",
+        aliases: &["update-check"],
         implemented: true,
     },
     CommandSpec {

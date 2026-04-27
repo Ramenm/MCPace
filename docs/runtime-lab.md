@@ -6,7 +6,7 @@ The runtime lab answers a simple question:
 
 ## Files
 
-- `eval/runtime-capabilities.json` — capability inventory with status, priority, evidence, and next step
+- `eval/runtime-capabilities.json` — capability inventory with implementation `status`, public `claimStatus`, priority, evidence, and next step
 - `eval/fixtures/runtime/*.json` — production-like runtime scenarios
 - `src/lab.rs` — grouped CLI surface for reading the lab
 - `src/client_catalog.rs` — surface-aware client catalog used by lab coverage and gap reports
@@ -53,12 +53,21 @@ Each capability entry contains:
 - `id`
 - `area`
 - `title`
-- `status` (`implemented`, `planned`, or `missing`)
+- `status` (`implemented`, `planned`, or `missing`) — completion of the full
+  capability definition
+- `claimStatus` (`supported`, `supported-local-only`, `control-plane-only`,
+  `bootstrap-only`, `connectable-preview`, `requires-host-proof`, or
+  `planned`) — strongest honest public claim right now
 - `priority` (`p0`, `p1`, `p2`)
 - `summary`
 - `evidence`
 - `nextStep`
 
+Today the Rust lab still treats only `status = implemented` as fully satisfied
+for scenario coverage. `claimStatus` exists so docs and roadmap can stay honest
+about partial runtime slices such as bootstrap-only, control-plane-only, or
+connectable-preview behavior without falsely upgrading those slices to
+fully-covered runtime proof.
 
 ## Surface-aware reporting
 

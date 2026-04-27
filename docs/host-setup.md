@@ -25,7 +25,7 @@ The following commands were actually run successfully in the current container:
 
 ```bash
 npm test
-npm run pack:npm:dry-run
+npm run verify:npm-pack
 ```
 
 ## Not currently available in this container
@@ -44,6 +44,9 @@ Runtime and cross-host proof still need real Linux, Windows, and macOS runs:
 ```bash
 cargo test
 cargo build --release
+node scripts/stage-vendored-binary.mjs --json
+node scripts/verify-vendored-binary.mjs --json
+node scripts/verify-npm-pack.mjs --json
 ./target/release/mcpace client plan --json --client-id codex --session-id demo-1 --project-root /work/project-a
 ./target/release/mcpace verify doctor
 ./target/release/mcpace verify readiness

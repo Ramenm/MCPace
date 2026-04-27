@@ -1,0 +1,1 @@
+Patched source-only archive. Excludes generated/runtime/heavy directories: .git, target, dist, node_modules, .omx, data/runtime, logs, backups, and vendored binaries.

@@ -10,6 +10,10 @@ fn help_mentions_grouped_native_read_paths() {
     let text = stdout(&output);
     assert!(text.contains("doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths"));
     assert!(text.contains("repair [--json] [--root <path>]"));
+    assert!(text.contains("setup [--json]"));
+    assert!(text.contains("setup starts the one-port MCPace endpoint"));
+    assert!(text.contains("service install|status|uninstall|print"));
+    assert!(text.contains("service installs user-level autostart entries"));
     assert!(text.contains("server capabilities"));
     assert!(text.contains("verify readiness"));
     assert!(text.contains("dashboard"));
@@ -66,7 +70,7 @@ fn repair_command_routes_to_grouped_hub_repair() {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",

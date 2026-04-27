@@ -12,7 +12,7 @@ fn server_list_json_applies_profile_override_and_case_folded_source_settings() {
     fs::write(
         root.join("mcpace.config.json"),
         r#"{
-  "version": "0.3.0",
+  "version": "0.3.5",
   "profiles": {
     "runtime": {
       "default": "safe",

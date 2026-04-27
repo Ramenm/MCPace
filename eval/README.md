@@ -20,7 +20,7 @@ Each seed case now carries:
 
 ### 2. Runtime lab cases
 
-`eval/fixtures/runtime/` contains production-like runtime scenarios, and `eval/runtime-capabilities.json` maps those scenarios to concrete capabilities.
+`eval/fixtures/runtime/` contains production-like runtime scenarios, and `eval/runtime-capabilities.json` maps those scenarios to concrete capabilities. The capability inventory now keeps both implementation status (`status`) and the strongest honest public claim (`claimStatus`) so roadmap/docs can distinguish supported, control-plane-only, bootstrap-only, connectable-preview, and still-planned slices.
 
 ### 3. Eval governance files
 

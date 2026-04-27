@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-04-27T15:08:01.7213162Z",
+  "results": [
+    {
+      "name": "docker-fast bullseye",
+      "exitCode": 0,
+      "durationSeconds": 202.96,
+      "output": "{\r\n  \"image\": \"rust:1.95-bullseye\",\r\n  \"testName\": \"hub_up_releases_captured_stdio_for_background_launcher\",\r\n  \"cpus\": \"1.0\",\r\n  \"memory\": \"768m\",\r\n  \"pidsLimit\": \"256\",\r\n  \"durationMs\": 202278,\r\n  \"timeoutMs\": 600000,\r\n  \"timedOut\": false,\r\n  \"status\": 0\r\n}"
+    },
+    {
+      "name": "docker-fast alpine-musl",
+      "exitCode": 0,
+      "durationSeconds": 209.11,
+      "output": "{\r\n  \"image\": \"rust:1.95-alpine\",\r\n  \"testName\": \"hub_up_releases_captured_stdio_for_background_launcher\",\r\n  \"cpus\": \"1.0\",\r\n  \"memory\": \"1g\",\r\n  \"pidsLimit\": \"256\",\r\n  \"durationMs\": 208365,\r\n  \"timeoutMs\": 600000,\r\n  \"timedOut\": false,\r\n  \"status\": 0\r\n}"
+    }
+  ]
+}

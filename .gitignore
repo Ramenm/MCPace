@@ -13,6 +13,7 @@
 
 # Local IDE and agent state
 /.omx/
+/.playwright-mcp/
 /.serena/
 /.vscode/
 /.idea/
