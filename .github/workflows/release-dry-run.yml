@@ -57,7 +57,7 @@ jobs:
           npm pack --workspace "@mcpace/cli" --json --pack-destination dist/npm
 
       - name: Upload dry-run source and main package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dry-run-source-and-main
           path: |
@@ -134,7 +134,7 @@ jobs:
           npm pack "packages/npm/cli-${{ matrix.target_key }}" --json --pack-destination dist/npm
 
       - name: Upload dry-run native artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dry-run-native-${{ matrix.target_key }}
           path: |
