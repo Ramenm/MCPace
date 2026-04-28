@@ -106,7 +106,10 @@ fn normalize_server_record(
         profile_override_enabled.unwrap_or(default_enabled)
     };
     let source_enabled = source_record.map(|record| record.enabled).unwrap_or(false);
-    let effective_enabled = profile_enabled && source_enabled;
+    let platforms =
+        json_helpers::strings_from_array(object.get("platforms").and_then(JsonValue::as_array));
+    let platform_supported = server_supports_current_platform(&platforms);
+    let effective_enabled = profile_enabled && source_enabled && platform_supported;
 
     let scope_class = policy_string(policy, "scopeClass", "");
     let concurrency_policy = policy_string(policy, "concurrencyPolicy", "");
@@ -156,6 +159,7 @@ fn normalize_server_record(
         required,
         default_enabled,
         profile_enabled,
+        platform_supported,
         effective_enabled,
         auto_start: object
             .get("autoStart")
@@ -172,9 +176,7 @@ fn normalize_server_record(
                 .get("supportedTransports")
                 .and_then(JsonValue::as_array),
         ),
-        platforms: json_helpers::strings_from_array(
-            object.get("platforms").and_then(JsonValue::as_array),
-        ),
+        platforms,
         required_commands: json_helpers::strings_from_array(
             object.get("requiredCommands").and_then(JsonValue::as_array),
         ),
@@ -205,6 +207,11 @@ fn normalize_server_record(
             .unwrap_or_default(),
         source_url: source_record
             .map(|record| record.url.clone())
+            .unwrap_or_default(),
+        tool_policies: object
+            .get("toolPolicies")
+            .and_then(JsonValue::as_array)
+            .map(|items| items.to_vec())
             .unwrap_or_default(),
         installer_target: installer
             .and_then(|installer| installer.get("installTarget"))
@@ -253,6 +260,35 @@ fn policy_usize(policy: Option<&BTreeMap<String, JsonValue>>, key: &str, fallbac
         .filter(|value| *value >= 0)
         .map(|value| value as usize)
         .unwrap_or(fallback)
+}
+
+fn server_supports_current_platform(platforms: &[String]) -> bool {
+    if platforms.is_empty() {
+        return true;
+    }
+    let current = current_platform_alias();
+    platforms.iter().any(|platform| {
+        let normalized = normalize_platform(platform);
+        normalized == current || normalized == "any" || normalized == "all" || normalized == "*"
+    })
+}
+
+fn current_platform_alias() -> &'static str {
+    match std::env::consts::OS {
+        "macos" => "macos",
+        "windows" => "windows",
+        "linux" => "linux",
+        other => other,
+    }
+}
+
+fn normalize_platform(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "darwin" | "mac" | "osx" | "macos" => "macos".to_string(),
+        "win" | "windows" => "windows".to_string(),
+        "linux" => "linux".to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn default_parallelism_limit(concurrency_policy: &str) -> usize {

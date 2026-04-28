@@ -9,6 +9,7 @@ use crate::client_catalog::{
     client_install_support_summary_for_targets, ClientInstallKindRecord as ClientInstallKind,
     ClientTargetRecord as ClientTarget, JsonMcpServerShapeRecord as JsonMcpServerShape,
 };
+use crate::codex_config;
 use crate::doctor;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
@@ -1424,6 +1425,14 @@ impl ClientInstallPlan {
 
         let would_change = update.contents != existing;
         let changed = would_change && !options.dry_run;
+        let mut warnings = self.warnings.clone();
+        if matches!(self.config, ClientInstallConfig::TomlManagedTable) {
+            warnings.extend(detect_missing_stdio_command_warnings(
+                &existing,
+                &self.adapter_key_name,
+                &self.config_path,
+            ));
+        }
         let backup = if changed {
             Some(self.create_backup(&existing, config_file_existed)?)
         } else {
@@ -1476,7 +1485,7 @@ impl ClientInstallPlan {
             created_config_file,
             would_create_config_dir,
             would_create_config_file,
-            warnings: self.warnings.clone(),
+            warnings,
         })
     }
 
@@ -2060,10 +2069,10 @@ fn build_adapter_contract(
             args: Vec::new(),
             url_template: Some(local_mcp_url()),
             metadata_carrier: "localhost HTTP request metadata plus session headers".to_string(),
-            session_model: "connectable localhost HTTP endpoint; sticky session ownership is still preview until runtime proof lands".to_string(),
+            session_model: "connectable localhost HTTP endpoint; upstream wrapper calls derive sticky session affinity from explicit args, metadata, or MCP session headers, while durable cross-process session ownership remains preview".to_string(),
             notes: vec![
-                "Use one localhost MCPace URL so the client can target a single MCPace endpoint while upstream routing proof is still in progress.".to_string(),
-                "Today this lane proves connectability to /mcp; full session reuse, ownership, and upstream-runtime guarantees remain preview.".to_string(),
+                "Use one localhost MCPace URL so the client can target a single MCPace endpoint without loading every upstream tool schema at startup.".to_string(),
+                "Request-time upstream session reuse and lease-gated ownership are implemented for explicit wrapper calls; protocol-level durable session lifecycle across MCPace restarts remains preview.".to_string(),
             ],
         },
         _ => AdapterContractPreview {
@@ -2154,7 +2163,7 @@ fn build_toml_managed_block(adapter_key_name: &str, server_url: &str, newline: &
         format!("# BEGIN MCPACE MANAGED BLOCK: {}", adapter_key_name),
         "# This block is managed by `mcpace client install`.".to_string(),
         format!("[mcp_servers.{}]", format_toml_table_key(adapter_key_name)),
-        format!("url = {}", toml_basic_string(server_url)),
+        format!("url = {}", codex_config::toml_basic_string(server_url)),
         "enabled = true".to_string(),
         "startup_timeout_sec = 20".to_string(),
         format!("# END MCPACE MANAGED BLOCK: {}", adapter_key_name),
@@ -2388,12 +2397,12 @@ fn find_toml_mcp_servers_table_block(
     let mut offset = 0usize;
 
     for line in existing.split_inclusive('\n') {
-        let trimmed = trim_toml_line(line);
+        let trimmed = codex_config::trim_toml_line(line);
         if start.is_none() {
             if candidates.iter().any(|candidate| trimmed == candidate) {
                 start = Some(offset);
             }
-        } else if looks_like_toml_table_header(trimmed) {
+        } else if codex_config::looks_like_toml_table_header(trimmed) {
             return Some((start.unwrap_or_default(), offset));
         }
         offset += line.len();
@@ -2404,26 +2413,32 @@ fn find_toml_mcp_servers_table_block(
 
 fn table_header_candidates(adapter_key_name: &str) -> Vec<String> {
     let mut candidates = Vec::new();
-    if is_bare_toml_key(adapter_key_name) {
+    if codex_config::is_bare_toml_key(adapter_key_name) {
         candidates.push(format!("[mcp_servers.{}]", adapter_key_name));
     }
     candidates.push(format!(
         "[mcp_servers.{}]",
-        toml_basic_string(adapter_key_name)
+        codex_config::toml_basic_string(adapter_key_name)
     ));
     candidates
 }
 
-fn trim_toml_line(line: &str) -> &str {
-    let trimmed = line.trim();
-    match trimmed.find('#') {
-        Some(index) => trimmed[..index].trim_end(),
-        None => trimmed,
-    }
-}
-
-fn looks_like_toml_table_header(trimmed_line: &str) -> bool {
-    trimmed_line.starts_with('[') && trimmed_line.ends_with(']')
+fn detect_missing_stdio_command_warnings(
+    existing: &str,
+    adapter_key_name: &str,
+    config_path: &Path,
+) -> Vec<String> {
+    codex_config::missing_mcp_server_commands(existing, Some(adapter_key_name))
+        .into_iter()
+        .map(|entry| {
+            format!(
+                "Existing MCP server '{}' in '{}' uses command '{}', but that program was not found on PATH. MCP clients can fail startup before reaching MCPace; fix or remove that separate entry if startup still fails.",
+                entry.server_name,
+                config_path.display(),
+                entry.command
+            )
+        })
+        .collect()
 }
 
 fn find_yaml_top_level_section(existing: &str, key: &str) -> Option<(usize, usize, usize)> {
@@ -2507,39 +2522,15 @@ fn trim_yaml_key_quotes(value: &str) -> &str {
 }
 
 fn format_toml_table_key(value: &str) -> String {
-    if is_bare_toml_key(value) {
+    if codex_config::is_bare_toml_key(value) {
         value.to_string()
     } else {
-        toml_basic_string(value)
+        codex_config::toml_basic_string(value)
     }
-}
-
-fn is_bare_toml_key(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
-}
-
-fn toml_basic_string(value: &str) -> String {
-    let mut escaped = String::with_capacity(value.len() + 2);
-    escaped.push('"');
-    for ch in value.chars() {
-        match ch {
-            '\\' => escaped.push_str("\\\\"),
-            '"' => escaped.push_str("\\\""),
-            '\n' => escaped.push_str("\\n"),
-            '\r' => escaped.push_str("\\r"),
-            '\t' => escaped.push_str("\\t"),
-            _ => escaped.push(ch),
-        }
-    }
-    escaped.push('"');
-    escaped
 }
 
 fn yaml_double_quoted_string(value: &str) -> String {
-    toml_basic_string(value)
+    codex_config::toml_basic_string(value)
 }
 
 fn install_warnings_from_plan(

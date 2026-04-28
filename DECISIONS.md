@@ -307,3 +307,63 @@ platform, or team-wide control plane.
 
 Revisit after local HTTP ingress, lease ownership, stale-result guards, and
 real-host traces exist for the tier-1 surfaces.
+
+
+---
+
+## D-011 — Keep upstream MCP tools explicit by default; optimize speed behind wrappers
+
+**Decision**
+
+MCPace should keep the current wrapper-first upstream surface as the default:
+clients see the small MCPace-native tool set, discover upstreams with
+`upstream_catalog` / `upstream_tools`, and invoke them with `upstream_call` or
+`upstream_batch`. Do not globally advertise every upstream tool name in the
+top-level `tools/list`.
+
+Speed improvements should happen behind those wrappers through bounded upstream
+process/session pooling. If direct-looking tools are needed later, expose only
+allowlisted promoted tools and still route them through the same scheduler,
+lease, diagnostics, and pooled-session path.
+
+**Rationale**
+
+- the small top-level tool list is cheaper in tokens than dumping every upstream
+  schema into every client startup
+- on-demand `upstream_tools` preserves full schemas without bloating the default
+  MCP surface
+- the current wrapper path preserves leases, heartbeat-loss cancellation,
+  stale-id filtering, and runtime diagnostics
+- cold-start latency comes from upstream process initialize cost, so the correct
+  fix is session/process reuse behind the wrapper contract, not global direct
+  passthrough
+
+**Alternatives considered**
+
+- **Advertise all upstream tools directly**: more native-looking, but expensive
+  in tool-list tokens and easy to overclaim when servers are disabled, slow, or
+  non-stdio.
+- **Keep only stateless one-shot `upstream_call`**: simple, but leaves browser
+  and other stateful flows paying repeated initialize cost.
+- **Add direct aliases for everything**: convenient short-term, but creates a
+  second public contract that must be kept in sync with upstream schemas.
+
+**Consequences**
+
+- default MCPace startup remains small and stable
+- `upstream_batch` remains the preferred current path for stateful multi-call
+  flows
+- runtime implementation should keep hardening pooled ownership keyed by server,
+  project root, session/client affinity, config fingerprint, and credential
+  scope
+- optional promoted tools must be opt-in and allowlisted, not a global mode
+
+**Revisit when**
+
+Revisit after pooled upstream sessions have host proof, cancellation/stale-result
+guards work across requests, and at least one compatibility client needs
+allowlisted direct-looking tools.
+
+**Related**
+
+- `docs/adr/0003-upstream-tool-surface-and-session-pooling.md`

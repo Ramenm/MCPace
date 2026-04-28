@@ -28,6 +28,9 @@ Start here:
 - `product-truth-and-beta-gate.md` — current promise, support tiers, truth taxonomy, and beta gate
 - `product-truth.json` — machine-readable copy of the current promise, activation, entrypoint contract, plus catalog-driven proof-tier and install-support selectors
 - `recovery-runbook.md` — stale/corrupt runtime recovery
+- `adr/0003-upstream-tool-surface-and-session-pooling.md` — decision to keep
+  upstream tools wrapper-first by default and optimize latency with pooled
+  sessions instead of global direct passthrough
 
 Project-control docs at the repo root:
 

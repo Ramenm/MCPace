@@ -138,9 +138,9 @@ pub const COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "release",
-        description: "Planned grouped release/build command.",
+        description: "Build local source release artifacts without publishing.",
         aliases: &["build-release"],
-        implemented: false,
+        implemented: true,
     },
 ];
 

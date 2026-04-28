@@ -7,6 +7,7 @@ pub struct ServerRecord {
     pub required: bool,
     pub default_enabled: bool,
     pub profile_enabled: bool,
+    pub platform_supported: bool,
     pub effective_enabled: bool,
     pub auto_start: bool,
     pub transport_preference: String,
@@ -30,6 +31,7 @@ pub struct ServerRecord {
     pub source_type: String,
     pub source_command: String,
     pub source_url: String,
+    pub tool_policies: Vec<JsonValue>,
     pub installer_target: String,
     pub installer_method: String,
     pub installer_package: String,
@@ -52,6 +54,10 @@ impl ServerRecord {
             ("required", JsonValue::bool(self.required)),
             ("defaultEnabled", JsonValue::bool(self.default_enabled)),
             ("profileEnabled", JsonValue::bool(self.profile_enabled)),
+            (
+                "platformSupported",
+                JsonValue::bool(self.platform_supported),
+            ),
             ("sourceEnabled", JsonValue::bool(self.source_enabled)),
             ("effectiveEnabled", JsonValue::bool(self.effective_enabled)),
             (
@@ -110,6 +116,10 @@ impl ServerRecord {
             ("required", JsonValue::bool(self.required)),
             ("autoStart", JsonValue::bool(self.auto_start)),
             ("profileEnabled", JsonValue::bool(self.profile_enabled)),
+            (
+                "platformSupported",
+                JsonValue::bool(self.platform_supported),
+            ),
             ("effectiveEnabled", JsonValue::bool(self.effective_enabled)),
             (
                 "supportedTransports",
@@ -188,6 +198,7 @@ impl ServerRecord {
                 JsonValue::string(self.source_command.clone()),
             ),
             ("sourceUrl", JsonValue::string(self.source_url.clone())),
+            ("toolPolicies", JsonValue::array(self.tool_policies.clone())),
             (
                 "installer",
                 JsonValue::object([

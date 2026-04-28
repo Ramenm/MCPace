@@ -3,11 +3,13 @@ use crate::json::{parse_str, JsonValue};
 use crate::runtimepaths;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::io::Write;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::io::{Read, Write};
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+const HEALTH_PROBE_IO_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Default)]
 struct ParsedArgs {
@@ -583,10 +585,38 @@ fn health_check(host: &str, port: u16) -> Result<bool, String> {
     let Some(addr) = addrs.next() else {
         return Ok(false);
     };
-    match TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
+    let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
+        Ok(stream) => stream,
+        Err(_) => return Ok(false),
+    };
+    let timeout = Some(HEALTH_PROBE_IO_TIMEOUT);
+    let _ = stream.set_read_timeout(timeout);
+    let _ = stream.set_write_timeout(timeout);
+    let request = format!(
+        "GET /healthz HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        probe_host
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return Ok(false);
     }
+    let _ = stream.shutdown(Shutdown::Write);
+    let mut response = String::new();
+    if stream.read_to_string(&mut response).is_err() {
+        return Ok(false);
+    }
+    let Some((headers, body)) = response.split_once("\r\n\r\n") else {
+        return Ok(false);
+    };
+    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
+        return Ok(false);
+    }
+    let Ok(payload) = parse_str(body.trim()) else {
+        return Ok(false);
+    };
+    Ok(matches!(
+        payload.get("readiness"),
+        Some(JsonValue::Object(_))
+    ))
 }
 
 fn wait_for_health(host: &str, port: u16, attempts: usize, delay: Duration) -> Result<(), String> {
@@ -906,6 +936,9 @@ mod tests {
 
     #[test]
     fn serve_start_status_stop_round_trip() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let root = temp_root();
         if resolve_runner_source().is_err() {
             let _ = fs::remove_dir_all(root);

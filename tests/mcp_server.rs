@@ -339,6 +339,11 @@ fn mcp_server_completes_initialize_and_lists_tools() {
         line
     );
     assert!(
+        line.contains(r#""name":"surface_manifest""#),
+        "line: {}",
+        line
+    );
+    assert!(
         line.contains(r#""name":"upstream_tools""#),
         "line: {}",
         line
@@ -350,6 +355,16 @@ fn mcp_server_completes_initialize_and_lists_tools() {
     );
     assert!(
         line.contains(r#""name":"upstream_probe""#),
+        "line: {}",
+        line
+    );
+    assert!(
+        line.contains(r#""name":"upstream_policy_audit""#),
+        "line: {}",
+        line
+    );
+    assert!(
+        line.contains(r#""name":"upstream_policy_suggest""#),
         "line: {}",
         line
     );
@@ -476,6 +491,131 @@ fn mcp_server_upstream_call_attaches_and_releases_runtime_lease() {
         .expect("read runtime_leases response");
     assert!(line.contains(r#""isError":false"#), "line: {}", line);
     assert!(line.contains(r#""activeLeaseCount":0"#), "line: {}", line);
+
+    drop(stdin);
+    let status = child.wait().expect("wait for child");
+    assert!(status.success(), "status: {:?}", status);
+
+    let down = run(&["hub", "down", "--json", "--root", root.to_str().unwrap()]);
+    assert!(down.status.success(), "stderr: {}", stderr(&down));
+}
+
+#[test]
+fn mcp_server_reuses_upstream_session_pool_for_same_session_calls() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let started_path = write_fake_upstream_config(root);
+
+    let mut child = Command::new(bin_path())
+        .args([
+            "mcp-server",
+            "--root",
+            root.to_str().unwrap(),
+            "--client-id",
+            "codex",
+            "--session-id",
+            "pooled-forwarding",
+            "--project-root",
+            root.to_str().unwrap(),
+        ])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn mcpace mcp-server");
+
+    let mut stdin = child.stdin.take().expect("child stdin");
+    let child_stdout = child.stdout.take().expect("child stdout");
+    let mut reader = BufReader::new(child_stdout);
+    let mut line = String::new();
+
+    writeln!(
+        stdin,
+        "{{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{{}},\"clientInfo\":{{\"name\":\"codex-cli\",\"version\":\"0.122.0\"}}}}}}"
+    )
+    .unwrap();
+    reader
+        .read_line(&mut line)
+        .expect("read initialize response");
+    assert!(
+        line.contains(r#""serverInfo":{"name":"mcpace""#),
+        "line: {}",
+        line
+    );
+
+    writeln!(
+        stdin,
+        "{{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}}"
+    )
+    .unwrap();
+    write_json_line(
+        &mut stdin,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"first"},"timeoutMs":5000}}}"#,
+    );
+    line.clear();
+    reader
+        .read_line(&mut line)
+        .expect("read first pooled upstream_call response");
+    let first = mcp_structured_content(&line);
+    assert_eq!(first["upstreamOk"].as_bool(), Some(true), "line: {line}");
+    assert_eq!(
+        first["sessionPoolEnabled"].as_bool(),
+        Some(true),
+        "line: {line}"
+    );
+    assert_eq!(
+        first["sessionPoolHit"].as_bool(),
+        Some(false),
+        "line: {line}"
+    );
+    assert_eq!(
+        fs::read_to_string(&started_path)
+            .expect("started log")
+            .lines()
+            .count(),
+        1,
+        "first call should start one upstream process"
+    );
+
+    write_json_line(
+        &mut stdin,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"second"},"timeoutMs":5000}}}"#,
+    );
+    line.clear();
+    reader
+        .read_line(&mut line)
+        .expect("read second pooled upstream_call response");
+    let second = mcp_structured_content(&line);
+    assert_eq!(second["upstreamOk"].as_bool(), Some(true), "line: {line}");
+    assert_eq!(
+        second["sessionPoolHit"].as_bool(),
+        Some(true),
+        "line: {line}"
+    );
+    assert_eq!(
+        second["sessionPoolSessionCallCount"].as_u64(),
+        Some(2),
+        "line: {line}"
+    );
+    assert_eq!(
+        fs::read_to_string(&started_path)
+            .expect("started log")
+            .lines()
+            .count(),
+        1,
+        "second call should reuse the initialized upstream process"
+    );
+
+    write_json_line(
+        &mut stdin,
+        r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"runtime_leases","arguments":{}}}"#,
+    );
+    line.clear();
+    reader
+        .read_line(&mut line)
+        .expect("read runtime_leases response");
+    let leases = mcp_structured_content(&line);
+    assert_eq!(leases["activeLeaseCount"].as_u64(), Some(0), "line: {line}");
 
     drop(stdin);
     let status = child.wait().expect("wait for child");
@@ -746,7 +886,7 @@ fn mcp_server_upstream_call_cancels_when_heartbeat_loses_lease() {
     .unwrap();
     write_json_line(
         &mut stdin,
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"delayMs":1200},"timeoutMs":5000,"ttlMs":300}}}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"delayMs":1200},"timeoutMs":5000,"ttlMs":1000}}}"#,
     );
 
     thread::sleep(Duration::from_millis(350));

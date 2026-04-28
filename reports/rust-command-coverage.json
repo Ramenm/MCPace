@@ -47,11 +47,10 @@
     "verify doctor",
     "verify readiness",
     "repair",
+    "release build",
     "update check"
   ],
-  "plannedCommandGroups": [
-    "release"
-  ],
+  "plannedCommandGroups": [],
   "bridgeOnlyCommands": 0,
   "implementedReadOnlyNotes": {
     "profile": "mutation not implemented yet",
@@ -68,6 +67,7 @@
     "service": "user-level autostart install/status/uninstall/print via the auto-launch crate; uses the current executable path instead of requiring mcpace in PATH",
     "serve": "public one-port localhost HTTP surface with start/stop/status lifecycle commands",
     "mcp-server": "internal MCP compatibility surface for stdio bootstrap/fallback flows with lease-gated and heartbeat-renewed upstream wrapper calls",
-    "update": "safe update-check guidance only; reports package-manager commands and never self-updates the running binary"
+    "update": "safe update-check guidance only; reports package-manager commands and never self-updates the running binary",
+    "release": "local release artifact/proof bundle wrapper only; builds artifacts and checksums without publishing to npm or GitHub"
   }
 }

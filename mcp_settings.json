@@ -96,7 +96,7 @@
       ]
     },
     "git": {
-      "enabled": false,
+      "enabled": true,
       "owner": "admin",
       "type": "stdio",
       "command": "uvx",
@@ -148,10 +148,13 @@
       ]
     },
     "windows-mcp": {
-      "enabled": false,
+      "enabled": true,
       "owner": "admin",
-      "type": "http",
-      "url": "http://host.docker.internal:8233/mcp"
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "windows-mcp"
+      ]
     },
     "screenpipe": {
       "enabled": false,
@@ -204,7 +207,7 @@
       }
     },
     "time": {
-      "enabled": false,
+      "enabled": true,
       "owner": "admin",
       "type": "stdio",
       "command": "uvx",
@@ -223,7 +226,7 @@
       ]
     },
     "sqlite": {
-      "enabled": false,
+      "enabled": true,
       "owner": "admin",
       "type": "stdio",
       "command": "uvx",
@@ -272,7 +275,7 @@
       }
     },
     "playwright": {
-      "enabled": false,
+      "enabled": true,
       "owner": "admin",
       "type": "stdio",
       "command": "npx",
@@ -287,7 +290,7 @@
       }
     },
     "everything": {
-      "enabled": false,
+      "enabled": true,
       "owner": "admin",
       "type": "stdio",
       "command": "npx",
@@ -343,9 +346,3 @@
     }
   ]
 }
-
-
-
-
-
-

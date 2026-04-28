@@ -1,12 +1,12 @@
 # Rust Command Coverage
 
 - legacy shell entrypoints removed from repo: **yes**
-- source-level native command surfaces today: **39**
-- grouped commands implemented now: **`client`, `hub`, `init`, `lab`, `repair`, `server`, `verify`**
-- planned grouped commands still remaining: **1** (`release`)
+- source-level native command surfaces today: **40**
+- grouped commands implemented now: **`client`, `hub`, `init`, `lab`, `release`, `repair`, `server`, `verify`**
+- planned grouped commands still remaining: **0**
 - partially unimplemented grouped sub-surfaces: **1** (`client export` remains preview-only for blocked/public lanes)
 - bridge-only commands remaining: **0**
-- explicit not-yet-implemented commands/capabilities: **persistent upstream process-pool/session ownership, config-writing client export for blocked/public lanes, release**
+- explicit not-yet-implemented commands/capabilities: **persistent upstream process-pool/session ownership, config-writing client export for blocked/public lanes**
 
 | Surface | Status | Notes |
 |---|---|---|
@@ -49,4 +49,4 @@
 | `verify doctor` | native-rust-read-only | grouped wrapper over doctor report |
 | `verify readiness` | native-rust-read-only | profile-aware readiness summary for required/runtime-enabled servers and host prerequisites |
 | `repair` | native-rust | grouped shorthand for `hub repair` on the public CLI surface |
-| `release` | planned | build/release target |
+| `release build` | native-rust | wraps the local source release artifact builder and proof bundle without publishing to npm/GitHub |

@@ -25,13 +25,16 @@ test('rust command coverage reflects the currently implemented launch and instal
     'serve stop',
     'mcp-server',
     'client install',
-    'client restore'
+    'client restore',
+    'release build'
   ]) {
     assert.ok(commands.has(command), `missing native command coverage for ${command}`);
   }
 
   assert.ok(!coverage.plannedCommandGroups.includes('client install'));
+  assert.ok(!coverage.plannedCommandGroups.includes('release'));
   assert.match(coverage.implementedReadOnlyNotes.client, /config-writing install/i);
+  assert.match(coverage.implementedReadOnlyNotes.release, /without publishing/i);
   assert.doesNotMatch(coverage.implementedReadOnlyNotes.client, /install\/config-writing export not implemented yet/i);
 });
 

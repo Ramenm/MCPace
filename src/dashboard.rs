@@ -3,9 +3,11 @@ use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::runtimepaths;
 use crate::upstream;
+use std::collections::BTreeSet;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
@@ -35,6 +37,7 @@ struct DashboardConfig {
     root_path: PathBuf,
     max_requests: Option<usize>,
     surface: ServeSurface,
+    upstream_session_pool: Mutex<upstream::UpstreamSessionPool>,
 }
 
 #[derive(Clone, Copy)]
@@ -125,6 +128,7 @@ fn run_internal(
             root_path,
             max_requests: parsed.max_requests,
             surface,
+            upstream_session_pool: Mutex::new(upstream::UpstreamSessionPool::default()),
         },
         stderr,
     )
@@ -521,7 +525,7 @@ fn handle_mcp_http_request(
                         (
                             "instructions",
                             JsonValue::string(
-                            "Use MCPace over HTTP on this local port. Management tools are native here; configured stdio upstreams are discovered from mcp_settings.json, cataloged with upstream_catalog, probed with upstream_probe, listed with upstream_tools, called once through upstream_call, or called as a single state-preserving sequence through upstream_batch. HTTP-only upstreams remain explicit diagnostics until a real proxy is configured.",
+                            "Use MCPace over HTTP on this local port. Management tools are native here; configured stdio upstreams are discovered from mcp_settings.json, cataloged with upstream_catalog, probed with upstream_probe, audited with upstream_policy_audit, suggested with upstream_policy_suggest, listed with upstream_tools, called once through upstream_call, or called as a single state-preserving sequence through upstream_batch. Call surface_manifest for the exact native-vs-upstream surface contract. HTTP-only upstreams remain explicit diagnostics until a real proxy is configured.",
                             ),
                         ),
                     ]),
@@ -547,27 +551,28 @@ fn handle_mcp_http_request(
             let args = json_helpers::value_at_path(&message, &["params", "arguments"])
                 .cloned()
                 .unwrap_or_else(empty_object);
-            let (structured, is_error) = match run_http_tool(&config.root_path, tool_name, &args) {
-                Ok(value) => (value, false),
-                Err(error) => (
-                    JsonValue::object([
-                        ("ok", JsonValue::bool(false)),
-                        ("tool", JsonValue::string(tool_name)),
-                        ("error", JsonValue::string(error)),
-                        (
-                            "supportedTools",
-                            JsonValue::array(http_tool_definitions().into_iter().filter_map(
-                                |tool| {
-                                    tool.get("name")
-                                        .and_then(JsonValue::as_str)
-                                        .map(JsonValue::string)
-                                },
-                            )),
-                        ),
-                    ]),
-                    true,
-                ),
-            };
+            let (structured, is_error) =
+                match run_http_tool(config, tool_name, &args, Some(request)) {
+                    Ok(value) => (value, false),
+                    Err(error) => (
+                        JsonValue::object([
+                            ("ok", JsonValue::bool(false)),
+                            ("tool", JsonValue::string(tool_name)),
+                            ("error", JsonValue::string(error)),
+                            (
+                                "supportedTools",
+                                JsonValue::array(http_tool_definitions().into_iter().filter_map(
+                                    |tool| {
+                                        tool.get("name")
+                                            .and_then(JsonValue::as_str)
+                                            .map(JsonValue::string)
+                                    },
+                                )),
+                            ),
+                        ]),
+                        true,
+                    ),
+                };
             Ok(mcp_tool_result(id, structured, is_error))
         }
         _ => Ok(McpHttpResponse::Json(JsonValue::object([
@@ -727,6 +732,49 @@ fn http_tool_definitions() -> Vec<JsonValue> {
             "Explain MCPace runtime and upstream tool availability",
         ),
         http_tool_with_schema(
+            "surface_manifest",
+            "Explain exact native MCPace tools versus configured upstream MCP tools",
+            JsonValue::object([
+                (
+                    "includeLiveCatalog",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "When true, launch/probe configured callable upstreams and include the live upstream_catalog output.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Optional per-server catalog timeout from 1000 to 300000 ms when includeLiveCatalog=true.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Bypass the short tools/list cache when includeLiveCatalog=true.",
+                            ),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
+        ),
+        http_tool_with_schema(
             "upstream_tools",
             "List callable tools for one configured stdio upstream MCP server",
             JsonValue::object([
@@ -852,6 +900,88 @@ fn http_tool_definitions() -> Vec<JsonValue> {
             vec![],
         ),
         http_tool_with_schema(
+            "upstream_policy_audit",
+            "Audit configured upstream MCP tool annotations and declarative MCPace toolPolicies",
+            JsonValue::object([
+                (
+                    "server",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Optional configured upstream server name. Omit to audit all configured upstream tools.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional per-server audit timeout from 1000 to 300000 ms."),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Bypass the short tools/list cache and force a fresh upstream audit.",
+                            ),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
+        ),
+        http_tool_with_schema(
+            "upstream_policy_suggest",
+            "Generate declarative MCPace toolPolicies suggestions from live upstream MCP risk signals",
+            JsonValue::object([
+                (
+                    "server",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Optional configured upstream server name. Omit to suggest policies for all configured upstream tools.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional per-server suggestion timeout from 1000 to 300000 ms."),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Bypass the short tools/list cache and force fresh upstream suggestions.",
+                            ),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
+        ),
+        http_tool_with_schema(
             "upstream_call",
             "Call a tool on a configured stdio upstream server",
             JsonValue::object([
@@ -919,6 +1049,74 @@ fn http_tool_definitions() -> Vec<JsonValue> {
                 (
                     "metadata",
                     JsonValue::object([("type", JsonValue::string("object"))]),
+                ),
+                (
+                    "allowDesktopObservation",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Explicitly allow windows-mcp observation tools such as Snapshot/Screenshot/Scrape for this call.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "allowDesktopControl",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Explicitly allow windows-mcp desktop-control tools such as App/Click/Type/Shortcut for this call.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "allowSystemControl",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Explicitly allow windows-mcp system tools such as PowerShell/FileSystem/Clipboard/Process/Registry for this call.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "allowToolRiskClasses",
+                    JsonValue::object([
+                        ("type", JsonValue::string("array")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Generic risk-class opt-in for config-declared upstream tool policies, for example ['desktop-observation'].",
+                            ),
+                        ),
+                        (
+                            "items",
+                            JsonValue::object([("type", JsonValue::string("string"))]),
+                        ),
+                    ]),
+                ),
+                (
+                    "allowArguments",
+                    JsonValue::object([
+                        ("type", JsonValue::string("array")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Generic allow-argument opt-in names for config-declared upstream tool policies, for example ['allowCustomRisk'].",
+                            ),
+                        ),
+                        (
+                            "items",
+                            JsonValue::object([("type", JsonValue::string("string"))]),
+                        ),
+                    ]),
                 ),
             ]),
             vec!["server", "tool"],
@@ -1025,6 +1223,74 @@ fn http_tool_definitions() -> Vec<JsonValue> {
                     "metadata",
                     JsonValue::object([("type", JsonValue::string("object"))]),
                 ),
+                (
+                    "allowDesktopObservation",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Explicitly allow windows-mcp observation tools such as Snapshot/Screenshot/Scrape for this batch.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "allowDesktopControl",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Explicitly allow windows-mcp desktop-control tools such as App/Click/Type/Shortcut for this batch.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "allowSystemControl",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Explicitly allow windows-mcp system tools such as PowerShell/FileSystem/Clipboard/Process/Registry for this batch.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "allowToolRiskClasses",
+                    JsonValue::object([
+                        ("type", JsonValue::string("array")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Generic risk-class opt-in for config-declared upstream tool policies, for example ['desktop-observation'].",
+                            ),
+                        ),
+                        (
+                            "items",
+                            JsonValue::object([("type", JsonValue::string("string"))]),
+                        ),
+                    ]),
+                ),
+                (
+                    "allowArguments",
+                    JsonValue::object([
+                        ("type", JsonValue::string("array")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Generic allow-argument opt-in names for config-declared upstream tool policies, for example ['allowCustomRisk'].",
+                            ),
+                        ),
+                        (
+                            "items",
+                            JsonValue::object([("type", JsonValue::string("string"))]),
+                        ),
+                    ]),
+                ),
             ]),
             vec!["server", "calls"],
         ),
@@ -1062,7 +1328,24 @@ fn http_tool_with_schema(
     ])
 }
 
-fn run_http_tool(root_path: &Path, name: &str, args: &JsonValue) -> Result<JsonValue, String> {
+fn http_tool_names() -> Vec<String> {
+    http_tool_definitions()
+        .into_iter()
+        .filter_map(|tool| {
+            tool.get("name")
+                .and_then(JsonValue::as_str)
+                .map(str::to_string)
+        })
+        .collect()
+}
+
+fn run_http_tool(
+    config: &DashboardConfig,
+    name: &str,
+    args: &JsonValue,
+    request: Option<&HttpRequest>,
+) -> Result<JsonValue, String> {
+    let root_path = &config.root_path;
     match name {
         "doctor" => run_json_command(root_path, &["doctor", "--json"]),
         "hub_status" => run_json_command(root_path, &["hub", "status", "--json"]),
@@ -1086,6 +1369,23 @@ fn run_http_tool(root_path: &Path, name: &str, args: &JsonValue) -> Result<JsonV
         }
         "server_list" => run_json_command(root_path, &["server", "list", "--json"]),
         "runtime_diagnostics" => runtime_diagnostics(root_path),
+        "surface_manifest" => {
+            let include_live_catalog =
+                json_helpers::bool_at_path(args, &["includeLiveCatalog"]).unwrap_or(false);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            upstream::surface_manifest(
+                root_path,
+                "streamable-http",
+                http_tool_names(),
+                include_live_catalog,
+                timeout_ms,
+                refresh,
+            )
+        }
         "upstream_tools" => {
             let server = json_helpers::string_at_path(args, &["server"]);
             let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
@@ -1113,6 +1413,24 @@ fn run_http_tool(root_path: &Path, name: &str, args: &JsonValue) -> Result<JsonV
             let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
             upstream::catalog_tools(root_path, server, timeout_ms, refresh)
         }
+        "upstream_policy_audit" => {
+            let server = json_helpers::string_at_path(args, &["server"]);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            upstream::audit_tool_policies(root_path, server, timeout_ms, refresh)
+        }
+        "upstream_policy_suggest" => {
+            let server = json_helpers::string_at_path(args, &["server"]);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            upstream::suggest_tool_policies(root_path, server, timeout_ms, refresh)
+        }
         "upstream_call" => {
             let server = json_helpers::string_at_path(args, &["server"])
                 .ok_or_else(|| "upstream_call requires a 'server' string".to_string())?;
@@ -1125,14 +1443,15 @@ fn run_http_tool(root_path: &Path, name: &str, args: &JsonValue) -> Result<JsonV
                 .and_then(JsonValue::as_i64)
                 .filter(|value| *value > 0)
                 .map(|value| value as u64);
-            let context = http_upstream_lease_context(args)?;
-            upstream::call_tool_with_context(
+            let context = http_upstream_lease_context(args, request)?;
+            upstream::call_tool_with_pooled_context(
                 root_path,
                 server,
                 tool,
                 &arguments,
                 timeout_ms,
                 Some(&context),
+                &config.upstream_session_pool,
             )
         }
         "upstream_batch" => {
@@ -1158,27 +1477,47 @@ fn run_http_tool(root_path: &Path, name: &str, args: &JsonValue) -> Result<JsonV
                 .and_then(JsonValue::as_i64)
                 .filter(|value| *value > 0)
                 .map(|value| value as u64);
-            let context = http_upstream_lease_context(args)?;
-            upstream::call_tools_with_context(root_path, server, &calls, timeout_ms, Some(&context))
+            let context = http_upstream_lease_context(args, request)?;
+            upstream::call_tools_with_pooled_context(
+                root_path,
+                server,
+                &calls,
+                timeout_ms,
+                Some(&context),
+                &config.upstream_session_pool,
+            )
         }
         "browser_status" => upstream::browser_status(root_path),
         "client_list" => run_json_command(root_path, &["client", "list", "--json"]),
         other => Err(format!(
-            "unsupported MCPace HTTP tool '{}'. This HTTP endpoint exposes MCPace management tools and stdio upstream access through upstream_catalog/upstream_probe/upstream_tools/upstream_call/upstream_batch. Direct upstream tool names are not advertised; call upstream_catalog for concise descriptions, upstream_tools for one server's full schemas, then upstream_call or upstream_batch. Call runtime_diagnostics for exact status.",
+            "unsupported MCPace HTTP tool '{}'. This HTTP endpoint exposes MCPace management tools and stdio upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch. Direct upstream tool names are not advertised as native MCPace tools; call surface_manifest for the exact contract, upstream_catalog for concise descriptions, upstream_policy_audit for policy review, upstream_policy_suggest for generated policy candidates, upstream_tools for one server's full schemas, then upstream_call or upstream_batch. Call runtime_diagnostics for exact status.",
             other
         )),
     }
 }
 
-fn http_upstream_lease_context(args: &JsonValue) -> Result<upstream::UpstreamLeaseContext, String> {
+fn http_upstream_lease_context(
+    args: &JsonValue,
+    request: Option<&HttpRequest>,
+) -> Result<upstream::UpstreamLeaseContext, String> {
     Ok(upstream::UpstreamLeaseContext {
         client_id: Some(
-            optional_http_string(args, "clientId")?.unwrap_or_else(|| "local-http".to_string()),
+            optional_http_string(args, "clientId")?
+                .or_else(|| first_http_metadata_string(args, CLIENT_ID_METADATA_PATHS))
+                .or_else(|| request_header_string(request, "x-mcpace-client-id"))
+                .or_else(|| request_header_string(request, "x-codex-client-id"))
+                .unwrap_or_else(|| "local-http".to_string()),
         ),
-        session_id: optional_http_string(args, "sessionId")?,
-        project_root: optional_http_string(args, "projectRoot")?,
+        session_id: optional_http_string(args, "sessionId")?
+            .or_else(|| first_http_metadata_string(args, SESSION_ID_METADATA_PATHS))
+            .or_else(|| request_header_string(request, "mcp-session-id"))
+            .or_else(|| request_header_string(request, "x-mcpace-session-id"))
+            .or_else(|| request_header_string(request, "x-codex-session-id")),
+        project_root: optional_http_string(args, "projectRoot")?
+            .or_else(|| first_http_metadata_string(args, PROJECT_ROOT_METADATA_PATHS)),
         transport: Some(
             optional_http_string(args, "transport")?
+                .or_else(|| first_http_metadata_string(args, TRANSPORT_METADATA_PATHS))
                 .unwrap_or_else(|| "streamable-http".to_string()),
         ),
         metadata: json_helpers::value_at_path(args, &["metadata"]).cloned(),
@@ -1186,6 +1525,63 @@ fn http_upstream_lease_context(args: &JsonValue) -> Result<upstream::UpstreamLea
             .and_then(JsonValue::as_i64)
             .filter(|value| *value > 0)
             .map(|value| value as u128),
+        allow_arguments: http_allow_arguments(args)?,
+        allowed_tool_risk_classes: http_allowed_tool_risk_classes(args)?,
+    })
+}
+
+const CLIENT_ID_METADATA_PATHS: &[&[&str]] = &[
+    &["metadata", "client", "id"],
+    &["metadata", "clientId"],
+    &["metadata", "clientProfileId"],
+    &["metadata", "context", "clientId"],
+];
+
+const SESSION_ID_METADATA_PATHS: &[&[&str]] = &[
+    &["metadata", "session", "id"],
+    &["metadata", "sessionId"],
+    &["metadata", "externalSessionId"],
+    &["metadata", "conversationId"],
+    &["metadata", "context", "sessionId"],
+    &["metadata", "context", "externalSessionId"],
+    &["metadata", "headers", "Mcp-Session-Id"],
+    &["metadata", "headers", "mcp-session-id"],
+];
+
+const PROJECT_ROOT_METADATA_PATHS: &[&[&str]] = &[
+    &["metadata", "projectRoot"],
+    &["metadata", "workspaceRoot"],
+    &["metadata", "workspace", "root"],
+    &["metadata", "context", "projectRoot"],
+    &["metadata", "context", "cwd"],
+    &["metadata", "cwd"],
+];
+
+const TRANSPORT_METADATA_PATHS: &[&[&str]] = &[
+    &["metadata", "transport"],
+    &["metadata", "ingress"],
+    &["metadata", "context", "transport"],
+];
+
+fn first_http_metadata_string(args: &JsonValue, paths: &[&[&str]]) -> Option<String> {
+    paths.iter().find_map(|path| {
+        json_helpers::string_at_path(args, path)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
+    })
+}
+
+fn request_header_string(request: Option<&HttpRequest>, key: &str) -> Option<String> {
+    let key = key.to_ascii_lowercase();
+    request.and_then(|request| {
+        request
+            .headers
+            .iter()
+            .find(|(candidate, _)| candidate == &key)
+            .map(|(_, value)| value.trim())
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned)
     })
 }
 
@@ -1195,6 +1591,15 @@ fn optional_http_string(args: &JsonValue, key: &str) -> Result<Option<String>, S
         Some(JsonValue::Null) | None => Ok(None),
         Some(_) => Err(format!("{} must be a string when provided", key)),
     }
+}
+
+fn http_allow_arguments(args: &JsonValue) -> Result<BTreeSet<String>, String> {
+    upstream::collect_allow_arguments(args).map_err(|error| format!("{} when provided", error))
+}
+
+fn http_allowed_tool_risk_classes(args: &JsonValue) -> Result<BTreeSet<String>, String> {
+    upstream::collect_allowed_tool_risk_classes(args)
+        .map_err(|error| format!("{} when provided", error))
 }
 
 fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
@@ -1217,14 +1622,7 @@ fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
         .iter()
         .filter(|server| json_helpers::bool_at_path(server, &["effectiveEnabled"]).unwrap_or(false))
         .count();
-    let exposed_tools = http_tool_definitions()
-        .into_iter()
-        .filter_map(|tool| {
-            tool.get("name")
-                .and_then(JsonValue::as_str)
-                .map(JsonValue::string)
-        })
-        .collect::<Vec<_>>();
+    let exposed_tools = http_tool_names();
 
     Ok(JsonValue::object([
         ("ok", JsonValue::bool(true)),
@@ -1235,7 +1633,7 @@ fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
         (
             "summary",
             JsonValue::string(
-                "MCPace HTTP MCP is reachable. This build exposes management tools plus explicit stdio upstream access through upstream_catalog/upstream_probe/upstream_tools/upstream_call/upstream_batch; direct upstream tool names are intentionally not advertised.",
+                "MCPace HTTP MCP is reachable. This build exposes management tools plus explicit stdio upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch; direct upstream tool names are intentionally not advertised as native MCPace tools.",
             ),
         ),
         ("doctor", doctor),
@@ -1257,9 +1655,27 @@ fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
                 (
                     "reason",
                     JsonValue::string(
-                        "MCPace forwards resolvable configured stdio upstreams through upstream_tools/upstream_call and uses upstream_batch for stateful multi-call sessions. upstream_catalog lists concise tool descriptions and upstream_probe checks configured servers without hardcoded names while reporting missing commands or broken future servers cleanly. Non-stdio HTTP upstream fan-out remains explicit blocked diagnostics.",
+                        "MCPace forwards resolvable configured stdio upstreams through upstream_tools/upstream_call and uses upstream_batch for stateful multi-call sessions. upstream_catalog lists concise tool descriptions, upstream_probe checks configured servers, upstream_policy_audit compares MCP annotations with declarative toolPolicies, and upstream_policy_suggest generates reviewable policy candidates without hardcoded server names. Non-stdio HTTP upstream fan-out remains explicit blocked diagnostics.",
                     ),
                 ),
+            ]),
+        ),
+        (
+            "surfaceContract",
+            JsonValue::object([
+                (
+                    "nativeTopLevelClaim",
+                    JsonValue::string(
+                        "Only the names in managementTools.names are returned by this endpoint's tools/list.",
+                    ),
+                ),
+                (
+                    "upstreamProjection",
+                    JsonValue::string(
+                        "Configured upstream tool names remain upstream; use surface_manifest for this exact contract and upstream_catalog/upstream_tools for live discovery.",
+                    ),
+                ),
+                ("directTopLevelProjectionEnabled", JsonValue::bool(false)),
             ]),
         ),
         ("upstreamInventory", upstream_inventory),
@@ -1267,7 +1683,10 @@ fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
             "managementTools",
             JsonValue::object([
                 ("count", JsonValue::number(exposed_tools.len())),
-                ("names", JsonValue::array(exposed_tools)),
+                (
+                    "names",
+                    JsonValue::array(exposed_tools.into_iter().map(JsonValue::string)),
+                ),
             ]),
         ),
         (
@@ -1281,7 +1700,7 @@ fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
         (
             "nextSafeAction",
             JsonValue::string(
-                "Use upstream_probe to check all configured upstream MCP servers, then upstream_tools with a specific stdio server, then upstream_call for stateless calls or upstream_batch for stateful sequences. Use browser_status for browser bridge truth; direct upstream tool names are intentionally not advertised.",
+                "Use surface_manifest to see the exact native-vs-upstream surface contract, upstream_probe to check all configured upstream MCP servers, upstream_policy_audit to review annotations/policy coverage, upstream_policy_suggest to generate policy candidates, then upstream_tools with a specific stdio server, then upstream_call for stateless calls or upstream_batch for stateful sequences. Use browser_status for browser bridge truth; direct upstream tool names are intentionally not advertised as native MCPace tools.",
             ),
         ),
     ]))
@@ -2240,6 +2659,7 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
     use std::path::PathBuf;
+    use std::sync::Mutex;
     use std::thread;
 
     fn write_minimal_config(root: &std::path::Path) {
@@ -2360,6 +2780,19 @@ rl.on('line', (line) => {
         value.replace('\\', "\\\\").replace('"', "\\\"")
     }
 
+    fn test_config(
+        root_path: PathBuf,
+        max_requests: Option<usize>,
+        surface: super::ServeSurface,
+    ) -> super::DashboardConfig {
+        super::DashboardConfig {
+            root_path,
+            max_requests,
+            surface,
+            upstream_session_pool: Mutex::new(crate::upstream::UpstreamSessionPool::default()),
+        }
+    }
+
     #[test]
     fn overview_json_contains_expected_sections() {
         let root = temp_root();
@@ -2378,8 +2811,9 @@ rl.on('line', (line) => {
     fn http_upstream_call_attaches_and_releases_runtime_lease() {
         let root = temp_root();
         write_fake_upstream_config(&root);
+        let config = test_config(root.clone(), None, super::ServeSurface::UnifiedServe);
         let result = run_http_tool(
-            &root,
+            &config,
             "upstream_call",
             &JsonValue::object([
                 ("server", JsonValue::string("fake")),
@@ -2390,6 +2824,7 @@ rl.on('line', (line) => {
                 ),
                 ("timeoutMs", JsonValue::number(5_000)),
             ]),
+            None,
         )
         .expect("upstream_call");
 
@@ -2413,6 +2848,106 @@ rl.on('line', (line) => {
             Some(0)
         );
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn http_upstream_lease_context_derives_affinity_from_metadata_and_headers() {
+        let request = super::HttpRequest {
+            method: "POST".to_string(),
+            path: "/mcp".to_string(),
+            query: String::new(),
+            headers: vec![
+                ("mcp-session-id".to_string(), "header-session".to_string()),
+                (
+                    "x-mcpace-client-id".to_string(),
+                    "header-client".to_string(),
+                ),
+            ],
+            body: Vec::new(),
+        };
+
+        let header_context =
+            super::http_upstream_lease_context(&super::empty_object(), Some(&request))
+                .expect("header context");
+        assert_eq!(header_context.client_id.as_deref(), Some("header-client"));
+        assert_eq!(header_context.session_id.as_deref(), Some("header-session"));
+        assert_eq!(header_context.transport.as_deref(), Some("streamable-http"));
+        assert!(header_context.allow_arguments.is_empty());
+        assert!(header_context.allowed_tool_risk_classes.is_empty());
+
+        let metadata_context = super::http_upstream_lease_context(
+            &JsonValue::object([(
+                "metadata",
+                JsonValue::object([
+                    (
+                        "session",
+                        JsonValue::object([("id", JsonValue::string("metadata-session"))]),
+                    ),
+                    ("clientId", JsonValue::string("metadata-client")),
+                    ("projectRoot", JsonValue::string("C:/metadata-project")),
+                    ("transport", JsonValue::string("metadata-transport")),
+                ]),
+            )]),
+            Some(&request),
+        )
+        .expect("metadata context");
+        assert_eq!(
+            metadata_context.client_id.as_deref(),
+            Some("metadata-client")
+        );
+        assert_eq!(
+            metadata_context.session_id.as_deref(),
+            Some("metadata-session")
+        );
+        assert_eq!(
+            metadata_context.project_root.as_deref(),
+            Some("C:/metadata-project")
+        );
+        assert_eq!(
+            metadata_context.transport.as_deref(),
+            Some("metadata-transport")
+        );
+
+        let explicit_context = super::http_upstream_lease_context(
+            &JsonValue::object([
+                ("clientId", JsonValue::string("explicit-client")),
+                ("sessionId", JsonValue::string("explicit-session")),
+                ("allowDesktopObservation", JsonValue::bool(true)),
+                ("allowDesktopControl", JsonValue::bool(true)),
+                ("allowSystemControl", JsonValue::bool(true)),
+                (
+                    "allowToolRiskClasses",
+                    JsonValue::array([JsonValue::string("custom-risk")]),
+                ),
+                (
+                    "allowArguments",
+                    JsonValue::array([JsonValue::string("allowCustomRisk")]),
+                ),
+            ]),
+            Some(&request),
+        )
+        .expect("explicit context");
+        assert_eq!(
+            explicit_context.client_id.as_deref(),
+            Some("explicit-client")
+        );
+        assert_eq!(
+            explicit_context.session_id.as_deref(),
+            Some("explicit-session")
+        );
+        assert!(explicit_context
+            .allow_arguments
+            .contains("allowDesktopObservation"));
+        assert!(explicit_context
+            .allow_arguments
+            .contains("allowDesktopControl"));
+        assert!(explicit_context
+            .allow_arguments
+            .contains("allowSystemControl"));
+        assert!(explicit_context
+            .allowed_tool_risk_classes
+            .contains("custom-risk"));
+        assert!(explicit_context.allow_arguments.contains("allowCustomRisk"));
     }
 
     #[test]
@@ -2453,6 +2988,9 @@ rl.on('line', (line) => {
 
     #[test]
     fn dashboard_serves_root_and_overview() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let root = temp_root();
         write_minimal_config(&root);
 
@@ -2463,11 +3001,7 @@ rl.on('line', (line) => {
             let mut stderr = Vec::new();
             serve_listener(
                 listener,
-                super::DashboardConfig {
-                    root_path: server_root,
-                    max_requests: Some(2),
-                    surface: super::ServeSurface::Dashboard,
-                },
+                test_config(server_root, Some(2), super::ServeSurface::Dashboard),
                 &mut stderr,
             )
         });
@@ -2502,6 +3036,9 @@ rl.on('line', (line) => {
 
     #[test]
     fn unified_serve_exposes_health_and_mcp_routes() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let root = temp_root();
         write_minimal_config(&root);
 
@@ -2512,11 +3049,7 @@ rl.on('line', (line) => {
             let mut stderr = Vec::new();
             serve_listener(
                 listener,
-                super::DashboardConfig {
-                    root_path: server_root,
-                    max_requests: Some(8),
-                    surface: super::ServeSurface::UnifiedServe,
-                },
+                test_config(server_root, Some(8), super::ServeSurface::UnifiedServe),
                 &mut stderr,
             )
         });
@@ -2602,9 +3135,12 @@ rl.on('line', (line) => {
         assert!(tools_response.contains("\"hub_status\""));
         assert!(tools_response.contains("\"hub_repair\""));
         assert!(tools_response.contains("\"runtime_diagnostics\""));
+        assert!(tools_response.contains("\"surface_manifest\""));
         assert!(tools_response.contains("\"upstream_tools\""));
         assert!(tools_response.contains("\"upstream_catalog\""));
         assert!(tools_response.contains("\"upstream_probe\""));
+        assert!(tools_response.contains("\"upstream_policy_audit\""));
+        assert!(tools_response.contains("\"upstream_policy_suggest\""));
         assert!(tools_response.contains("\"upstream_call\""));
         assert!(tools_response.contains("\"upstream_batch\""));
         assert!(tools_response.contains("\"browser_status\""));
@@ -2628,7 +3164,7 @@ rl.on('line', (line) => {
         );
         assert!(
             unsupported_response.contains(
-                "upstream_catalog/upstream_probe/upstream_tools/upstream_call/upstream_batch"
+                "surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch"
             ),
             "unsupported response: {}",
             unsupported_response
@@ -2648,6 +3184,11 @@ rl.on('line', (line) => {
         stream.read_to_string(&mut diagnostics_response).unwrap();
         assert!(
             diagnostics_response.contains("\"upstreamForwarding\""),
+            "diagnostics response: {}",
+            diagnostics_response
+        );
+        assert!(
+            diagnostics_response.contains("\"surfaceContract\""),
             "diagnostics response: {}",
             diagnostics_response
         );
@@ -2691,6 +3232,9 @@ rl.on('line', (line) => {
 
     #[test]
     fn dashboard_actions_reject_cross_origin_posts() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let root = temp_root();
         write_minimal_config(&root);
 
@@ -2701,11 +3245,7 @@ rl.on('line', (line) => {
             let mut stderr = Vec::new();
             serve_listener(
                 listener,
-                super::DashboardConfig {
-                    root_path: server_root,
-                    max_requests: Some(1),
-                    surface: super::ServeSurface::Dashboard,
-                },
+                test_config(server_root, Some(1), super::ServeSurface::Dashboard),
                 &mut stderr,
             )
         });

@@ -43,9 +43,13 @@ test('README reflects the Rust-only repo contract and current client/server grou
   assert.match(normalized, /Rust-first local MCP hub/i);
   assert.match(normalized, /client plan/i);
   assert.match(normalized, /lab report/i);
+  assert.match(normalized, /release build/i);
+  assert.match(normalized, /does not publish/i);
   assert.match(normalized, /single local MCP hub for many clients/i);
   assert.match(normalized, /not implemented yet/i);
   assert.match(normalized, /2025-11-25/);
+  assert.doesNotMatch(normalized, /release command remains planned/i);
+  assert.doesNotMatch(normalized, /release still fail/i);
   assert.doesNotMatch(readme, /pwsh\s+\.\//i);
   assert.doesNotMatch(readme, /\.\/manager\.ps1/i);
 });

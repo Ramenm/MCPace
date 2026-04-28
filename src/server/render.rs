@@ -17,12 +17,13 @@ pub(super) fn render_list(
     for record in records {
         let _ = writeln!(
             stdout,
-            "- {} [{}] required={} source-enabled={} profile-enabled={} effective-enabled={} default-enabled={}",
+            "- {} [{}] required={} source-enabled={} profile-enabled={} platform-supported={} effective-enabled={} default-enabled={}",
             record.name,
             record.kind,
             yes_no(record.required),
             yes_no(record.source_enabled),
             yes_no(record.profile_enabled),
+            yes_no(record.platform_supported),
             yes_no(record.effective_enabled),
             yes_no(record.default_enabled)
         );
@@ -72,6 +73,11 @@ pub(super) fn render_capabilities(
             join_or_none(&record.supported_transports)
         );
         let _ = writeln!(stdout, "    platforms: {}", join_or_none(&record.platforms));
+        let _ = writeln!(
+            stdout,
+            "    platform supported: {}",
+            yes_no(record.platform_supported)
+        );
         let _ = writeln!(
             stdout,
             "    required commands: {}",

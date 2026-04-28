@@ -2,8 +2,10 @@ use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
 use crate::{app, upstream};
+use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 #[derive(Debug, Default)]
 struct ParsedArgs {
@@ -105,6 +107,11 @@ const TOOL_SPECS: &[ToolSpec] = &[
         description: "Return the client launcher contract for a target surface.",
     },
     ToolSpec {
+        name: "surface_manifest",
+        title: "Explain the MCPace tool surface",
+        description: "Return the transparent contract for native MCPace tools versus configured upstream MCP tools; optionally include a live upstream catalog.",
+    },
+    ToolSpec {
         name: "upstream_tools",
         title: "List one upstream server's tools",
         description: "List callable tools for one configured stdio upstream MCP server; omit server for fast inventory only.",
@@ -118,6 +125,16 @@ const TOOL_SPECS: &[ToolSpec] = &[
         name: "upstream_probe",
         title: "Probe configured upstream servers",
         description: "Probe configured upstream MCP servers without hardcoded server names; uses the short successful tools/list cache unless refresh=true is supplied.",
+    },
+    ToolSpec {
+        name: "upstream_policy_audit",
+        title: "Audit upstream tool policies",
+        description: "Audit configured upstream MCP tool annotations and declarative MCPace toolPolicies to find tools that need review or explicit guards.",
+    },
+    ToolSpec {
+        name: "upstream_policy_suggest",
+        title: "Suggest upstream tool policies",
+        description: "Generate declarative mcpace.config.json toolPolicies suggestions from live upstream MCP annotations and advisory risk signals.",
     },
     ToolSpec {
         name: "upstream_call",
@@ -178,6 +195,7 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
     let mut initialize_seen = false;
     let mut initialized_notification_seen = false;
     let mut initialize_params: Option<JsonValue> = None;
+    let upstream_session_pool = Mutex::new(upstream::UpstreamSessionPool::default());
 
     loop {
         line.clear();
@@ -339,19 +357,24 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                     .cloned()
                     .unwrap_or_else(mcp::empty_object);
 
-                let response =
-                    match execute_tool(&config, name, &arguments, initialize_params.as_ref()) {
-                        Ok(value) => mcp::result(id, value),
-                        Err(ToolCallError::InvalidParams(message)) => {
-                            mcp::error(id, mcp::ERROR_INVALID_PARAMS, &message, None)
-                        }
-                        Err(ToolCallError::UnknownTool(message)) => {
-                            mcp::error(id, mcp::ERROR_METHOD_NOT_FOUND, &message, None)
-                        }
-                        Err(ToolCallError::Execution(message)) => {
-                            mcp::result(id, tool_error_result(message))
-                        }
-                    };
+                let response = match execute_tool(
+                    &config,
+                    name,
+                    &arguments,
+                    initialize_params.as_ref(),
+                    &upstream_session_pool,
+                ) {
+                    Ok(value) => mcp::result(id, value),
+                    Err(ToolCallError::InvalidParams(message)) => {
+                        mcp::error(id, mcp::ERROR_INVALID_PARAMS, &message, None)
+                    }
+                    Err(ToolCallError::UnknownTool(message)) => {
+                        mcp::error(id, mcp::ERROR_METHOD_NOT_FOUND, &message, None)
+                    }
+                    Err(ToolCallError::Execution(message)) => {
+                        mcp::result(id, tool_error_result(message))
+                    }
+                };
                 if write_message(stdout, &response).is_err() {
                     return 1;
                 }
@@ -672,7 +695,55 @@ fn tool_definition(tool: &ToolSpec) -> JsonValue {
                     ),
                     ("additionalProperties", JsonValue::bool(false)),
                 ]),
-                "upstream_tools" | "upstream_catalog" => JsonValue::object([
+                "surface_manifest" => JsonValue::object([
+                    ("type", JsonValue::string("object")),
+                    (
+                        "properties",
+                        JsonValue::object([
+                            (
+                                "includeLiveCatalog",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "When true, launch/probe configured callable upstreams and include the live upstream_catalog output.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "timeoutMs",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("integer")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Optional per-server catalog timeout from 1000 to 300000 ms when includeLiveCatalog=true.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "refresh",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Bypass the short tools/list cache when includeLiveCatalog=true.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                        ]),
+                    ),
+                    ("additionalProperties", JsonValue::bool(false)),
+                ]),
+                "upstream_tools"
+                | "upstream_catalog"
+                | "upstream_policy_audit"
+                | "upstream_policy_suggest" => JsonValue::object([
                     ("type", JsonValue::string("object")),
                     (
                         "properties",
@@ -871,6 +942,74 @@ fn tool_definition(tool: &ToolSpec) -> JsonValue {
                                     ),
                                 ]),
                             ),
+                            (
+                                "allowDesktopObservation",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Explicitly allow windows-mcp observation tools such as Snapshot/Screenshot/Scrape for this call.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowDesktopControl",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Explicitly allow windows-mcp desktop-control tools such as App/Click/Type/Shortcut for this call.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowSystemControl",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Explicitly allow windows-mcp system tools such as PowerShell/FileSystem/Clipboard/Process/Registry for this call.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowToolRiskClasses",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("array")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Generic risk-class opt-in for config-declared upstream tool policies, for example ['desktop-observation'].",
+                                        ),
+                                    ),
+                                    (
+                                        "items",
+                                        JsonValue::object([("type", JsonValue::string("string"))]),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowArguments",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("array")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Generic allow-argument opt-in names for config-declared upstream tool policies, for example ['allowCustomRisk'].",
+                                        ),
+                                    ),
+                                    (
+                                        "items",
+                                        JsonValue::object([("type", JsonValue::string("string"))]),
+                                    ),
+                                ]),
+                            ),
                         ]),
                     ),
                     (
@@ -962,6 +1101,74 @@ fn tool_definition(tool: &ToolSpec) -> JsonValue {
                                     ),
                                 ]),
                             ),
+                            (
+                                "allowDesktopObservation",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Explicitly allow windows-mcp observation tools such as Snapshot/Screenshot/Scrape for this batch.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowDesktopControl",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Explicitly allow windows-mcp desktop-control tools such as App/Click/Type/Shortcut for this batch.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowSystemControl",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Explicitly allow windows-mcp system tools such as PowerShell/FileSystem/Clipboard/Process/Registry for this batch.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowToolRiskClasses",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("array")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Generic risk-class opt-in for config-declared upstream tool policies, for example ['desktop-observation'].",
+                                        ),
+                                    ),
+                                    (
+                                        "items",
+                                        JsonValue::object([("type", JsonValue::string("string"))]),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowArguments",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("array")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Generic allow-argument opt-in names for config-declared upstream tool policies, for example ['allowCustomRisk'].",
+                                        ),
+                                    ),
+                                    (
+                                        "items",
+                                        JsonValue::object([("type", JsonValue::string("string"))]),
+                                    ),
+                                ]),
+                            ),
                         ]),
                     ),
                     (
@@ -980,6 +1187,13 @@ fn tool_definition(tool: &ToolSpec) -> JsonValue {
     ])
 }
 
+fn mcp_tool_names() -> Vec<String> {
+    TOOL_SPECS
+        .iter()
+        .map(|tool| tool.name.to_string())
+        .collect()
+}
+
 enum ToolCallError {
     InvalidParams(String),
     UnknownTool(String),
@@ -991,6 +1205,7 @@ fn execute_tool(
     tool_name: &str,
     arguments: &JsonValue,
     initialize_params: Option<&JsonValue>,
+    upstream_session_pool: &Mutex<upstream::UpstreamSessionPool>,
 ) -> Result<JsonValue, ToolCallError> {
     let result = match tool_name {
         "doctor" => run_json_command(config, &["doctor", "--json"])?,
@@ -1066,6 +1281,21 @@ fn execute_tool(
             config,
             build_client_args("export", config, arguments, initialize_params)?,
         )?,
+        "surface_manifest" => {
+            let include_live_catalog =
+                bool_argument(arguments, "includeLiveCatalog")?.unwrap_or(false);
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            upstream::surface_manifest(
+                &config.root_path,
+                &config.transport,
+                mcp_tool_names(),
+                include_live_catalog,
+                timeout_ms,
+                refresh,
+            )
+            .map_err(ToolCallError::Execution)?
+        }
         "upstream_tools" => {
             let server = optional_string_argument(arguments, "server")?;
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
@@ -1087,6 +1317,25 @@ fn execute_tool(
             upstream::probe_servers(&config.root_path, server.as_deref(), timeout_ms, refresh)
                 .map_err(ToolCallError::Execution)?
         }
+        "upstream_policy_audit" => {
+            let server = optional_string_argument(arguments, "server")?;
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            upstream::audit_tool_policies(&config.root_path, server.as_deref(), timeout_ms, refresh)
+                .map_err(ToolCallError::Execution)?
+        }
+        "upstream_policy_suggest" => {
+            let server = optional_string_argument(arguments, "server")?;
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            upstream::suggest_tool_policies(
+                &config.root_path,
+                server.as_deref(),
+                timeout_ms,
+                refresh,
+            )
+            .map_err(ToolCallError::Execution)?
+        }
         "upstream_call" => {
             let server = required_string_argument(arguments, "server")?;
             let tool = required_string_argument(arguments, "tool")?;
@@ -1095,13 +1344,14 @@ fn execute_tool(
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
             let context =
                 ForwardedContext::from_tool_arguments(config, arguments, initialize_params)?;
-            upstream::call_tool_with_context(
+            upstream::call_tool_with_pooled_context(
                 &config.root_path,
                 &server,
                 &tool,
                 &upstream_arguments,
                 timeout_ms,
                 Some(&context.upstream_lease_context(integer_argument(arguments, "ttlMs")?)),
+                upstream_session_pool,
             )
             .map_err(ToolCallError::Execution)?
         }
@@ -1134,12 +1384,13 @@ fn execute_tool(
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
             let context =
                 ForwardedContext::from_tool_arguments(config, arguments, initialize_params)?;
-            upstream::call_tools_with_context(
+            upstream::call_tools_with_pooled_context(
                 &config.root_path,
                 &server,
                 &calls,
                 timeout_ms,
                 Some(&context.upstream_lease_context(integer_argument(arguments, "ttlMs")?)),
+                upstream_session_pool,
             )
             .map_err(ToolCallError::Execution)?
         }
@@ -1249,6 +1500,8 @@ struct ForwardedContext {
     project_root: Option<String>,
     transport: String,
     metadata: Option<JsonValue>,
+    allow_arguments: BTreeSet<String>,
+    allowed_tool_risk_classes: BTreeSet<String>,
 }
 
 impl ForwardedContext {
@@ -1268,6 +1521,8 @@ impl ForwardedContext {
                 .unwrap_or_else(|| config.transport.clone()),
             metadata: optional_value_argument(arguments, "metadata")
                 .or_else(|| initialize_params.cloned()),
+            allow_arguments: allow_arguments(arguments)?,
+            allowed_tool_risk_classes: allowed_tool_risk_classes_argument(arguments)?,
         })
     }
 
@@ -1288,6 +1543,8 @@ impl ForwardedContext {
             transport: Some(self.transport.clone()),
             metadata: self.metadata.clone(),
             ttl_ms: ttl_ms.filter(|value| *value > 0).map(|value| value as u128),
+            allow_arguments: self.allow_arguments.clone(),
+            allowed_tool_risk_classes: self.allowed_tool_risk_classes.clone(),
         }
     }
 }
@@ -1386,6 +1643,16 @@ fn bool_argument(arguments: &JsonValue, key: &str) -> Result<Option<bool>, ToolC
     }
 }
 
+fn allow_arguments(arguments: &JsonValue) -> Result<BTreeSet<String>, ToolCallError> {
+    upstream::collect_allow_arguments(arguments).map_err(ToolCallError::InvalidParams)
+}
+
+fn allowed_tool_risk_classes_argument(
+    arguments: &JsonValue,
+) -> Result<BTreeSet<String>, ToolCallError> {
+    upstream::collect_allowed_tool_risk_classes(arguments).map_err(ToolCallError::InvalidParams)
+}
+
 fn timeout_argument(arguments: &JsonValue, key: &str) -> Result<Option<u64>, ToolCallError> {
     Ok(integer_argument(arguments, key)?
         .filter(|value| *value > 0)
@@ -1438,7 +1705,7 @@ fn tool_error_text(error: &ToolCallError) -> String {
 
 fn instructions_text(startup_notes: &[String]) -> String {
     let base =
-        "Use MCPace tools to inspect readiness, manage the hub, and build client routing/export contracts.";
+        "Use MCPace tools to inspect readiness, manage the hub, and build client routing/export contracts. Call surface_manifest when you need the exact native-vs-upstream tool surface contract; upstream tools are discovered and called explicitly through wrapper tools, not disguised as top-level native MCPace tools.";
     if startup_notes.is_empty() {
         return base.to_string();
     }

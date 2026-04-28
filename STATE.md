@@ -26,13 +26,36 @@ What is confirmed in-repo right now:
 - this pass added a file-backed `hub lease` admission controller with acquire/renew/release/list, expired lease pruning, stale lock recovery, MCP tool exposure, and regression tests for host-lock, project-local, and bounded-parallel conflicts
 - this pass added `client install --dry-run --diff` previews plus automatic install backups and `client restore` rollback for single-target and `install all`/`restore all` flows, so users can inspect or undo local config patches without manual file surgery
 - this pass attached the lease admission controller to explicit live upstream forwarding (`upstream_call` / `upstream_batch`) for both HTTP and stdio fallback ingress, including conflict tests that prove blocked calls do not launch the upstream process, successful calls release their lease, settings-only servers receive conservative leases instead of bypasses, short-TTL calls renew during long upstream work, forced lease loss cancels the in-flight wait before a stale success can be accepted, and stale JSON-RPC ids are ignored
+- this pass added bounded in-process upstream session pooling behind `upstream_call` / `upstream_batch`, keyed by server/config/project/client-session/transport/metadata context, so repeated same-context stdio calls can reuse an initialized upstream process while leases still attach and release per request
+- this pass extended HTTP `/mcp` upstream wrapper routing so client/session/project/transport context can come from explicit tool arguments, tool metadata hints, or MCP/bridge headers such as `Mcp-Session-Id`, keeping stateful upstreams from falling back to one anonymous shared context when clients supply native session hints
+- this pass corrected the `windows-mcp` source/config shape to the MCPace-compatible stdio bridge (`uvx windows-mcp`), moved activation into an explicit `desktop` runtime profile, and kept autostart off because desktop-control tools require deliberate host-lock ownership
+- this pass added config-driven MCPace bridge guardrails for high-risk upstream tools: `toolPolicies` in `mcpace.config.json` can require convenience allow flags or generic `allowToolRiskClasses` before a matching upstream tool is launched
+- this pass tightened popular stateful upstream policy without hardcoding Rust logic: installed `sequential-thinking`, `memory`, and `filesystem` lacked trusted ToolAnnotations in live `tools/list`, so MCPace now keeps sequential reasoning session-affine, serializes persistent memory/filesystem stores, and gates memory/filesystem mutations through declarative `toolPolicies`
+- this pass live-probed additional MCP canaries (`time`, `git`, `everything`, `sqlite`, `playwright`), promoted `time` as a safe default, and source-enabled the rest behind the `labs` profile with mutation/control gates for git, sqlite, and Playwright
+- this pass added `upstream_policy_audit`, a native MCP/HTTP audit surface that reads live upstream `tools/list`, surfaces MCP ToolAnnotations, generic advisory risk classes, matching declarative `toolPolicies`, unprotected guard-recommended tools, and unknown/unannotated tools without adding Rust-hardcoded enforcement; the audit loop also tightened the active Agent Browser Protocol, Lean context, and Serena lanes by putting browser controls, Lean edit/shell, and Serena source/memory mutations behind declarative opt-ins
+- this pass added `upstream_policy_suggest`, a dry-run automation layer that turns unprotected guard-recommended audit findings into copyable declarative `toolPolicies` using stable generated risk-class and allow-argument naming, so future MCPs can be onboarded from patterns without silently changing policy
+- this pass added `surface_manifest`, a transparent MCP/HTTP surface contract that lists the exact top-level MCPace tools, states that configured upstream tools remain upstream/proxied rather than disguised as native MCPace tools, and can include a live upstream catalog count for full current visibility without expanding default `tools/list`
+- this pass added grouped top-level `release build` as a native Rust wrapper around the existing local artifact/proof bundle, while explicitly avoiding npm/GitHub publication claims
+- this pass hardened the JSON facade regression tests around non-ASCII strings, malformed numbers/escapes, lone surrogates, and number text normalization
+- this pass expanded runtime prerequisite reporting beyond Docker: readiness now derives missing prerequisites from container server kinds, catalog `requiredCommands`, and enabled stdio source commands
+- this pass added scoped scheduler lease takeover: `hub lease acquire --takeover` can replace a conflicting lease only when the existing lease has the same `sessionLeaseId`, preserving cross-session conflict blocking
+- this pass broadened real-looking client config merge safety coverage for Claude JSON and Hermes YAML configs, including preservation of user-owned settings/comments and restore round-trip proof
+- this pass removed stale README underclaims that still described `release` as planned, and added a docs contract requiring `release build` to remain documented as local artifact/proof only with no publication claim
+- this pass promoted `adapter-config-merge-safety` in the capability inventory from stale planned status to implemented and locked that status with a Node fixture contract
+- this pass added a non-destructive warning for the original MCP startup-failure class: Codex TOML installs preserve other user MCP servers, but now warn when a preserved non-MCPace `command` is missing from PATH and could fail client startup before MCPace runs
+- this pass extended that same preserved-client-config diagnostic into `verify doctor` / `verify readiness` as `clientConfigWarnings`, so broken client startup config is visible without running an install and without downgrading MCPace runtime readiness
+- this pass consolidated Codex TOML inspection into one shared parser, covering quoted table names, inline `#` inside strings, and escaped command strings for both install diagnostics and readiness warnings
+- this pass hardened host-local runtime tests that share ports or forced lease-loss timing by serializing live-server unit tests and adding TTL headroom to the lease-loss integration
+- this pass added a derived active session registry to the file-backed lease store: `hub lease list --json` now reports `activeSessionCount` plus per-session active lease ids and refreshes that registry after acquire/renew/release/list and expiry pruning
+- this pass hardened `serve start/status` health detection so MCPace verifies the `/healthz` contract instead of treating any open TCP port as a running local endpoint, and serialized setup integration tests that allocate local ports
+- this pass surfaced scheduler occupancy in `hub status`: JSON and text status now include active lease/session counts derived from the lease store
 
 ## Product truth for the current cycle
 
 - **first ICP:** advanced integrator / solo power user juggling 2–3 local MCP clients and tired of hand-maintained config drift
 - **current public promise:** one local MCPace endpoint, selected local client install paths, and honest diagnostics for configured-vs-usable state
 - **activation proven today:** `client install` or `client export`, then a real client reaches `http://127.0.0.1:39022/mcp` and completes at least `initialize -> tools/list`
-- **beta-only activation still missing:** real-host proof that upstream tool calls run through durable MCPace session/process ownership; request-time wrappers now have heartbeat renewal, settings-only conservative leases, and lost-lease/stale-id guards in source tests
+- **beta-only activation still missing:** real-host proof that upstream tool calls run through durable cross-process MCPace session/process ownership; request-time wrappers now have heartbeat renewal, settings-only conservative leases, active lease-session bookkeeping, bounded in-process session pooling, metadata/header-derived session affinity, and lost-lease/stale-id guards in source tests
 - **entrypoint contract:** `serve` is the product, `hub` is lifecycle machinery, `dashboard` is an optional view into state
 - **proof-tier gate for the next cycle:** any client surface marked `proofTier = tier-1` in the loaded client catalog
 - **truth taxonomy now split in the capability inventory:** `status` tracks full implementation completion, while `claimStatus` records the strongest honest public claim (`supported`, `supported-local-only`, `control-plane-only`, `bootstrap-only`, `connectable-preview`, `planned`)
@@ -60,10 +83,24 @@ What is confirmed in-repo right now:
 - Added `scripts/build-release-artifacts.mjs` plus contract coverage so canonical source bundles are rebuilt into a clean `dist/` set with `verification-latest.json`, `SHA256SUMS.txt`, and `release-artifacts.json` instead of depending on a potentially stale local artifact directory.
 - Fixed `scripts/verify-ubuntu-docker-full.mjs` so the release-version proof derives the current project version instead of hardcoding `0.3.0`.
 - Synced command-coverage/project-control artifacts with the real Rust surface and added Node drift contracts for those reports.
+- Added grouped top-level `release build` so maintainers can invoke the local source release-artifact/proof bundle from the native Rust CLI without overclaiming publish readiness.
+- Added focused JSON parser/facade correctness tests for non-ASCII content, malformed numeric/escape forms, lone surrogate rejection, and serde-backed number text normalization.
+- Expanded `doctor` / `verify readiness` runtime prerequisite reporting so non-container stdio source commands can explain blocked runtime readiness instead of only Docker-driven container prerequisites.
+- Added same-session lease takeover semantics for restarted runtime owners while keeping cross-session takeover blocked by default.
+- Added real-looking install/restore regression coverage proving MCPace-owned config patches preserve user-owned Claude permissions/hooks, existing MCP servers, Hermes comments, and later YAML sections.
+- Synced README release wording with the implemented `release build` command and locked the no-publish boundary in the docs contract.
+- Synced the capability inventory and latest verification snapshot with the completed config-merge safety proof.
+- Added Codex TOML preserved-entry diagnostics so broken third-party MCP server commands are surfaced as separate config problems instead of being confused with MCPace install state.
+- Added non-mutating client config warnings to doctor/readiness so the original `program not found` class is visible from verification flows as a client-startup warning, not a runtime-prerequisite failure.
+- Added HTTP MCP metadata/header-derived affinity for upstream wrapper calls so `Mcp-Session-Id` and related bridge headers can partition pooled stateful upstream sessions without inflating the top-level tool surface.
+- Corrected `windows-mcp` from a guessed HTTP endpoint to a stdio template guarded by the desktop-session host-lock policy, then activated it through the explicit `desktop` runtime profile for this workstation.
+- Added declarative per-server `toolPolicies` with per-request risk authorization so profile activation makes `windows-mcp` reachable without hardcoding tool names in Rust or silently authorizing screenshot, keyboard, PowerShell, registry, clipboard, or process operations.
+- Added conservative config policy for stateful reference servers: `sequential-thinking` is `single-session` / `chat-session`, `memory` is a `single-writer` `runtime-memory` store with `memory-mutation` gates, and `filesystem` is a `single-writer` `workspace-roots` store with `filesystem-mutation` gates.
+- Added canary MCP coverage: `time` is now an effective safe default, while `git`, `everything`, `sqlite`, and `playwright` can be enabled through `labs`; mutating `git`, `sqlite`, and Playwright browser-control tools are guarded by declarative `toolPolicies`.
 
 ## What is in progress
 
-- Converting the current control plane into a real runtime core: durable `stdio` ingress, local Streamable HTTP session handling, process-pool ownership, takeover semantics, and cross-request cancel/stale-result guards beyond the current request-time wrapper guards.
+- Converting the current control plane into a real runtime core: durable `stdio` ingress, local Streamable HTTP session handling, durable process-pool ownership, takeover semantics, and transport-level cancel/stale-result guards beyond the current in-process pooled wrapper slice.
 - Keeping the eval suite tied to real maintainer work instead of vanity benchmarks.
 - Tightening release/source proof so evidence paths, archive contents, and version alignment do not drift silently.
 
@@ -78,7 +115,7 @@ What is confirmed in-repo right now:
 
 1. Promote bootstrap-only `mcpace stdio-shim --json` into a durable stdio forwarding path while keeping the reused planner logic as the single source of truth.
 2. Add local Streamable HTTP session create/reuse/close handling beyond the current connectable wrapper surface.
-3. Add process-pool reuse, takeover semantics, and cross-request cancel/stale-result guards on top of the current request-time lease gates, heartbeat renewal, lost-lease cancellation, and stale-id filtering.
+3. Harden the new in-process upstream session pool into cross-process ownership with per-upstream concurrency/backpressure, takeover semantics, transport-level cancel propagation, and adversarial pooled-session fixtures.
 4. Re-run runtime proof and repeated multi-host release proof on supported hosts.
 5. Only then expand preview-only `client export` into real config patching for the still-blocked/public client lanes.
 
@@ -86,12 +123,12 @@ What is confirmed in-repo right now:
 
 ### Verified repo metrics
 
-- source-level native command surfaces: **39** (`reports/rust-command-coverage.md`)
-- grouped command families implemented now: **7** (`client`, `hub`, `init`, `lab`, `repair`, `server`, `verify`)
-- grouped commands still planned: **1** (`release`) plus the preview-only `client export` surface for blocked/public lanes
+- source-level native command surfaces: **40** (`reports/rust-command-coverage.md`)
+- grouped command families implemented now: **8** (`client`, `hub`, `init`, `lab`, `release`, `repair`, `server`, `verify`)
+- grouped commands still planned: **0**; `client export` remains preview-only for blocked/public lanes
 - runtime capability inventory: **24 total**
-  - **14 implemented**
-  - **10 planned**
+  - **15 implemented**
+  - **9 planned**
   - public claim view:
     - **12 supported**
     - **3 supported-local-only**
@@ -114,7 +151,7 @@ What is confirmed in-repo right now:
 
 Two lenses are honest enough to use:
 
-1. **Unweighted capability count**: `14 / 24` implemented = about **58%**.
+1. **Unweighted capability count**: `15 / 24` implemented = about **63%**.
 2. **Public-claim mix**: `21 / 24` capabilities now have some honest non-planned claim, but most of that extra surface is still `control-plane-only`, `bootstrap-only`, `connectable-preview`, or `supported-local-only` rather than fully-proven runtime support.
 3. **Coarse roadmap weighting**: roughly **50%–60% complete**.
 

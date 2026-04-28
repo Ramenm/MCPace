@@ -29,11 +29,14 @@ with `mcpace client restore codex --backup latest --root .` if you need to roll
 back to the previous config file.
 
 The HTTP MCP endpoint exposes MCPace management and diagnostic tools. It also
-provides explicit stdio upstream access through `upstream_catalog`,
-`upstream_probe`, `upstream_tools`, `upstream_call`, and `upstream_batch`. These
-bridge tools discover servers from `mcp_settings.json` at runtime rather than
-hardcoding server names, so future stdio MCP entries become probe/list/call
-candidates as soon as their command is installed and enabled. Real
+provides explicit stdio upstream access through `surface_manifest`,
+`upstream_catalog`, `upstream_probe`, `upstream_policy_audit`,
+`upstream_policy_suggest`, `upstream_tools`, `upstream_call`, and
+`upstream_batch`. These bridge tools
+discover servers from
+`mcp_settings.json` at runtime rather than hardcoding server names, so future
+stdio MCP entries become probe/list/audit/call candidates as soon as their
+command is installed and enabled. Real
 `upstream_call` / `upstream_batch` executions now acquire a scheduler lease from
 the planner-derived route, heartbeat-renew it when a call can outlive the
 initial TTL, abort before accepting a result if the heartbeat loses ownership,
@@ -43,10 +46,19 @@ conservative single-writer `settings-only-conservative` request lease instead of
 bypassing scheduling.
 
 MCPace does not advertise fake direct tool names such as `browser` or
-`read_file`. Call `upstream_catalog` to get a flat `tools` array with concise
-server-qualified tool descriptions and an `upstream_call`-ready `call` object
-for each discovered tool. Use `upstream_tools` when you need one server's full
-tool schemas, then `upstream_call` with the selected server and tool name.
+`read_file`, and it must not pretend that upstream tools are native top-level
+MCPace tools. Call `surface_manifest` to see the exact contract: which tool
+names are returned by MCPace `tools/list`, how configured upstream tools are
+discovered, and why direct top-level projection is disabled by default. Call
+`upstream_catalog` to get a flat `tools` array with concise server-qualified
+tool descriptions and an `upstream_call`-ready `call` object for each
+discovered tool. Call `upstream_policy_audit` when you need to compare
+MCP ToolAnnotations, generic name heuristics, and configured MCPace
+`toolPolicies` before exposing a new upstream server. Call
+`upstream_policy_suggest` to turn unprotected guard-recommended audit findings
+into copyable `toolPolicies` candidates. Use `upstream_tools` when you need one
+server's full tool schemas, then `upstream_call` with the selected server and
+tool name.
 `upstream_catalog` and `upstream_tools` use a short in-process `tools/list` cache; pass
 `"refresh": true` when you need to force a fresh upstream schema after changing
 configuration or upgrading an upstream package. For stateful upstreams such as
@@ -123,7 +135,8 @@ Expected results:
 - `initialize` returns `200 OK` with a `protocolVersion`.
 - `notifications/initialized` returns `202 Accepted` with an empty body.
 - `tools/list` returns `200 OK` with MCPace management tools, including
-  `runtime_diagnostics`, `upstream_catalog`, `upstream_probe`,
+  `runtime_diagnostics`, `surface_manifest`, `upstream_catalog`,
+  `upstream_probe`, `upstream_policy_audit`, `upstream_policy_suggest`,
   `upstream_tools`, `upstream_call`, `upstream_batch`, and `browser_status`.
 - Calling an unsupported upstream name, such as `browser`, returns a normal MCP
   tool error payload. It must not close the HTTP transport.
@@ -136,13 +149,174 @@ Transport channel closed, when send initialized notification
 
 ## Verify stdio upstream tools
 
-Use `upstream_catalog`, `upstream_probe`, `upstream_tools`, `upstream_call`, and
+Use `surface_manifest`, `upstream_catalog`, `upstream_probe`,
+`upstream_policy_audit`, `upstream_policy_suggest`, `upstream_tools`,
+`upstream_call`, and
 `upstream_batch` to prove that MCPace can launch and call configured stdio
-upstream MCP servers. Each uncached launch starts the selected upstream hidden
-on Windows, performs a short JSON-RPC session, returns the result, and cleans up
-the helper process. `upstream_probe`, `upstream_catalog`, and `upstream_tools`
-share the same short successful `tools/list` cache; pass `"refresh": true` when
-you need a fresh live upstream check rather than cached proof.
+upstream MCP servers. Probe/catalog/audit/suggest/list
+refreshes still perform short `tools/list` checks and share the same successful
+`tools/list` cache; pass `"refresh": true` when you need a fresh live upstream
+check rather than cached proof. Runtime calls through `upstream_call` and
+`upstream_batch` keep the small wrapper surface but now use a bounded in-process
+upstream session pool keyed by server, settings fingerprint, project root,
+client/session context, transport, and metadata. Pool hits reuse an
+already-initialized stdio upstream process instead of paying a fresh initialize
+cost every call.
+
+For HTTP MCP callers, `upstream_call` / `upstream_batch` derive the routing
+context from explicit tool arguments first (`clientId`, `sessionId`,
+`projectRoot`, `transport`), then from `metadata` hints
+(`metadata.session.id`, `metadata.sessionId`, `metadata.clientId`, etc.), and
+then from MCP/bridge headers such as `Mcp-Session-Id`,
+`X-MCPace-Session-Id`, `X-Codex-Session-Id`, `X-MCPace-Client-Id`, and
+`X-Codex-Client-Id`. Pass a stable `sessionId` for stateful tools when the
+client does not supply one automatically; different chat/session ids should
+create different pool keys, while the same id keeps session affinity.
+
+### Automatic MCP hints vs explicit MCPace policy
+
+MCPace does not hardcode special cases for popular servers, but it also does
+not pretend the MCP protocol can prove everything automatically. In practice:
+
+- if an upstream tool advertises trusted ToolAnnotations, MCPace can surface
+  those hints for operator decisions;
+- if a client sends roots/project/session metadata, MCPace can derive the
+  appropriate project or session key;
+- if the server is mutable, host-global, or lacks trusted annotations, the
+  safe policy must be declared in `mcpace.config.json`.
+
+`upstream_policy_audit` is the safe discovery loop for new MCPs: it launches the
+same configured stdio server, reads `tools/list`, reports annotation keys,
+advisory risk classes, matching `toolPolicies`, unprotected guard-recommended
+tools, and unknown/unannotated tools. The audit is intentionally advisory; the
+runtime enforces only declarative `toolPolicies`, not Rust-side hardcoded lists
+or fragile guesses.
+
+`upstream_policy_suggest` is the automation layer on top of the audit. It groups
+unprotected guard-recommended tools by risk class, generates stable
+`riskClass`/`allowArgument` names such as `browser-control` /
+`allowBrowserControl` or `<server>-mutation` /
+`allow<Server>Mutation`, and returns copyable policy snippets plus evidence.
+It is dry-run by design: MCPace can generate the pattern automatically, but a
+config update must still be explicit so heuristics never silently weaken or
+change the user's policy.
+
+Current local probes showed this matters: `context7` exposes `readOnlyHint`
+annotations, while the installed `sequential-thinking`, `memory`, `filesystem`,
+and `fetch` servers did not expose annotations through `tools/list`. MCPace
+therefore keeps the stateful reference servers conservative by policy:
+
+- `sequential-thinking`: `single-session` + `chat-session`, so two chats do not
+  interleave one reasoning chain. Pass a stable `sessionId` or ensure the client
+  forwards `Mcp-Session-Id`.
+- `memory`: `single-writer` over `runtime-memory`; graph mutation tools require
+  `allowMemoryMutation` or `allowToolRiskClasses:["memory-mutation"]` because
+  the backing memory is intentionally persistent/cross-chat.
+- `filesystem`: `single-writer` over `workspace-roots`; mutating tools require
+  `allowFilesystemMutation` or
+  `allowToolRiskClasses:["filesystem-mutation"]`. Read/list/search tools remain
+  callable without that opt-in.
+- `lean-ctx`: project-local context/shell tools stay serialized by project;
+  `ctx_edit` requires `allowArguments:["allowLeanMutation"]` or
+  `allowToolRiskClasses:["lean-mutation"]`, and `ctx_shell` requires
+  `allowArguments:["allowLeanShell"]` or
+  `allowToolRiskClasses:["lean-shell"]`.
+- `serena`: project index/search/read tools remain available, while source-edit
+  tools require `allowArguments:["allowCodeMutation"]` or
+  `allowToolRiskClasses:["code-mutation"]`, and Serena memory mutation tools
+  require `allowArguments:["allowSerenaMemoryMutation"]` or
+  `allowToolRiskClasses:["serena-memory-mutation"]`.
+
+Additional canary integrations are wired so they can be evaluated without
+turning the whole workstation into an unbounded MCP surface:
+
+- `browser` uses Agent Browser Protocol as the always-available host browser
+  bridge. Read/status tools stay available, while browser-control tools such as
+  action, scroll, navigation, JavaScript, dialogs, downloads/files, selectors,
+  sliders, tabs, and permissions require `allowBrowserControl` or
+  `allowToolRiskClasses:["browser-control"]`.
+- `time` is enabled as a safe default canary (`get_current_time`,
+  `convert_time`) because live probing showed it starts cleanly and has no
+  mutation surface.
+- `git`, `everything`, `sqlite`, and `playwright` are source-enabled but remain
+  profile-gated under `labs` unless another profile explicitly enables them.
+  Live canary probes confirmed their `tools/list` handshakes on this Windows
+  host.
+- `git` mutation tools (`git_add`, `git_commit`, `git_reset`,
+  `git_create_branch`, `git_checkout`) require `allowGitMutation` or
+  `allowToolRiskClasses:["git-mutation"]`.
+- `sqlite` mutation tools (`write_query`, `create_table`, `append_insight`)
+  require `allowSqliteMutation` or
+  `allowToolRiskClasses:["sqlite-mutation"]`.
+- `playwright` advertises useful ToolAnnotations, but MCPace still keeps
+  state-changing browser tools behind declarative policy:
+  `allowBrowserControl` or `allowToolRiskClasses:["browser-control"]`.
+  Read-only Playwright tools such as snapshots, screenshots, console, network,
+  and waits remain ungated.
+
+### Config-driven risk gates for desktop/system MCP tools
+
+`windows-mcp` is deliberately routed through the same `upstream_call` /
+`upstream_batch` bridge instead of advertising every desktop tool as a native
+top-level MCPace tool. That keeps the Codex-visible tool surface small and lets
+MCPace attach the desktop host lock before the upstream tool runs.
+
+Sensitive-tool gates are not hardcoded into MCPace's Rust code. They are
+declared per upstream server in `mcpace.config.json` as `toolPolicies`, and the
+same mechanism can be used for other MCP servers. Each policy declares:
+
+- `tools`: exact tool names or simple `*` wildcard patterns;
+- `riskClass`: a normalized risk class such as `desktop-observation`;
+- `allowArgument`: an optional convenience boolean argument, such as
+  `allowDesktopObservation`;
+- `description`: an operator-facing reason shown in blocked-call errors.
+
+For the current `windows-mcp` config:
+
+- observation tools (`Snapshot`, `Screenshot`, `Scrape`) require
+  either `"allowDesktopObservation": true` or
+  `"allowToolRiskClasses": ["desktop-observation"]`;
+- desktop-control tools (`App`, `Click`, `Type`, `Scroll`, `Move`, `Shortcut`,
+  `MultiSelect`, `MultiEdit`, `Notification`) require
+  either `"allowDesktopControl": true` or
+  `"allowToolRiskClasses": ["desktop-control"]`;
+- system-control tools (`PowerShell`, `FileSystem`, `Clipboard`, `Process`,
+  `Registry`) require either `"allowSystemControl": true` or
+  `"allowToolRiskClasses": ["system-control"]`;
+- `Wait` remains safe and does not need an opt-in flag.
+
+Examples:
+
+```powershell
+$body = '{"jsonrpc":"2.0","id":71,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"windows-mcp","tool":"Screenshot","arguments":{"use_annotation":false},"allowDesktopObservation":true,"sessionId":"desktop-observe"}}}'
+Invoke-RestMethod -Uri 'http://127.0.0.1:39022/mcp' -Method Post -Headers $headers -ContentType 'application/json' -Body $body
+
+$body = '{"jsonrpc":"2.0","id":72,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"windows-mcp","tool":"PowerShell","arguments":{"command":"Write-Output ''mcpace-ok''","timeout":10},"allowSystemControl":true,"sessionId":"desktop-system"}}}'
+Invoke-RestMethod -Uri 'http://127.0.0.1:39022/mcp' -Method Post -Headers $headers -ContentType 'application/json' -Body $body
+
+$body = '{"jsonrpc":"2.0","id":73,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"windows-mcp","tool":"Type","arguments":{"text":"MCPACE_KEYBOARD_OK","press_enter":false},"allowDesktopControl":true,"sessionId":"desktop-control"}}}'
+Invoke-RestMethod -Uri 'http://127.0.0.1:39022/mcp' -Method Post -Headers $headers -ContentType 'application/json' -Body $body
+```
+
+Equivalent generic risk-class authorization:
+
+```powershell
+$body = '{"jsonrpc":"2.0","id":74,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"windows-mcp","tool":"Screenshot","arguments":{"use_annotation":false},"allowToolRiskClasses":["desktop-observation"],"sessionId":"desktop-observe"}}}'
+Invoke-RestMethod -Uri 'http://127.0.0.1:39022/mcp' -Method Post -Headers $headers -ContentType 'application/json' -Body $body
+```
+
+For custom policy names that are not first-class schema fields, pass the
+declared `allowArgument` through the generic `allowArguments` array:
+
+```json
+{
+  "allowArguments": ["allowCustomRisk"]
+}
+```
+
+For keyboard tools, first focus a known test window (for example a temporary
+Notepad file launched by a guarded `PowerShell` call) and clean it up by process
+id. Do not type into an arbitrary active desktop window.
 
 Catalog configured upstream tool names and short descriptions without hardcoded
 names. The response keeps the grouped `servers` details for diagnostics and also
@@ -186,6 +360,32 @@ Invoke-RestMethod `
   -Body $body
 ```
 
+Audit annotations and declarative policy coverage for every configured
+upstream. Use this before adding new popular MCPs or before enabling a
+profile-gated server by default:
+
+```powershell
+$body = '{"jsonrpc":"2.0","id":44,"method":"tools/call","params":{"name":"upstream_policy_audit","arguments":{"refresh":true,"timeoutMs":45000}}}'
+Invoke-RestMethod `
+  -Uri 'http://127.0.0.1:39022/mcp' `
+  -Method Post `
+  -Headers $headers `
+  -ContentType 'application/json' `
+  -Body $body
+```
+
+Generate copyable policy candidates from the same audit signals:
+
+```powershell
+$body = '{"jsonrpc":"2.0","id":45,"method":"tools/call","params":{"name":"upstream_policy_suggest","arguments":{"refresh":true,"timeoutMs":45000}}}'
+Invoke-RestMethod `
+  -Uri 'http://127.0.0.1:39022/mcp' `
+  -Method Post `
+  -Headers $headers `
+  -ContentType 'application/json' `
+  -Body $body
+```
+
 List an upstream server's tools:
 
 ```powershell
@@ -201,7 +401,7 @@ Invoke-RestMethod `
 Call a safe upstream tool:
 
 ```powershell
-$body = '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"filesystem","tool":"list_allowed_directories","arguments":{},"timeoutMs":120000}}}'
+$body = '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"filesystem","tool":"list_allowed_directories","arguments":{},"timeoutMs":120000,"sessionId":"docs-smoke-session"}}}'
 Invoke-RestMethod `
   -Uri 'http://127.0.0.1:39022/mcp' `
   -Method Post `
@@ -213,7 +413,7 @@ Invoke-RestMethod `
 Call a stateful browser sequence in one upstream session:
 
 ```powershell
-$body = '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"upstream_batch","arguments":{"server":"browser","timeoutMs":180000,"calls":[{"tool":"browser_navigate","arguments":{"url":"data:text/html,<title>MCPace</title><main>MCPace browser batch ok</main>"}},{"tool":"browser_text","arguments":{}},{"tool":"browser_shutdown","arguments":{"timeout_ms":3000}}]}}}'
+$body = '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"upstream_batch","arguments":{"server":"browser","timeoutMs":180000,"sessionId":"docs-browser-session","allowBrowserControl":true,"calls":[{"tool":"browser_navigate","arguments":{"url":"data:text/html,<title>MCPace</title><main>MCPace browser batch ok</main>"}},{"tool":"browser_text","arguments":{}},{"tool":"browser_shutdown","arguments":{"timeout_ms":3000}}]}}}'
 Invoke-RestMethod `
   -Uri 'http://127.0.0.1:39022/mcp' `
   -Method Post `
@@ -248,12 +448,15 @@ Expected results:
   calls with a short lease TTL also report `leaseHeartbeatStarted` and
   `leaseHeartbeatRenewalCount`; lost-heartbeat diagnostics use
   `leaseHeartbeatLost` / `leaseHeartbeatFailureCount` before the bridge returns
-  a result.
+  a result. Pooled calls also report `sessionPoolEnabled`,
+  `sessionPoolHit`, `sessionPoolSessionCallCount`, and `sessionPoolSize` so you
+  can tell whether an upstream process was reused.
 - `upstream_batch` returns one `results` item per requested upstream tool while
-  keeping state within that batch. This is the preferred browser automation path
-  when a follow-up action depends on the page opened by a previous action. The
-  whole batch holds one scheduler lease, heartbeat-renews it if needed, and
-  releases it before responding.
+  keeping state within that batch and, when the pool key matches, across later
+  calls or batches in the same MCPace process. This is the preferred browser
+  automation path when a follow-up action depends on the page opened by a
+  previous action. The whole batch holds one scheduler lease, heartbeat-renews
+  it if needed, and releases it before responding.
 - `browser_status` returns `status: callable-stdio-abp` when the ABP browser
   stdio bridge is configured.
 - `upstream_tools` with `server: "browser"` returns the ABP browser tool list.
@@ -267,17 +470,21 @@ Expected results:
 Current MCPace intentionally keeps upstream calls behind stable wrapper tools
 instead of projecting every upstream tool directly into `tools/list`. This keeps
 client startup fast and avoids breaking clients when upstream packages change
-their schemas. `upstream_catalog` is the native discovery surface: it returns a
-flat server-qualified catalog for immediate selection while preserving grouped
-server diagnostics. The short `tools/list` cache makes repeated
+their schemas. This is an explicit proxy/wrapper contract, not a trick:
+`surface_manifest` reports the exact top-level MCPace `tools/list` names and
+can optionally include the live upstream catalog. `upstream_catalog` is the
+native discovery surface for upstream tools: it returns a flat server-qualified
+catalog for immediate selection while preserving grouped server diagnostics.
+The short `tools/list` cache makes repeated
 probe/catalog/list calls cheap while still invalidating on `mcp_settings.json`
 metadata changes and allowing explicit `refresh`.
 
-The current wrapper tools already use request-time scheduler leases. The next
-larger performance step is a lease/route-scoped connector manager:
+The current wrapper tools use request-time scheduler leases and a first bounded
+session-pool slice. The remaining connector-manager work is to harden that pool
+into a full runtime owner:
 
-1. key warm upstream sessions by server, client/session affinity, project root,
-   and route/process scope;
+1. keep warm upstream sessions keyed by server, client/session affinity, project
+   root, config fingerprint, metadata, and route/process scope;
 2. apply bounded concurrency and backpressure per upstream;
 3. renew leases while sessions are active and invalidate sessions on lease
    expiry, config changes, protocol errors, and
@@ -377,6 +584,8 @@ calls:
   its lease after the call.
 - `upstream_probe` across all enabled upstreams, including `lean-ctx` after the
   `lean-ctx` binary was installed and resolved from PATH
+- `upstream_policy_audit` policy/annotation review for configured upstream
+  servers, including live canary MCPs and disabled/profile-gated entries
 - `upstream_call` safe smoke calls for those same stdio servers
 - `browser_status`, `upstream_tools server=browser`, and
   `upstream_call server=browser tool=browser_get_status`

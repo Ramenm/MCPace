@@ -12,6 +12,6 @@
     "timeoutSec": 30
   },
   "runtimeProfile": {
-    "active": "safe"
+    "active": "desktop"
   }
 }

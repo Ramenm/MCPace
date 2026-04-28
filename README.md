@@ -13,21 +13,26 @@ This repo is intentionally honest about its state:
   `candidates`, `client list`, `client plan`,
   `client install` / `client install all` (catalog-driven local config patcher with
   `--dry-run` / `--diff` previews and automatic restoreable backups; discover
-  current write-capable surfaces via `mcpace client list --json`),
+  current write-capable surfaces via `mcpace client list --json`; Codex TOML
+  installs also warn when preserved non-MCPace stdio entries point at missing
+  programs that can fail client startup before MCPace runs),
   `client restore` (roll back the latest or named install backup for one client, or latest backups for all),
   `client export` (HTTP-first MCPace URL contracts for local clients,
   preview-only for blocked cloud/public surfaces), `lab list`, `lab matrix`,
   `lab coverage`, `lab gaps`, `lab report`, `lab show`, `server list`,
   `server capabilities`, `server candidates`, `verify doctor`,
-  `verify readiness`, `repair`, `update check`;
+  `verify readiness` (including non-mutating warnings for broken preserved
+  Codex MCP commands), `repair`, `update check`, `release build` (local
+  source/artifact/proof bundle only; no npm or GitHub publishing);
 - internal compatibility surfaces kept for transition/debug work:
   `stdio-shim --json` (bootstrap-only proof surface) and `mcp-server`
   (stdio fallback lane with lease-gated upstream wrapper calls);
 - the client catalog is now surface-aware and extensible: built-ins are a fallback, while `clientCatalog.targets`, `clientCatalog.paths`, and `MCPACE_CLIENT_CATALOG` can add or override local/cloud/API/generic surfaces without recompiling;
 - the repo now includes a local file-backed hub lifecycle surface for bootstrap, state, health, logs, corruption repair, bounded log retention, and scheduler lease enforcement;
-- release/platform automation is now prepared as CI workflows and package manifests, while the interactive `release` command remains planned;
-- planned next: persistent upstream session/process-pool ownership, real config-writing `client export` for blocked cloud/public
-  surfaces, richer upstream session fan-in, transport-level cancellation/progress, and real process-pool execution;
+- release/platform automation is now prepared as CI workflows and package manifests, and
+  `release build` wraps the local artifact/proof bundle while staying honest that publication is separate;
+- planned next: broader pooled-session management, real config-writing `client export` for blocked cloud/public
+  surfaces, richer upstream session fan-in, and transport-level cancellation/progress;
 - stack policy is now explicit and machine-readable: Node 22/24 LTS contributor lanes, default local Node 24 via `.nvmrc` / `.node-version`, npm 10+, and a pinned Rust 1.95.0 toolchain are tracked in `docs/toolchain-policy.md` plus `reports/toolchain-support.json`;
 - **not** reconfirmed in this pass: live Docker/runtime behavior, or multi-host parity on Windows/macOS/Linux.
 
@@ -190,7 +195,10 @@ local lifecycle/status/log/repair/lease surface, `client list` exposes the
 verified/generic client target catalog with surface-aware local/cloud/API
 distinctions, `serve` is the public one-port MCP surface, explicit upstream
 wrapper calls now acquire/heartbeat-renew/release scheduler leases, cancel on
-lost heartbeat, and put settings-only servers under a conservative lease, and `lab`
+lost heartbeat, put settings-only servers under a conservative lease, and expose
+active lease-session bookkeeping for restart/cancel hardening, `surface_manifest`
+reports the exact native MCPace tools versus proxied upstream tools without
+pretending upstream names are top-level native tools, and `lab`
 turns runtime fixtures plus capability inventory into an explicit backlog.
 
 ## Local dashboard available now
@@ -429,19 +437,20 @@ mcpace verify doctor
 mcpace verify readiness
 mcpace repair
 mcpace update check --json
-mcpace release # planned; release automation currently lives in CI workflows
+mcpace release build # local artifact/proof bundle only; does not publish
 ```
 
 At this stage, `setup`, `service`, `dashboard`, `serve`, `init`, `hub`, top-level `repair`,
 HTTP-first `client export`, safe `update check`, the catalog-driven local `client install`
 patchers with dry-run/diff previews plus `client restore` rollback backups, and
-lease-gated explicit upstream wrapper calls with heartbeat renewal, lost-lease cancellation, and conservative settings-only leases are implemented in source. `stdio-shim --json` remains a bootstrap-only internal
+lease-gated explicit upstream wrapper calls with heartbeat renewal, lost-lease cancellation, conservative settings-only leases, bounded in-process upstream session pooling behind `upstream_call` / `upstream_batch`, config-driven `toolPolicies`, advisory `upstream_policy_audit`, generated `upstream_policy_suggest` candidates, `surface_manifest` as the transparent MCP tool-surface contract, and active session counts in `hub lease list --json` are implemented in source. The small default tool list is therefore an explicit wrapper/proxy design rather than a hidden direct-passthrough claim. `stdio-shim --json` remains a bootstrap-only internal
 compatibility lane, while `mcp-server` remains a stdio fallback/debug lane. The runtime capability inventory now keeps a separate
 `claimStatus` field so docs can say `supported`, `control-plane-only`,
 `bootstrap-only`, or `connectable-preview` without pretending those are all the
 same thing. Config-writing `client export` for broader cloud/public client
-families and `release` still fail clearly as **planned but not implemented
-yet**.
+families still fails clearly as **planned but not implemented yet**; `release build`
+is implemented for local artifacts/proof only and intentionally does not publish
+to npm or GitHub.
 
 ## Toolchain lanes
 

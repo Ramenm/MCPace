@@ -381,7 +381,7 @@ fn client_install_codex_json_replaces_unmanaged_user_table_and_is_idempotent() {
     fs::write(
         codex_dir.join("config.toml"),
         r#"[mcp_servers.other]
-command = "other"
+command = "definitely-missing-mcpace-command-xyz"
 args = ["serve"]
 enabled = true
 
@@ -416,6 +416,8 @@ enabled = false
     assert!(first_text.contains(r#""replacedExistingBlock": true"#));
     assert!(first_text.contains(r#""transport": "streamable-http""#));
     assert!(first_text.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+    assert!(first_text.contains("definitely-missing-mcpace-command-xyz"));
+    assert!(first_text.contains("MCP clients can fail startup before reaching MCPace"));
 
     let config_path = codex_dir.join("config.toml");
     let installed = fs::read_to_string(&config_path).unwrap();
@@ -1026,6 +1028,89 @@ fn client_install_claude_code_writes_user_json_config() {
 }
 
 #[test]
+fn client_install_claude_code_preserves_realistic_user_config_and_restore_round_trip() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    let config_path = home.path().join(".claude.json");
+    let original = r#"{
+  "theme": "dark",
+  "permissions": {
+    "allow": ["Bash(git status:*)", "Read(**/*.rs)"],
+    "deny": ["Bash(rm -rf:*)"]
+  },
+  "hooks": {
+    "Stop": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "echo done" }] }
+    ]
+  },
+  "mcpServers": {
+    "existing-local": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["server.js"]
+    },
+    "MCPace": {
+      "type": "http",
+      "url": "http://127.0.0.1:1/old"
+    }
+  }
+}"#;
+    fs::write(&config_path, original).unwrap();
+
+    let install = run_with_envs(
+        &[
+            "client",
+            "install",
+            "claude-code",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(install.status.success(), "stderr: {}", stderr(&install));
+    let install_text = stdout(&install);
+    assert!(install_text.contains(r#""backupCreated": true"#));
+    assert!(install_text.contains(r#""replacedExistingBlock": true"#));
+
+    let installed = fs::read_to_string(&config_path).unwrap();
+    assert!(installed.contains(r#""theme": "dark""#));
+    assert!(installed.contains(r#""permissions""#));
+    assert!(installed.contains(r#""hooks""#));
+    assert!(installed.contains(r#""existing-local""#));
+    assert!(installed.contains(r#""command": "node""#));
+    assert!(installed.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+    assert!(!installed.contains("http://127.0.0.1:1/old"));
+
+    let restore = run_with_envs(
+        &[
+            "client",
+            "restore",
+            "claude-code",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(restore.status.success(), "stderr: {}", stderr(&restore));
+    assert!(stdout(&restore).contains(r#""mode": "restored""#));
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+}
+
+#[test]
 fn client_install_gemini_cli_writes_user_settings_json() {
     let temp = TempDir::new();
     let root = temp.path();
@@ -1221,6 +1306,64 @@ mcp_servers:
 
     let reinstalled = fs::read_to_string(&config_path).unwrap();
     assert_eq!(installed, reinstalled);
+}
+
+#[test]
+fn client_install_hermes_agent_preserves_comments_and_later_yaml_sections() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    fs::create_dir_all(home.path().join(".hermes")).unwrap();
+    fs::write(
+        home.path().join(".hermes").join("config.yaml"),
+        r#"# user-owned Hermes config
+model: nous/hermes-3
+mcp_servers:
+  # keep this user server
+  research:
+    url: "https://mcp.example.com/research"
+tools:
+  enabled: true
+"#,
+    )
+    .unwrap();
+
+    let output = run_with_envs(
+        &[
+            "client",
+            "install",
+            "hermes-agent",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    let installed = fs::read_to_string(home.path().join(".hermes").join("config.yaml")).unwrap();
+    assert!(installed.contains("# user-owned Hermes config"));
+    assert!(installed.contains("  # keep this user server"));
+    assert!(installed.contains("  research:"));
+    assert!(installed.contains("  MCPace:"));
+    assert!(installed.contains("tools:"));
+    assert!(installed.contains("  enabled: true"));
+    assert!(
+        installed.find("  MCPace:").unwrap() < installed.find("tools:").unwrap(),
+        "MCPace entry should stay inside mcp_servers section:\n{}",
+        installed
+    );
 }
 
 #[test]

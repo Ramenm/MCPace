@@ -23,6 +23,8 @@ pub struct ReadinessReport {
     pub effective_enabled_server_count: usize,
     pub missing_required_source_enablement: Vec<String>,
     pub missing_profile_source_enablement: Vec<String>,
+    pub missing_runtime_prerequisites: Vec<String>,
+    pub client_config_warnings: Vec<String>,
     pub missing_required_commands: Vec<String>,
     pub missing_profile_commands: Vec<String>,
     pub ready_for_read_only_ops: bool,
@@ -124,6 +126,8 @@ fn build_readiness_report(
         effective_enabled_server_count,
         missing_required_source_enablement,
         missing_profile_source_enablement,
+        missing_runtime_prerequisites: doctor_report.project.missing_runtime_prerequisites.clone(),
+        client_config_warnings: doctor_report.project.client_config_warnings.clone(),
         missing_required_commands,
         missing_profile_commands,
         ready_for_read_only_ops,
@@ -214,6 +218,24 @@ impl ReadinessReport {
             "missingProfileSourceEnablement".to_string(),
             JsonValue::array(
                 self.missing_profile_source_enablement
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
+        );
+        map.insert(
+            "missingRuntimePrerequisites".to_string(),
+            JsonValue::array(
+                self.missing_runtime_prerequisites
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
+        );
+        map.insert(
+            "clientConfigWarnings".to_string(),
+            JsonValue::array(
+                self.client_config_warnings
                     .iter()
                     .cloned()
                     .map(JsonValue::string),

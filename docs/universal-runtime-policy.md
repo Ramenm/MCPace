@@ -55,6 +55,54 @@ spawn. The policy vocabulary is:
 `hostLockKey`, `browserProfileKey`, `parallelismLimit`, `schedulerLane`, and
 `startupStrategy`.
 
+### What MCPace can infer automatically
+
+MCPace uses automatic signals where the MCP protocol or the client gives them:
+
+- MCP `roots` / explicit `projectRoot` / cwd metadata can bind project and
+  workspace-scoped servers.
+- `Mcp-Session-Id`, `X-MCPace-Session-Id`, `X-Codex-Session-Id`, or explicit
+  `sessionId` can split chat/session-affine upstream pools.
+- tool `annotations` such as `readOnlyHint`, `destructiveHint`,
+  `idempotentHint`, and `openWorldHint` can inform risk summaries when a
+  trusted upstream server actually sends them.
+- package/registry metadata can help discover installation and command shapes.
+
+Those signals are not a complete concurrency contract. The MCP spec defines
+ToolAnnotations as hints, not as trusted proof, and it does not currently define
+a standard field for "parallel-safe", "single writer", "per browser profile",
+"per desktop session", or "this memory store is scoped to one chat". Therefore
+MCPace's safe default is:
+
+1. trust protocol hints only as advisory metadata;
+2. prefer explicit `mcpace.config.json` server policies for routing;
+3. use `toolPolicies` for sensitive tool-level mutation/control gates;
+4. serialize or isolate unknown mutable resources instead of guessing from
+   descriptions alone.
+
+`upstream_policy_audit` operationalizes that rule for any configured MCP server.
+It reads live `tools/list` output, reports annotation keys and generic advisory
+risk classes, shows matching declarative `toolPolicies`, and flags
+unprotected guard-recommended tools or unknown/unannotated tools for review.
+The audit does not add hidden enforcement; only `toolPolicies` authorize or
+block `upstream_call` / `upstream_batch`.
+
+`upstream_policy_suggest` adds the automation boundary: it converts unprotected
+guard-recommended audit findings into copyable declarative policy candidates
+using stable naming rules (`browser-control` stays shared, generic mutation
+becomes `<server>-mutation`, and allow arguments become `allow<RiskClass>` in
+PascalCase). Suggestions remain dry-run output until a config update applies
+them, because MCP annotations and name patterns are useful signals but not a
+complete trust contract.
+
+`surface_manifest` is the transparency boundary. It reports the exact
+top-level MCPace tools returned by `tools/list`, states that configured upstream
+tools remain upstream rather than being disguised as native MCPace tools, and
+can include a live `upstream_catalog` snapshot when a caller wants the full
+current upstream count. This keeps the small wrapper surface honest: speed comes
+from explicit discovery, caching, batching, and pooling, not from hiding what is
+really being proxied.
+
 ## Correct parallelism model
 
 The scheduler should parallelize only when the server policy says the underlying
@@ -68,6 +116,13 @@ resource is safe to share.
 | Browser automation | one browser profile key per project/session unless the policy declares a shared host profile |
 | Desktop/Windows automation | singleton host lock by conflict domain; never let two client chats drive the same desktop session concurrently |
 | Capture/host services such as screen/capture tools | singleton or host-service queue unless policy proves read-only fan-out |
+| Sequential-thinking / scratchpad-style reasoning tools | session-affine serialization; do not merge two chats into one thought chain |
+| Persistent memory graphs | single writer over the backing store, with explicit mutation gates when writes affect cross-chat memory |
+| Filesystem roots | single writer over workspace roots unless trusted read-only annotations and tool-level read/write routing prove a narrower safe lane |
+| Git and SQLite project tools | project-local serialization, with mutation tools guarded by `toolPolicies` and read/status/schema tools left available |
+| Lean/Serena project context tools | project-local serialization, with shell/edit/source-memory mutations guarded by declarative `toolPolicies` |
+| Agent Browser Protocol host bridge | browser-profile serialization; navigation/action/JavaScript/dialog/download/file/permission controls require explicit browser-control opt-in |
+| Playwright-style browser canaries | isolated project/session browser lane; state-changing control tools require explicit risk opt-in even when upstream annotations are present |
 
 The important distinction is between parallelizing work and parallelizing access
 to a mutable host resource. Browser and desktop servers may support multiple MCP
@@ -100,6 +155,38 @@ host-lock:windows-desktop|kind:desktop-session
 That lock is shared across clients and chats. A session lease alone is not enough
 because two clients can have different session ids while still touching the same
 visible desktop.
+
+`windows-mcp` must be enabled through an explicit desktop-control profile rather
+than hidden inside the safe default profile. The current MCPace-compatible
+transport is the stdio bridge (`uvx windows-mcp`), not an assumed localhost HTTP
+endpoint. Generic HTTP upstream fan-out remains a separate runtime capability;
+desktop-control servers should not be auto-started just because their package is
+installed.
+
+The desktop host lock is necessary but not sufficient for safe use. MCPace also
+supports declarative tool policies in `mcpace.config.json`:
+
+```json
+{
+  "toolPolicies": [
+    {
+      "riskClass": "desktop-observation",
+      "allowArgument": "allowDesktopObservation",
+      "tools": ["Snapshot", "Screenshot", "Scrape"]
+    }
+  ]
+}
+```
+
+The bridge enforces these policies generically for any configured upstream
+server. A blocked call can be authorized by the policy's convenience boolean
+(`allowDesktopObservation=true`), by the generic allow-argument list
+(`allowArguments=["allowDesktopObservation"]`), or by the generic risk-class
+list (`allowToolRiskClasses=["desktop-observation"]`). These are explicit
+`upstream_call` / `upstream_batch` arguments; they are not inferred from chat
+intent, session id, or profile activation. A profile plus platform support makes
+the server reachable; the per-call policy flag makes a sensitive action
+authorized for that one bridge request.
 
 ## Project-local servers
 
@@ -147,10 +234,12 @@ routes, prunes expired leases, and then enforces one of two gates:
 
 The lease store lives at `data/runtime/hub/leases.json`; a short-lived
 `leases.lock` prevents concurrent writers, and stale lock files are recovered
-when their recorded `createdAtMs` is older than the lock TTL. The current layer
-is still an admission controller: live MCP upstream forwarding, process pools,
-request cancellation, and stale-result suppression remain the next runtime
-layer.
+when their recorded `createdAtMs` is older than the lock TTL. `hub lease list
+--json` exposes both active lease records and derived active session records, and
+`hub status` summarizes active lease/session counts for operator visibility. The
+current layer is still an admission controller: durable process pools,
+transport-level request cancellation, and cross-request stale-result suppression
+remain the next runtime layer.
 
 The MCP compatibility server exposes the same operator surface as tools:
 `runtime_leases`, `runtime_acquire`, `runtime_renew`, and `runtime_release`.

@@ -2,8 +2,8 @@ use crate::catalog::{find, normalize, COMMANDS};
 use crate::client_catalog::client_install_support_summary;
 use crate::runtimepaths;
 use crate::{
-    candidates, client, dashboard, doctor, hub, init, lab, mcp_server, profile, projects, repair,
-    reporoot, serve, server, service, setup, stdio_shim, update, verify,
+    candidates, client, dashboard, doctor, hub, init, lab, mcp_server, profile, projects, release,
+    repair, reporoot, serve, server, service, setup, stdio_shim, update, verify,
 };
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -62,7 +62,7 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         "verify" => verify::run(&args[1..], root_path, stdout, stderr),
         "repair" => repair::run(&args[1..], root_path, stdout, stderr),
         "update" => update::run(&args[1..], stdout, stderr),
-        "release" => run_planned(resolved, stderr),
+        "release" => release::run(&args[1..], root_path, stdout, stderr),
         _ => {
             let _ = writeln!(stderr, "unknown command: {}", args[0]);
             let _ = writeln!(
@@ -236,11 +236,12 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  verify doctor [--json] [--root <path>]");
     let _ = writeln!(stdout, "  verify readiness [--json] [--root <path>]");
     let _ = writeln!(stdout, "  repair [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  release [build] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  update check [--json] [--source none|env|npm] [--latest-version <semver>] [--package <name>]");
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes /healthz plus /mcp in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/stop/status lifecycle commands, dashboard provides the same local browser control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and grouped top-level release remains planned.",
+        "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes /healthz plus /mcp in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/stop/status lifecycle commands, dashboard provides the same local browser control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and release build now wraps the local artifact/proof bundle without publishing.",
         runtimepaths::default_local_mcp_url(),
         client_install_support_summary()
     );
