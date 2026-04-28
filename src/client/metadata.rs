@@ -96,7 +96,7 @@ pub(super) fn load_metadata(parsed: &ParsedArgs) -> Result<MetadataEnvelope, Str
     })
 }
 
-fn metadata_documents<'a>(json: &'a JsonValue) -> Vec<&'a JsonValue> {
+fn metadata_documents(json: &JsonValue) -> Vec<&JsonValue> {
     let mut documents = vec![json];
     if let Some(params) = json.get("params") {
         documents.push(params);

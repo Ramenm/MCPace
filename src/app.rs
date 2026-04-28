@@ -162,13 +162,13 @@ fn run_planned(name: &str, stderr: &mut dyn Write) -> i32 {
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "MCPace Rust-only local MCP hub");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  version");
     let _ = writeln!(stdout, "  doctor [--json] [--root <path>]");
     let _ = writeln!(
         stdout,
-        "  setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--skip-client-install]"
+        "  setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--skip-client-install] [--install-service|--install-autostart] [--no-enable]"
     );
     let _ = writeln!(
         stdout,
@@ -209,7 +209,11 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]");
     let _ = writeln!(
         stdout,
-        "  client install <client|all> [--json] [--root <path>]"
+        "  client install <client|all> [--json] [--root <path>] [--dry-run] [--diff]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  client restore <client|all> [--json] [--root <path>] [--backup <id|latest>]"
     );
     let _ = writeln!(stdout, "  client export <client> [--json] [--root <path>] [--transport <stdio|streamable-http>] [--session-id <id>] [--project-root <path>]");
     let _ = writeln!(stdout, "  mcp-server [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]  # internal compatibility");
@@ -233,10 +237,10 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  verify readiness [--json] [--root <path>]");
     let _ = writeln!(stdout, "  repair [--json] [--root <path>]");
     let _ = writeln!(stdout, "  update check [--json] [--source none|env|npm] [--latest-version <semver>] [--package <name>]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes /healthz plus /mcp in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/stop/status lifecycle commands, dashboard provides the same local browser control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and grouped top-level release remains planned.",
+        "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes /healthz plus /mcp in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/stop/status lifecycle commands, dashboard provides the same local browser control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and grouped top-level release remains planned.",
         runtimepaths::default_local_mcp_url(),
         client_install_support_summary()
     );
@@ -248,7 +252,7 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Unsupported commands are reported as not implemented yet in the Rust-only repo."
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Still planned grouped surfaces:");
     for command in COMMANDS.iter().filter(|command| !command.implemented) {
         let _ = writeln!(stdout, "  {:<8} {}", command.name, command.description);

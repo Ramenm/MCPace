@@ -7,7 +7,7 @@ mod pathing;
 mod plan;
 mod render;
 
-use self::actions::{run_export, run_install, run_list, run_plan};
+use self::actions::{run_export, run_install, run_list, run_plan, run_restore};
 use self::args::{parse_args, write_help, ParsedArgs};
 use crate::json::JsonValue;
 use std::io::Write;
@@ -36,6 +36,9 @@ pub(crate) fn runtime_plan_json(
         project_root: request.project_root,
         transport: request.transport,
         metadata_json: request.metadata_json,
+        dry_run: false,
+        diff: false,
+        backup: None,
         error: None,
     };
     actions::build_plan_json(parsed, root_path)
@@ -58,11 +61,26 @@ pub fn run(
     }
 
     let action = parsed.action.clone().unwrap_or_default();
+    if action != "install" && (parsed.dry_run || parsed.diff) {
+        let _ = writeln!(
+            stderr,
+            "--dry-run and --diff are currently supported only for 'mcpace client install'"
+        );
+        return 2;
+    }
+    if action != "restore" && parsed.backup.is_some() {
+        let _ = writeln!(
+            stderr,
+            "--backup and --latest are currently supported only for 'mcpace client restore'"
+        );
+        return 2;
+    }
     match action.as_str() {
         "plan" => run_plan(parsed, default_root, stdout, stderr),
         "list" => run_list(parsed, default_root, stdout, stderr),
         "export" => run_export(parsed, default_root, stdout, stderr),
         "install" => run_install(parsed, default_root, stdout, stderr),
+        "restore" => run_restore(parsed, default_root, stdout, stderr),
         other => {
             let _ = writeln!(
                 stderr,

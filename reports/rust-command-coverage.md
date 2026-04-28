@@ -1,12 +1,12 @@
 # Rust Command Coverage
 
 - legacy shell entrypoints removed from repo: **yes**
-- source-level native command surfaces today: **38**
+- source-level native command surfaces today: **39**
 - grouped commands implemented now: **`client`, `hub`, `init`, `lab`, `repair`, `server`, `verify`**
 - planned grouped commands still remaining: **1** (`release`)
 - partially unimplemented grouped sub-surfaces: **1** (`client export` remains preview-only for blocked/public lanes)
 - bridge-only commands remaining: **0**
-- explicit not-yet-implemented commands: **live upstream MCP forwarding, config-writing client export for blocked/public lanes, release**
+- explicit not-yet-implemented commands/capabilities: **persistent upstream process-pool/session ownership, config-writing client export for blocked/public lanes, release**
 
 | Surface | Status | Notes |
 |---|---|---|
@@ -28,13 +28,14 @@
 | `hub lease renew` | native-rust | extends an active lease TTL and records a renewal timestamp |
 | `hub lease release` | native-rust | releases an active scheduler lease by id |
 | `stdio-shim --json` | native-rust-bootstrap | normalizes client/session/project context, ensures the hub is up, and reports a sticky lease plus adapter preview without forwarding live MCP traffic |
-| `mcp-server` | native-rust-bootstrap | internal compatibility lane for stdio bootstrap/fallback flows |
+| `mcp-server` | native-rust-bootstrap | internal compatibility lane for stdio bootstrap/fallback flows with lease-gated and heartbeat-renewed upstream wrapper calls |
 | `profile show --json` | native-rust-read-only | legacy settings file may still influence active profile resolution |
 | `projects list --json` | native-rust-read-only | registry inspection only |
 | `candidates --json` | native-rust | candidate catalog read path |
 | `client list` | native-rust-read-only | verified/generic client target catalog inspection |
 | `client plan` | native-rust-read-only | resolves client/session/project context, derived leases, and server arbitration plan |
-| `client install` | native-rust | config-writing MCPace-owned block patcher for the catalog-declared local install surfaces (`mcpace client list --json` / `installSupport`) |
+| `client install` | native-rust | config-writing MCPace-owned block patcher for the catalog-declared local install surfaces (`mcpace client list --json` / `installSupport`) with dry-run/diff previews and restoreable backups |
+| `client restore` | native-rust | restores the latest or named backup created by config-writing `client install` |
 | `client export` | native-rust-bootstrap | preview-only adapter contract with blockers and next actions; does not yet patch blocked/public client configs |
 | `lab list` | native-rust-read-only | runtime fixture inventory |
 | `lab matrix` | native-rust-read-only | readiness counts by suite/category/proof layer |

@@ -23,6 +23,7 @@ For this cycle, treat `serve` as the product, `hub` as lifecycle machinery, and 
 - release engineering now includes `scripts/generate-checksums.mjs`, `scripts/build-release-artifacts.mjs`, a hosted `release-artifacts` workflow scaffold, and a dynamic-version Ubuntu full-work proof script that no longer hardcodes `0.3.0`
 - canonical source bundles now emit one cleaned `dist/` set with the ZIP, verification snapshot, `SHA256SUMS.txt`, and `release-artifacts.json`, while keeping `reports/verification-latest.json` aligned during fresh proof runs
 - release/platform delivery now has a single target manifest, generated npm platform package scaffolds, generated GitHub Actions native matrices, checksum-gated npm publish, dry-run release rehearsal, draft GitHub Release workflow, and safe `update check` guidance with no silent self-update
+- explicit upstream wrapper calls now acquire/heartbeat-renew/release scheduler leases for both HTTP `/mcp` and stdio fallback ingress, with regressions for successful release, conservative settings-only leases, short-TTL renewal, lost-heartbeat cancellation, stale-id ignoring, and conflict-blocked no-launch behavior
 
 ## What is included
 
@@ -69,17 +70,17 @@ cargo build --release
 ## Current public claim view
 
 - `supported`: 12 capabilities
-- `supported-local-only`: 2 capabilities
+- `supported-local-only`: 3 capabilities
 - `control-plane-only`: 4 capabilities
 - `bootstrap-only`: 1 capability
 - `connectable-preview`: 1 capability
-- `planned`: 4 capabilities
+- `planned`: 3 capabilities
 
 Those claim tiers come from `eval/runtime-capabilities.json` and intentionally stay narrower than the north-star runtime story.
 
 ## Current implemented native commands
 
-`version`, `doctor`, `dashboard`, `serve`, `serve start/stop/status`, `init`, `hub up/down/repair/status/logs`, `profile show`, `projects list`, `candidates`, `client list`, `client plan`, `client install`, `client export`, `mcp-server`, `stdio-shim`, `lab list/matrix/coverage/gaps/report/show`, `server list/capabilities/candidates`, `verify doctor`, `verify readiness`, `repair`, `update check`.
+`version`, `doctor`, `dashboard`, `serve`, `serve start/stop/status`, `init`, `hub up/down/repair/status/logs`, `hub lease list/acquire/renew/release`, `profile show`, `projects list`, `candidates`, `client list`, `client plan`, `client install`, `client restore`, `client export`, `mcp-server`, `stdio-shim`, `lab list/matrix/coverage/gaps/report/show`, `server list/capabilities/candidates`, `verify doctor`, `verify readiness`, `repair`, `update check`.
 
 ## Current project-control artifacts
 

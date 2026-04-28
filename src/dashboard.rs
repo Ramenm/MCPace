@@ -5,7 +5,7 @@ use crate::runtimepaths;
 use crate::upstream;
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
@@ -201,7 +201,7 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-requests <n>]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
         "dashboard serves a local browser UI for hub status, verification, servers, clients, and logs."
@@ -227,8 +227,7 @@ enum McpHttpResponse {
 }
 
 fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut dyn Write) -> i32 {
-    let mut handled = 0usize;
-    for incoming in listener.incoming() {
+    for (index, incoming) in listener.incoming().enumerate() {
         let stream = match incoming {
             Ok(value) => value,
             Err(error) => {
@@ -240,7 +239,7 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
         if let Err(error) = handle_connection(stream, &config) {
             let _ = writeln!(stderr, "dashboard request failed: {}", error);
         }
-        handled += 1;
+        let handled = index + 1;
         if config
             .max_requests
             .map(|limit| handled >= limit)
@@ -442,7 +441,7 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
     Ok(())
 }
 
-fn build_overview_json(root_path: &PathBuf) -> Result<JsonValue, String> {
+fn build_overview_json(root_path: &Path) -> Result<JsonValue, String> {
     let doctor = run_json_command(root_path, &["doctor", "--json"])?;
     let hub = run_json_command(root_path, &["hub", "status", "--json"])?;
     let readiness = run_json_command(root_path, &["verify", "readiness", "--json"])?;
@@ -891,6 +890,36 @@ fn http_tool_definitions() -> Vec<JsonValue> {
                         ),
                     ]),
                 ),
+                (
+                    "clientId",
+                    JsonValue::object([("type", JsonValue::string("string"))]),
+                ),
+                (
+                    "sessionId",
+                    JsonValue::object([("type", JsonValue::string("string"))]),
+                ),
+                (
+                    "projectRoot",
+                    JsonValue::object([("type", JsonValue::string("string"))]),
+                ),
+                (
+                    "transport",
+                    JsonValue::object([("type", JsonValue::string("string"))]),
+                ),
+                (
+                    "ttlMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional runtime lease TTL in milliseconds."),
+                        ),
+                    ]),
+                ),
+                (
+                    "metadata",
+                    JsonValue::object([("type", JsonValue::string("object"))]),
+                ),
             ]),
             vec!["server", "tool"],
         ),
@@ -966,6 +995,36 @@ fn http_tool_definitions() -> Vec<JsonValue> {
                         ),
                     ]),
                 ),
+                (
+                    "clientId",
+                    JsonValue::object([("type", JsonValue::string("string"))]),
+                ),
+                (
+                    "sessionId",
+                    JsonValue::object([("type", JsonValue::string("string"))]),
+                ),
+                (
+                    "projectRoot",
+                    JsonValue::object([("type", JsonValue::string("string"))]),
+                ),
+                (
+                    "transport",
+                    JsonValue::object([("type", JsonValue::string("string"))]),
+                ),
+                (
+                    "ttlMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional runtime lease TTL in milliseconds."),
+                        ),
+                    ]),
+                ),
+                (
+                    "metadata",
+                    JsonValue::object([("type", JsonValue::string("object"))]),
+                ),
             ]),
             vec!["server", "calls"],
         ),
@@ -1003,7 +1062,7 @@ fn http_tool_with_schema(
     ])
 }
 
-fn run_http_tool(root_path: &PathBuf, name: &str, args: &JsonValue) -> Result<JsonValue, String> {
+fn run_http_tool(root_path: &Path, name: &str, args: &JsonValue) -> Result<JsonValue, String> {
     match name {
         "doctor" => run_json_command(root_path, &["doctor", "--json"]),
         "hub_status" => run_json_command(root_path, &["hub", "status", "--json"]),
@@ -1066,7 +1125,15 @@ fn run_http_tool(root_path: &PathBuf, name: &str, args: &JsonValue) -> Result<Js
                 .and_then(JsonValue::as_i64)
                 .filter(|value| *value > 0)
                 .map(|value| value as u64);
-            upstream::call_tool(root_path, server, tool, &arguments, timeout_ms)
+            let context = http_upstream_lease_context(args)?;
+            upstream::call_tool_with_context(
+                root_path,
+                server,
+                tool,
+                &arguments,
+                timeout_ms,
+                Some(&context),
+            )
         }
         "upstream_batch" => {
             let server = json_helpers::string_at_path(args, &["server"])
@@ -1091,7 +1158,8 @@ fn run_http_tool(root_path: &PathBuf, name: &str, args: &JsonValue) -> Result<Js
                 .and_then(JsonValue::as_i64)
                 .filter(|value| *value > 0)
                 .map(|value| value as u64);
-            upstream::call_tools(root_path, server, &calls, timeout_ms)
+            let context = http_upstream_lease_context(args)?;
+            upstream::call_tools_with_context(root_path, server, &calls, timeout_ms, Some(&context))
         }
         "browser_status" => upstream::browser_status(root_path),
         "client_list" => run_json_command(root_path, &["client", "list", "--json"]),
@@ -1102,7 +1170,34 @@ fn run_http_tool(root_path: &PathBuf, name: &str, args: &JsonValue) -> Result<Js
     }
 }
 
-fn runtime_diagnostics(root_path: &PathBuf) -> Result<JsonValue, String> {
+fn http_upstream_lease_context(args: &JsonValue) -> Result<upstream::UpstreamLeaseContext, String> {
+    Ok(upstream::UpstreamLeaseContext {
+        client_id: Some(
+            optional_http_string(args, "clientId")?.unwrap_or_else(|| "local-http".to_string()),
+        ),
+        session_id: optional_http_string(args, "sessionId")?,
+        project_root: optional_http_string(args, "projectRoot")?,
+        transport: Some(
+            optional_http_string(args, "transport")?
+                .unwrap_or_else(|| "streamable-http".to_string()),
+        ),
+        metadata: json_helpers::value_at_path(args, &["metadata"]).cloned(),
+        ttl_ms: json_helpers::value_at_path(args, &["ttlMs"])
+            .and_then(JsonValue::as_i64)
+            .filter(|value| *value > 0)
+            .map(|value| value as u128),
+    })
+}
+
+fn optional_http_string(args: &JsonValue, key: &str) -> Result<Option<String>, String> {
+    match json_helpers::value_at_path(args, &[key]) {
+        Some(JsonValue::String(value)) => Ok(Some(value.clone())),
+        Some(JsonValue::Null) | None => Ok(None),
+        Some(_) => Err(format!("{} must be a string when provided", key)),
+    }
+}
+
+fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
     let doctor = run_json_command(root_path, &["doctor", "--json"])?;
     let hub_status = run_json_command(root_path, &["hub", "status", "--json"])?;
     let server_capabilities = run_json_command(root_path, &["server", "capabilities", "--json"])?;
@@ -1257,14 +1352,14 @@ fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
     ])
 }
 
-fn run_json_command(root_path: &PathBuf, args: &[&str]) -> Result<JsonValue, String> {
+fn run_json_command(root_path: &Path, args: &[&str]) -> Result<JsonValue, String> {
     run_json_command_vec(
         root_path,
         args.iter().map(|value| (*value).to_string()).collect(),
     )
 }
 
-fn run_json_command_vec(root_path: &PathBuf, mut args: Vec<String>) -> Result<JsonValue, String> {
+fn run_json_command_vec(root_path: &Path, mut args: Vec<String>) -> Result<JsonValue, String> {
     args.push("--root".to_string());
     args.push(root_path.display().to_string());
 
@@ -2135,7 +2230,12 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
 
 #[cfg(test)]
 mod tests {
-    use super::{build_overview_json, is_allowed_local_origin, serve_listener};
+    use super::{
+        build_overview_json, is_allowed_local_origin, run_http_tool, run_json_command,
+        serve_listener,
+    };
+    use crate::json::JsonValue;
+    use crate::json_helpers;
     use std::fs;
     use std::io::{Read, Write};
     use std::net::{TcpListener, TcpStream};
@@ -2178,6 +2278,88 @@ mod tests {
         path
     }
 
+    fn write_fake_upstream_config(root: &std::path::Path) {
+        let script = root.join("fake-upstream.js");
+        fs::write(
+            &script,
+            r#"
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
+
+function send(id, result) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
+}
+
+rl.on('line', (line) => {
+  const message = JSON.parse(line);
+  if (message.method === 'initialize') {
+    send(message.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fake', version: '0.1.0' } });
+  } else if (message.method === 'tools/call') {
+    send(message.id, { content: [{ type: 'text', text: 'ok' }], isError: false });
+  } else if (message.method === 'tools/list') {
+    send(message.id, { tools: [{ name: 'echo', inputSchema: { type: 'object' } }] });
+  }
+});
+"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("mcpace.config.json"),
+            r#"{
+  "version": "0.3.5",
+  "client": { "keyName": "MCPace" },
+  "profiles": {
+    "runtime": {
+      "default": "safe",
+      "profiles": { "safe": { "description": "Safe", "serverOverrides": {} } }
+    }
+  },
+  "servers": {
+    "fake": {
+      "kind": "host-stdio",
+      "required": true,
+      "policy": {
+        "scopeClass": "shared-global",
+        "concurrencyPolicy": "single-writer",
+        "stateBinding": "none",
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "fake-shared"
+      },
+      "installer": {
+        "installTarget": "none",
+        "installMethod": "none",
+        "installPackage": "",
+        "verifyCommand": ""
+      }
+    }
+  }
+}"#,
+        )
+        .unwrap();
+        fs::write(
+            root.join("mcp_settings.json"),
+            format!(
+                r#"{{
+  "mcpServers": {{
+    "fake": {{
+      "enabled": true,
+      "type": "stdio",
+      "command": "node",
+      "args": ["{}"]
+    }}
+  }}
+}}"#,
+                json_escape(&script.display().to_string())
+            ),
+        )
+        .unwrap();
+    }
+
+    fn json_escape(value: &str) -> String {
+        value.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+
     #[test]
     fn overview_json_contains_expected_sections() {
         let root = temp_root();
@@ -2189,6 +2371,47 @@ mod tests {
         assert!(object.contains_key("readiness"));
         assert!(object.contains_key("servers"));
         assert!(object.contains_key("clients"));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn http_upstream_call_attaches_and_releases_runtime_lease() {
+        let root = temp_root();
+        write_fake_upstream_config(&root);
+        let result = run_http_tool(
+            &root,
+            "upstream_call",
+            &JsonValue::object([
+                ("server", JsonValue::string("fake")),
+                ("tool", JsonValue::string("echo")),
+                (
+                    "arguments",
+                    JsonValue::object::<String, Vec<(String, JsonValue)>>(Vec::new()),
+                ),
+                ("timeoutMs", JsonValue::number(5_000)),
+            ]),
+        )
+        .expect("upstream_call");
+
+        assert_eq!(
+            json_helpers::bool_at_path(&result, &["upstreamOk"]),
+            Some(true)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(&result, &["leaseAttached"]),
+            Some(true)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(&result, &["leaseReleased"]),
+            Some(true)
+        );
+
+        let leases =
+            run_json_command(&root, &["hub", "lease", "list", "--json"]).expect("runtime_leases");
+        assert_eq!(
+            json_helpers::value_at_path(&leases, &["activeLeaseCount"]).and_then(JsonValue::as_i64),
+            Some(0)
+        );
         let _ = fs::remove_dir_all(root);
     }
 

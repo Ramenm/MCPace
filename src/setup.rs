@@ -154,7 +154,7 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--skip-client-install] [--install-service] [--no-enable]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
         "Starts the local MCPace endpoint, installs supported local client config entries, and verifies /healthz plus /mcp."
@@ -408,10 +408,7 @@ fn command_result_json(result: &CommandResult) -> JsonValue {
     JsonValue::object([
         ("ok", JsonValue::bool(result.ok)),
         ("exitCode", JsonValue::number(result.exit_code)),
-        (
-            "json",
-            result.json.clone().unwrap_or_else(|| JsonValue::Null),
-        ),
+        ("json", result.json.clone().unwrap_or(JsonValue::Null)),
         ("stdout", JsonValue::string(result.stdout.clone())),
         ("stderr", JsonValue::string(result.stderr.clone())),
     ])

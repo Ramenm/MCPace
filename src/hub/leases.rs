@@ -49,6 +49,23 @@ struct LeaseCommandResult {
     exit_code: i32,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeLeaseRequest {
+    pub(crate) server_name: String,
+    pub(crate) client_id: Option<String>,
+    pub(crate) session_id: Option<String>,
+    pub(crate) project_root: Option<String>,
+    pub(crate) transport: Option<String>,
+    pub(crate) metadata_json: Option<String>,
+    pub(crate) ttl_ms: Option<u128>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum RuntimeLeaseAcquireResult {
+    Acquired { lease_id: String, json: JsonValue },
+    Blocked { json: JsonValue },
+}
+
 struct LeaseStoreGuard {
     path: PathBuf,
 }
@@ -117,19 +134,140 @@ fn run_acquire(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResu
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "hub lease acquire requires --server <name>".to_string())?
         .to_string();
-    let ttl_ms = normalize_ttl(parsed.ttl_ms);
-    let plan_json = client::runtime_plan_json(
+    acquire_runtime_lease_command(
         root_path,
-        RuntimePlanRequest {
+        RuntimeLeaseRequest {
+            server_name,
             client_id: parsed.client_id.clone(),
             session_id: parsed.session_id.clone(),
             project_root: parsed.project_root.clone(),
             transport: parsed.transport.clone(),
             metadata_json: parsed.metadata_json.clone(),
+            ttl_ms: parsed.ttl_ms,
+        },
+    )
+}
+
+pub(crate) fn acquire_runtime_lease(
+    root_path: &Path,
+    request: RuntimeLeaseRequest,
+) -> Result<RuntimeLeaseAcquireResult, String> {
+    let server_name = clean_required_server_name(&request.server_name)?;
+    let route = route_for_request(root_path, &request, &server_name)?
+        .unwrap_or_else(|| conservative_settings_only_route(&request, &server_name));
+    let result = acquire_lease_for_route(root_path, route, normalize_ttl(request.ttl_ms))?;
+    if result.exit_code == 0 {
+        let lease_id = json_helpers::string_at_path(&result.json, &["leaseId"])
+            .unwrap_or("")
+            .to_string();
+        Ok(RuntimeLeaseAcquireResult::Acquired {
+            lease_id,
+            json: result.json,
+        })
+    } else {
+        Ok(RuntimeLeaseAcquireResult::Blocked { json: result.json })
+    }
+}
+
+fn conservative_settings_only_route(
+    request: &RuntimeLeaseRequest,
+    server_name: &str,
+) -> PlannedRoute {
+    let server_token = non_empty_token(server_name, "server");
+    let client_id = request_text(request.client_id.as_ref())
+        .unwrap_or_else(|| "mcpace-upstream-bridge".to_string());
+    let session_id = request_text(request.session_id.as_ref());
+    let project_root = request_text(request.project_root.as_ref());
+    let project_token = project_root
+        .as_deref()
+        .map(|value| non_empty_token(value, "global"))
+        .unwrap_or_else(|| "global".to_string());
+    let session_token = session_id
+        .as_deref()
+        .map(|value| non_empty_token(value, "adhoc"))
+        .unwrap_or_else(|| format!("settings-only-{}", server_token));
+    let upstream_transport =
+        request_text(request.transport.as_ref()).unwrap_or_else(|| "stdio".to_string());
+
+    PlannedRoute {
+        server_name: server_name.to_string(),
+        admission_state: "configured-source".to_string(),
+        request_strategy: "single-writer".to_string(),
+        request_mutex_key: Some(format!(
+            "settings-only:{}:{}",
+            server_token, project_token
+        )),
+        session_affinity_key: session_id
+            .as_ref()
+            .map(|_| format!("settings-only:{}:{}", server_token, session_token)),
+        process_scope_key: format!("settings-only:{}:{}", server_token, project_token),
+        process_partition: project_token,
+        project_binding_key: project_root
+            .as_ref()
+            .map(|_| format!("project:settings-only:{}", server_token)),
+        worktree_binding_key: None,
+        conflict_domain: format!("settings-only:{}", server_token),
+        host_lock_key: None,
+        browser_profile_key: None,
+        scheduler_lane: "settings-only-conservative".to_string(),
+        startup_strategy: "per-request".to_string(),
+        upstream_transport,
+        parallelism_limit: 1,
+        warnings: vec![format!(
+            "server '{}' exists in mcp_settings.json but is not declared in mcpace.config.json; MCPace assigned a conservative single-writer request lease instead of bypassing scheduling",
+            server_name
+        )],
+        client_id: client_id.clone(),
+        session_lease_id: format!(
+            "session:{}:{}",
+            non_empty_token(&client_id, "client"),
+            session_token
+        ),
+        session_id,
+        project_root,
+    }
+}
+
+fn acquire_runtime_lease_command(
+    root_path: &Path,
+    request: RuntimeLeaseRequest,
+) -> Result<LeaseCommandResult, String> {
+    let server_name = clean_required_server_name(&request.server_name)?;
+    let route = route_for_request(root_path, &request, &server_name)?.ok_or_else(|| {
+        format!(
+            "server '{}' was not found in the client routing plan",
+            server_name
+        )
+    })?;
+    acquire_lease_for_route(root_path, route, normalize_ttl(request.ttl_ms))
+}
+
+fn route_for_request(
+    root_path: &Path,
+    request: &RuntimeLeaseRequest,
+    server_name: &str,
+) -> Result<Option<PlannedRoute>, String> {
+    let plan_json = client::runtime_plan_json(
+        root_path,
+        RuntimePlanRequest {
+            client_id: request.client_id.clone(),
+            session_id: request.session_id.clone(),
+            project_root: request.project_root.clone(),
+            transport: request.transport.clone(),
+            metadata_json: request.metadata_json.clone(),
         },
     )?;
-    let route = planned_route_from_plan(&plan_json, &server_name)?;
+    if find_server_plan(&plan_json, server_name).is_none() {
+        return Ok(None);
+    }
+    planned_route_from_plan(&plan_json, server_name).map(Some)
+}
 
+fn acquire_lease_for_route(
+    root_path: &Path,
+    route: PlannedRoute,
+    ttl_ms: u128,
+) -> Result<LeaseCommandResult, String> {
     mutate_store(root_path, |store, now_ms, expired_purged_count| {
         let blockers = route_blockers(&route);
         if !blockers.is_empty() {
@@ -220,7 +358,33 @@ fn run_renew(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResult
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "hub lease renew requires --lease-id <id>".to_string())?
         .to_string();
-    let ttl_ms = normalize_ttl(parsed.ttl_ms);
+
+    renew_runtime_lease_command(root_path, &lease_id, parsed.ttl_ms)
+}
+
+pub(crate) fn renew_runtime_lease(
+    root_path: &Path,
+    lease_id: &str,
+    ttl_ms: Option<u128>,
+) -> Result<JsonValue, String> {
+    let result = renew_runtime_lease_command(root_path, lease_id, ttl_ms)?;
+    if result.exit_code == 0 {
+        Ok(result.json)
+    } else {
+        Err(result.json.to_compact_string())
+    }
+}
+
+fn renew_runtime_lease_command(
+    root_path: &Path,
+    lease_id: &str,
+    ttl_ms: Option<u128>,
+) -> Result<LeaseCommandResult, String> {
+    let lease_id = lease_id.trim().to_string();
+    if lease_id.is_empty() {
+        return Err("hub lease renew requires --lease-id <id>".to_string());
+    }
+    let ttl_ms = normalize_ttl(ttl_ms);
 
     mutate_store(root_path, |store, now_ms, expired_purged_count| {
         let expires_at_ms = now_ms.saturating_add(ttl_ms);
@@ -285,6 +449,22 @@ fn run_release(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResu
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "hub lease release requires --lease-id <id>".to_string())?
         .to_string();
+
+    release_runtime_lease_command(root_path, &lease_id)
+}
+
+pub(crate) fn release_runtime_lease(root_path: &Path, lease_id: &str) -> Result<JsonValue, String> {
+    Ok(release_runtime_lease_command(root_path, lease_id)?.json)
+}
+
+fn release_runtime_lease_command(
+    root_path: &Path,
+    lease_id: &str,
+) -> Result<LeaseCommandResult, String> {
+    let lease_id = lease_id.trim().to_string();
+    if lease_id.is_empty() {
+        return Err("hub lease release requires --lease-id <id>".to_string());
+    }
 
     mutate_store(root_path, |store, now_ms, expired_purged_count| {
         let removed = leases_map_mut(store).remove(&lease_id);
@@ -816,6 +996,30 @@ fn normalize_ttl(ttl_ms: Option<u128>) -> u128 {
         .filter(|value| *value > 0)
         .map(|value| value.min(MAX_LEASE_TTL_MS))
         .unwrap_or(DEFAULT_LEASE_TTL_MS)
+}
+
+fn clean_required_server_name(server_name: &str) -> Result<String, String> {
+    let server_name = server_name.trim();
+    if server_name.is_empty() {
+        return Err("hub lease acquire requires --server <name>".to_string());
+    }
+    Ok(server_name.to_string())
+}
+
+fn request_text(value: Option<&String>) -> Option<String> {
+    value
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn non_empty_token(value: &str, fallback: &str) -> String {
+    let token = sanitize_token(value);
+    if token.is_empty() {
+        fallback.to_string()
+    } else {
+        token
+    }
 }
 
 fn generate_lease_id(route: &PlannedRoute, now_ms: u128) -> String {

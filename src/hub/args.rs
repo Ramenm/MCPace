@@ -199,7 +199,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace hub <up|down|repair|status|logs|lease> [--json] [--root <path>] [options]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(
         stdout,

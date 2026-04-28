@@ -1,6 +1,6 @@
 mod args;
 mod launcher;
-mod leases;
+pub(crate) mod leases;
 mod lifecycle;
 mod model;
 mod runtime;

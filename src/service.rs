@@ -186,7 +186,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Usage: mcpace service <install|status|uninstall|print> [--json] [--root <path>] [--host <addr>] [--port <n>] [--dry-run] [--no-enable]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Uses the auto-launch crate to install user-level autostart without requiring mcpace in PATH.");
 }
 

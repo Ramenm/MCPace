@@ -259,14 +259,11 @@ fn first_string(documents: &[Option<&JsonValue>], path: &[&str]) -> Option<Strin
 
 fn first_u128(documents: &[Option<&JsonValue>], path: &[&str]) -> Option<u128> {
     for document in documents {
-        if let Some(value) = document.and_then(|doc| json_helpers::value_at_path(doc, path)) {
-            match value {
-                JsonValue::Number(number) => {
-                    if let Ok(parsed) = number.parse::<u128>() {
-                        return Some(parsed);
-                    }
-                }
-                _ => {}
+        if let Some(JsonValue::Number(number)) =
+            document.and_then(|doc| json_helpers::value_at_path(doc, path))
+        {
+            if let Ok(parsed) = number.parse::<u128>() {
+                return Some(parsed);
             }
         }
     }

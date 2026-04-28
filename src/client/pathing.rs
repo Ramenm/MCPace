@@ -33,7 +33,7 @@ pub(super) fn normalize_transport(value: &str) -> String {
         "http" | "streamable-http" | "streamable_http" => "streamable-http".to_string(),
         "stdio" | "local-stdio" => "stdio".to_string(),
         "sse" => "sse".to_string(),
-        other if other.is_empty() => "stdio".to_string(),
+        "" => "stdio".to_string(),
         other => other.to_string(),
     }
 }

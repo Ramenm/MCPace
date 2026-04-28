@@ -1,3 +1,4 @@
+use crate::hub::leases::{self, RuntimeLeaseAcquireResult, RuntimeLeaseRequest};
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
@@ -8,8 +9,9 @@ use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
     mpsc::{self, Receiver},
-    Mutex, OnceLock,
+    Arc, Mutex, OnceLock,
 };
 use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -39,10 +41,53 @@ struct RunningServer {
     stderr_rx: Receiver<String>,
 }
 
+struct UpstreamLeaseGuard {
+    root_path: PathBuf,
+    lease_id: String,
+    lease: JsonValue,
+    released: bool,
+    heartbeat: Option<LeaseHeartbeat>,
+}
+
+struct LeaseHeartbeat {
+    stop: Arc<AtomicBool>,
+    lost: Arc<AtomicBool>,
+    renewal_count: Arc<AtomicUsize>,
+    failure_count: Arc<AtomicUsize>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+enum UpstreamLeaseAttachment {
+    Attached(UpstreamLeaseGuard),
+}
+
+struct UpstreamLeaseOutcome {
+    attached: bool,
+    lease_id: Option<String>,
+    lease: JsonValue,
+    released: bool,
+    release: JsonValue,
+    bypass_reason: Option<String>,
+    heartbeat_started: bool,
+    heartbeat_renewal_count: usize,
+    heartbeat_lost: bool,
+    heartbeat_failure_count: usize,
+}
+
 #[derive(Clone, Debug)]
 pub struct UpstreamToolCall {
     pub tool: String,
     pub arguments: JsonValue,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct UpstreamLeaseContext {
+    pub client_id: Option<String>,
+    pub session_id: Option<String>,
+    pub project_root: Option<String>,
+    pub transport: Option<String>,
+    pub metadata: Option<JsonValue>,
+    pub ttl_ms: Option<u128>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -71,11 +116,81 @@ impl Drop for RunningServer {
     }
 }
 
+impl Drop for UpstreamLeaseGuard {
+    fn drop(&mut self) {
+        if !self.released {
+            self.stop_heartbeat();
+            let _ = leases::release_runtime_lease(&self.root_path, &self.lease_id);
+            self.released = true;
+        }
+    }
+}
+
+impl UpstreamLeaseGuard {
+    fn release(&mut self) -> Result<JsonValue, String> {
+        if self.released {
+            return Ok(JsonValue::Null);
+        }
+        self.stop_heartbeat();
+        let release = leases::release_runtime_lease(&self.root_path, &self.lease_id)?;
+        self.released = true;
+        Ok(release)
+    }
+
+    fn stop_heartbeat(&mut self) {
+        if let Some(mut heartbeat) = self.heartbeat.take() {
+            heartbeat.stop.store(true, Ordering::SeqCst);
+            if let Some(handle) = heartbeat.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn heartbeat_started(&self) -> bool {
+        self.heartbeat.is_some()
+    }
+
+    fn heartbeat_renewal_count(&self) -> usize {
+        self.heartbeat
+            .as_ref()
+            .map(|heartbeat| heartbeat.renewal_count.load(Ordering::SeqCst))
+            .unwrap_or(0)
+    }
+
+    fn heartbeat_lost(&self) -> bool {
+        self.heartbeat
+            .as_ref()
+            .map(|heartbeat| heartbeat.lost.load(Ordering::SeqCst))
+            .unwrap_or(false)
+    }
+
+    fn heartbeat_failure_count(&self) -> usize {
+        self.heartbeat
+            .as_ref()
+            .map(|heartbeat| heartbeat.failure_count.load(Ordering::SeqCst))
+            .unwrap_or(0)
+    }
+
+    fn heartbeat_lost_flag(&self) -> Option<&AtomicBool> {
+        self.heartbeat
+            .as_ref()
+            .map(|heartbeat| heartbeat.lost.as_ref())
+    }
+}
+
+impl UpstreamLeaseAttachment {
+    fn heartbeat_lost_flag(&self) -> Option<&AtomicBool> {
+        match self {
+            UpstreamLeaseAttachment::Attached(guard) => guard.heartbeat_lost_flag(),
+        }
+    }
+}
+
 pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
     let servers = load_servers(root_path)?;
     let items = servers
         .values()
-        .map(|server| server_inventory_item(server))
+        .map(server_inventory_item)
         .collect::<Vec<_>>();
     let callable_stdio_count = servers
         .values()
@@ -429,6 +544,24 @@ pub fn call_tool(
     arguments: &JsonValue,
     timeout_ms: Option<u64>,
 ) -> Result<JsonValue, String> {
+    call_tool_with_context(
+        root_path,
+        server_name,
+        tool_name,
+        arguments,
+        timeout_ms,
+        None,
+    )
+}
+
+pub fn call_tool_with_context(
+    root_path: &Path,
+    server_name: &str,
+    tool_name: &str,
+    arguments: &JsonValue,
+    timeout_ms: Option<u64>,
+    context: Option<&UpstreamLeaseContext>,
+) -> Result<JsonValue, String> {
     let server_name = server_name.trim();
     let tool_name = tool_name.trim();
     if server_name.is_empty() {
@@ -445,6 +578,8 @@ pub fn call_tool(
     ensure_callable_stdio(server)?;
 
     let effective_timeout = timeout_for(server, timeout_ms);
+    let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
+    let heartbeat_lost = lease.heartbeat_lost_flag();
     let result = run_stdio_request(
         root_path,
         server,
@@ -454,23 +589,30 @@ pub fn call_tool(
             ("arguments", arguments.clone()),
         ])),
         effective_timeout,
+        heartbeat_lost,
     )?;
+    let lease_outcome = finalize_upstream_lease(lease)?;
     let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
     let upstream_ok = !upstream_is_error;
 
-    Ok(JsonValue::object([
-        ("ok", JsonValue::bool(upstream_ok)),
-        ("bridgeOk", JsonValue::bool(true)),
-        ("upstreamOk", JsonValue::bool(upstream_ok)),
-        ("upstreamIsError", JsonValue::bool(upstream_is_error)),
-        ("server", JsonValue::string(server_name)),
-        ("tool", JsonValue::string(tool_name)),
+    let mut entries = vec![
+        ("ok".to_string(), JsonValue::bool(upstream_ok)),
+        ("bridgeOk".to_string(), JsonValue::bool(true)),
+        ("upstreamOk".to_string(), JsonValue::bool(upstream_ok)),
         (
-            "timeoutMs",
+            "upstreamIsError".to_string(),
+            JsonValue::bool(upstream_is_error),
+        ),
+        ("server".to_string(), JsonValue::string(server_name)),
+        ("tool".to_string(), JsonValue::string(tool_name)),
+        (
+            "timeoutMs".to_string(),
             JsonValue::number(effective_timeout.as_millis()),
         ),
-        ("upstreamResult", result),
-    ]))
+        ("upstreamResult".to_string(), result),
+    ];
+    entries.extend(upstream_lease_entries(lease_outcome));
+    Ok(JsonValue::object(entries))
 }
 
 pub fn call_tools(
@@ -478,6 +620,16 @@ pub fn call_tools(
     server_name: &str,
     calls: &[UpstreamToolCall],
     timeout_ms: Option<u64>,
+) -> Result<JsonValue, String> {
+    call_tools_with_context(root_path, server_name, calls, timeout_ms, None)
+}
+
+pub fn call_tools_with_context(
+    root_path: &Path,
+    server_name: &str,
+    calls: &[UpstreamToolCall],
+    timeout_ms: Option<u64>,
+    context: Option<&UpstreamLeaseContext>,
 ) -> Result<JsonValue, String> {
     let server_name = server_name.trim();
     if server_name.is_empty() {
@@ -494,7 +646,11 @@ pub fn call_tools(
     ensure_callable_stdio(server)?;
 
     let effective_timeout = timeout_for(server, timeout_ms);
-    let results = run_stdio_tool_calls(root_path, server, calls, effective_timeout)?;
+    let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
+    let heartbeat_lost = lease.heartbeat_lost_flag();
+    let results =
+        run_stdio_tool_calls(root_path, server, calls, effective_timeout, heartbeat_lost)?;
+    let lease_outcome = finalize_upstream_lease(lease)?;
     let upstream_ok_count = results
         .iter()
         .filter(|item| json_helpers::bool_at_path(item, &["upstreamOk"]).unwrap_or(false))
@@ -502,23 +658,251 @@ pub fn call_tools(
     let upstream_failed_count = results.len().saturating_sub(upstream_ok_count);
     let upstream_ok = upstream_failed_count == 0;
 
-    Ok(JsonValue::object([
-        ("ok", JsonValue::bool(upstream_ok)),
-        ("bridgeOk", JsonValue::bool(true)),
-        ("upstreamOk", JsonValue::bool(upstream_ok)),
-        ("server", JsonValue::string(server_name)),
+    let mut entries = vec![
+        ("ok".to_string(), JsonValue::bool(upstream_ok)),
+        ("bridgeOk".to_string(), JsonValue::bool(true)),
+        ("upstreamOk".to_string(), JsonValue::bool(upstream_ok)),
+        ("server".to_string(), JsonValue::string(server_name)),
         (
-            "timeoutMs",
+            "timeoutMs".to_string(),
             JsonValue::number(effective_timeout.as_millis()),
         ),
-        ("callCount", JsonValue::number(results.len())),
-        ("upstreamOkCount", JsonValue::number(upstream_ok_count)),
+        ("callCount".to_string(), JsonValue::number(results.len())),
         (
-            "upstreamFailedCount",
+            "upstreamOkCount".to_string(),
+            JsonValue::number(upstream_ok_count),
+        ),
+        (
+            "upstreamFailedCount".to_string(),
             JsonValue::number(upstream_failed_count),
         ),
-        ("results", JsonValue::array(results)),
-    ]))
+        ("results".to_string(), JsonValue::array(results)),
+    ];
+    entries.extend(upstream_lease_entries(lease_outcome));
+    Ok(JsonValue::object(entries))
+}
+
+fn acquire_upstream_lease(
+    root_path: &Path,
+    server_name: &str,
+    context: Option<&UpstreamLeaseContext>,
+    timeout: Duration,
+) -> Result<UpstreamLeaseAttachment, String> {
+    let effective_ttl_ms = context
+        .and_then(|value| value.ttl_ms)
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| timeout.as_millis().saturating_add(5_000));
+    let request = RuntimeLeaseRequest {
+        server_name: server_name.to_string(),
+        client_id: Some(
+            context_string(context.and_then(|value| value.client_id.as_ref()))
+                .unwrap_or_else(|| "mcpace-upstream-bridge".to_string()),
+        ),
+        session_id: context_string(context.and_then(|value| value.session_id.as_ref())),
+        project_root: context_string(context.and_then(|value| value.project_root.as_ref()))
+            .or_else(|| Some(child_process_path(root_path))),
+        transport: Some(
+            context_string(context.and_then(|value| value.transport.as_ref()))
+                .unwrap_or_else(|| "stdio".to_string()),
+        ),
+        metadata_json: context
+            .and_then(|value| value.metadata.as_ref())
+            .map(JsonValue::to_compact_string),
+        ttl_ms: Some(effective_ttl_ms),
+    };
+
+    match leases::acquire_runtime_lease(root_path, request)? {
+        RuntimeLeaseAcquireResult::Acquired { lease_id, json } => {
+            let lease = json_helpers::value_at_path(&json, &["lease"])
+                .cloned()
+                .unwrap_or_else(|| json.clone());
+            let heartbeat = should_heartbeat_lease(effective_ttl_ms, timeout)
+                .then(|| start_lease_heartbeat(root_path, &lease_id, effective_ttl_ms));
+            Ok(UpstreamLeaseAttachment::Attached(UpstreamLeaseGuard {
+                root_path: root_path.to_path_buf(),
+                lease_id,
+                lease,
+                released: false,
+                heartbeat,
+            }))
+        }
+        RuntimeLeaseAcquireResult::Blocked { json } => Err(runtime_lease_blocked_error(
+            server_name,
+            json_helpers::string_at_path(&json, &["reason"])
+                .unwrap_or("runtime lease acquisition was blocked"),
+            &json,
+        )),
+    }
+}
+
+fn finalize_upstream_lease(
+    attachment: UpstreamLeaseAttachment,
+) -> Result<UpstreamLeaseOutcome, String> {
+    match attachment {
+        UpstreamLeaseAttachment::Attached(mut guard) => {
+            let lease_id = guard.lease_id.clone();
+            let lease = guard.lease.clone();
+            let heartbeat_started = guard.heartbeat_started();
+            let heartbeat_renewal_count = guard.heartbeat_renewal_count();
+            let heartbeat_lost = guard.heartbeat_lost();
+            let heartbeat_failure_count = guard.heartbeat_failure_count();
+            let release = guard.release()?;
+            Ok(UpstreamLeaseOutcome {
+                attached: true,
+                lease_id: Some(lease_id),
+                lease,
+                released: true,
+                release,
+                bypass_reason: None,
+                heartbeat_started,
+                heartbeat_renewal_count,
+                heartbeat_lost,
+                heartbeat_failure_count,
+            })
+        }
+    }
+}
+
+fn upstream_lease_entries(outcome: UpstreamLeaseOutcome) -> Vec<(String, JsonValue)> {
+    vec![
+        (
+            "leaseAttached".to_string(),
+            JsonValue::bool(outcome.attached),
+        ),
+        (
+            "leaseId".to_string(),
+            optional_json_string(outcome.lease_id),
+        ),
+        ("lease".to_string(), outcome.lease),
+        (
+            "leaseReleased".to_string(),
+            JsonValue::bool(outcome.released),
+        ),
+        ("leaseRelease".to_string(), outcome.release),
+        (
+            "leaseBypassReason".to_string(),
+            optional_json_string(outcome.bypass_reason),
+        ),
+        (
+            "leaseHeartbeatStarted".to_string(),
+            JsonValue::bool(outcome.heartbeat_started),
+        ),
+        (
+            "leaseHeartbeatRenewalCount".to_string(),
+            JsonValue::number(outcome.heartbeat_renewal_count),
+        ),
+        (
+            "leaseHeartbeatLost".to_string(),
+            JsonValue::bool(outcome.heartbeat_lost),
+        ),
+        (
+            "leaseHeartbeatFailureCount".to_string(),
+            JsonValue::number(outcome.heartbeat_failure_count),
+        ),
+    ]
+}
+
+fn should_heartbeat_lease(ttl_ms: u128, timeout: Duration) -> bool {
+    ttl_ms <= timeout.as_millis().saturating_add(1_000)
+}
+
+fn start_lease_heartbeat(root_path: &Path, lease_id: &str, ttl_ms: u128) -> LeaseHeartbeat {
+    let stop = Arc::new(AtomicBool::new(false));
+    let lost = Arc::new(AtomicBool::new(false));
+    let renewal_count = Arc::new(AtomicUsize::new(0));
+    let failure_count = Arc::new(AtomicUsize::new(0));
+    let thread_stop = Arc::clone(&stop);
+    let thread_lost = Arc::clone(&lost);
+    let thread_renewal_count = Arc::clone(&renewal_count);
+    let thread_failure_count = Arc::clone(&failure_count);
+    let thread_root_path = root_path.to_path_buf();
+    let thread_lease_id = lease_id.to_string();
+    let interval = lease_heartbeat_interval(ttl_ms);
+
+    let handle = thread::spawn(move || {
+        while !thread_stop.load(Ordering::SeqCst) {
+            sleep_interruptibly(interval, &thread_stop);
+            if thread_stop.load(Ordering::SeqCst) {
+                break;
+            }
+            match leases::renew_runtime_lease(&thread_root_path, &thread_lease_id, Some(ttl_ms)) {
+                Ok(json) if json_helpers::string_at_path(&json, &["status"]) == Some("renewed") => {
+                    thread_renewal_count.fetch_add(1, Ordering::SeqCst);
+                }
+                Ok(_) | Err(_) => {
+                    thread_failure_count.fetch_add(1, Ordering::SeqCst);
+                    thread_lost.store(true, Ordering::SeqCst);
+                    break;
+                }
+            }
+        }
+    });
+
+    LeaseHeartbeat {
+        stop,
+        lost,
+        renewal_count,
+        failure_count,
+        handle: Some(handle),
+    }
+}
+
+fn sleep_interruptibly(duration: Duration, stop: &AtomicBool) {
+    let deadline = Instant::now() + duration;
+    while !stop.load(Ordering::SeqCst) {
+        let now = Instant::now();
+        if now >= deadline {
+            break;
+        }
+        thread::sleep(
+            deadline
+                .saturating_duration_since(now)
+                .min(Duration::from_millis(25)),
+        );
+    }
+}
+
+fn lease_heartbeat_interval(ttl_ms: u128) -> Duration {
+    let ttl_ms = u64::try_from(ttl_ms).unwrap_or(u64::MAX);
+    let upper_bound = ttl_ms.saturating_sub(1).max(1);
+    let interval_ms = (ttl_ms / 3).clamp(50, 30_000).min(upper_bound);
+    Duration::from_millis(interval_ms)
+}
+
+fn runtime_lease_blocked_error(server_name: &str, reason: &str, json: &JsonValue) -> String {
+    format!(
+        "runtime lease blocked for upstream server '{}': {} | {}",
+        server_name,
+        reason,
+        json.to_compact_string()
+    )
+}
+
+fn runtime_lease_lost_error(
+    server_name: &str,
+    method: &str,
+    stderr_rx: &Receiver<String>,
+) -> String {
+    format!(
+        "runtime lease lost while waiting for upstream server '{}' response to {}; upstream process was cancelled before using a stale result{}",
+        server_name,
+        method,
+        stderr_suffix(stderr_rx)
+    )
+}
+
+fn context_string(value: Option<&String>) -> Option<String> {
+    value
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn optional_json_string(value: Option<String>) -> JsonValue {
+    match value {
+        Some(value) => JsonValue::string(value),
+        None => JsonValue::Null,
+    }
 }
 
 fn load_servers(root_path: &Path) -> Result<BTreeMap<String, UpstreamServerConfig>, String> {
@@ -649,7 +1033,7 @@ fn cached_tools_list(
         }
     }
 
-    let result = run_stdio_request(root_path, server, "tools/list", None, timeout)?;
+    let result = run_stdio_request(root_path, server, "tools/list", None, timeout, None)?;
     let tools = json_helpers::value_at_path(&result, &["tools"])
         .cloned()
         .unwrap_or_else(|| JsonValue::array([]));
@@ -817,6 +1201,7 @@ fn run_stdio_request(
     method: &str,
     params: Option<JsonValue>,
     timeout: Duration,
+    lease_lost: Option<&AtomicBool>,
 ) -> Result<JsonValue, String> {
     let mut running = spawn_stdio_server(root_path, server)?;
     let deadline = Instant::now() + timeout;
@@ -853,6 +1238,7 @@ fn run_stdio_request(
         deadline,
         &server.name,
         "initialize",
+        lease_lost,
     )?;
 
     write_jsonrpc(
@@ -879,6 +1265,7 @@ fn run_stdio_request(
         deadline,
         &server.name,
         method,
+        lease_lost,
     )
 }
 
@@ -887,6 +1274,7 @@ fn run_stdio_tool_calls(
     server: &UpstreamServerConfig,
     calls: &[UpstreamToolCall],
     timeout: Duration,
+    lease_lost: Option<&AtomicBool>,
 ) -> Result<Vec<JsonValue>, String> {
     let mut running = spawn_stdio_server(root_path, server)?;
     let deadline = Instant::now() + timeout;
@@ -923,6 +1311,7 @@ fn run_stdio_tool_calls(
         deadline,
         &server.name,
         "initialize",
+        lease_lost,
     )?;
 
     write_jsonrpc(
@@ -958,6 +1347,7 @@ fn run_stdio_tool_calls(
             deadline,
             &server.name,
             "tools/call",
+            lease_lost,
         )?;
         let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
         let upstream_ok = !upstream_is_error;
@@ -1078,8 +1468,15 @@ fn read_response(
     deadline: Instant,
     server_name: &str,
     method: &str,
+    lease_lost: Option<&AtomicBool>,
 ) -> Result<JsonValue, String> {
     loop {
+        if lease_lost
+            .map(|value| value.load(Ordering::SeqCst))
+            .unwrap_or(false)
+        {
+            return Err(runtime_lease_lost_error(server_name, method, stderr_rx));
+        }
         let now = Instant::now();
         if now >= deadline {
             return Err(format!(
@@ -1093,6 +1490,12 @@ fn read_response(
         let remaining = deadline.saturating_duration_since(now);
         match stdout_rx.recv_timeout(remaining.min(Duration::from_millis(250))) {
             Ok(line) => {
+                if lease_lost
+                    .map(|value| value.load(Ordering::SeqCst))
+                    .unwrap_or(false)
+                {
+                    return Err(runtime_lease_lost_error(server_name, method, stderr_rx));
+                }
                 let trimmed = line.trim();
                 if trimmed.is_empty() || !trimmed.starts_with('{') {
                     continue;
@@ -1107,6 +1510,12 @@ fn read_response(
                     .unwrap_or(false);
                 if !id_matches {
                     continue;
+                }
+                if lease_lost
+                    .map(|value| value.load(Ordering::SeqCst))
+                    .unwrap_or(false)
+                {
+                    return Err(runtime_lease_lost_error(server_name, method, stderr_rx));
                 }
                 if let Some(error) = json_helpers::value_at_path(&message, &["error"]) {
                     return Err(format!(
@@ -1619,10 +2028,8 @@ fn resolve_command(command: &str) -> Result<PathBuf, String> {
         return Err("empty command".to_string());
     }
     let raw = PathBuf::from(command);
-    if raw.components().count() > 1 || raw.extension().is_some() {
-        if raw.exists() {
-            return Ok(raw);
-        }
+    if (raw.components().count() > 1 || raw.extension().is_some()) && raw.exists() {
+        return Ok(raw);
     }
 
     #[cfg(windows)]

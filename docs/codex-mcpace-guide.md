@@ -24,13 +24,23 @@ startup_timeout_sec = 20
 
 `MCPace` owns this block when you install it through
 `mcpace client install codex` or `mcpace client install all`.
+Install writes create a local MCPace backup first; undo the latest Codex patch
+with `mcpace client restore codex --backup latest --root .` if you need to roll
+back to the previous config file.
 
 The HTTP MCP endpoint exposes MCPace management and diagnostic tools. It also
 provides explicit stdio upstream access through `upstream_catalog`,
 `upstream_probe`, `upstream_tools`, `upstream_call`, and `upstream_batch`. These
 bridge tools discover servers from `mcp_settings.json` at runtime rather than
 hardcoding server names, so future stdio MCP entries become probe/list/call
-candidates as soon as their command is installed and enabled.
+candidates as soon as their command is installed and enabled. Real
+`upstream_call` / `upstream_batch` executions now acquire a scheduler lease from
+the planner-derived route, heartbeat-renew it when a call can outlive the
+initial TTL, abort before accepting a result if the heartbeat loses ownership,
+run the upstream MCP call, and release the lease before returning. Servers that
+exist only in `mcp_settings.json` remain callable, but MCPace now assigns a
+conservative single-writer `settings-only-conservative` request lease instead of
+bypassing scheduling.
 
 MCPace does not advertise fake direct tool names such as `browser` or
 `read_file`. Call `upstream_catalog` to get a flat `tools` array with concise
@@ -232,10 +242,18 @@ Expected results:
 - `upstream_call` returns `isError: false` and an `upstreamResult` object for
   successful upstream tool calls. Its payload separates bridge success from
   upstream tool success with `bridgeOk`, `upstreamOk`, and `upstreamIsError`, so
-  invalid tool arguments do not look like successful real work.
+  invalid tool arguments do not look like successful real work. Declared MCPace
+  servers also include `leaseAttached`, `leaseId`, `leaseReleased`, `lease`, and
+  `leaseRelease` fields so you can see the request-time scheduler gate. Long
+  calls with a short lease TTL also report `leaseHeartbeatStarted` and
+  `leaseHeartbeatRenewalCount`; lost-heartbeat diagnostics use
+  `leaseHeartbeatLost` / `leaseHeartbeatFailureCount` before the bridge returns
+  a result.
 - `upstream_batch` returns one `results` item per requested upstream tool while
   keeping state within that batch. This is the preferred browser automation path
-  when a follow-up action depends on the page opened by a previous action.
+  when a follow-up action depends on the page opened by a previous action. The
+  whole batch holds one scheduler lease, heartbeat-renews it if needed, and
+  releases it before responding.
 - `browser_status` returns `status: callable-stdio-abp` when the ABP browser
   stdio bridge is configured.
 - `upstream_tools` with `server: "browser"` returns the ABP browser tool list.
@@ -255,12 +273,14 @@ server diagnostics. The short `tools/list` cache makes repeated
 probe/catalog/list calls cheap while still invalidating on `mcp_settings.json`
 metadata changes and allowing explicit `refresh`.
 
-The next larger performance step is a lease/route-scoped connector manager:
+The current wrapper tools already use request-time scheduler leases. The next
+larger performance step is a lease/route-scoped connector manager:
 
 1. key warm upstream sessions by server, client/session affinity, project root,
    and route/process scope;
 2. apply bounded concurrency and backpressure per upstream;
-3. invalidate sessions on lease expiry, config changes, protocol errors, and
+3. renew leases while sessions are active and invalidate sessions on lease
+   expiry, config changes, protocol errors, and
    explicit refresh;
 4. keep wrapper tools as the compatibility baseline, then optionally add
    namespaced direct tool projection behind a feature flag.
@@ -335,6 +355,26 @@ The local Windows host verification covered:
 - `initialize -> notifications/initialized -> ping -> tools/list`
 - `upstream_tools` for `memory`, `filesystem`, `sequential-thinking`,
   `context7`, `fetch`, `serena`, `exa`, and `wireshark-mcp`
+
+## Source-regression coverage added on April 28, 2026
+
+Rust tests now cover the request-time lease gate for explicit upstream wrapper
+calls:
+
+- successful stdio fallback `upstream_call` attaches and releases a scheduler
+  lease, leaving `activeLeaseCount: 0`;
+- settings-only upstream servers get a conservative single-writer request lease
+  instead of a scheduler bypass;
+- a short-TTL upstream call heartbeat-renews its lease while the fake upstream
+  delays the response;
+- a forced lost lease cancels the in-flight upstream wait and refuses the stale
+  successful result;
+- a conflicting held lease blocks `upstream_call` before the fake upstream
+  process launches;
+- stale JSON-RPC response ids from an upstream helper are ignored in favor of the
+  expected request id;
+- the HTTP tool dispatch path uses the same upstream lease context and releases
+  its lease after the call.
 - `upstream_probe` across all enabled upstreams, including `lean-ctx` after the
   `lean-ctx` binary was installed and resolved from PATH
 - `upstream_call` safe smoke calls for those same stdio servers

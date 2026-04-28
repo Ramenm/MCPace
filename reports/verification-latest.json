@@ -1,6 +1,6 @@
 {
   "version": "0.3.6",
-  "checkedAt": "2026-04-27T16:30:04.689Z",
+  "checkedAt": "2026-04-28T09:33:40.953Z",
   "productTruth": {
     "version": "0.3.6",
     "currentPromise": "One local MCPace endpoint, simpler install on selected local clients, and honest diagnostics for what is configured versus actually usable.",
@@ -87,18 +87,18 @@
   "capabilityInventory": {
     "totalCapabilities": 24,
     "implementationStatusCounts": {
-      "implemented": 13,
-      "planned": 11,
+      "implemented": 14,
+      "planned": 10,
       "missing": 0
     },
     "claimStatusCounts": {
       "supported": 12,
-      "supported-local-only": 2,
+      "supported-local-only": 3,
       "control-plane-only": 4,
       "bootstrap-only": 1,
       "connectable-preview": 1,
       "requires-host-proof": 0,
-      "planned": 4
+      "planned": 3
     },
     "claimStatusLegend": {
       "supported": "Safe to describe as working now inside the current repo proof boundary.",
@@ -137,7 +137,7 @@
     "checks": [
       "npm test"
     ],
-    "durationMs": 26861
+    "durationMs": 9983
   },
   "buildProof": {
     "status": "not-run",
@@ -157,9 +157,9 @@
       "node scripts/archive-release.mjs --json"
     ],
     "archive": {
-      "name": "mcpace-v0.3.6-270426-193034.zip",
-      "path": "dist/mcpace-v0.3.6-270426-193034.zip",
-      "stamp": "270426-193034"
+      "name": "mcpace-v0.3.6-280426-123352.zip",
+      "path": "dist/mcpace-v0.3.6-280426-123352.zip",
+      "stamp": "280426-123352"
     },
     "npmPackage": {
       "status": "pass",

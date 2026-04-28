@@ -24,7 +24,8 @@ test('rust command coverage reflects the currently implemented launch and instal
     'serve status',
     'serve stop',
     'mcp-server',
-    'client install'
+    'client install',
+    'client restore'
   ]) {
     assert.ok(commands.has(command), `missing native command coverage for ${command}`);
   }

@@ -9,120 +9,100 @@ use super::pathing::{
 pub(super) fn resolve_context(parsed: &ParsedArgs, metadata: &MetadataEnvelope) -> ResolvedContext {
     let mut warnings = Vec::new();
 
-    let (client_id, client_id_source) = resolve_string(
-        parsed.client_id.clone(),
-        env::var("MCPACE_CLIENT_ID").ok(),
-        metadata.client_id.clone(),
-        Some("unknown-client".to_string()),
-        "flag",
-        "env",
-        "metadata",
-        "fallback",
-    );
+    let (client_id, client_id_source) = resolve_string([
+        (parsed.client_id.clone(), "flag"),
+        (env::var("MCPACE_CLIENT_ID").ok(), "env"),
+        (metadata.client_id.clone(), "metadata"),
+        (Some("unknown-client".to_string()), "fallback"),
+    ]);
 
-    let (session_id, session_id_source) = resolve_string(
-        parsed.session_id.clone(),
-        env::var("MCPACE_SESSION_ID").ok(),
-        metadata.session_id.clone(),
-        None,
-        "flag",
-        "env",
-        "metadata",
-        "none",
-    );
+    let (session_id, session_id_source) = resolve_string([
+        (parsed.session_id.clone(), "flag"),
+        (env::var("MCPACE_SESSION_ID").ok(), "env"),
+        (metadata.session_id.clone(), "metadata"),
+        (None, "none"),
+    ]);
 
-    let (conversation_id, conversation_id_source) = resolve_string(
-        env::var("MCPACE_CONVERSATION_ID").ok(),
-        None,
-        metadata.conversation_id.clone(),
-        None,
-        "env",
-        "env",
-        "metadata",
-        "none",
-    );
+    let (conversation_id, conversation_id_source) = resolve_string([
+        (env::var("MCPACE_CONVERSATION_ID").ok(), "env"),
+        (None, "env"),
+        (metadata.conversation_id.clone(), "metadata"),
+        (None, "none"),
+    ]);
 
-    let (client_instance_id, client_instance_id_source) = resolve_string(
-        env::var("MCPACE_CLIENT_INSTANCE_ID").ok(),
-        None,
-        metadata.client_instance_id.clone(),
-        None,
-        "env",
-        "env",
-        "metadata",
-        "none",
-    );
+    let (client_instance_id, client_instance_id_source) = resolve_string([
+        (env::var("MCPACE_CLIENT_INSTANCE_ID").ok(), "env"),
+        (None, "env"),
+        (metadata.client_instance_id.clone(), "metadata"),
+        (None, "none"),
+    ]);
 
-    let (transport_session_id, transport_session_id_source) = resolve_string(
-        env::var("MCPACE_TRANSPORT_SESSION_ID").ok(),
-        None,
-        metadata.transport_session_id.clone(),
-        None,
-        "env",
-        "env",
-        "metadata",
-        "none",
-    );
+    let (transport_session_id, transport_session_id_source) = resolve_string([
+        (env::var("MCPACE_TRANSPORT_SESSION_ID").ok(), "env"),
+        (None, "env"),
+        (metadata.transport_session_id.clone(), "metadata"),
+        (None, "none"),
+    ]);
 
-    let (credential_profile_id, credential_profile_id_source) = resolve_string(
-        env::var("MCPACE_CREDENTIAL_PROFILE_ID").ok(),
-        None,
-        metadata.credential_profile_id.clone(),
-        None,
-        "env",
-        "env",
-        "metadata",
-        "none",
-    );
+    let (credential_profile_id, credential_profile_id_source) = resolve_string([
+        (env::var("MCPACE_CREDENTIAL_PROFILE_ID").ok(), "env"),
+        (None, "env"),
+        (metadata.credential_profile_id.clone(), "metadata"),
+        (None, "none"),
+    ]);
 
-    let (cwd, cwd_source) = resolve_string(
-        env::var("MCPACE_CWD")
-            .ok()
-            .map(|value| normalize_path(&value)),
-        None,
-        metadata.cwd.clone(),
-        None,
-        "env",
-        "env",
-        "metadata",
-        "none",
-    );
+    let (cwd, cwd_source) = resolve_string([
+        (
+            env::var("MCPACE_CWD")
+                .ok()
+                .map(|value| normalize_path(&value)),
+            "env",
+        ),
+        (None, "env"),
+        (metadata.cwd.clone(), "metadata"),
+        (None, "none"),
+    ]);
 
     let (project_root, project_root_source) =
         resolve_project_root(parsed, metadata, cwd.as_deref(), &mut warnings);
 
-    let (preferred_ingress, preferred_ingress_source) = resolve_string(
-        parsed
-            .transport
-            .clone()
-            .map(|value| normalize_transport(&value)),
-        env::var("MCPACE_CLIENT_TRANSPORT")
-            .ok()
-            .or_else(|| env::var("MCPACE_CLIENT_INGRESS").ok())
-            .map(|value| normalize_transport(&value)),
-        metadata
-            .transport
-            .clone()
-            .map(|value| normalize_transport(&value)),
-        Some("stdio".to_string()),
-        "flag",
-        "env",
-        "metadata",
-        "default-local",
-    );
+    let (preferred_ingress, preferred_ingress_source) = resolve_string([
+        (
+            parsed
+                .transport
+                .clone()
+                .map(|value| normalize_transport(&value)),
+            "flag",
+        ),
+        (
+            env::var("MCPACE_CLIENT_TRANSPORT")
+                .ok()
+                .or_else(|| env::var("MCPACE_CLIENT_INGRESS").ok())
+                .map(|value| normalize_transport(&value)),
+            "env",
+        ),
+        (
+            metadata
+                .transport
+                .clone()
+                .map(|value| normalize_transport(&value)),
+            "metadata",
+        ),
+        (Some("stdio".to_string()), "default-local"),
+    ]);
 
     let client_id = client_id.unwrap_or_else(|| "unknown-client".to_string());
     let preferred_ingress = preferred_ingress.unwrap_or_else(|| "stdio".to_string());
-    let session_lease = resolve_session_lease(
-        &client_id,
-        session_id.as_deref(),
-        conversation_id.as_deref(),
-        client_instance_id.as_deref(),
-        transport_session_id.as_deref(),
-        project_root.as_deref(),
-        cwd.as_deref(),
-        &preferred_ingress,
-    );
+    let session_lease = resolve_session_lease(SessionLeaseInput {
+        client_id: &client_id,
+        session_id: session_id.as_deref(),
+        conversation_id: conversation_id.as_deref(),
+        client_instance_id: client_instance_id.as_deref(),
+        transport_session_id: transport_session_id.as_deref(),
+        project_root: project_root.as_deref(),
+        cwd: cwd.as_deref(),
+        preferred_ingress: &preferred_ingress,
+    });
 
     if session_id.is_none() {
         warnings.push(format!(
@@ -228,29 +208,14 @@ fn best_matching_root<'a>(roots: &'a [String], cwd: &str) -> Option<&'a str> {
     best
 }
 
-fn resolve_string(
-    primary: Option<String>,
-    secondary: Option<String>,
-    tertiary: Option<String>,
-    fallback: Option<String>,
-    primary_source: &str,
-    secondary_source: &str,
-    tertiary_source: &str,
-    fallback_source: &str,
-) -> (Option<String>, String) {
-    if let Some(value) = clean_optional_string(primary) {
-        return (Some(value), primary_source.to_string());
+fn resolve_string(candidates: [(Option<String>, &str); 4]) -> (Option<String>, String) {
+    let fallback_source = candidates[3].1.to_string();
+    for (candidate, source) in candidates {
+        if let Some(value) = clean_optional_string(candidate) {
+            return (Some(value), source.to_string());
+        }
     }
-    if let Some(value) = clean_optional_string(secondary) {
-        return (Some(value), secondary_source.to_string());
-    }
-    if let Some(value) = clean_optional_string(tertiary) {
-        return (Some(value), tertiary_source.to_string());
-    }
-    if let Some(value) = clean_optional_string(fallback) {
-        return (Some(value), fallback_source.to_string());
-    }
-    (None, fallback_source.to_string())
+    (None, fallback_source)
 }
 
 fn clean_optional_string(value: Option<String>) -> Option<String> {
@@ -263,17 +228,19 @@ fn clean_optional_string(value: Option<String>) -> Option<String> {
     }
 }
 
-fn resolve_session_lease(
-    client_id: &str,
-    session_id: Option<&str>,
-    conversation_id: Option<&str>,
-    client_instance_id: Option<&str>,
-    transport_session_id: Option<&str>,
-    project_root: Option<&str>,
-    cwd: Option<&str>,
-    preferred_ingress: &str,
-) -> (String, String) {
-    if let Some(external_session_id) = clean_optional_string(session_id.map(str::to_string)) {
+struct SessionLeaseInput<'a> {
+    client_id: &'a str,
+    session_id: Option<&'a str>,
+    conversation_id: Option<&'a str>,
+    client_instance_id: Option<&'a str>,
+    transport_session_id: Option<&'a str>,
+    project_root: Option<&'a str>,
+    cwd: Option<&'a str>,
+    preferred_ingress: &'a str,
+}
+
+fn resolve_session_lease(input: SessionLeaseInput<'_>) -> (String, String) {
+    if let Some(external_session_id) = clean_optional_string(input.session_id.map(str::to_string)) {
         return (
             format!("external:{}", sanitize_key(&external_session_id)),
             "external-session-id".to_string(),
@@ -281,13 +248,13 @@ fn resolve_session_lease(
     }
 
     let mut seed = Vec::new();
-    extend_seed(&mut seed, "client", Some(client_id));
-    extend_seed(&mut seed, "conversation", conversation_id);
-    extend_seed(&mut seed, "client-instance", client_instance_id);
-    extend_seed(&mut seed, "transport-session", transport_session_id);
-    extend_seed(&mut seed, "project-root", project_root);
-    extend_seed(&mut seed, "cwd", cwd);
-    extend_seed(&mut seed, "ingress", Some(preferred_ingress));
+    extend_seed(&mut seed, "client", Some(input.client_id));
+    extend_seed(&mut seed, "conversation", input.conversation_id);
+    extend_seed(&mut seed, "client-instance", input.client_instance_id);
+    extend_seed(&mut seed, "transport-session", input.transport_session_id);
+    extend_seed(&mut seed, "project-root", input.project_root);
+    extend_seed(&mut seed, "cwd", input.cwd);
+    extend_seed(&mut seed, "ingress", Some(input.preferred_ingress));
 
     if seed.is_empty() {
         seed.push("anonymous".to_string());
@@ -307,7 +274,10 @@ fn extend_seed(seed: &mut Vec<String>, key: &str, value: Option<&str>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{best_matching_root, clean_optional_string, resolve_session_lease, resolve_string};
+    use super::{
+        best_matching_root, clean_optional_string, resolve_session_lease, resolve_string,
+        SessionLeaseInput,
+    };
 
     const ABSENT: u8 = 0;
     const BLANK: u8 = 1;
@@ -315,55 +285,39 @@ mod tests {
 
     #[test]
     fn resolve_string_prefers_flag_then_env_then_metadata_then_fallback() {
-        let (value, source) = resolve_string(
-            Some("  flag-value  ".to_string()),
-            Some("env-value".to_string()),
-            Some("metadata-value".to_string()),
-            Some("fallback-value".to_string()),
-            "flag",
-            "env",
-            "metadata",
-            "fallback",
-        );
+        let (value, source) = resolve_string([
+            (Some("  flag-value  ".to_string()), "flag"),
+            (Some("env-value".to_string()), "env"),
+            (Some("metadata-value".to_string()), "metadata"),
+            (Some("fallback-value".to_string()), "fallback"),
+        ]);
         assert_eq!(value.as_deref(), Some("flag-value"));
         assert_eq!(source, "flag");
 
-        let (value, source) = resolve_string(
-            Some("   ".to_string()),
-            Some("env-value".to_string()),
-            Some("metadata-value".to_string()),
-            Some("fallback-value".to_string()),
-            "flag",
-            "env",
-            "metadata",
-            "fallback",
-        );
+        let (value, source) = resolve_string([
+            (Some("   ".to_string()), "flag"),
+            (Some("env-value".to_string()), "env"),
+            (Some("metadata-value".to_string()), "metadata"),
+            (Some("fallback-value".to_string()), "fallback"),
+        ]);
         assert_eq!(value.as_deref(), Some("env-value"));
         assert_eq!(source, "env");
 
-        let (value, source) = resolve_string(
-            None,
-            None,
-            Some("metadata-value".to_string()),
-            Some("fallback-value".to_string()),
-            "flag",
-            "env",
-            "metadata",
-            "fallback",
-        );
+        let (value, source) = resolve_string([
+            (None, "flag"),
+            (None, "env"),
+            (Some("metadata-value".to_string()), "metadata"),
+            (Some("fallback-value".to_string()), "fallback"),
+        ]);
         assert_eq!(value.as_deref(), Some("metadata-value"));
         assert_eq!(source, "metadata");
 
-        let (value, source) = resolve_string(
-            None,
-            None,
-            None,
-            Some("fallback-value".to_string()),
-            "flag",
-            "env",
-            "metadata",
-            "fallback",
-        );
+        let (value, source) = resolve_string([
+            (None, "flag"),
+            (None, "env"),
+            (None, "metadata"),
+            (Some("fallback-value".to_string()), "fallback"),
+        ]);
         assert_eq!(value.as_deref(), Some("fallback-value"));
         assert_eq!(source, "fallback");
     }
@@ -380,52 +334,52 @@ mod tests {
 
     #[test]
     fn resolve_session_lease_keeps_external_session_ids() {
-        let (lease_id, source) = resolve_session_lease(
-            "codex",
-            Some(" sess-42 "),
-            Some("conv-1"),
-            Some("client-1"),
-            Some("transport-1"),
-            Some("/work/project"),
-            Some("/work/project"),
-            "stdio",
-        );
+        let (lease_id, source) = resolve_session_lease(SessionLeaseInput {
+            client_id: "codex",
+            session_id: Some(" sess-42 "),
+            conversation_id: Some("conv-1"),
+            client_instance_id: Some("client-1"),
+            transport_session_id: Some("transport-1"),
+            project_root: Some("/work/project"),
+            cwd: Some("/work/project"),
+            preferred_ingress: "stdio",
+        });
         assert_eq!(lease_id, "external:sess-42");
         assert_eq!(source, "external-session-id");
     }
 
     #[test]
     fn resolve_session_lease_derives_stable_fallback_from_context() {
-        let left = resolve_session_lease(
-            "claude-code",
-            None,
-            Some("conv-1"),
-            Some("client-1"),
-            Some("transport-1"),
-            Some("/work/project-b"),
-            Some("/work/project-b"),
-            "streamable-http",
-        );
-        let right = resolve_session_lease(
-            "claude-code",
-            None,
-            Some("conv-1"),
-            Some("client-1"),
-            Some("transport-1"),
-            Some("/work/project-b"),
-            Some("/work/project-b"),
-            "streamable-http",
-        );
-        let different = resolve_session_lease(
-            "claude-code",
-            None,
-            Some("conv-1"),
-            Some("client-1"),
-            Some("transport-1"),
-            Some("/work/project-c"),
-            Some("/work/project-c"),
-            "streamable-http",
-        );
+        let left = resolve_session_lease(SessionLeaseInput {
+            client_id: "claude-code",
+            session_id: None,
+            conversation_id: Some("conv-1"),
+            client_instance_id: Some("client-1"),
+            transport_session_id: Some("transport-1"),
+            project_root: Some("/work/project-b"),
+            cwd: Some("/work/project-b"),
+            preferred_ingress: "streamable-http",
+        });
+        let right = resolve_session_lease(SessionLeaseInput {
+            client_id: "claude-code",
+            session_id: None,
+            conversation_id: Some("conv-1"),
+            client_instance_id: Some("client-1"),
+            transport_session_id: Some("transport-1"),
+            project_root: Some("/work/project-b"),
+            cwd: Some("/work/project-b"),
+            preferred_ingress: "streamable-http",
+        });
+        let different = resolve_session_lease(SessionLeaseInput {
+            client_id: "claude-code",
+            session_id: None,
+            conversation_id: Some("conv-1"),
+            client_instance_id: Some("client-1"),
+            transport_session_id: Some("transport-1"),
+            project_root: Some("/work/project-c"),
+            cwd: Some("/work/project-c"),
+            preferred_ingress: "streamable-http",
+        });
 
         assert_eq!(left.1, "planned-fallback");
         assert_eq!(left, right);
@@ -470,16 +424,12 @@ mod tests {
                 })
                 .collect::<Vec<_>>();
 
-            let (value, source) = resolve_string(
-                values[0].clone(),
-                values[1].clone(),
-                values[2].clone(),
-                values[3].clone(),
-                source_names[0],
-                source_names[1],
-                source_names[2],
-                source_names[3],
-            );
+            let (value, source) = resolve_string([
+                (values[0].clone(), source_names[0]),
+                (values[1].clone(), source_names[1]),
+                (values[2].clone(), source_names[2]),
+                (values[3].clone(), source_names[3]),
+            ]);
 
             if let Some(index) = states.iter().position(|state| *state == VALUE) {
                 let expected_value = format!("{}-value", source_names[index]);

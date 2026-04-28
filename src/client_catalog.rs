@@ -1052,9 +1052,7 @@ fn resolve_catalog_path(root_path: &Path, raw: &str) -> PathBuf {
 fn expand_home(raw: &str) -> String {
     if raw == "~" || raw.starts_with("~/") || raw.starts_with("~\\") {
         if let Ok(home) = env::var("HOME").or_else(|_| env::var("USERPROFILE")) {
-            let suffix = raw
-                .trim_start_matches('~')
-                .trim_start_matches(|ch| ch == '/' || ch == '\\');
+            let suffix = raw.trim_start_matches('~').trim_start_matches(['/', '\\']);
             return PathBuf::from(home).join(suffix).display().to_string();
         }
     }

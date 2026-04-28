@@ -16,9 +16,11 @@ The strongest honest public promise today is:
 honest diagnostics for what is configured versus actually usable.**
 
 That is narrower than the north star in
-`docs/universal-mcp-runtime-north-star.md`. Until live ingress, lease
-ownership, stale-result guards, and real-host proof exist, do not collapse the
-north star into a present-tense claim.
+`docs/universal-mcp-runtime-north-star.md`. Request-time leases with heartbeat
+renewal, conservative settings-only leases, stale-id filtering, and lost-lease
+cancellation now protect explicit upstream wrapper calls, but until durable
+session ownership and real-host proof exist, do not collapse the north star into
+a present-tense claim.
 
 ## First ICP
 
@@ -56,8 +58,11 @@ Beta-quality activation is stricter:
 3. at least one upstream tool call succeeds without stale-result or ownership
    confusion.
 
-Until that second definition is proven on supported hosts, do not talk as if the
-current connectable endpoint equals a fully proven runtime.
+Source tests now prove request-time lease gates, settings-only conservative
+leases, short-TTL heartbeat renewal, stale-id filtering, and lost-heartbeat
+cancellation around explicit upstream wrapper calls. Until the stricter beta
+definition is proven on supported hosts with durable session/process ownership,
+do not talk as if the current connectable endpoint equals a fully proven runtime.
 
 ## Product shape for the current cycle
 
@@ -137,9 +142,12 @@ Do not call the product beta until all of the following are true:
 
 1. catalog-selected `proofTier = tier-1` surfaces have real-host traces;
 2. local HTTP ingress proves session creation/reuse/close behavior;
-3. lease ownership exists for `single-session` / `shared-exclusive` lanes;
-4. cancel/restart/stale-result guards exist;
-5. `client install/export` has dry-run or diff semantics and rollback guidance;
+3. lease ownership is proven for `single-session` / `shared-exclusive` lanes in
+   the supported beta ingress path, including renewal/takeover behavior where a
+   session outlives one request;
+4. cancel/restart/stale-result guards exist beyond the current request-time
+   wrapper protections;
+5. `client install` has dry-run/diff semantics plus restoreable rollback backups, and broader install/export rollback guidance stays documented;
 6. capability inventory, README, `STATE.md`, and docs use the same public truth
    taxonomy.
 

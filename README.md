@@ -11,8 +11,10 @@ This repo is intentionally honest about its state:
 - implemented today: `version`, `doctor`, `setup`, `service`, `dashboard`, `serve`, `init`,
   `hub up/down/repair/status/logs`, `hub lease list/acquire/renew/release`, `profile show`, `projects list`,
   `candidates`, `client list`, `client plan`,
-  `client install` / `client install all` (catalog-driven local config patcher; discover current
-  write-capable surfaces via `mcpace client list --json`),
+  `client install` / `client install all` (catalog-driven local config patcher with
+  `--dry-run` / `--diff` previews and automatic restoreable backups; discover
+  current write-capable surfaces via `mcpace client list --json`),
+  `client restore` (roll back the latest or named install backup for one client, or latest backups for all),
   `client export` (HTTP-first MCPace URL contracts for local clients,
   preview-only for blocked cloud/public surfaces), `lab list`, `lab matrix`,
   `lab coverage`, `lab gaps`, `lab report`, `lab show`, `server list`,
@@ -20,12 +22,12 @@ This repo is intentionally honest about its state:
   `verify readiness`, `repair`, `update check`;
 - internal compatibility surfaces kept for transition/debug work:
   `stdio-shim --json` (bootstrap-only proof surface) and `mcp-server`
-  (stdio fallback lane);
+  (stdio fallback lane with lease-gated upstream wrapper calls);
 - the client catalog is now surface-aware and extensible: built-ins are a fallback, while `clientCatalog.targets`, `clientCatalog.paths`, and `MCPACE_CLIENT_CATALOG` can add or override local/cloud/API/generic surfaces without recompiling;
 - the repo now includes a local file-backed hub lifecycle surface for bootstrap, state, health, logs, corruption repair, bounded log retention, and scheduler lease enforcement;
 - release/platform automation is now prepared as CI workflows and package manifests, while the interactive `release` command remains planned;
-- planned next: live upstream MCP forwarding, real config-writing `client export` for blocked cloud/public
-  surfaces, richer upstream session fan-in, cancellation guards, and real process-pool execution;
+- planned next: persistent upstream session/process-pool ownership, real config-writing `client export` for blocked cloud/public
+  surfaces, richer upstream session fan-in, transport-level cancellation/progress, and real process-pool execution;
 - stack policy is now explicit and machine-readable: Node 22/24 LTS contributor lanes, default local Node 24 via `.nvmrc` / `.node-version`, npm 10+, and a pinned Rust 1.95.0 toolchain are tracked in `docs/toolchain-policy.md` plus `reports/toolchain-support.json`;
 - **not** reconfirmed in this pass: live Docker/runtime behavior, or multi-host parity on Windows/macOS/Linux.
 
@@ -102,8 +104,11 @@ mcpace projects list --json
 mcpace candidates --json
 mcpace client list --json
 mcpace client plan --json --client-id codex --session-id demo-1 --project-root /work/project-a
+mcpace client install all --dry-run --diff --json
 mcpace client install all
 mcpace client install codex
+mcpace client restore codex --backup latest
+mcpace client restore all --backup latest
 mcpace client install claude-code
 mcpace client install cursor-local
 mcpace client install kiro-ide
@@ -183,8 +188,10 @@ npm run generate:checksums -- --output-dir dist
 native Rust read paths, `init` seeds the runtime layout, `hub` provides a
 local lifecycle/status/log/repair/lease surface, `client list` exposes the
 verified/generic client target catalog with surface-aware local/cloud/API
-distinctions, `serve` is the public one-port MCP surface, and `lab` turns
-runtime fixtures plus capability inventory into an explicit backlog.
+distinctions, `serve` is the public one-port MCP surface, explicit upstream
+wrapper calls now acquire/heartbeat-renew/release scheduler leases, cancel on
+lost heartbeat, and put settings-only servers under a conservative lease, and `lab`
+turns runtime fixtures plus capability inventory into an explicit backlog.
 
 ## Local dashboard available now
 
@@ -296,9 +303,23 @@ startup_timeout_sec = 20
 If you want MCPace to write the default shared-scope block for you, run:
 
 ```bash
+mcpace client install all --dry-run --diff --json
 mcpace client install codex
+mcpace client restore codex --backup latest
+mcpace client restore all --backup latest
 mcpace client install all
 ```
+
+Use `--dry-run` to compute the same candidate patch without creating or writing
+client config files, and add `--diff` to inspect the exact current-vs-candidate
+config change before allowing MCPace to persist it. Diff output redacts
+secret-like keys such as tokens, passwords, API keys, and auth credentials.
+Real writes create a local install backup under the MCPace state root; restore the
+latest one with `mcpace client restore <client> --backup latest`, undo all latest
+install backups with `mcpace client restore all --backup latest`, or use the
+`restoreCommand` returned by `--json`. Backups preserve the exact previous
+client config so rollback is lossless; treat the local MCPace state root as
+sensitive if client configs contain tokens or credentials.
 
 MCPace chooses the broadest documented shared scope for each supported local
 client. `client install all` walks the loaded client catalog, patches local install-capable targets, and skips manual/cloud surfaces. Today that means user or global config files for:
@@ -328,7 +349,8 @@ handshake check, see `docs/codex-mcpace-guide.md`.
 
 Internal compatibility note: `mcp-server` and `stdio-shim` still exist for
 debugging and fallback work, but they are no longer the primary local product
-surface.
+surface. `mcp-server` can exercise the same lease-gated upstream wrapper calls
+as the HTTP endpoint; `stdio-shim --json` remains bootstrap-only.
 
 Compatibility aliases currently kept for a smaller migration gap:
 
@@ -397,6 +419,8 @@ mcpace client install gemini-cli
 mcpace client install hermes-agent
 mcpace client install windsurf
 mcpace client install github-copilot-cli
+mcpace client restore codex --backup latest
+mcpace client restore all --backup latest
 mcpace client export codex
 mcpace server list
 mcpace profile show --json
@@ -409,9 +433,10 @@ mcpace release # planned; release automation currently lives in CI workflows
 ```
 
 At this stage, `setup`, `service`, `dashboard`, `serve`, `init`, `hub`, top-level `repair`,
-HTTP-first `client export`, safe `update check`, and the catalog-driven local `client install`
-patchers are implemented in source. `stdio-shim --json` and `mcp-server` remain internal
-compatibility lanes. The runtime capability inventory now keeps a separate
+HTTP-first `client export`, safe `update check`, the catalog-driven local `client install`
+patchers with dry-run/diff previews plus `client restore` rollback backups, and
+lease-gated explicit upstream wrapper calls with heartbeat renewal, lost-lease cancellation, and conservative settings-only leases are implemented in source. `stdio-shim --json` remains a bootstrap-only internal
+compatibility lane, while `mcp-server` remains a stdio fallback/debug lane. The runtime capability inventory now keeps a separate
 `claimStatus` field so docs can say `supported`, `control-plane-only`,
 `bootstrap-only`, or `connectable-preview` without pretending those are all the
 same thing. Config-writing `client export` for broader cloud/public client

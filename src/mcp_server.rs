@@ -297,7 +297,7 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                     continue;
                 }
 
-                let tools = JsonValue::array(TOOL_SPECS.iter().map(|tool| tool_definition(tool)));
+                let tools = JsonValue::array(TOOL_SPECS.iter().map(tool_definition));
                 let response = mcp::result(id, JsonValue::object([("tools", tools)]));
                 if write_message(stdout, &response).is_err() {
                     return 1;
@@ -448,7 +448,7 @@ fn write_help(stdout: &mut dyn Write) {
          [--session-id <id>] [--project-root <path>] \
          [--transport <stdio|streamable-http>]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
         "mcp-server starts a live MCP stdio server for local clients."
@@ -713,6 +713,38 @@ fn tool_definition(tool: &ToolSpec) -> JsonValue {
                                     ),
                                 ]),
                             ),
+                            (
+                                "clientId",
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ),
+                            (
+                                "sessionId",
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ),
+                            (
+                                "projectRoot",
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ),
+                            (
+                                "transport",
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ),
+                            (
+                                "ttlMs",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("integer")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Optional runtime lease TTL in milliseconds.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "metadata",
+                                JsonValue::object([("type", JsonValue::string("object"))]),
+                            ),
                         ]),
                     ),
                     ("additionalProperties", JsonValue::bool(false)),
@@ -757,6 +789,38 @@ fn tool_definition(tool: &ToolSpec) -> JsonValue {
                                         ),
                                     ),
                                 ]),
+                            ),
+                            (
+                                "clientId",
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ),
+                            (
+                                "sessionId",
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ),
+                            (
+                                "projectRoot",
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ),
+                            (
+                                "transport",
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ),
+                            (
+                                "ttlMs",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("integer")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Optional runtime lease TTL in milliseconds.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "metadata",
+                                JsonValue::object([("type", JsonValue::string("object"))]),
                             ),
                         ]),
                     ),
@@ -1029,12 +1093,15 @@ fn execute_tool(
             let upstream_arguments =
                 optional_value_argument(arguments, "arguments").unwrap_or_else(mcp::empty_object);
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
-            upstream::call_tool(
+            let context =
+                ForwardedContext::from_tool_arguments(config, arguments, initialize_params)?;
+            upstream::call_tool_with_context(
                 &config.root_path,
                 &server,
                 &tool,
                 &upstream_arguments,
                 timeout_ms,
+                Some(&context.upstream_lease_context(integer_argument(arguments, "ttlMs")?)),
             )
             .map_err(ToolCallError::Execution)?
         }
@@ -1065,8 +1132,16 @@ fn execute_tool(
                 });
             }
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
-            upstream::call_tools(&config.root_path, &server, &calls, timeout_ms)
-                .map_err(ToolCallError::Execution)?
+            let context =
+                ForwardedContext::from_tool_arguments(config, arguments, initialize_params)?;
+            upstream::call_tools_with_context(
+                &config.root_path,
+                &server,
+                &calls,
+                timeout_ms,
+                Some(&context.upstream_lease_context(integer_argument(arguments, "ttlMs")?)),
+            )
+            .map_err(ToolCallError::Execution)?
         }
         "browser_status" => {
             upstream::browser_status(&config.root_path).map_err(ToolCallError::Execution)?
@@ -1202,6 +1277,17 @@ impl ForwardedContext {
         push_arg(args, "--transport", self.transport);
         if let Some(value) = self.metadata {
             push_arg(args, "--metadata-json", value.to_compact_string());
+        }
+    }
+
+    fn upstream_lease_context(&self, ttl_ms: Option<i64>) -> upstream::UpstreamLeaseContext {
+        upstream::UpstreamLeaseContext {
+            client_id: Some(self.client_id.clone()),
+            session_id: self.session_id.clone(),
+            project_root: self.project_root.clone(),
+            transport: Some(self.transport.clone()),
+            metadata: self.metadata.clone(),
+            ttl_ms: ttl_ms.filter(|value| *value > 0).map(|value| value as u128),
         }
     }
 }

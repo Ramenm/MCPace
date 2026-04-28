@@ -457,7 +457,7 @@ pub(super) fn render_report(
         let _ = writeln!(stdout, "  {}: {}", key, value);
     }
 
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Priority gaps:");
     if gaps.is_empty() {
         let _ = writeln!(stdout, "  none");
@@ -482,7 +482,7 @@ pub(super) fn render_report(
         }
     }
 
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Recommended next steps:");
     if next_steps.is_empty() {
         let _ = writeln!(stdout, "  none");
@@ -492,7 +492,7 @@ pub(super) fn render_report(
         }
     }
 
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Scenarios still blocked:");
     for assessment in assessments
         .iter()

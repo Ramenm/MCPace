@@ -1,6 +1,7 @@
 use super::args::ParsedArgs;
 use super::context::resolve_context;
 use super::metadata::load_metadata;
+use super::pathing::stable_hash_hex;
 use super::plan::build_plan;
 use super::render::{count_static, join_count_map, join_or_none, write_text_plan};
 use crate::client_catalog::{
@@ -17,6 +18,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 fn local_mcp_url() -> String {
     runtimepaths::default_local_mcp_url()
@@ -436,7 +438,8 @@ pub(super) fn run_install(
         }
     };
 
-    let result = match install.write() {
+    let options = ClientInstallRunOptions::from_args(&parsed);
+    let result = match install.write_with_options(&options) {
         Ok(value) => value,
         Err(error) => {
             let _ = writeln!(stderr, "{}", error);
@@ -451,6 +454,143 @@ pub(super) fn run_install(
 
     result.write_text(stdout);
     0
+}
+
+pub(super) fn run_restore(
+    parsed: ParsedArgs,
+    default_root: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let root_path = parsed.root_override.clone().or(default_root);
+    let Some(root_path) = root_path else {
+        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        return 1;
+    };
+    let Some(client_id) = parsed.client_id.as_deref() else {
+        let _ = writeln!(
+            stderr,
+            "client restore requires a client target id, for example: mcpace client restore codex"
+        );
+        return 2;
+    };
+
+    let selector = parsed.backup.as_deref().unwrap_or("latest");
+    if client_id.eq_ignore_ascii_case("all") {
+        return run_restore_all(&root_path, selector, parsed.json_output, stdout, stderr);
+    }
+    let result = match restore_client_install_backup(&root_path, client_id, selector) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = writeln!(stderr, "{}", error);
+            return 1;
+        }
+    };
+
+    if parsed.json_output {
+        let _ = writeln!(stdout, "{}", result.to_json_value().to_pretty_string());
+        return 0;
+    }
+
+    result.write_text(stdout);
+    0
+}
+
+fn run_restore_all(
+    root_path: &Path,
+    selector: &str,
+    json_output: bool,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    if !selector.trim().is_empty() && !selector.eq_ignore_ascii_case("latest") {
+        let _ = writeln!(
+            stderr,
+            "client restore all supports only --backup latest because backup ids are per-client"
+        );
+        return 2;
+    }
+
+    let backup_root = install_backup_root(root_path);
+    let entries = match fs::read_dir(&backup_root) {
+        Ok(value) => value,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            let _ = writeln!(
+                stderr,
+                "no client install backups found under '{}'",
+                backup_root.display()
+            );
+            return 1;
+        }
+        Err(error) => {
+            let _ = writeln!(
+                stderr,
+                "failed to read client install backups '{}': {}",
+                backup_root.display(),
+                error
+            );
+            return 1;
+        }
+    };
+
+    let mut restored = Vec::new();
+    let mut failed = Vec::new();
+    for entry in entries {
+        let entry = match entry {
+            Ok(value) => value,
+            Err(error) => {
+                failed.push((
+                    "unknown".to_string(),
+                    format!("failed to inspect backup entry: {}", error),
+                ));
+                continue;
+            }
+        };
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let client_id = entry.file_name().to_string_lossy().to_string();
+        match restore_client_install_backup(root_path, &client_id, "latest") {
+            Ok(value) => restored.push(value),
+            Err(error) => failed.push((client_id, error)),
+        }
+    }
+
+    if json_output {
+        let json = JsonValue::object([
+            ("mode", JsonValue::string("restored-all")),
+            ("backupSelector", JsonValue::string("latest")),
+            (
+                "restored",
+                JsonValue::array(restored.iter().map(ClientRestoreResult::to_json_value)),
+            ),
+            (
+                "failed",
+                JsonValue::array(failed.iter().map(|(client_id, error)| {
+                    JsonValue::object([
+                        ("clientTargetId", JsonValue::string(client_id.clone())),
+                        ("error", JsonValue::string(error.clone())),
+                    ])
+                })),
+            ),
+        ]);
+        let _ = writeln!(stdout, "{}", json.to_pretty_string());
+    } else {
+        let _ = writeln!(stdout, "Client restore all complete");
+        for result in &restored {
+            result.write_text(stdout);
+        }
+        for (client_id, error) in &failed {
+            let _ = writeln!(stderr, "{}: {}", client_id, error);
+        }
+    }
+
+    if failed.is_empty() {
+        0
+    } else {
+        1
+    }
 }
 
 fn run_install_all(
@@ -470,6 +610,7 @@ fn run_install_all(
     let mut installed = Vec::new();
     let mut failed = Vec::new();
     let mut skipped = Vec::new();
+    let options = ClientInstallRunOptions::from_args(&parsed);
 
     for target in registry
         .targets
@@ -515,7 +656,7 @@ fn run_install_all(
                 continue;
             }
         };
-        match install.write() {
+        match install.write_with_options(&options) {
             Ok(value) => installed.push(value),
             Err(error) => failed.push((target.id.clone(), error)),
         }
@@ -523,7 +664,16 @@ fn run_install_all(
 
     if parsed.json_output {
         let json = JsonValue::object([
-            ("mode", JsonValue::string("installed-all")),
+            (
+                "mode",
+                JsonValue::string(if parsed.dry_run {
+                    "install-preview-all"
+                } else {
+                    "installed-all"
+                }),
+            ),
+            ("dryRun", JsonValue::bool(parsed.dry_run)),
+            ("diffRequested", JsonValue::bool(parsed.diff)),
             (
                 "installed",
                 JsonValue::array(installed.iter().map(ClientInstallResult::to_json_value)),
@@ -544,7 +694,15 @@ fn run_install_all(
         ]);
         let _ = writeln!(stdout, "{}", json.to_pretty_string());
     } else {
-        let _ = writeln!(stdout, "Client install all complete");
+        let _ = writeln!(
+            stdout,
+            "{}",
+            if parsed.dry_run {
+                "Client install all dry-run complete"
+            } else {
+                "Client install all complete"
+            }
+        );
         for result in &installed {
             result.write_text(stdout);
         }
@@ -561,6 +719,211 @@ fn run_install_all(
     } else {
         1
     }
+}
+
+fn restore_client_install_backup(
+    root_path: &Path,
+    client_id: &str,
+    selector: &str,
+) -> Result<ClientRestoreResult, String> {
+    let backup_path = resolve_backup_path(root_path, client_id, selector)?;
+    let manifest_path = backup_path.join("manifest.json");
+    let manifest = json_helpers::read_json_file(&manifest_path)?;
+    let schema = json_helpers::string_at_path(&manifest, &["schema"]).unwrap_or("");
+    if schema != "mcpace.clientInstallBackup.v1" {
+        return Err(format!(
+            "client install backup '{}' has unsupported schema '{}'",
+            manifest_path.display(),
+            schema
+        ));
+    }
+
+    let backup_id = required_manifest_string(&manifest, &manifest_path, "backupId")?;
+    let manifest_client_id = required_manifest_string(&manifest, &manifest_path, "clientTargetId")?;
+    if manifest_client_id != client_id {
+        return Err(format!(
+            "client install backup '{}' belongs to '{}' not '{}'",
+            manifest_path.display(),
+            manifest_client_id,
+            client_id
+        ));
+    }
+    let config_path_text = required_manifest_string(&manifest, &manifest_path, "configPath")?;
+    let expected_hash = required_manifest_string(&manifest, &manifest_path, "configPathHash")?;
+    let actual_hash = stable_hash_hex(&config_path_text);
+    if actual_hash != expected_hash {
+        return Err(format!(
+            "client install backup '{}' failed config path integrity check",
+            manifest_path.display()
+        ));
+    }
+    let config_existed =
+        json_helpers::bool_at_path(&manifest, &["configExisted"]).ok_or_else(|| {
+            format!(
+                "client install backup '{}' is missing boolean field configExisted",
+                manifest_path.display()
+            )
+        })?;
+    let config_path = PathBuf::from(&config_path_text);
+
+    let mut removed_config_file = false;
+    let mut wrote_config_file = false;
+    if config_existed {
+        let content_path = backup_path.join("config.before");
+        let contents = fs::read_to_string(&content_path).map_err(|error| {
+            format!(
+                "failed to read client install backup content '{}': {}",
+                content_path.display(),
+                error
+            )
+        })?;
+        if let Some(parent) = config_path.parent() {
+            fs::create_dir_all(parent).map_err(|error| {
+                format!(
+                    "failed to create restored client config directory '{}': {}",
+                    parent.display(),
+                    error
+                )
+            })?;
+        }
+        fs::write(&config_path, contents).map_err(|error| {
+            format!(
+                "failed to restore client config '{}': {}",
+                config_path.display(),
+                error
+            )
+        })?;
+        wrote_config_file = true;
+    } else if config_path.is_file() {
+        fs::remove_file(&config_path).map_err(|error| {
+            format!(
+                "failed to remove client config '{}' during restore: {}",
+                config_path.display(),
+                error
+            )
+        })?;
+        removed_config_file = true;
+    }
+
+    Ok(ClientRestoreResult {
+        client_target_id: client_id.to_string(),
+        backup_id,
+        backup_path: sanitize_path_for_display(&backup_path),
+        config_path: sanitize_path_for_display(&config_path),
+        restored_existing_config: config_existed,
+        removed_config_file,
+        wrote_config_file,
+    })
+}
+
+fn resolve_backup_path(
+    root_path: &Path,
+    client_id: &str,
+    selector: &str,
+) -> Result<PathBuf, String> {
+    let client_backup_root = install_backup_root(root_path).join(safe_file_segment(client_id));
+    let normalized_selector = selector.trim();
+    if normalized_selector.is_empty() || normalized_selector.eq_ignore_ascii_case("latest") {
+        return latest_backup_path(&client_backup_root, client_id);
+    }
+    if !is_safe_backup_id(normalized_selector) {
+        return Err(format!(
+            "client restore backup selector '{}' is invalid; use a backup id or 'latest'",
+            selector
+        ));
+    }
+    let path = client_backup_root.join(normalized_selector);
+    if !path.join("manifest.json").is_file() {
+        return Err(format!(
+            "client restore backup '{}' was not found for '{}'",
+            normalized_selector, client_id
+        ));
+    }
+    Ok(path)
+}
+
+fn latest_backup_path(client_backup_root: &Path, client_id: &str) -> Result<PathBuf, String> {
+    let entries = fs::read_dir(client_backup_root).map_err(|error| {
+        format!(
+            "failed to read client install backups for '{}': {}",
+            client_id, error
+        )
+    })?;
+    let mut candidates = Vec::new();
+    for entry in entries {
+        let entry = entry.map_err(|error| {
+            format!(
+                "failed to inspect client install backups for '{}': {}",
+                client_id, error
+            )
+        })?;
+        let path = entry.path();
+        if path.join("manifest.json").is_file() {
+            candidates.push(path);
+        }
+    }
+    candidates.sort_by(|left, right| left.file_name().cmp(&right.file_name()));
+    candidates.pop().ok_or_else(|| {
+        format!(
+            "no client install backups found for '{}'; run client install first",
+            client_id
+        )
+    })
+}
+
+fn required_manifest_string(
+    manifest: &JsonValue,
+    manifest_path: &Path,
+    key: &str,
+) -> Result<String, String> {
+    json_helpers::string_at_path(manifest, &[key])
+        .map(|value| value.to_string())
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            format!(
+                "client install backup '{}' is missing string field {}",
+                manifest_path.display(),
+                key
+            )
+        })
+}
+
+fn is_safe_backup_id(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+}
+
+fn install_backup_root(root_path: &Path) -> PathBuf {
+    runtimepaths::resolve_state_root(root_path)
+        .join("data")
+        .join("client-install-backups")
+}
+
+fn safe_file_segment(value: &str) -> String {
+    let sanitized = value
+        .chars()
+        .map(|ch| {
+            if ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.') {
+                ch
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+    if sanitized.trim_matches(['.', '_', '-']).is_empty() {
+        "unknown".to_string()
+    } else {
+        sanitized
+    }
+}
+
+fn now_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
 }
 
 fn read_client_key_name(root_path: &Path) -> Option<String> {
@@ -630,10 +993,17 @@ struct ClientInstallPlan {
     display_name: String,
     adapter_key_name: String,
     config_path: PathBuf,
+    backup_root: PathBuf,
     config_scope: String,
     server_url: String,
     config: ClientInstallConfig,
     warnings: Vec<String>,
+}
+
+#[derive(Clone, Copy)]
+struct ClientInstallRunOptions {
+    dry_run: bool,
+    diff: bool,
 }
 
 struct ClientInstallResult {
@@ -645,10 +1015,39 @@ struct ClientInstallResult {
     transport: String,
     server_url: String,
     changed: bool,
+    would_change: bool,
+    dry_run: bool,
+    diff_requested: bool,
+    diff: Option<String>,
+    persisted: bool,
+    backup_created: bool,
+    backup_id: Option<String>,
+    backup_path: Option<String>,
+    backup_manifest_path: Option<String>,
+    restore_command: Option<String>,
     replaced_existing_block: bool,
     created_config_dir: bool,
     created_config_file: bool,
+    would_create_config_dir: bool,
+    would_create_config_file: bool,
     warnings: Vec<String>,
+}
+
+struct ClientInstallBackup {
+    id: String,
+    path: PathBuf,
+    manifest_path: PathBuf,
+    restore_command: String,
+}
+
+struct ClientRestoreResult {
+    client_target_id: String,
+    backup_id: String,
+    backup_path: String,
+    config_path: String,
+    restored_existing_config: bool,
+    removed_config_file: bool,
+    wrote_config_file: bool,
 }
 
 impl ClientExportPreview {
@@ -917,9 +1316,18 @@ impl ClientExportPreview {
     }
 }
 
+impl ClientInstallRunOptions {
+    fn from_args(parsed: &ParsedArgs) -> Self {
+        Self {
+            dry_run: parsed.dry_run,
+            diff: parsed.diff,
+        }
+    }
+}
+
 impl ClientInstallPlan {
     fn from_plan(
-        _root_path: &Path,
+        root_path: &Path,
         target: &ClientTarget,
         plan: &super::model::ClientPlan,
     ) -> Result<Self, String> {
@@ -944,6 +1352,7 @@ impl ClientInstallPlan {
             display_name: target.display_name.clone(),
             adapter_key_name,
             config_path,
+            backup_root: install_backup_root(root_path),
             config_scope,
             server_url: local_mcp_url(),
             config,
@@ -951,14 +1360,16 @@ impl ClientInstallPlan {
         })
     }
 
-    fn write(&self) -> Result<ClientInstallResult, String> {
+    fn write_with_options(
+        &self,
+        options: &ClientInstallRunOptions,
+    ) -> Result<ClientInstallResult, String> {
         let config_dir = self
             .config_path
             .parent()
             .ok_or_else(|| "failed to resolve the target client config directory".to_string())?;
-        let created_config_dir = if config_dir.is_dir() {
-            false
-        } else {
+        let would_create_config_dir = !config_dir.is_dir();
+        let created_config_dir = if would_create_config_dir && !options.dry_run {
             fs::create_dir_all(config_dir).map_err(|error| {
                 format!(
                     "failed to create client config directory '{}': {}",
@@ -967,8 +1378,11 @@ impl ClientInstallPlan {
                 )
             })?;
             true
+        } else {
+            false
         };
 
+        let config_file_existed = self.config_path.is_file();
         let existing = match fs::read_to_string(&self.config_path) {
             Ok(value) => value,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => String::new(),
@@ -980,7 +1394,8 @@ impl ClientInstallPlan {
                 ))
             }
         };
-        let created_config_file = existing.is_empty() && !self.config_path.is_file();
+        let would_create_config_file = existing.is_empty() && !config_file_existed;
+        let created_config_file = would_create_config_file && !options.dry_run;
         let update = match &self.config {
             ClientInstallConfig::TomlManagedTable => {
                 let newline = detect_newline(&existing);
@@ -1007,9 +1422,15 @@ impl ClientInstallPlan {
             )?,
         };
 
-        let changed = update.contents != existing;
+        let would_change = update.contents != existing;
+        let changed = would_change && !options.dry_run;
+        let backup = if changed {
+            Some(self.create_backup(&existing, config_file_existed)?)
+        } else {
+            None
+        };
         if changed {
-            fs::write(&self.config_path, update.contents).map_err(|error| {
+            fs::write(&self.config_path, &update.contents).map_err(|error| {
                 format!(
                     "failed to write client config '{}': {}",
                     self.config_path.display(),
@@ -1017,6 +1438,15 @@ impl ClientInstallPlan {
                 )
             })?;
         }
+        let diff = if options.diff {
+            Some(build_unified_config_diff(
+                &self.config_path,
+                &existing,
+                &update.contents,
+            ))
+        } else {
+            None
+        };
 
         Ok(ClientInstallResult {
             client_target_id: self.client_target_id.clone(),
@@ -1027,18 +1457,275 @@ impl ClientInstallPlan {
             transport: "streamable-http".to_string(),
             server_url: self.server_url.clone(),
             changed,
+            would_change,
+            dry_run: options.dry_run,
+            diff_requested: options.diff,
+            diff,
+            persisted: changed,
+            backup_created: backup.is_some(),
+            backup_id: backup.as_ref().map(|value| value.id.clone()),
+            backup_path: backup
+                .as_ref()
+                .map(|value| sanitize_path_for_display(&value.path)),
+            backup_manifest_path: backup
+                .as_ref()
+                .map(|value| sanitize_path_for_display(&value.manifest_path)),
+            restore_command: backup.as_ref().map(|value| value.restore_command.clone()),
             replaced_existing_block: update.replaced_existing_block,
             created_config_dir,
             created_config_file,
+            would_create_config_dir,
+            would_create_config_file,
             warnings: self.warnings.clone(),
         })
     }
+
+    fn create_backup(
+        &self,
+        existing: &str,
+        config_file_existed: bool,
+    ) -> Result<ClientInstallBackup, String> {
+        let now_ms = now_ms();
+        let config_path_text = self.config_path.display().to_string();
+        let config_path_hash = stable_hash_hex(&config_path_text);
+        let id_hash = stable_hash_hex(&format!(
+            "{}|{}|{}|{}",
+            self.client_target_id, self.adapter_key_name, config_path_text, now_ms
+        ));
+        let id = format!("{}-{}", now_ms, &id_hash[..8]);
+        let backup_path = self
+            .backup_root
+            .join(safe_file_segment(&self.client_target_id))
+            .join(&id);
+        fs::create_dir_all(&backup_path).map_err(|error| {
+            format!(
+                "failed to create client install backup directory '{}': {}",
+                backup_path.display(),
+                error
+            )
+        })?;
+
+        let content_path = backup_path.join("config.before");
+        if config_file_existed {
+            fs::write(&content_path, existing).map_err(|error| {
+                format!(
+                    "failed to write client install backup '{}': {}",
+                    content_path.display(),
+                    error
+                )
+            })?;
+        }
+
+        let manifest_path = backup_path.join("manifest.json");
+        let restore_command = format!(
+            "mcpace client restore {} --backup {} --root <mcpace-root>",
+            self.client_target_id, id
+        );
+        let manifest = JsonValue::object([
+            ("schema", JsonValue::string("mcpace.clientInstallBackup.v1")),
+            ("backupId", JsonValue::string(id.clone())),
+            ("createdAtMs", JsonValue::number(now_ms)),
+            (
+                "clientTargetId",
+                JsonValue::string(self.client_target_id.clone()),
+            ),
+            ("displayName", JsonValue::string(self.display_name.clone())),
+            (
+                "adapterKeyName",
+                JsonValue::string(self.adapter_key_name.clone()),
+            ),
+            ("configPath", JsonValue::string(config_path_text)),
+            ("configPathHash", JsonValue::string(config_path_hash)),
+            ("configExisted", JsonValue::bool(config_file_existed)),
+            (
+                "contentPath",
+                if config_file_existed {
+                    JsonValue::string("config.before")
+                } else {
+                    JsonValue::Null
+                },
+            ),
+            ("restoreCommand", JsonValue::string(restore_command.clone())),
+        ]);
+        fs::write(&manifest_path, manifest.to_pretty_string()).map_err(|error| {
+            format!(
+                "failed to write client install backup manifest '{}': {}",
+                manifest_path.display(),
+                error
+            )
+        })?;
+
+        Ok(ClientInstallBackup {
+            id,
+            path: backup_path,
+            manifest_path,
+            restore_command,
+        })
+    }
+}
+
+fn build_unified_config_diff(path: &Path, before: &str, after: &str) -> String {
+    if before == after {
+        return String::new();
+    }
+
+    let display_path = sanitize_path_for_display(path);
+    let mut diff = Vec::new();
+    diff.push(format!("--- {} (current)", display_path));
+    diff.push(format!("+++ {} (candidate)", display_path));
+
+    let mut before_state = DiffSanitizeState::default();
+    if !before.is_empty() {
+        for line in before.lines() {
+            diff.push(format!(
+                "-{}",
+                sanitize_config_diff_line(line, &mut before_state)
+            ));
+        }
+    }
+    let mut after_state = DiffSanitizeState::default();
+    if !after.is_empty() {
+        for line in after.lines() {
+            diff.push(format!(
+                "+{}",
+                sanitize_config_diff_line(line, &mut after_state)
+            ));
+        }
+    }
+
+    diff.join("\n")
+}
+
+#[derive(Default)]
+struct DiffSanitizeState {
+    in_sensitive_multiline_value: bool,
+    close_marker: Option<&'static str>,
+}
+
+fn sanitize_config_diff_line(line: &str, state: &mut DiffSanitizeState) -> String {
+    let escaped = escape_diff_control_chars(line);
+    if state.in_sensitive_multiline_value {
+        if let Some(marker) = state.close_marker {
+            if escaped.contains(marker) {
+                state.in_sensitive_multiline_value = false;
+                state.close_marker = None;
+            }
+            return "[REDACTED]".to_string();
+        }
+        if is_top_level_config_boundary(&escaped) {
+            state.in_sensitive_multiline_value = false;
+        } else {
+            return "[REDACTED]".to_string();
+        }
+    }
+
+    let separator_index = match (escaped.find('='), escaped.find(':')) {
+        (Some(equal), Some(colon)) => Some(equal.min(colon)),
+        (Some(equal), None) => Some(equal),
+        (None, Some(colon)) => Some(colon),
+        (None, None) => None,
+    };
+    let lower_line = escaped.to_ascii_lowercase();
+    let key_area = separator_index
+        .map(|index| &escaped[..index])
+        .unwrap_or(&escaped)
+        .to_ascii_lowercase();
+    let sensitive_keys = [
+        "token",
+        "api_key",
+        "apikey",
+        "api-key",
+        "private_key",
+        "private-key",
+        "secret",
+        "password",
+        "passwd",
+        "auth",
+        "authorization",
+        "credential",
+    ];
+    if !sensitive_keys
+        .iter()
+        .any(|sensitive_key| lower_line.contains(sensitive_key))
+    {
+        return escaped;
+    }
+
+    state.in_sensitive_multiline_value = true;
+    state.close_marker = sensitive_multiline_close_marker(&escaped);
+
+    if !sensitive_keys
+        .iter()
+        .any(|sensitive_key| key_area.contains(sensitive_key))
+    {
+        return "[REDACTED]".to_string();
+    }
+
+    let Some(separator_index) = separator_index else {
+        return "[REDACTED]".to_string();
+    };
+    let prefix = escaped[..=separator_index].trim_end();
+    let suffix = if escaped.trim_end().ends_with(',') {
+        ","
+    } else {
+        ""
+    };
+    format!("{} \"[redacted]\"{}", prefix, suffix)
+}
+
+fn sensitive_multiline_close_marker(line: &str) -> Option<&'static str> {
+    if line.matches("\"\"\"").count() % 2 == 1 {
+        return Some("\"\"\"");
+    }
+    if line.matches("'''").count() % 2 == 1 {
+        return Some("'''");
+    }
+    None
+}
+
+fn is_top_level_config_boundary(line: &str) -> bool {
+    let trimmed = line.trim_start();
+    if trimmed.is_empty() || line.len() != trimmed.len() {
+        return false;
+    }
+    if trimmed.starts_with('[') {
+        return true;
+    }
+    let Some(separator_index) = trimmed.find('=').or_else(|| trimmed.find(':')) else {
+        return false;
+    };
+    let key = trimmed[..separator_index].trim();
+    !key.is_empty()
+        && key
+            .chars()
+            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '"' | '\''))
+}
+
+fn escape_diff_control_chars(line: &str) -> String {
+    let mut escaped = String::new();
+    for ch in line.chars() {
+        if ch == '\x1b' {
+            escaped.push_str("\\x1b");
+        } else if ch.is_control() && ch != '\t' {
+            escaped.push_str(&format!("\\u{{{:x}}}", ch as u32));
+        } else {
+            escaped.push(ch);
+        }
+    }
+    escaped
 }
 
 impl ClientInstallResult {
     fn to_json_value(&self) -> JsonValue {
         JsonValue::object([
-            ("mode", JsonValue::string("installed")),
+            (
+                "mode",
+                JsonValue::string(if self.dry_run {
+                    "install-preview"
+                } else {
+                    "installed"
+                }),
+            ),
             (
                 "clientTargetId",
                 JsonValue::string(self.client_target_id.clone()),
@@ -1052,8 +1739,48 @@ impl ClientInstallResult {
             ("configScope", JsonValue::string(self.config_scope.clone())),
             ("transport", JsonValue::string(self.transport.clone())),
             ("url", JsonValue::string(self.server_url.clone())),
-            ("writesConfig", JsonValue::bool(true)),
+            ("writesConfig", JsonValue::bool(!self.dry_run)),
+            ("dryRun", JsonValue::bool(self.dry_run)),
+            ("persisted", JsonValue::bool(self.persisted)),
+            ("backupCreated", JsonValue::bool(self.backup_created)),
+            (
+                "backupId",
+                self.backup_id
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "backupPath",
+                self.backup_path
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "backupManifestPath",
+                self.backup_manifest_path
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "restoreCommand",
+                self.restore_command
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
             ("changed", JsonValue::bool(self.changed)),
+            ("wouldChange", JsonValue::bool(self.would_change)),
+            ("diffRequested", JsonValue::bool(self.diff_requested)),
+            (
+                "diff",
+                self.diff
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
             (
                 "replacedExistingBlock",
                 JsonValue::bool(self.replaced_existing_block),
@@ -1064,6 +1791,14 @@ impl ClientInstallResult {
                 JsonValue::bool(self.created_config_file),
             ),
             (
+                "wouldCreateConfigDir",
+                JsonValue::bool(self.would_create_config_dir),
+            ),
+            (
+                "wouldCreateConfigFile",
+                JsonValue::bool(self.would_create_config_file),
+            ),
+            (
                 "warnings",
                 JsonValue::array(self.warnings.iter().cloned().map(JsonValue::string)),
             ),
@@ -1071,7 +1806,15 @@ impl ClientInstallResult {
     }
 
     fn write_text(&self, stdout: &mut dyn Write) {
-        let _ = writeln!(stdout, "Client install complete");
+        let _ = writeln!(
+            stdout,
+            "{}",
+            if self.dry_run {
+                "Client install dry-run complete"
+            } else {
+                "Client install complete"
+            }
+        );
         let _ = writeln!(
             stdout,
             "Client target: {} ({})",
@@ -1083,6 +1826,15 @@ impl ClientInstallResult {
         let _ = writeln!(stdout, "Transport: {}", self.transport);
         let _ = writeln!(stdout, "URL: {}", self.server_url);
         let _ = writeln!(stdout, "Changed config: {}", yes_no(self.changed));
+        let _ = writeln!(stdout, "Would change config: {}", yes_no(self.would_change));
+        let _ = writeln!(stdout, "Persisted: {}", yes_no(self.persisted));
+        let _ = writeln!(stdout, "Backup created: {}", yes_no(self.backup_created));
+        if let Some(backup_path) = &self.backup_path {
+            let _ = writeln!(stdout, "Backup path: {}", backup_path);
+        }
+        if let Some(restore_command) = &self.restore_command {
+            let _ = writeln!(stdout, "Restore command: {}", restore_command);
+        }
         let _ = writeln!(
             stdout,
             "Replaced existing block: {}",
@@ -1098,7 +1850,69 @@ impl ClientInstallResult {
             "Created config file: {}",
             yes_no(self.created_config_file)
         );
+        let _ = writeln!(
+            stdout,
+            "Would create config directory: {}",
+            yes_no(self.would_create_config_dir)
+        );
+        let _ = writeln!(
+            stdout,
+            "Would create config file: {}",
+            yes_no(self.would_create_config_file)
+        );
+        if let Some(diff) = &self.diff {
+            if !diff.is_empty() {
+                let _ = writeln!(stdout, "Diff:\n{}", diff);
+            }
+        }
         let _ = writeln!(stdout, "Warnings: {}", join_or_none(&self.warnings));
+    }
+}
+
+impl ClientRestoreResult {
+    fn to_json_value(&self) -> JsonValue {
+        JsonValue::object([
+            ("mode", JsonValue::string("restored")),
+            (
+                "clientTargetId",
+                JsonValue::string(self.client_target_id.clone()),
+            ),
+            ("backupId", JsonValue::string(self.backup_id.clone())),
+            ("backupPath", JsonValue::string(self.backup_path.clone())),
+            ("configPath", JsonValue::string(self.config_path.clone())),
+            (
+                "restoredExistingConfig",
+                JsonValue::bool(self.restored_existing_config),
+            ),
+            (
+                "removedConfigFile",
+                JsonValue::bool(self.removed_config_file),
+            ),
+            ("wroteConfigFile", JsonValue::bool(self.wrote_config_file)),
+        ])
+    }
+
+    fn write_text(&self, stdout: &mut dyn Write) {
+        let _ = writeln!(stdout, "Client config restore complete");
+        let _ = writeln!(stdout, "Client target: {}", self.client_target_id);
+        let _ = writeln!(stdout, "Backup id: {}", self.backup_id);
+        let _ = writeln!(stdout, "Backup path: {}", self.backup_path);
+        let _ = writeln!(stdout, "Config path: {}", self.config_path);
+        let _ = writeln!(
+            stdout,
+            "Restored existing config: {}",
+            yes_no(self.restored_existing_config)
+        );
+        let _ = writeln!(
+            stdout,
+            "Removed config file: {}",
+            yes_no(self.removed_config_file)
+        );
+        let _ = writeln!(
+            stdout,
+            "Wrote config file: {}",
+            yes_no(self.wrote_config_file)
+        );
     }
 }
 
@@ -1336,7 +2150,7 @@ fn empty_json_object() -> JsonValue {
 }
 
 fn build_toml_managed_block(adapter_key_name: &str, server_url: &str, newline: &str) -> String {
-    let lines = vec![
+    let lines = [
         format!("# BEGIN MCPACE MANAGED BLOCK: {}", adapter_key_name),
         "# This block is managed by `mcpace client install`.".to_string(),
         format!("[mcp_servers.{}]", format_toml_table_key(adapter_key_name)),
@@ -1354,7 +2168,7 @@ fn build_yaml_mcp_servers_entry_block(
     server_url: &str,
     newline: &str,
 ) -> String {
-    let lines = vec![
+    let lines = [
         format!("  # BEGIN MCPACE MANAGED BLOCK: {}", adapter_key_name),
         format!("  {}:", adapter_key_name),
         format!("    url: {}", yaml_double_quoted_string(server_url)),

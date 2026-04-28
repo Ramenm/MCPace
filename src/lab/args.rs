@@ -67,7 +67,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace lab <list|matrix|coverage|gaps|report|show> [options]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  mcpace lab list [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace lab matrix [--json] [--root <path>]");
@@ -78,6 +78,6 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "  mcpace lab show --id <scenario> [--json] [--root <path>]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "lab reads runtime fixtures plus a capability inventory and turns them into a concrete backlog: what is covered now, what is only partially covered, and what is still blocked.");
 }

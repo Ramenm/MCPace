@@ -89,7 +89,7 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace projects [list] [--json] [--root <path>]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
         "Native Rust path supports read-only project registry inspection."

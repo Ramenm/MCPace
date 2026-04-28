@@ -133,7 +133,7 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace serve [start|stop|status] [--json] [--root <path>] [--host <addr>] [--port <n>]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Public serve surface:");
     let _ = writeln!(
         stdout,
@@ -145,7 +145,7 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(stdout, "  mcpace serve stop [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace serve status [--json] [--root <path>]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
         "serve is the public one-port MCPace surface. The default local MCP endpoint is {}.",

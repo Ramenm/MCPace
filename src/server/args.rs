@@ -13,7 +13,7 @@ pub(super) struct ParsedArgs {
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Usage: mcpace server <list|capabilities|candidates> [--json] [--root <path>] [--name <server>]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  mcpace server list [--json] [--root <path>]");
     let _ = writeln!(

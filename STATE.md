@@ -8,12 +8,13 @@ What is confirmed in-repo right now:
 
 - native Rust read surfaces exist for `version`, `doctor`, `init`, `hub`, `profile show`, `projects list`, `candidates`, `client list`, `client plan`, `lab`, `server`, `verify`
 - `stdio-shim --json` now exists as a bootstrap-only proof surface that reuses planner/export logic, derives a sticky lease, and ensures the persistent hub is up
-- `client install` now writes MCPace-managed config blocks for the catalog-declared local patchers surfaced by `mcpace client list --json`
+- `client install` now writes MCPace-managed config blocks for the catalog-declared local patchers surfaced by `mcpace client list --json`, and `client restore` can roll back the latest or named install backup for one client, or latest backups for all clients
 - `client export` now emits connectable preview contracts for local HTTP-capable clients plus preview-only blocker output for blocked cloud/public surfaces instead of failing as entirely unimplemented
 - the hub has a **local file-backed lifecycle shell** with status, logs, repair, and seeded runtime state
+- explicit upstream wrapper calls through HTTP `/mcp` and the stdio `mcp-server` fallback now acquire, heartbeat-renew, and release scheduler leases around real stdio upstream MCP calls; settings-only upstreams get conservative request leases, and lost heartbeats cancel before a stale result is accepted
 - the client catalog is **surface-aware** across local / cloud / API-connector / generic shapes
 - the runtime lab has **production-like fixtures** plus a capability inventory and gap report
-- source/archive/npm checks run in this container; Rust build/runtime proof does **not**
+- source/archive/npm checks plus current-host Rust build/test proof run in this container; live Docker/real-client runtime proof does **not**
 - `reports/verification-latest.json` can now be regenerated from executed source/release checks via `npm run prove:report`
 - the verification snapshot now reports the current target packaging mode plus optional vendored-binary smoke proof instead of treating mere file presence as enough evidence
 - this pass fixed a source-level regression in `client/context` and corrected readiness semantics so `verify readiness` does not report runtime-green merely because a config file exists
@@ -23,13 +24,15 @@ What is confirmed in-repo right now:
 - this pass added a canonical `scripts/build-release-artifacts.mjs` bundle builder so local/CI source releases are rebuilt into one clean directory with an archive, verification snapshot, checksums, a machine-readable artifact manifest, and a synced canonical verification report
 - this pass added dynamic client catalog extensions and scheduler-visible routing keys for project-local, browser-profile, desktop/host-lock, credential, and bounded-parallel server lanes
 - this pass added a file-backed `hub lease` admission controller with acquire/renew/release/list, expired lease pruning, stale lock recovery, MCP tool exposure, and regression tests for host-lock, project-local, and bounded-parallel conflicts
+- this pass added `client install --dry-run --diff` previews plus automatic install backups and `client restore` rollback for single-target and `install all`/`restore all` flows, so users can inspect or undo local config patches without manual file surgery
+- this pass attached the lease admission controller to explicit live upstream forwarding (`upstream_call` / `upstream_batch`) for both HTTP and stdio fallback ingress, including conflict tests that prove blocked calls do not launch the upstream process, successful calls release their lease, settings-only servers receive conservative leases instead of bypasses, short-TTL calls renew during long upstream work, forced lease loss cancels the in-flight wait before a stale success can be accepted, and stale JSON-RPC ids are ignored
 
 ## Product truth for the current cycle
 
 - **first ICP:** advanced integrator / solo power user juggling 2–3 local MCP clients and tired of hand-maintained config drift
 - **current public promise:** one local MCPace endpoint, selected local client install paths, and honest diagnostics for configured-vs-usable state
 - **activation proven today:** `client install` or `client export`, then a real client reaches `http://127.0.0.1:39022/mcp` and completes at least `initialize -> tools/list`
-- **beta-only activation still missing:** a real upstream tool call forwarded through MCPace's process/session manager with correct session/project ownership and no stale-result confusion
+- **beta-only activation still missing:** real-host proof that upstream tool calls run through durable MCPace session/process ownership; request-time wrappers now have heartbeat renewal, settings-only conservative leases, and lost-lease/stale-id guards in source tests
 - **entrypoint contract:** `serve` is the product, `hub` is lifecycle machinery, `dashboard` is an optional view into state
 - **proof-tier gate for the next cycle:** any client surface marked `proofTier = tier-1` in the loaded client catalog
 - **truth taxonomy now split in the capability inventory:** `status` tracks full implementation completion, while `claimStatus` records the strongest honest public claim (`supported`, `supported-local-only`, `control-plane-only`, `bootstrap-only`, `connectable-preview`, `planned`)
@@ -41,7 +44,7 @@ What is confirmed in-repo right now:
 - Removed legacy shell-runtime dependence from the active repo contract.
 - Implemented grouped Rust command families and kept large families split into thin module roots.
 - Added `client plan` so routing, project-root resolution, server policy arbitration, and surface constraints are visible before live runtime exists.
-- Added config-writing `client install` for the supported local client surfaces while keeping `client export` preview-only where config patching is still blocked.
+- Added config-writing `client install` for the supported local client surfaces, with dry-run/diff previews and restoreable backups, while keeping `client export` preview-only where config patching is still blocked.
 - Added bootstrap-only `stdio-shim --json` so the repo now has a real entrypoint for normalized session bootstrap and persistent-hub attach proof, without pretending that live MCP stdio forwarding already works.
 - Added `lab list/matrix/coverage/gaps/report/show` so runtime claims are separated into covered / partial / blocked instead of being blurred together.
 - Added top-level `repair` as a grouped maintenance shorthand over `hub repair` with native Rust integration coverage.
@@ -60,42 +63,42 @@ What is confirmed in-repo right now:
 
 ## What is in progress
 
-- Converting the current control plane into a real runtime core: live `stdio` ingress, local Streamable HTTP ingress, lease-backed upstream forwarding, process-pool ownership, and cancel/stale-result guards.
+- Converting the current control plane into a real runtime core: durable `stdio` ingress, local Streamable HTTP session handling, process-pool ownership, takeover semantics, and cross-request cancel/stale-result guards beyond the current request-time wrapper guards.
 - Keeping the eval suite tied to real maintainer work instead of vanity benchmarks.
 - Tightening release/source proof so evidence paths, archive contents, and version alignment do not drift silently.
 
 ## What is blocked
 
-- **Rust build proof** in this container is blocked because `cargo` / `rustc` are not installed here.
+- **Multi-host build proof** is still blocked outside this container: current-host `cargo`/`rustc` proof runs here, but repeated Linux/macOS/Windows release-lane proof still needs supported CI/hosts.
 - **Runtime proof** is blocked because the current container is not a supported real-host environment for live Docker/client/transport validation.
 - **Compatibility proof** for closed or cloud-only client surfaces is blocked until real traces or safe reproductions exist.
 - **Published release proof** is blocked until GitHub Release and npm publish/provenance are exercised, not just documented.
 
 ## What happens next
 
-1. Promote bootstrap-only `mcpace stdio-shim --json` into a live stdio forwarding path while keeping the reused planner logic as the single source of truth.
-2. Add local Streamable HTTP ingress plus session handling.
-3. Attach `hub lease` ownership to live upstream forwarding and add cancel/stale-result guards.
-4. Re-run build/runtime proof on supported hosts.
+1. Promote bootstrap-only `mcpace stdio-shim --json` into a durable stdio forwarding path while keeping the reused planner logic as the single source of truth.
+2. Add local Streamable HTTP session create/reuse/close handling beyond the current connectable wrapper surface.
+3. Add process-pool reuse, takeover semantics, and cross-request cancel/stale-result guards on top of the current request-time lease gates, heartbeat renewal, lost-lease cancellation, and stale-id filtering.
+4. Re-run runtime proof and repeated multi-host release proof on supported hosts.
 5. Only then expand preview-only `client export` into real config patching for the still-blocked/public client lanes.
 
 ## Key metrics
 
 ### Verified repo metrics
 
-- source-level native command surfaces: **34** (`reports/rust-command-coverage.md`)
+- source-level native command surfaces: **39** (`reports/rust-command-coverage.md`)
 - grouped command families implemented now: **7** (`client`, `hub`, `init`, `lab`, `repair`, `server`, `verify`)
 - grouped commands still planned: **1** (`release`) plus the preview-only `client export` surface for blocked/public lanes
 - runtime capability inventory: **24 total**
-  - **13 implemented**
-  - **11 planned**
+  - **14 implemented**
+  - **10 planned**
   - public claim view:
     - **12 supported**
-    - **2 supported-local-only**
+    - **3 supported-local-only**
     - **4 control-plane-only**
     - **1 bootstrap-only**
     - **1 connectable-preview**
-    - **4 planned**
+    - **3 planned**
 - runtime lab fixtures: **16**
   - **3 typical**
   - **9 edge**
@@ -111,9 +114,9 @@ What is confirmed in-repo right now:
 
 Two lenses are honest enough to use:
 
-1. **Unweighted capability count**: `13 / 24` implemented = about **54%**.
-2. **Public-claim mix**: `18 / 24` capabilities now have some honest non-planned claim, but most of that extra surface is still `control-plane-only`, `bootstrap-only`, `connectable-preview`, or `supported-local-only` rather than fully-proven runtime support.
-3. **Coarse roadmap weighting**: roughly **45%–55% complete**.
+1. **Unweighted capability count**: `14 / 24` implemented = about **58%**.
+2. **Public-claim mix**: `21 / 24` capabilities now have some honest non-planned claim, but most of that extra surface is still `control-plane-only`, `bootstrap-only`, `connectable-preview`, or `supported-local-only` rather than fully-proven runtime support.
+3. **Coarse roadmap weighting**: roughly **50%–60% complete**.
 
 Why the weighted view is a range rather than a single percentage:
 
