@@ -12,7 +12,7 @@
 |---|---|---|
 | `version` | native-rust | reads version from `mcpace.config.json` |
 | `doctor` | native-rust | host/source diagnostics without PowerShell |
-| `dashboard` | native-rust | local browser dashboard over native JSON read paths and safe hub actions |
+| `dashboard` | native-rust | local web dashboard over native JSON read paths and safe hub actions |
 | `serve` | native-rust | foreground one-port localhost HTTP surface for UI, health, and MCP ingress |
 | `serve start` | native-rust | starts the one-port HTTP surface in the background |
 | `serve status` | native-rust | reports background serve lifecycle and URL state |
@@ -24,7 +24,7 @@
 | `hub repair` | native-rust | archives corrupt runtime files and rewrites a clean stopped baseline |
 | `hub logs` | native-rust | reads structured hub event logs with bounded single-archive rotation |
 | `hub lease list` | native-rust | lists/prunes active runtime leases from the file-backed lease store |
-| `hub lease acquire` | native-rust | grants or blocks scheduler leases using planner-derived mutex/capacity/project/browser/host keys |
+| `hub lease acquire` | native-rust | grants or blocks scheduler leases using planner-derived mutex/capacity/project/state-profile/host keys |
 | `hub lease renew` | native-rust | extends an active lease TTL and records a renewal timestamp |
 | `hub lease release` | native-rust | releases an active scheduler lease by id |
 | `stdio-shim --json` | native-rust-bootstrap | normalizes client/session/project context, ensures the hub is up, and reports a sticky lease plus adapter preview without forwarding live MCP traffic |

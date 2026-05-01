@@ -81,7 +81,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         aliases: &["claude", "claude code", "claudecode"],
         maturity: "documented",
         surface_class: "local",
-        surface_kind: "local-cli-ide-browser",
+        surface_kind: "local-cli-ide-web",
         proof_tier: "tier-1",
         config_format: "json",
         config_paths: &["~/.claude.json", ".mcp.json"],

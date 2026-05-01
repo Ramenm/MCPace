@@ -26,7 +26,7 @@ The user story should be:
 4. use the client normally
 5. inspect health with `mcpace doctor` and `mcpace status`
 
-Users should not need to understand ABP, container wiring, per-client settings drift, or repo-local contributor tooling.
+Users should not need to understand MCP, container wiring, per-client settings drift, or repo-local contributor tooling.
 
 ## Why a single hub is stronger than many scripts
 

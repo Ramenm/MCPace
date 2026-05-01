@@ -42,17 +42,17 @@ spawn. The policy vocabulary is:
   touched them at once;
 - `projectRootMode`: `required` or `optional`;
 - `worktreeBinding`: `project-root`, `workspace-roots`, or `none`;
-- `browserProfileMode`: `project-session`, `project-shared`, `host`, or `none`;
-- `hostLock`: `desktop-session`, `browser-profile`, `capture-session`,
+- `stateProfileMode`: `project-session`, `project-shared`, `host`, or `none`;
+- `hostLock`: `desktop-session`, `state-profile`, `capture-session`,
   `host-service`, or `none`;
 - `startupStrategy`: `lazy-shared`, `lazy-per-project`, `lazy-per-profile`,
   `lazy-per-credential`, `singleton-host`, or another explicit scheduler hint;
 - `routingGroup`: human-readable lane such as `shared`, `workspace`, `project`,
-  `credential`, `browser`, or `desktop`.
+  `credential`, `demo-server`, or `desktop`.
 
 `mcpace client plan --json` now renders the derived scheduler fields per server:
 `processPartition`, `projectBindingKey`, `worktreeBindingKey`, `conflictDomain`,
-`hostLockKey`, `browserProfileKey`, `parallelismLimit`, `schedulerLane`, and
+`hostLockKey`, `stateProfileKey`, `parallelismLimit`, `schedulerLane`, and
 `startupStrategy`.
 
 ### What MCPace can infer automatically
@@ -70,7 +70,7 @@ MCPace uses automatic signals where the MCP protocol or the client gives them:
 
 Those signals are not a complete concurrency contract. The MCP spec defines
 ToolAnnotations as hints, not as trusted proof, and it does not currently define
-a standard field for "parallel-safe", "single writer", "per browser profile",
+a standard field for "parallel-safe", "single writer", "per state profile",
 "per desktop session", or "this memory store is scoped to one chat". Therefore
 MCPace's safe default is:
 
@@ -89,7 +89,7 @@ block `upstream_call` / `upstream_batch`.
 
 `upstream_policy_suggest` adds the automation boundary: it converts unprotected
 guard-recommended audit findings into copyable declarative policy candidates
-using stable naming rules (`browser-control` stays shared, generic mutation
+using stable naming rules (`interaction-control` stays shared, generic mutation
 becomes `<server>-mutation`, and allow arguments become `allow<RiskClass>` in
 PascalCase). Suggestions remain dry-run output until a config update applies
 them, because MCP annotations and name patterns are useful signals but not a
@@ -113,7 +113,7 @@ resource is safe to share.
 | Ephemeral read-only or service-managed servers | parallel pool, optionally bounded by `parallelismLimit` |
 | Project-local servers such as git, Lean context, Serena, PDF, SQLite | one process partition per resolved project root; serialize per project instance |
 | Credential-scoped servers such as GitHub, Sentry, Postgres, Brave Search | partition by credential profile; allow bounded parallel reads when safe |
-| Browser automation | one browser profile key per project/session unless the policy declares a shared host profile |
+| Stateful interaction automation | one state profile key per project/session unless the policy declares a shared host profile |
 | Desktop/Windows automation | singleton host lock by conflict domain; never let two client chats drive the same desktop session concurrently |
 | Capture/host services such as screen/capture tools | singleton or host-service queue unless policy proves read-only fan-out |
 | Sequential-thinking / scratchpad-style reasoning tools | session-affine serialization; do not merge two chats into one thought chain |
@@ -121,27 +121,27 @@ resource is safe to share.
 | Filesystem roots | single writer over workspace roots unless trusted read-only annotations and tool-level read/write routing prove a narrower safe lane |
 | Git and SQLite project tools | project-local serialization, with mutation tools guarded by `toolPolicies` and read/status/schema tools left available |
 | Lean/Serena project context tools | project-local serialization, with shell/edit/source-memory mutations guarded by declarative `toolPolicies` |
-| Agent Browser Protocol host bridge | browser-profile serialization; navigation/action/JavaScript/dialog/download/file/permission controls require explicit browser-control opt-in |
-| Playwright-style browser canaries | isolated project/session browser lane; state-changing control tools require explicit risk opt-in even when upstream annotations are present |
+| external MCP server host bridge | state-profile serialization; navigation/action/JavaScript/dialog/download/file/permission controls require explicit interaction-control opt-in |
+| Playwright-style interaction canaries | isolated project/session stateful lane; state-changing control tools require explicit risk opt-in even when upstream annotations are present |
 
 The important distinction is between parallelizing work and parallelizing access
-to a mutable host resource. Browser and desktop servers may support multiple MCP
+to a mutable host resource. Stateful and desktop servers may support multiple MCP
 requests, but the underlying page, profile, UI, or OS session is not necessarily
 safe to drive from two unrelated client chats.
 
-## Browser-style servers
+## Stateful interaction servers
 
-Browser automation needs a profile key, not just a process key. The safe default
+Stateful interaction automation needs a profile key, not just a process key. The safe default
 is:
 
 ```text
-browser-profile:<conflict-domain>|project:<project-root>|session:<lease>
+state-profile:<conflict-domain>|project:<project-root>|session:<lease>
 ```
 
 That lets two projects run separately and prevents two chats in the same project
 from corrupting one another unless the policy explicitly chooses a shared
 project or host profile. MCPace should then serialize mutations through the
-`browser-profile-queue` lane.
+`state-profile-queue` lane.
 
 ## Desktop and Windows-style servers
 
@@ -228,7 +228,7 @@ mcpace hub lease release --json --lease-id <lease-id>
 Acquisition derives the route from `client plan`, refuses pending/projectless
 routes, prunes expired leases, and then enforces one of two gates:
 
-- `requestMutexKey` for exclusive host locks, browser-profile queues,
+- `requestMutexKey` for exclusive host locks, state-profile queues,
   single-session servers, single-writer servers, and project-local serializers;
 - `capacityKey` + `parallelismLimit` for parallel-safe pools.
 

@@ -35,3 +35,13 @@ MCPace keeps protocol handling, command orchestration, and runtime state changes
 - Reuse the command bridge helpers in `mcp_server.rs` instead of hand-rolling `app::run` buffers.
 - Preserve request/notification semantics: requests receive exactly one response; notifications receive none.
 - Keep command modules usable directly from the CLI before exposing them through MCP.
+
+## Machine-checked boundaries
+
+`npm run audit:source` currently guards the most important small boundaries:
+
+- **Protocol primitives stay transport and command agnostic.** `src/mcp_protocol.rs` may define JSON-RPC/MCP envelopes, errors, and protocol helpers, but it must not spawn commands, open sockets, call the CLI router, or depend on runtime state modules.
+- **Resource defaults stay side-effect free.** `src/resources.rs` may calculate limits and limiter state, but it must not shell out, own network sockets, or read/write project state.
+- **HTTP adapter errors remain structured.** `src/dashboard.rs` routes go through a handler/error-boundary split so internal route failures return JSON `500` responses instead of silent connection closes.
+
+These checks are intentionally narrow. If a new boundary cannot be described as a deterministic source invariant, document it as a warning/backlog item rather than a critical CI blocker.

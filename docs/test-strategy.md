@@ -17,15 +17,19 @@ Run in this repo today:
 - seed prompt/agent eval contract checks
 - evidence-path checks for runtime capabilities and seed evals
 - eval scenario-map / rubric / dataset-plan validation
+- security contract checks for upstream stderr redaction and MCP child-env isolation
 - stack-policy drift checks across `package.json`, `.nvmrc`, `.node-version`, CI, and docs
-- machine-generated verification report contract checks for `scripts/proof-report.mjs`
+- machine-generated verification report contract checks for `scripts/proof-report.mjs`, including verbose-child-output buffer hardening
+- source/architecture audit for deterministic production-code hazards, unsafe/FFI boundary drift, and boundary violations (`npm run audit:source`)
+- optional built-in Node coverage lane for contract tests: `npm run test:node:coverage`
 
 ## 2. Build checks
 
 Need a host with a real Rust toolchain:
 
-- `cargo test`
-- `cargo build --release`
+- `npm run verify:rust-quality` for the ordered fmt → clippy → suite-isolated tests → release-build gate
+- `cargo test` when running ad hoc full Rust tests
+- `cargo build --release` when validating a single release build manually
 - later `cargo nextest run`
 
 ## 3. Runtime checks
@@ -67,6 +71,7 @@ Run in CI before publication:
 - `tests/node/stack-contract.test.js`
 - `tests/node/evidence-contract.test.js`
 - `tests/node/eval-contract.test.js`
+- `tests/node/mcp-config-contract.test.js`
 - `packages/npm/cli/test/*.test.mjs`
 - `tests/help_and_root.rs`
 - `tests/hub_runtime.rs`
@@ -86,7 +91,9 @@ Run in CI before publication:
 - Ubuntu also runs a constrained Docker full-work lane that builds the release
   binary inside a Rust+Node verify image and exercises the repo-root CLI path;
 - npm package dry-run is separated into its own job to reduce duplicate work;
-- Rust build proof remains a three-host matrix and is still the required build gate.
+- Rust build proof remains a three-host matrix and now runs `npm run verify:rust-quality`, producing `reports/rust-quality-latest.json` for fmt, clippy, tests, and release-build evidence;
+- Rust quality, lifecycle, launcher, dry-run, and release native jobs cache Cargo registry/git/target with deterministic keys from OS, Rust `1.95.0`, target or suite, `Cargo.lock`, and `rust-toolchain.toml`;
+- checkout steps use `persist-credentials: false` unless a job explicitly needs GitHub credentials.
 
 ## Fast launcher verification lanes
 
@@ -145,4 +152,12 @@ If a future lane needs higher limits, raise them deliberately and document why.
 - docs claim full client onboarding when only `client plan` exists;
 - build/runtime proof is claimed from Node/source checks alone;
 - project status or ETA is reported with fake precision;
-- eval changes improve a vanity score while hiding unsupported-claim regressions.
+- eval changes improve a vanity score while hiding unsupported-claim regressions;
+- packaged MCP defaults reintroduce upstream server IDs, commands, or candidate recommendations;
+- stdio upstream launch regresses to forwarding the whole parent environment instead of explicit `env` / local `env_vars`;
+- upstream stderr diagnostics leak raw Authorization headers, bearer tokens, passwords, or unbounded secret-bearing output.
+
+Additional source-quality failure classes now guarded:
+
+- production `panic!`, `todo!`, `unimplemented!`, or explicit architecture-boundary drift slips into source proof;
+- unsafe Rust or FFI declarations appear outside the reviewed process-detach boundary;

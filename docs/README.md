@@ -1,46 +1,45 @@
-# Documentation Index
+# MCPace docs
 
-This packaged copy tracks repo version `0.3.6`. Generated release archives use a
-root folder named `<project-name>-v<version>-<ddmmyy-hhmmss>`.
+This packaged copy tracks repo version `0.4.1`.
 
-Start here:
+MCPace is a Rust-first local MCP hub. It ships with no upstream MCP servers enabled by default and no hardcoded recommended upstream catalog. Configure user-supplied stdio MCP servers directly in `mcp_settings.json`; add `mcpace.config.json` server policy only when you need extra routing, platform, or tool-risk metadata.
 
-- `../README.md` — product overview and quick command surface
-- `host-setup.md` — local prerequisites
-- `toolchain-policy.md` — supported Node/npm/Rust lanes
-- `test-strategy.md` — what to run for source and host proof
-- `eval-plan.md` — prompt/agent eval goals, rubric, dataset, and regression loop
-- `verification-matrix.md` — practical verification checklist
-- `codex-mcpace-guide.md` — Codex local MCP install, handshake, and
-  troubleshooting guide
-- `mcp-spec-alignment.md` — checked MCP baseline and transport scope
-- `client-metadata-routing.md` — client/session routing inputs
-- `client-surface-matrix.md` — local/cloud/API connector client differences
-- `server-segmentation-and-auto-discovery.md` — server policy and serialization model
-- `universal-runtime-policy.md` — dynamic client catalogs, project/browser/desktop routing, and scheduler policy
-- `technology-decision.md` — Rust core + npm launcher rationale
-- `technology-evaluation.md` — compared implementation paths and why incremental Rust-first completion still wins
-- `rust-rewrite-architecture.md` — current module layout
-- `architecture-boundaries.md` — active Rust module boundaries and extension rules
-- `release-automation.md` — release target, platform package, update-check, and publish automation policy
-- `rewrite-cutover-plan.md` — next implementation phases
-- `runtime-lab.md` — runtime fixture lab and gaps
-- `product-truth-and-beta-gate.md` — current promise, support tiers, truth taxonomy, and beta gate
-- `product-truth.json` — machine-readable copy of the current promise, activation, entrypoint contract, plus catalog-driven proof-tier and install-support selectors
-- `recovery-runbook.md` — stale/corrupt runtime recovery
-- `adr/0003-upstream-tool-surface-and-session-pooling.md` — decision to keep
-  upstream tools wrapper-first by default and optimize latency with pooled
-  sessions instead of global direct passthrough
+Start with:
 
-Project-control docs at the repo root:
+- `product-truth.json` for the machine-readable product promise.
+- `mcp-spec-alignment.md` for the checked MCP baseline.
+- `client-surface-matrix.md` and `client-metadata-routing.md` for client routing.
+- `server-segmentation-and-auto-discovery.md` for server discovery and serialization.
+- `test-strategy.md` and `verification-matrix.md` for checks.
+- `adr/0004-source-only-mcp-env-isolation.md` for the source-only MCP env isolation decision.
+- `adr/0005-ci-cache-and-upstream-diagnostic-redaction.md` for Cargo CI caching and stderr diagnostic redaction.
 
-- `../TODO.md` — prioritized backlog and ETA ranges
-- `../STATE.md` — current verified status and progress view
-- `../DECISIONS.md` — active decisions and review triggers
+Run from the repository root:
 
-Included machine-readable reports:
+```bash
+npm test
+npm run verify:rust-quality
+cargo fmt --all -- --check
+cargo check --all-targets --locked
+cargo test --all-targets --locked
+```
 
-- `../reports/summary.md` — concise packaged summary
-- `../reports/verification-latest.json` — latest machine-generated source/release verification snapshot
-- `../reports/rust-command-coverage.json` — implemented vs planned command surface
-- `../reports/toolchain-support.json` — stack policy used by CI and tests
+Minimal source-only upstream example:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "node",
+      "args": ["path/to/server.js"],
+      "env": { "EXPLICIT_VAR": "value" },
+      "env_vars": ["TOKEN_FROM_PARENT_ENV", { "name": "LOCAL_TOKEN", "source": "local" }],
+      "cwd": "/absolute/or/project-specific/path"
+    }
+  }
+}
+```
+
+Stdio upstream children get a cleared environment plus a small process-launch baseline, MCPace runtime variables, and explicit `env` / local `env_vars` values only. This preserves generic MCP server support without forwarding every parent process secret by default.
+Cache/session fingerprints hash explicit env values so plaintext tokens are not embedded in cache keys.
+Upstream stderr included in errors is bounded and sanitized before display so diagnostics remain useful without intentionally echoing obvious credentials.

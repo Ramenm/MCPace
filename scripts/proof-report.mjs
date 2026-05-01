@@ -16,13 +16,18 @@ const DEFAULT_OUTPUT_PATH = path.join(repoRoot, 'reports', 'verification-latest.
 const DEFAULT_ARCHIVE_OUTPUT_DIR = path.join(repoRoot, 'dist');
 const DEFAULT_VERSION_PROBE_TIMEOUT_MS = 3000;
 const DEFAULT_PROOF_COMMAND_TIMEOUT_MS = 300000;
-const VERSION_PROBE_TIMEOUT_MS = parseTimeoutEnv(
+const DEFAULT_PROOF_COMMAND_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+const VERSION_PROBE_TIMEOUT_MS = parsePositiveIntegerEnv(
   'MCPACE_VERSION_PROBE_TIMEOUT_MS',
   DEFAULT_VERSION_PROBE_TIMEOUT_MS
 );
-const PROOF_COMMAND_TIMEOUT_MS = parseTimeoutEnv(
+const PROOF_COMMAND_TIMEOUT_MS = parsePositiveIntegerEnv(
   'MCPACE_PROOF_COMMAND_TIMEOUT_MS',
   DEFAULT_PROOF_COMMAND_TIMEOUT_MS
+);
+const PROOF_COMMAND_MAX_BUFFER_BYTES = parsePositiveIntegerEnv(
+  'MCPACE_PROOF_COMMAND_MAX_BUFFER_BYTES',
+  DEFAULT_PROOF_COMMAND_MAX_BUFFER_BYTES
 );
 const IMPLEMENTATION_STATUS_ORDER = ['implemented', 'planned', 'missing'];
 const CLAIM_STATUS_ORDER = [
@@ -35,7 +40,7 @@ const CLAIM_STATUS_ORDER = [
   'planned'
 ];
 
-function parseTimeoutEnv(name, fallback) {
+function parsePositiveIntegerEnv(name, fallback) {
   const parsed = Number.parseInt(process.env[name] || '', 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
@@ -235,6 +240,7 @@ function runCheckedCommand(command, args, label, cwd = repoRoot, timeoutMs = PRO
     encoding: 'utf8',
     env: childEnvForCommand(command),
     timeout: timeoutMs,
+    maxBuffer: PROOF_COMMAND_MAX_BUFFER_BYTES,
     windowsHide: true
   });
   return {
@@ -245,6 +251,7 @@ function runCheckedCommand(command, args, label, cwd = repoRoot, timeoutMs = PRO
     signal: result.signal ?? null,
     durationMs: Date.now() - startedAt,
     timeoutMs,
+    maxBufferBytes: PROOF_COMMAND_MAX_BUFFER_BYTES,
     timedOut: result.error?.code === 'ETIMEDOUT',
     stdout: result.stdout || '',
     stderr: result.stderr || '',

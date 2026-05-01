@@ -22,7 +22,7 @@ pub struct ServerRecord {
     pub conflict_domain: String,
     pub project_root_mode: String,
     pub worktree_binding: String,
-    pub browser_profile_mode: String,
+    pub state_profile_mode: String,
     pub host_lock: String,
     pub startup_strategy: String,
     pub routing_group: String,
@@ -40,6 +40,7 @@ pub struct ServerRecord {
 
 #[derive(Debug, Clone)]
 pub(super) struct SourceServerRecord {
+    pub(super) name: String,
     pub(super) enabled: bool,
     pub(super) source_type: String,
     pub(super) command: String,
@@ -94,8 +95,8 @@ impl ServerRecord {
                 JsonValue::string(self.worktree_binding.clone()),
             ),
             (
-                "browserProfileMode",
-                JsonValue::string(self.browser_profile_mode.clone()),
+                "stateProfileMode",
+                JsonValue::string(self.state_profile_mode.clone()),
             ),
             ("hostLock", JsonValue::string(self.host_lock.clone())),
             (
@@ -176,8 +177,8 @@ impl ServerRecord {
                         JsonValue::string(self.worktree_binding.clone()),
                     ),
                     (
-                        "browserProfileMode",
-                        JsonValue::string(self.browser_profile_mode.clone()),
+                        "stateProfileMode",
+                        JsonValue::string(self.state_profile_mode.clone()),
                     ),
                     ("hostLock", JsonValue::string(self.host_lock.clone())),
                     (

@@ -144,7 +144,7 @@ printf '== client plan ==\\n'
 grep -Eq '"requiresHubOwnedStdio": true' /tmp/mcpace-client-plan.json
 printf '== server list ==\\n'
 ./target/release/mcpace server list --json > /tmp/mcpace-server-list.json
-grep -Eq '"name": "browser"' /tmp/mcpace-server-list.json
+grep -Eq '"servers": \[\]' /tmp/mcpace-server-list.json
 printf '== verify doctor ==\\n'
 ./target/release/mcpace verify doctor --json > /tmp/mcpace-verify-doctor.json
 grep -Eq '"configFound": true' /tmp/mcpace-verify-doctor.json

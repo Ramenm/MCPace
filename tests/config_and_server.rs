@@ -18,12 +18,12 @@ fn server_list_json_applies_profile_override_and_case_folded_source_settings() {
       "default": "safe",
       "profiles": {
         "safe": { "description": "Safe", "serverOverrides": {} },
-        "full": { "description": "Full", "serverOverrides": { "Browser": { "enabled": true } } }
+        "full": { "description": "Full", "serverOverrides": { "RemoteDemo": { "enabled": true } } }
       }
     }
   },
   "servers": {
-    "Browser": {
+    "RemoteDemo": {
       "kind": "host-bridge",
       "required": false,
       "defaultEnabled": false,
@@ -49,7 +49,7 @@ fn server_list_json_applies_profile_override_and_case_folded_source_settings() {
         root.join("mcp_settings.json"),
         r#"{
   "mcpServers": {
-    "browser": {
+    "remotedemo": {
       "enabled": true,
       "type": "http",
       "url": "http://127.0.0.1:39022/mcp"
@@ -66,7 +66,50 @@ fn server_list_json_applies_profile_override_and_case_folded_source_settings() {
         .expect("run mcpace server list with runtime profile env");
     assert!(output.status.success());
     let text = stdout(&output);
-    assert!(text.contains(r#""name": "Browser""#));
+    assert!(text.contains(r#""name": "RemoteDemo""#));
+    assert!(text.contains(r#""profileEnabled": true"#));
+    assert!(text.contains(r#""sourceEnabled": true"#));
+    assert!(text.contains(r#""effectiveEnabled": true"#));
+}
+
+#[test]
+fn server_list_json_includes_source_only_generic_mcp_server() {
+    let temp = TempDir::new();
+    let root = temp.path();
+
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.4.1",
+  "profiles": {
+    "runtime": {
+      "default": "manual",
+      "profiles": { "manual": { "description": "Manual", "serverOverrides": {} } }
+    }
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("mcp_settings.json"),
+        r#"{
+  "mcpServers": {
+    "AnyServer": {
+      "command": "node",
+      "args": ["server.js"]
+    }
+  }
+}"#,
+    )
+    .unwrap();
+
+    let output = run(&["server", "list", "--json", "--root", root.to_str().unwrap()]);
+    assert!(output.status.success());
+    let text = stdout(&output);
+    assert!(text.contains(r#""name": "AnyServer""#));
+    assert!(text.contains(r#""kind": "source-stdio""#));
+    assert!(text.contains(r#""defaultEnabled": false"#));
     assert!(text.contains(r#""profileEnabled": true"#));
     assert!(text.contains(r#""sourceEnabled": true"#));
     assert!(text.contains(r#""effectiveEnabled": true"#));
@@ -120,7 +163,7 @@ fn server_capabilities_json_reads_config_and_source_settings() {
         r#"{
   "version": "0.2.0",
   "servers": {
-    "browser": {
+    "remote-demo": {
       "kind": "host-bridge",
       "required": true,
       "autoStart": true,
@@ -150,7 +193,7 @@ fn server_capabilities_json_reads_config_and_source_settings() {
         root.join("mcp_settings.json"),
         r#"{
   "mcpServers": {
-    "browser": {
+    "remote-demo": {
       "enabled": true,
       "type": "http",
       "url": "http://localhost:39022/mcp"
@@ -167,11 +210,11 @@ fn server_capabilities_json_reads_config_and_source_settings() {
         "--root",
         root.to_str().unwrap(),
         "--name",
-        "browser",
+        "remote-demo",
     ]);
     assert!(output.status.success());
     let text = stdout(&output);
-    assert!(text.contains(r#""name": "browser""#));
+    assert!(text.contains(r#""name": "remote-demo""#));
     assert!(text.contains(r#""sourceEnabled": true"#));
     assert!(text.contains(r#""supportedTransports": ["#));
 }
@@ -390,6 +433,66 @@ fn verify_readiness_reports_missing_stdio_source_command_as_runtime_prerequisite
     assert!(text.contains(r#""readyForRuntimeOps": false"#));
     assert!(text.contains(r#""missingRuntimePrerequisites": ["#));
     assert!(text.contains(r#""definitely-missing-mcpace-tool""#));
+}
+
+#[test]
+fn verify_readiness_reports_source_only_stdio_command_prerequisite() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.4.1",
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("mcp_settings.json"),
+        r#"{
+  "mcpServers": {
+    "loose-tool": {
+      "command": "definitely-missing-mcpace-source-only-tool"
+    }
+  }
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname='x'\nversion='0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(root.join("package.json"), "{}\n").unwrap();
+    fs::create_dir_all(root.join("packages")).unwrap();
+    fs::write(root.join("release-manifest.json"), "{}\n").unwrap();
+
+    let output = run(&[
+        "verify",
+        "readiness",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(output.status.success());
+    let text = stdout(&output);
+    assert!(text.contains(r#""serverCount": 1"#), "{}", text);
+    assert!(
+        text.contains(r#""sourceEnabledServerCount": 1"#),
+        "{}",
+        text
+    );
+    assert!(
+        text.contains(r#""runtimePrerequisitesReady": false"#),
+        "{}",
+        text
+    );
+    assert!(text.contains(r#""readyForRuntimeOps": false"#), "{}", text);
+    assert!(
+        text.contains(r#""definitely-missing-mcpace-source-only-tool""#),
+        "{}",
+        text
+    );
 }
 
 #[test]

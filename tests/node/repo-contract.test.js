@@ -74,12 +74,17 @@ test('Cargo manifest uses reviewed runtime dependencies instead of ad-hoc parser
   assert.doesNotMatch(cargoToml, /tempfile/);
 });
 
-test('CI workflow includes Rust build and test validation', () => {
+test('CI workflow includes Rust quality, build, test validation, and deterministic Cargo caches', () => {
   const workflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'ci.yml'), 'utf8');
-  assert.match(workflow, /npm run test:rust:ci/);
+  assert.match(workflow, /npm run verify:rust-quality/);
+  assert.match(workflow, /reports\/rust-quality-latest\.json/);
   assert.match(workflow, /rust-lifecycle-validation/);
   assert.match(workflow, /node scripts\/run-rust-tests\.mjs --json --suite/);
-  assert.match(workflow, /cargo build --release/);
   assert.match(workflow, /ubuntu-latest/);
   assert.match(workflow, /windows-latest/);
+  assert.match(workflow, /actions\/cache@v4/);
+  assert.match(workflow, /~\/\.cargo\/registry/);
+  assert.match(workflow, /~\/\.cargo\/git/);
+  assert.match(workflow, /hashFiles\('Cargo\.lock', 'rust-toolchain\.toml'\)/);
+  assert.match(workflow, /persist-credentials: false/);
 });

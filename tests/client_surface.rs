@@ -14,7 +14,7 @@ fn client_plan_json_uses_metadata_and_arbitrates_unsafe_servers() {
         r#"{
   "version": "0.3.5",
   "servers": {
-    "browser": {
+    "interactive-demo": {
       "kind": "host-bridge",
       "required": true,
       "transportPreference": "http",
@@ -71,7 +71,7 @@ fn client_plan_json_uses_metadata_and_arbitrates_unsafe_servers() {
         root.join("mcp_settings.json"),
         r#"{
   "mcpServers": {
-    "browser": { "enabled": true, "type": "http", "url": "http://127.0.0.1:39022/mcp" },
+    "interactive-demo": { "enabled": true, "type": "http", "url": "http://127.0.0.1:39022/mcp" },
     "filesystem": { "enabled": true, "type": "stdio", "command": "node" },
     "memory": { "enabled": true, "type": "stdio", "command": "node" }
   }
@@ -95,11 +95,11 @@ fn client_plan_json_uses_metadata_and_arbitrates_unsafe_servers() {
     assert!(text.contains(r#""clientExportImplemented": true"#));
     assert!(text.contains(r#""requiresHubOwnedStdio": true"#));
     assert!(text.contains(r#""requestStrategy": "serialize-per-project-instance""#));
-    assert!(text.contains(r#""requestStrategy": "serialize-per-browser-profile""#));
+    assert!(text.contains(r#""requestStrategy": "serialize-per-state-profile""#));
     assert!(text.contains(r#""requestStrategy": "parallel-safe""#));
-    assert!(text.contains(r#""browserProfileKey": "browser-profile:browser"#));
+    assert!(text.contains(r#""stateProfileKey": "state-profile:interactive-demo"#));
     assert!(text.contains(r#""projectBindingKey": "project:/work/project-a""#));
-    assert!(text.contains(r#""schedulerLane": "browser-profile-queue""#));
+    assert!(text.contains(r#""schedulerLane": "state-profile-queue""#));
     assert!(text.contains(r#""sessionLeaseId": "external:sess-42""#));
     assert!(text.contains(r#""clientTargetId": "codex""#));
     assert!(text.contains(

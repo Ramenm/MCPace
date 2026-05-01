@@ -20,12 +20,7 @@ pub(super) fn spawn_background(exe: &Path, root_path: &Path) -> Result<(), Strin
 
 #[cfg(unix)]
 fn unix_spawn_background(exe: &Path, root_path: &Path) -> Result<(), String> {
-    use std::os::unix::process::CommandExt;
     use std::process::{Command, Stdio};
-
-    extern "C" {
-        fn setsid() -> i32;
-    }
 
     let mut command = Command::new(exe);
     command
@@ -37,14 +32,7 @@ fn unix_spawn_background(exe: &Path, root_path: &Path) -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
 
-    unsafe {
-        command.pre_exec(|| {
-            if setsid() < 0 {
-                return Err(std::io::Error::last_os_error());
-            }
-            Ok(())
-        });
-    }
+    crate::process_detach::configure_unix_new_session(&mut command);
 
     command
         .spawn()

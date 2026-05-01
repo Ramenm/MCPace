@@ -1,5 +1,5 @@
 {
-  "version": "0.3.6",
+  "version": "0.4.1",
   "tracks": [
     {
       "id": "seed-prompt",
@@ -24,7 +24,7 @@
       "splitCounts": {
         "typical": 3,
         "edge": 8,
-        "adversarial": 8,
+        "adversarial": 10,
         "held-out": 2
       },
       "evaluationMethods": [

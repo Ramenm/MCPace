@@ -1,4 +1,5 @@
 use crate::json::JsonValue;
+use crate::resources;
 use crate::runtimepaths;
 use auto_launch::{
     AutoLaunch, AutoLaunchBuilder, LinuxLaunchMode, MacOSLaunchMode, WindowsEnableMode,
@@ -16,6 +17,10 @@ struct ParsedArgs {
     root_override: Option<PathBuf>,
     host: String,
     port: u16,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
     dry_run: bool,
     no_enable: bool,
     help: bool,
@@ -30,6 +35,10 @@ impl Default for ParsedArgs {
             root_override: None,
             host: runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
             port: runtimepaths::DEFAULT_LOCAL_MCP_PORT,
+            max_connections: None,
+            io_timeout_ms: None,
+            max_body_bytes: None,
+            overview_cache_ms: None,
             dry_run: false,
             no_enable: false,
             help: false,
@@ -71,7 +80,15 @@ pub fn run(
         return 1;
     };
     let root_path = canonicalize_or_original(&root_path);
-    let config = match service_config(&root_path, &parsed.host, parsed.port) {
+    let config = match service_config(
+        &root_path,
+        &parsed.host,
+        parsed.port,
+        parsed.max_connections,
+        parsed.io_timeout_ms,
+        parsed.max_body_bytes,
+        parsed.overview_cache_ms,
+    ) {
         Ok(value) => value,
         Err(error) => {
             let _ = writeln!(stderr, "{}", error);
@@ -163,6 +180,66 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                 }
                 index += 2;
             }
+            "--max-connections" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("service requires a value after --max-connections".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "service --max-connections") {
+                    Ok(limit) => parsed.max_connections = Some(limit),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--io-timeout-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("service requires a value after --io-timeout-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_u64(value, "service --io-timeout-ms") {
+                    Ok(timeout_ms) => parsed.io_timeout_ms = Some(timeout_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--max-body-bytes" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("service requires a value after --max-body-bytes".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "service --max-body-bytes") {
+                    Ok(limit) => parsed.max_body_bytes = Some(limit),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--overview-cache-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("service requires a value after --overview-cache-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_nonnegative_u64(value, "service --overview-cache-ms") {
+                    Ok(ttl_ms) => parsed.overview_cache_ms = Some(ttl_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
             "--dry-run" => {
                 parsed.dry_run = true;
                 index += 1;
@@ -185,17 +262,58 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 }
 
 fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace service <install|status|uninstall|print> [--json] [--root <path>] [--host <addr>] [--port <n>] [--dry-run] [--no-enable]");
+    let _ = writeln!(stdout, "Usage: mcpace service <install|status|uninstall|print> [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]");
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Uses the auto-launch crate to install user-level autostart without requiring mcpace in PATH.");
+    let _ = writeln!(
+        stdout,
+        "Serve resource defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms.",
+        resources::default_http_connection_limit(),
+        resources::DEFAULT_HTTP_IO_TIMEOUT_MS,
+        resources::DEFAULT_MAX_HTTP_BODY_BYTES,
+        resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS
+    );
 }
 
-fn service_config(root_path: &Path, host: &str, port: u16) -> Result<ServiceConfig, String> {
+fn append_serve_resource_args(
+    args: &mut Vec<String>,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
+) {
+    if let Some(value) = max_connections {
+        args.push("--max-connections".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = io_timeout_ms {
+        args.push("--io-timeout-ms".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = max_body_bytes {
+        args.push("--max-body-bytes".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = overview_cache_ms {
+        args.push("--overview-cache-ms".to_string());
+        args.push(value.to_string());
+    }
+}
+
+fn service_config(
+    root_path: &Path,
+    host: &str,
+    port: u16,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
+) -> Result<ServiceConfig, String> {
     let target_app_path = std::env::current_exe()
         .map_err(|error| format!("failed to resolve current executable: {}", error))?
         .display()
         .to_string();
-    let target_args = vec![
+    let mut target_args = vec![
         "serve".to_string(),
         "start".to_string(),
         "--root".to_string(),
@@ -205,6 +323,13 @@ fn service_config(root_path: &Path, host: &str, port: u16) -> Result<ServiceConf
         "--port".to_string(),
         port.to_string(),
     ];
+    append_serve_resource_args(
+        &mut target_args,
+        max_connections,
+        io_timeout_ms,
+        max_body_bytes,
+        overview_cache_ms,
+    );
     let autostart_script_path = autostart_script_path(root_path);
     let (app_path, args, launch_mode) = autostart_launcher_command(
         &target_app_path,

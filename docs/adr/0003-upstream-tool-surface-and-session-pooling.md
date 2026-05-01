@@ -9,7 +9,7 @@ Accepted for the current local HTTP MCP runtime slice.
 MCPace exposes one local MCP endpoint while discovering many configured upstream
 MCP servers. Those upstreams can contain large tool schemas and very different
 runtime properties: some are stateless, some are project-local, and some own
-browser, memory, or other mutable state.
+stateful interaction, memory, or other mutable state.
 
 The fastest-looking design would be to advertise every upstream tool directly
 from the top-level `tools/list`. That would make calls look more native, but it
@@ -56,7 +56,7 @@ tool layer:
   to reason about.
 - On-demand `upstream_tools` keeps full schemas available without forcing every
   schema into every startup.
-- `upstream_batch` is the right current path for browser/stateful sequences
+- `upstream_batch` is the right current path for stateful sequences
   because it avoids repeated initialize/call/cleanup cycles inside one sequence.
 - The missing speed layer is process/session reuse, not global direct passthrough.
 - Keeping wrappers preserves MCPace diagnostics, leases, heartbeat loss handling,

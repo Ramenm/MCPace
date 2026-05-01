@@ -302,8 +302,8 @@ impl ServerCoordinationPlan {
                 },
             ),
             (
-                "browserProfileKey",
-                match &self.browser_profile_key {
+                "stateProfileKey",
+                match &self.state_profile_key {
                     Some(value) => JsonValue::string(value.clone()),
                     None => JsonValue::Null,
                 },
@@ -486,8 +486,8 @@ pub(super) fn write_text_plan(plan: &ClientPlan, stdout: &mut dyn Write) {
         );
         let _ = writeln!(
             stdout,
-            "    browserProfile={}",
-            server.browser_profile_key.as_deref().unwrap_or("none")
+            "    stateProfile={}",
+            server.state_profile_key.as_deref().unwrap_or("none")
         );
         let _ = writeln!(stdout, "    parallelismLimit={}", server.parallelism_limit);
         let _ = writeln!(stdout, "    schedulerLane={}", server.scheduler_lane);

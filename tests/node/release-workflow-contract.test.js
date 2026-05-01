@@ -18,6 +18,9 @@ test('release dry-run workflow proves source and platform package lanes without 
   assert.match(workflow, /npm run build:release-artifacts/);
   assert.match(workflow, /node scripts\/stage-platform-package-binary\.mjs --json/);
   assert.match(workflow, /node scripts\/verify-platform-packages\.mjs --json/);
+  assert.match(workflow, /actions\/cache@v4/);
+  assert.match(workflow, /hashFiles\('Cargo\.lock', 'rust-toolchain\.toml'\)/);
+  assert.match(workflow, /persist-credentials: false/);
   assert.doesNotMatch(workflow, /target_key: linux-x64-gnu/);
   assert.doesNotMatch(workflow, /target_key: darwin-x64/);
   assert.doesNotMatch(workflow, /npm publish/);
@@ -48,10 +51,28 @@ test('release workflow creates attestable assets and only drafts a GitHub Releas
   assert.match(workflow, /node scripts\/verify-vendored-binary\.mjs --json/);
   assert.match(workflow, /node scripts\/stage-platform-package-binary\.mjs --json/);
   assert.match(workflow, /node scripts\/verify-platform-packages\.mjs --json/);
+  assert.match(workflow, /actions\/cache@v4/);
+  assert.match(workflow, /hashFiles\('Cargo\.lock', 'rust-toolchain\.toml'\)/);
+  assert.match(workflow, /persist-credentials: false/);
   assert.doesNotMatch(workflow, /target_key: linux-x64-gnu/);
   assert.doesNotMatch(workflow, /target_key: darwin-x64/);
   assert.match(workflow, /gh release create/);
   assert.match(workflow, /--draft/);
+});
+
+test('GitHub workflows do not persist checkout credentials in read-only worktrees', () => {
+  for (const workflowPath of [
+    path.join('.github', 'workflows', 'ci.yml'),
+    path.join('.github', 'workflows', 'release-dry-run.yml'),
+    path.join('.github', 'workflows', 'release.yml'),
+    path.join('.github', 'workflows', 'publish-npm.yml'),
+  ]) {
+    const workflow = read(workflowPath);
+    const checkoutCount = (workflow.match(/uses: actions\/checkout@v6/g) || []).length;
+    const disabledCredentialCount = (workflow.match(/persist-credentials: false/g) || []).length;
+    assert.ok(checkoutCount > 0, `${workflowPath} must use checkout`);
+    assert.equal(disabledCredentialCount, checkoutCount, `${workflowPath} must disable persisted checkout credentials`);
+  }
 });
 
 test('npm publish workflow is manually gated for trusted publishing from prebuilt release tarballs', () => {
@@ -60,7 +81,10 @@ test('npm publish workflow is manually gated for trusted publishing from prebuil
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /id-token: write/);
   assert.match(workflow, /environment: npm-publish/);
-  assert.match(workflow, /npm install -g npm@\^11\.5\.1/);
+  assert.doesNotMatch(workflow, /npm install -g/);
+  assert.match(workflow, /package-manager-cache: false/);
+  assert.match(workflow, /npm exec --yes --package=npm@11\.12\.1 -- npm --version/);
+  assert.match(workflow, /MCPACE_NPM_EXEC_PACKAGE: npm@11\.12\.1/);
   assert.match(workflow, /gh release download/);
   assert.match(workflow, /node scripts\/verify-release-checksums\.mjs --json --artifact-dir dist\/npm/);
   assert.match(workflow, /node scripts\/sync-platform-packages\.mjs --json --repository-url/);

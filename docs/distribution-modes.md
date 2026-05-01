@@ -22,7 +22,7 @@ Launcher-first local runtime is the current shipped baseline.
 ### Best fit
 
 - local files and local repositories;
-- browser automation and other host bridges;
+- stateful interaction automation and other host bridges;
 - desktop automation;
 - mixed stacks where the runtime must coordinate host and container behavior.
 
@@ -97,7 +97,7 @@ Distribution mode should follow server behavior.
 
 ### Local-first candidates
 
-- `browser`
+- `demo-server`
 - `windows-mcp`
 - `filesystem`
 - other machine-touching tools

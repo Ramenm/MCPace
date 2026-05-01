@@ -110,124 +110,34 @@ test('runtime fixtures keep cloud and tools-only client surfaces explicit', () =
   assert.ok(clientArchetypes.has('windsurf'));
 });
 
-test('windows desktop MCP is stdio-shaped and gated by explicit desktop profile', () => {
-  const settings = readJson('mcp_settings.json').mcpServers['windows-mcp'];
+test('windows desktop MCP is not bundled or enabled by default', () => {
+  const settings = readJson('mcp_settings.json').mcpServers;
   const config = readJson('mcpace.config.json');
-  const policy = config.servers['windows-mcp'];
   const profiles = config.profiles.runtime.profiles;
   const manager = readJson('manager.settings.json');
 
-  assert.equal(settings.enabled, true);
-  assert.equal(settings.type, 'stdio');
-  assert.equal(settings.command, 'uvx');
-  assert.deepEqual(settings.args, ['windows-mcp']);
-  assert.equal(policy.autoStart, false);
-  assert.equal(policy.transportPreference, 'stdio-http-bridge');
-  assert.deepEqual(policy.platforms, ['windows']);
-  assert.equal(policy.policy.hostLock, 'desktop-session');
-  assert.equal(policy.policy.concurrencyPolicy, 'single-session');
-  assert.ok(Array.isArray(policy.toolPolicies));
-  assert.deepEqual(
-    policy.toolPolicies.map((entry) => entry.riskClass).sort(),
-    ['desktop-control', 'desktop-observation', 'system-control'],
-  );
-  assert.deepEqual(
-    policy.toolPolicies.map((entry) => entry.allowArgument).sort(),
-    ['allowDesktopControl', 'allowDesktopObservation', 'allowSystemControl'],
-  );
-  assert.equal(profiles.safe.serverOverrides['windows-mcp'], undefined);
-  assert.equal(profiles.desktop.serverOverrides['windows-mcp'].enabled, true);
-  assert.equal(manager.runtimeProfile.active, 'desktop');
-  assert.ok(!JSON.stringify(settings).includes('host.docker.internal'));
+  assert.equal(settings['windows-mcp'], undefined);
+  assert.equal(config.servers['windows-mcp'], undefined);
+  assert.equal(profiles.desktop, undefined);
+  assert.equal(manager.runtimeProfile.active, 'manual');
 });
 
-test('stateful reference MCP servers use conservative declarative policies', () => {
+test('stateful reference MCP policies are user-supplied rather than bundled', () => {
   const config = readJson('mcpace.config.json');
 
-  const filesystem = config.servers.filesystem;
-  assert.equal(filesystem.policy.concurrencyPolicy, 'single-writer');
-  assert.equal(filesystem.policy.parallelismLimit, 1);
-  assert.equal(filesystem.policy.stateBinding, 'workspace-roots');
-  assert.deepEqual(
-    filesystem.toolPolicies.map((entry) => entry.riskClass),
-    ['filesystem-mutation'],
-  );
-  assert.ok(filesystem.toolPolicies[0].tools.includes('write_file'));
-  assert.ok(filesystem.toolPolicies[0].tools.includes('edit_file'));
-
-  const memory = config.servers.memory;
-  assert.equal(memory.policy.concurrencyPolicy, 'single-writer');
-  assert.equal(memory.policy.parallelismLimit, 1);
-  assert.equal(memory.policy.stateBinding, 'runtime-memory');
-  assert.deepEqual(
-    memory.toolPolicies.map((entry) => entry.riskClass),
-    ['memory-mutation'],
-  );
-  assert.ok(memory.toolPolicies[0].tools.includes('add_observations'));
-  assert.ok(memory.toolPolicies[0].tools.includes('delete_entities'));
-
-  const sequentialThinking = config.servers['sequential-thinking'];
-  assert.equal(sequentialThinking.policy.concurrencyPolicy, 'single-session');
-  assert.equal(sequentialThinking.policy.parallelismLimit, 1);
-  assert.equal(sequentialThinking.policy.stateBinding, 'chat-session');
-  assert.equal(sequentialThinking.policy.routingGroup, 'session');
-
-  assert.deepEqual(
-    config.servers['lean-ctx'].toolPolicies.map((entry) => entry.riskClass).sort(),
-    ['lean-mutation', 'lean-shell'],
-  );
-  assert.ok(config.servers['lean-ctx'].toolPolicies[0].tools.includes('ctx_edit'));
-  assert.ok(config.servers['lean-ctx'].toolPolicies[1].tools.includes('ctx_shell'));
-
-  assert.deepEqual(
-    config.servers.serena.toolPolicies.map((entry) => entry.riskClass).sort(),
-    ['code-mutation', 'serena-memory-mutation'],
-  );
-  assert.ok(config.servers.serena.toolPolicies[0].tools.includes('replace_symbol_body'));
-  assert.ok(config.servers.serena.toolPolicies[1].tools.includes('write_memory'));
+  for (const name of ['filesystem', 'memory', 'sequential-thinking', 'lean-ctx', 'serena']) {
+    assert.equal(config.servers[name], undefined, `${name} should not be bundled in the default distribution`);
+  }
 });
 
-test('canary MCP integrations stay profile gated with mutation policies', () => {
+test('default distribution does not enable or bundle upstream MCP servers', () => {
   const config = readJson('mcpace.config.json');
   const settings = readJson('mcp_settings.json').mcpServers;
-  const labs = config.profiles.runtime.profiles.labs.serverOverrides;
+  const profiles = config.profiles.runtime.profiles;
 
-  assert.deepEqual(
-    config.servers.browser.toolPolicies.map((entry) => entry.riskClass),
-    ['browser-control'],
-  );
-  assert.equal(config.servers.browser.toolPolicies[0].allowArgument, 'allowBrowserControl');
-  assert.ok(config.servers.browser.toolPolicies[0].tools.includes('browser_navigate'));
-  assert.ok(config.servers.browser.toolPolicies[0].tools.includes('browser_javascript'));
-
-  assert.equal(settings.time.enabled, true);
-  assert.equal(config.servers.time.defaultEnabled, true);
-  assert.equal(config.servers.time.policy.concurrencyPolicy, 'multi-reader');
-
-  for (const server of ['git', 'everything', 'sqlite', 'playwright']) {
-    assert.equal(settings[server].enabled, true);
-    assert.equal(config.servers[server].defaultEnabled, undefined);
-    assert.equal(labs[server].enabled, true);
-  }
-
-  assert.deepEqual(
-    config.servers.git.toolPolicies.map((entry) => entry.riskClass),
-    ['git-mutation'],
-  );
-  assert.ok(config.servers.git.toolPolicies[0].tools.includes('git_commit'));
-  assert.ok(config.servers.git.toolPolicies[0].tools.includes('git_checkout'));
-
-  assert.deepEqual(
-    config.servers.sqlite.toolPolicies.map((entry) => entry.riskClass),
-    ['sqlite-mutation'],
-  );
-  assert.ok(config.servers.sqlite.toolPolicies[0].tools.includes('write_query'));
-  assert.ok(config.servers.sqlite.toolPolicies[0].tools.includes('create_table'));
-
-  assert.deepEqual(
-    config.servers.playwright.toolPolicies.map((entry) => entry.riskClass),
-    ['browser-control'],
-  );
-  assert.ok(config.servers.playwright.toolPolicies[0].tools.includes('browser_click'));
-  assert.ok(config.servers.playwright.toolPolicies[0].tools.includes('browser_run_code'));
+  assert.equal(config.profiles.runtime.default, 'manual');
+  assert.deepEqual(settings, {});
+  assert.deepEqual(config.servers, {});
+  assert.deepEqual(profiles.manual.serverOverrides, {});
+  assert.deepEqual(profiles.labs.serverOverrides, {});
 });

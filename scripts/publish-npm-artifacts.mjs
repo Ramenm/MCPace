@@ -7,7 +7,7 @@ import { deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
 import { PLATFORM_PACKAGE_TARGETS } from './lib/npm-platform-packages.mjs';
 
 const DEFAULT_ARTIFACT_DIR = path.join(repoRoot, 'dist', 'npm');
-const NPM_COMMAND = process.platform === 'win32' ? 'cmd.exe' : 'npm';
+
 
 function parseArgs(argv) {
   const parsed = { json: false, dryRun: false, artifactDir: DEFAULT_ARTIFACT_DIR, skipExisting: true };
@@ -28,13 +28,27 @@ function tarballNameForPackage(packageName, version) {
   return `${packageName.replace(/^@/, '').replace('/', '-')}-${version}.tgz`;
 }
 
-function npmCommandArgs(args) {
-  return process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args;
+export function buildNpmInvocation(args, options = {}) {
+  const platform = options.platform || process.platform;
+  const env = options.env || process.env;
+  const exactPackage = String(env.MCPACE_NPM_EXEC_PACKAGE || '').trim();
+  const effectiveArgs = exactPackage
+    ? ['exec', '--yes', `--package=${exactPackage}`, '--', 'npm', ...args]
+    : args;
+  const displayCommand = exactPackage
+    ? ['npm', 'exec', '--yes', `--package=${exactPackage}`, '--', 'npm', ...args].join(' ')
+    : ['npm', ...args].join(' ');
+
+  if (platform === 'win32') {
+    return { command: 'cmd.exe', args: ['/d', '/s', '/c', 'npm', ...effectiveArgs], displayCommand };
+  }
+  return { command: 'npm', args: effectiveArgs, displayCommand };
 }
 
 function runNpm(args) {
-  const result = spawnSync(NPM_COMMAND, npmCommandArgs(args), { cwd: repoRoot, encoding: 'utf8', env: { ...process.env }, timeout: 120000, windowsHide: true });
-  return { command: ['npm', ...args].join(' '), status: result.status, ok: result.status === 0, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error ? String(result.error.message || result.error) : null };
+  const invocation = buildNpmInvocation(args);
+  const result = spawnSync(invocation.command, invocation.args, { cwd: repoRoot, encoding: 'utf8', env: { ...process.env }, timeout: 120000, windowsHide: true });
+  return { command: invocation.displayCommand, status: result.status, ok: result.status === 0, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error ? String(result.error.message || result.error) : null };
 }
 
 function summarizeFailure(result) {

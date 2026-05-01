@@ -255,6 +255,8 @@ fn mcp_server_completes_initialize_and_lists_tools() {
             "--client-id",
             "codex",
         ])
+        .env("MCPACE_MANAGEMENT_SURFACE", "full")
+        .env("MCPACE_ALLOW_FULL_MANAGEMENT", "1")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -374,12 +376,6 @@ fn mcp_server_completes_initialize_and_lists_tools() {
         "line: {}",
         line
     );
-    assert!(
-        line.contains(r#""name":"browser_status""#),
-        "line: {}",
-        line
-    );
-
     writeln!(
         stdin,
         "{{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/call\",\"params\":{{\"name\":\"client_export\",\"arguments\":{{}}}}}}"
@@ -465,7 +461,7 @@ fn mcp_server_upstream_call_attaches_and_releases_runtime_lease() {
     .unwrap();
     write_json_line(
         &mut stdin,
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"hello"},"timeoutMs":5000}}}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"hello"},"timeoutMs":5000,"diagnostics":"full"}}}"#,
     );
     line.clear();
     reader
@@ -550,7 +546,7 @@ fn mcp_server_reuses_upstream_session_pool_for_same_session_calls() {
     .unwrap();
     write_json_line(
         &mut stdin,
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"first"},"timeoutMs":5000}}}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"first"},"timeoutMs":5000,"diagnostics":"full"}}}"#,
     );
     line.clear();
     reader
@@ -579,7 +575,7 @@ fn mcp_server_reuses_upstream_session_pool_for_same_session_calls() {
 
     write_json_line(
         &mut stdin,
-        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"second"},"timeoutMs":5000}}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"second"},"timeoutMs":5000,"diagnostics":"full"}}}"#,
     );
     line.clear();
     reader
@@ -675,7 +671,7 @@ fn mcp_server_upstream_call_conservatively_leases_settings_only_server() {
     .unwrap();
     write_json_line(
         &mut stdin,
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"settings-only"},"timeoutMs":5000}}}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"message":"settings-only"},"timeoutMs":5000,"diagnostics":"full"}}}"#,
     );
     line.clear();
     reader
@@ -775,7 +771,7 @@ fn mcp_server_upstream_call_renews_short_lease_and_ignores_stale_ids() {
     .unwrap();
     write_json_line(
         &mut stdin,
-        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"delayMs":900,"emitStale":true},"timeoutMs":5000,"ttlMs":300}}}"#,
+        r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_call","arguments":{"server":"fake","tool":"echo","arguments":{"delayMs":900,"emitStale":true},"timeoutMs":5000,"ttlMs":300,"diagnostics":"full"}}}"#,
     );
     line.clear();
     reader

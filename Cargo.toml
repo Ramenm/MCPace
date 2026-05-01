@@ -1,6 +1,6 @@
 [package]
 name = "mcpace"
-version = "0.3.6"
+version = "0.4.1"
 edition = "2021"
 license = "Apache-2.0"
 publish = false
@@ -9,3 +9,11 @@ publish = false
 auto-launch = "0.6.0"
 serde_json = "1.0.149"
 which = "8.0.2"
+
+[profile.release]
+# Optimize the shipped CLI/runtime binary for runtime performance and smaller IO.
+# ThinLTO keeps a practical build-time/runtime trade-off for the current CI lanes.
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"

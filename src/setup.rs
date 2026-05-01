@@ -1,5 +1,5 @@
 use crate::json::{parse_str, JsonValue};
-use crate::{app, doctor, json_helpers, runtimepaths};
+use crate::{app, doctor, json_helpers, resources, runtimepaths};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
@@ -15,6 +15,10 @@ struct ParsedArgs {
     root_override: Option<PathBuf>,
     host: String,
     port: u16,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
     skip_client_install: bool,
     install_service: bool,
     no_enable_service: bool,
@@ -29,6 +33,10 @@ impl Default for ParsedArgs {
             root_override: None,
             host: runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
             port: runtimepaths::DEFAULT_LOCAL_MCP_PORT,
+            max_connections: None,
+            io_timeout_ms: None,
+            max_body_bytes: None,
+            overview_cache_ms: None,
             skip_client_install: false,
             install_service: false,
             no_enable_service: false,
@@ -123,6 +131,65 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                 }
                 index += 2;
             }
+            "--max-connections" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("setup requires a value after --max-connections".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "setup --max-connections") {
+                    Ok(limit) => parsed.max_connections = Some(limit),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--io-timeout-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some("setup requires a value after --io-timeout-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_u64(value, "setup --io-timeout-ms") {
+                    Ok(timeout_ms) => parsed.io_timeout_ms = Some(timeout_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--max-body-bytes" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("setup requires a value after --max-body-bytes".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "setup --max-body-bytes") {
+                    Ok(limit) => parsed.max_body_bytes = Some(limit),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--overview-cache-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("setup requires a value after --overview-cache-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_nonnegative_u64(value, "setup --overview-cache-ms") {
+                    Ok(ttl_ms) => parsed.overview_cache_ms = Some(ttl_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
             "--skip-client-install" => {
                 parsed.skip_client_install = true;
                 index += 1;
@@ -152,13 +219,46 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--skip-client-install] [--install-service] [--no-enable]"
+        "Usage: mcpace setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--skip-client-install] [--install-service] [--no-enable]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
         "Starts the local MCPace endpoint, installs supported local client config entries, and verifies /healthz plus /mcp."
     );
+    let _ = writeln!(
+        stdout,
+        "Serve resource defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms.",
+        resources::default_http_connection_limit(),
+        resources::DEFAULT_HTTP_IO_TIMEOUT_MS,
+        resources::DEFAULT_MAX_HTTP_BODY_BYTES,
+        resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS
+    );
+}
+
+fn append_serve_resource_args(
+    args: &mut Vec<String>,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
+) {
+    if let Some(value) = max_connections {
+        args.push("--max-connections".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = io_timeout_ms {
+        args.push("--io-timeout-ms".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = max_body_bytes {
+        args.push("--max-body-bytes".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = overview_cache_ms {
+        args.push("--overview-cache-ms".to_string());
+        args.push(value.to_string());
+    }
 }
 
 fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
@@ -177,7 +277,7 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         );
     }
 
-    let serve = run_json_command(vec![
+    let mut serve_args = vec![
         "serve".to_string(),
         "start".to_string(),
         "--json".to_string(),
@@ -187,7 +287,15 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         parsed.port.to_string(),
         "--root".to_string(),
         root_text.clone(),
-    ]);
+    ];
+    append_serve_resource_args(
+        &mut serve_args,
+        parsed.max_connections,
+        parsed.io_timeout_ms,
+        parsed.max_body_bytes,
+        parsed.overview_cache_ms,
+    );
+    let serve = run_json_command(serve_args);
 
     let client_install = if parsed.skip_client_install {
         warnings.push(
@@ -225,6 +333,13 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
             "--root".to_string(),
             root_text.clone(),
         ];
+        append_serve_resource_args(
+            &mut args,
+            parsed.max_connections,
+            parsed.io_timeout_ms,
+            parsed.max_body_bytes,
+            parsed.overview_cache_ms,
+        );
         if parsed.no_enable_service {
             args.push("--no-enable".to_string());
         }
@@ -332,6 +447,35 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         ("endpoint", JsonValue::string(endpoint.clone())),
         ("host", JsonValue::string(parsed.host)),
         ("port", JsonValue::number(parsed.port)),
+        (
+            "serveResources",
+            JsonValue::object([
+                (
+                    "maxConnections",
+                    JsonValue::number(
+                        parsed
+                            .max_connections
+                            .unwrap_or_else(resources::default_http_connection_limit),
+                    ),
+                ),
+                (
+                    "ioTimeoutMs",
+                    JsonValue::number(
+                        parsed
+                            .io_timeout_ms
+                            .unwrap_or(resources::DEFAULT_HTTP_IO_TIMEOUT_MS),
+                    ),
+                ),
+                (
+                    "maxBodyBytes",
+                    JsonValue::number(
+                        parsed
+                            .max_body_bytes
+                            .unwrap_or(resources::DEFAULT_MAX_HTTP_BODY_BYTES),
+                    ),
+                ),
+            ]),
+        ),
         ("serve", command_result_json(&serve)),
         (
             "launcher",

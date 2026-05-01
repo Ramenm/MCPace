@@ -28,6 +28,8 @@ jobs:
       native_matrix: ${{ steps.release-matrices.outputs.native_matrix }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
@@ -84,6 +86,8 @@ jobs:
             suite: test:hub_runtime
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
@@ -92,6 +96,18 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
+
+      - name: Cache Cargo registry and build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-rust-1.95.0-lifecycle-${{ matrix.suite }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-rust-1.95.0-lifecycle-
+            ${{ runner.os }}-cargo-rust-1.95.0-
 
       - name: Run isolated Rust lifecycle suite
         run: node scripts/run-rust-tests.mjs --json --suite ${{ matrix.suite }}
@@ -105,6 +121,8 @@ jobs:
       matrix: ${{ fromJson(needs.source-and-contracts.outputs.native_matrix) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
@@ -114,6 +132,18 @@ jobs:
         with:
           toolchain: 1.95.0
           targets: ${{ matrix.rust_target }}
+
+      - name: Cache Cargo registry and build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-rust-1.95.0-${{ matrix.rust_target }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-rust-1.95.0-${{ matrix.rust_target }}-
+            ${{ runner.os }}-cargo-rust-1.95.0-
 
       - name: Run Rust tests suite-by-suite on native host
         run: npm run test:rust:ci

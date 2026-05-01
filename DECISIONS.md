@@ -343,7 +343,7 @@ lease, diagnostics, and pooled-session path.
 - **Advertise all upstream tools directly**: more native-looking, but expensive
   in tool-list tokens and easy to overclaim when servers are disabled, slow, or
   non-stdio.
-- **Keep only stateless one-shot `upstream_call`**: simple, but leaves browser
+- **Keep only stateless one-shot `upstream_call`**: simple, but leaves stateful interaction
   and other stateful flows paying repeated initialize cost.
 - **Add direct aliases for everything**: convenient short-term, but creates a
   second public contract that must be kept in sync with upstream schemas.

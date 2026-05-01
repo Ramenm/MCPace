@@ -45,7 +45,13 @@ exist only in `mcp_settings.json` remain callable, but MCPace now assigns a
 conservative single-writer `settings-only-conservative` request lease instead of
 bypassing scheduling.
 
-MCPace does not advertise fake direct tool names such as `browser` or
+This is the **Bring Your Own MCP servers (BYO MCP)** contract: MCPace installs
+and exposes the adapter endpoint, while each user chooses and installs upstream
+servers separately. Packaged defaults remain empty; `mcp_settings.json` is the
+runtime source of truth, and `mcpace.config.json` is only an optional policy
+overlay when a server needs stricter routing or tool-risk gates.
+
+MCPace does not advertise fake direct tool names such as `demo-server` or
 `read_file`, and it must not pretend that upstream tools are native top-level
 MCPace tools. Call `surface_manifest` to see the exact contract: which tool
 names are returned by MCPace `tools/list`, how configured upstream tools are
@@ -62,11 +68,11 @@ tool name.
 `upstream_catalog` and `upstream_tools` use a short in-process `tools/list` cache; pass
 `"refresh": true` when you need to force a fresh upstream schema after changing
 configuration or upgrading an upstream package. For stateful upstreams such as
-browsers, use `upstream_batch` so navigation and follow-up reads run inside one
-initialized upstream session and no helper process is left behind. The browser entry
-uses Agent Browser Protocol (`agent-browser-protocol@0.1.10 --mcp`) as a
-host-side stdio MCP server with `ABP_HEADLESS=0`, so Windows/macOS/Linux use a
-real visible host browser rather than a fake/headless Playwright placeholder.
+stateful upstreams, use `upstream_batch` so navigation and follow-up reads run inside one
+initialized upstream session and no helper process is left behind. The upstream entry
+uses external MCP server (`user-configured-mcp-server`) as a
+host-side stdio MCP server with `MCP_SERVER_VISIBLE=1`, so Windows/macOS/Linux use a
+real visible host MCP server rather than a fake/headless Playwright placeholder.
 Other HTTP-only host-bridge entries remain diagnostics-only until a real bridge
 or proxy is configured.
 
@@ -137,8 +143,8 @@ Expected results:
 - `tools/list` returns `200 OK` with MCPace management tools, including
   `runtime_diagnostics`, `surface_manifest`, `upstream_catalog`,
   `upstream_probe`, `upstream_policy_audit`, `upstream_policy_suggest`,
-  `upstream_tools`, `upstream_call`, `upstream_batch`, and `browser_status`.
-- Calling an unsupported upstream name, such as `browser`, returns a normal MCP
+  `upstream_tools`, `upstream_call`, `upstream_batch`, and `upstream_tools`.
+- Calling an unsupported upstream name, such as `demo-server`, returns a normal MCP
   tool error payload. It must not close the HTTP transport.
 
 This sequence specifically protects against the previous Codex startup failure:
@@ -194,8 +200,8 @@ or fragile guesses.
 
 `upstream_policy_suggest` is the automation layer on top of the audit. It groups
 unprotected guard-recommended tools by risk class, generates stable
-`riskClass`/`allowArgument` names such as `browser-control` /
-`allowBrowserControl` or `<server>-mutation` /
+`riskClass`/`allowArgument` names such as `interaction-control` /
+`allowToolRiskClasses` or `<server>-mutation` /
 `allow<Server>Mutation`, and returns copyable policy snippets plus evidence.
 It is dry-run by design: MCPace can generate the pattern automatically, but a
 config update must still be explicit so heuristics never silently weaken or
@@ -227,21 +233,8 @@ therefore keeps the stateful reference servers conservative by policy:
   require `allowArguments:["allowSerenaMemoryMutation"]` or
   `allowToolRiskClasses:["serena-memory-mutation"]`.
 
-Additional canary integrations are wired so they can be evaluated without
-turning the whole workstation into an unbounded MCP surface:
+No upstream MCP integrations are wired as bundled defaults. Add any stdio upstream in `mcp_settings.json`; MCPace will inventory it as a source-only server and can apply optional `mcpace.config.json` policy when you need declarative risk gates. Curated canary lists from older builds were intentionally removed from the default distribution.
 
-- `browser` uses Agent Browser Protocol as the always-available host browser
-  bridge. Read/status tools stay available, while browser-control tools such as
-  action, scroll, navigation, JavaScript, dialogs, downloads/files, selectors,
-  sliders, tabs, and permissions require `allowBrowserControl` or
-  `allowToolRiskClasses:["browser-control"]`.
-- `time` is enabled as a safe default canary (`get_current_time`,
-  `convert_time`) because live probing showed it starts cleanly and has no
-  mutation surface.
-- `git`, `everything`, `sqlite`, and `playwright` are source-enabled but remain
-  profile-gated under `labs` unless another profile explicitly enables them.
-  Live canary probes confirmed their `tools/list` handshakes on this Windows
-  host.
 - `git` mutation tools (`git_add`, `git_commit`, `git_reset`,
   `git_create_branch`, `git_checkout`) require `allowGitMutation` or
   `allowToolRiskClasses:["git-mutation"]`.
@@ -249,8 +242,8 @@ turning the whole workstation into an unbounded MCP surface:
   require `allowSqliteMutation` or
   `allowToolRiskClasses:["sqlite-mutation"]`.
 - `playwright` advertises useful ToolAnnotations, but MCPace still keeps
-  state-changing browser tools behind declarative policy:
-  `allowBrowserControl` or `allowToolRiskClasses:["browser-control"]`.
+  state-changing interaction tools behind declarative policy:
+  `allowToolRiskClasses` or `allowToolRiskClasses:["interaction-control"]`.
   Read-only Playwright tools such as snapshots, screenshots, console, network,
   and waits remain ungated.
 
@@ -410,10 +403,10 @@ Invoke-RestMethod `
   -Body $body
 ```
 
-Call a stateful browser sequence in one upstream session:
+Call a stateful upstream sequence in one upstream session:
 
 ```powershell
-$body = '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"upstream_batch","arguments":{"server":"browser","timeoutMs":180000,"sessionId":"docs-browser-session","allowBrowserControl":true,"calls":[{"tool":"browser_navigate","arguments":{"url":"data:text/html,<title>MCPace</title><main>MCPace browser batch ok</main>"}},{"tool":"browser_text","arguments":{}},{"tool":"browser_shutdown","arguments":{"timeout_ms":3000}}]}}}'
+$body = '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"upstream_batch","arguments":{"server":"demo-server","timeoutMs":180000,"sessionId":"docs-upstream-session","allowToolRiskClasses":true,"calls":[{"tool":"demo_navigate","arguments":{"url":"data:text/html,<title>MCPace</title><main>MCPace upstream batch ok</main>"}},{"tool":"demo_text","arguments":{}},{"tool":"demo_shutdown","arguments":{"timeout_ms":3000}}]}}}'
 Invoke-RestMethod `
   -Uri 'http://127.0.0.1:39022/mcp' `
   -Method Post `
@@ -453,17 +446,17 @@ Expected results:
   can tell whether an upstream process was reused.
 - `upstream_batch` returns one `results` item per requested upstream tool while
   keeping state within that batch and, when the pool key matches, across later
-  calls or batches in the same MCPace process. This is the preferred browser
+  calls or batches in the same MCPace process. This is the preferred stateful upstream
   automation path when a follow-up action depends on the page opened by a
   previous action. The whole batch holds one scheduler lease, heartbeat-renews
   it if needed, and releases it before responding.
-- `browser_status` returns `status: callable-stdio-abp` when the ABP browser
+- `upstream_tools` returns `status: callable-stdio` when the configured MCP server
   stdio bridge is configured.
-- `upstream_tools` with `server: "browser"` returns the ABP browser tool list.
-- `upstream_call` with `server: "browser"` and `tool: "browser_get_status"`
-  proves the real host browser bridge can start. On Windows, the helper process
-  is launched without a console window; the browser window itself may be visible
-  because `ABP_HEADLESS=0` is intentional.
+- `upstream_tools` with `server: "demo-server"` returns the configured MCP server tool list.
+- `upstream_call` with `server: "demo-server"` and `tool: "demo_get_status"`
+  proves the real host MCP server bridge can start. On Windows, the helper process
+  is launched without a console window; the upstream UI window itself may be visible
+  because `MCP_SERVER_VISIBLE=1` is intentional.
 
 ## Performance and native-routing direction
 
@@ -587,10 +580,10 @@ calls:
 - `upstream_policy_audit` policy/annotation review for configured upstream
   servers, including live canary MCPs and disabled/profile-gated entries
 - `upstream_call` safe smoke calls for those same stdio servers
-- `browser_status`, `upstream_tools server=browser`, and
-  `upstream_call server=browser tool=browser_get_status`
-- `upstream_batch server=browser` for `browser_navigate -> browser_text ->
-  browser_shutdown`
+- `upstream_tools`, `upstream_tools server=demo-server`, and
+  `upstream_call server=demo-server tool=demo_get_status`
+- `upstream_batch server=demo-server` for `demo_navigate -> demo_text ->
+  demo_shutdown`
 - `/healthz`
 
 The verified running endpoint was `http://127.0.0.1:39022/mcp`.

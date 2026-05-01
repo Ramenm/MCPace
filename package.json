@@ -1,6 +1,6 @@
 {
   "name": "mcpace-workspace",
-  "version": "0.3.6",
+  "version": "0.4.1",
   "private": true,
   "workspaces": [
     "packages/npm/cli"
@@ -10,7 +10,7 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "lint:npm": "node --check packages/npm/cli/bin/mcpace.js && node --check packages/npm/cli/lib/platform.js && node --check packages/npm/cli/lib/targets.js && node --check packages/npm/cli/lib/resolve-binary.js && node --check packages/npm/cli/lib/runtime.js && node --check scripts/archive-release.mjs && node --check scripts/lib/project-metadata.mjs && node --check scripts/lib/release-targets.mjs && node --check scripts/lib/npm-platform-packages.mjs && node --check scripts/lib/client-catalog.mjs && node --check scripts/stage-vendored-binary.mjs && node --check scripts/stage-platform-package-binary.mjs && node --check scripts/sync-platform-packages.mjs && node --check scripts/verify-vendored-binary.mjs && node --check scripts/verify-platform-packages.mjs && node --check scripts/verify-release-targets.mjs && node --check scripts/verify-npm-pack.mjs && node --check scripts/build-release-artifacts.mjs && node --check scripts/run-rust-tests.mjs && node --check scripts/github-release-matrix.mjs && node --check scripts/generate-checksums.mjs && node --check scripts/verify-release-checksums.mjs && node --check scripts/publish-npm-artifacts.mjs && node --check scripts/verify-publish-readiness.mjs && node --check scripts/verify-ubuntu-docker-fast.mjs && node --check scripts/verify-ubuntu-docker-e2e.mjs && node --check scripts/verify-ubuntu-docker-full.mjs && node --check scripts/verify-linux-npm-install-docker.mjs && node --check scripts/verify-macos-proof-lanes.mjs && node --check scripts/proof-report.mjs && node --check tests/node/archive-contract.test.js && node --check tests/node/build-release-artifacts.test.js && node --check tests/node/command-coverage-contract.test.js && node --check tests/node/docs-contract.test.js && node --check tests/node/eval-contract.test.js && node --check tests/node/evidence-contract.test.js && node --check tests/node/fixtures-contract.test.js && node --check tests/node/generate-checksums.test.js && node --check tests/node/github-release-matrix-contract.test.js && node --check tests/node/platform-packages-contract.test.js && node --check tests/node/product-truth-contract.test.js && node --check tests/node/proof-report.test.js && node --check tests/node/release-targets-contract.test.js && node --check tests/node/release-workflow-contract.test.js && node --check tests/node/rust-test-runner-contract.test.js && node --check tests/node/repo-contract.test.js && node --check tests/node/schema-examples.test.js && node --check tests/node/stack-contract.test.js && node --check tests/node/stage-vendored-binary.test.js && node --check tests/node/verify-npm-pack.test.js && node --check tests/node/verify-release-checksums.test.js && node --check tests/node/verify-vendored-binary.test.js && node --check packages/npm/cli/test/platform.test.mjs && node --check packages/npm/cli/test/resolve-binary.test.mjs && node --check packages/npm/cli/test/runtime.test.mjs",
+    "lint:npm": "node --check packages/npm/cli/bin/mcpace.js && node --check packages/npm/cli/lib/platform.js && node --check packages/npm/cli/lib/targets.js && node --check packages/npm/cli/lib/resolve-binary.js && node --check packages/npm/cli/lib/runtime.js && node --check scripts/archive-release.mjs && node --check scripts/benchmark-runtime.mjs && node --check scripts/audit-source.mjs && node --check scripts/verify-rust-quality.mjs && node --check scripts/lib/project-metadata.mjs && node --check scripts/lib/release-targets.mjs && node --check scripts/lib/npm-platform-packages.mjs && node --check scripts/lib/client-catalog.mjs && node --check scripts/stage-vendored-binary.mjs && node --check scripts/stage-platform-package-binary.mjs && node --check scripts/sync-platform-packages.mjs && node --check scripts/verify-vendored-binary.mjs && node --check scripts/verify-platform-packages.mjs && node --check scripts/verify-release-targets.mjs && node --check scripts/verify-npm-pack.mjs && node --check scripts/build-release-artifacts.mjs && node --check scripts/run-rust-tests.mjs && node --check scripts/github-release-matrix.mjs && node --check scripts/generate-checksums.mjs && node --check scripts/verify-release-checksums.mjs && node --check scripts/publish-npm-artifacts.mjs && node --check scripts/verify-publish-readiness.mjs && node --check scripts/verify-ubuntu-docker-fast.mjs && node --check scripts/verify-ubuntu-docker-e2e.mjs && node --check scripts/verify-ubuntu-docker-full.mjs && node --check scripts/verify-linux-npm-install-docker.mjs && node --check scripts/verify-macos-proof-lanes.mjs && node --check scripts/proof-report.mjs && node --check tests/node/archive-contract.test.js && node --check tests/node/build-release-artifacts.test.js && node --check tests/node/command-coverage-contract.test.js && node --check tests/node/docs-contract.test.js && node --check tests/node/runtime-performance-contract.test.js && node --check tests/node/eval-contract.test.js && node --check tests/node/evidence-contract.test.js && node --check tests/node/fixtures-contract.test.js && node --check tests/node/generate-checksums.test.js && node --check tests/node/github-release-matrix-contract.test.js && node --check tests/node/mcp-config-contract.test.js && node --check tests/node/platform-packages-contract.test.js && node --check tests/node/product-truth-contract.test.js && node --check tests/node/proof-report.test.js && node --check tests/node/publish-npm-artifacts-contract.test.js && node --check tests/node/release-targets-contract.test.js && node --check tests/node/release-workflow-contract.test.js && node --check tests/node/rust-test-runner-contract.test.js && node --check tests/node/repo-contract.test.js && node --check tests/node/schema-examples.test.js && node --check tests/node/stack-contract.test.js && node --check tests/node/stage-vendored-binary.test.js && node --check tests/node/verify-npm-pack.test.js && node --check tests/node/verify-release-checksums.test.js && node --check tests/node/verify-vendored-binary.test.js && node --check packages/npm/cli/test/platform.test.mjs && node --check packages/npm/cli/test/resolve-binary.test.mjs && node --check packages/npm/cli/test/runtime.test.mjs && node --check tests/node/security-contract.test.js && node --check tests/node/source-quality-contract.test.js && node --check tests/node/rust-quality-contract.test.js && node --check tests/node/coverage-contract.test.js",
     "test:repo": "node --test tests/node/*.test.js",
     "test:npm": "node --test packages/npm/cli/test/*.test.mjs",
     "test:rust": "node scripts/run-rust-tests.mjs",
@@ -21,11 +21,12 @@
     "build:rust:release": "cargo build --release",
     "pack:npm:dry-run": "npm pack --workspace @mcpace/cli --json --dry-run",
     "prove:local": "npm run prove:source && npm run prove:rust-host",
-    "test": "npm run lint:npm && npm run test:repo && npm run test:npm",
+    "test": "npm run lint:npm && npm run audit:source && npm run test:repo && npm run test:npm",
     "prove:source": "npm test && npm run verify:npm-pack",
     "prove:report": "node scripts/proof-report.mjs --json --write",
-    "prove:rust-host": "npm run test:rust:ci && cargo build --release",
+    "prove:rust-host": "npm run verify:rust-quality",
     "archive:release": "node scripts/archive-release.mjs --json",
+    "benchmark:runtime": "node scripts/benchmark-runtime.mjs",
     "stage:vendored-binary": "node scripts/stage-vendored-binary.mjs --json",
     "verify:vendored-binary": "node scripts/verify-vendored-binary.mjs --json",
     "verify:npm-pack": "node scripts/verify-npm-pack.mjs --json",
@@ -45,7 +46,11 @@
     "generate:release-matrix": "node scripts/github-release-matrix.mjs --json",
     "verify:release-checksums": "node scripts/verify-release-checksums.mjs --json",
     "test:linux-npm-install:docker": "node scripts/verify-linux-npm-install-docker.mjs --json",
-    "verify:macos-proof-lanes": "node scripts/verify-macos-proof-lanes.mjs --json"
+    "verify:macos-proof-lanes": "node scripts/verify-macos-proof-lanes.mjs --json",
+    "audit:source": "node scripts/audit-source.mjs --fail-on-critical",
+    "verify:rust-quality": "node scripts/verify-rust-quality.mjs --json --write reports/rust-quality-latest.json",
+    "verify:rust-quality:plan": "node scripts/verify-rust-quality.mjs --json --plan-only",
+    "test:node:coverage": "node --test --experimental-test-coverage tests/node/*.test.js packages/npm/cli/test/*.test.mjs"
   },
   "packageManager": "npm@11.12.1",
   "devEngines": {

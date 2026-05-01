@@ -29,8 +29,10 @@ test('npm scripts expose the suite-isolated Rust runner for CI', () => {
   assert.equal(pkg.scripts['test:rust:full'], 'node scripts/run-rust-tests.mjs --json --profile full');
   assert.equal(pkg.scripts['test:linux-npm-install:docker'], 'node scripts/verify-linux-npm-install-docker.mjs --json');
   assert.equal(pkg.scripts['verify:macos-proof-lanes'], 'node scripts/verify-macos-proof-lanes.mjs --json');
-  assert.match(pkg.scripts['prove:rust-host'], /npm run test:rust:ci/);
+  assert.equal(pkg.scripts['prove:rust-host'], 'npm run verify:rust-quality');
+  assert.equal(pkg.scripts['verify:rust-quality'], 'node scripts/verify-rust-quality.mjs --json --write reports/rust-quality-latest.json');
   assert.match(pkg.scripts['lint:npm'], /node --check scripts\/run-rust-tests\.mjs/);
+  assert.match(pkg.scripts['lint:npm'], /node --check scripts\/verify-rust-quality\.mjs/);
   assert.match(pkg.scripts['lint:npm'], /node --check scripts\/verify-linux-npm-install-docker\.mjs/);
   assert.match(pkg.scripts['lint:npm'], /node --check scripts\/verify-macos-proof-lanes\.mjs/);
 });

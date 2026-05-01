@@ -222,7 +222,7 @@ fn build_server_plan(record: &ServerRecord, context: &ResolvedContext) -> Server
         worktree_binding_key: scope.worktree_binding_key,
         conflict_domain: scope.conflict_domain,
         host_lock_key: scope.host_lock_key,
-        browser_profile_key: scope.browser_profile_key,
+        state_profile_key: scope.state_profile_key,
         parallelism_limit: request.parallelism_limit,
         scheduler_lane: request.scheduler_lane,
         startup_strategy: scope.startup_strategy,
@@ -257,15 +257,15 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
     } else {
         None
     };
-    let browser_profile_key = if is_browser_like(record) {
+    let state_profile_key = if is_state_profiled(record) {
         let project_key = project_binding_key
             .clone()
             .unwrap_or_else(|| optional_project_or_cwd_key(context));
         Some(format!(
-            "browser-profile:{}|{}|session:{}",
+            "state-profile:{}|{}|session:{}",
             sanitize_key(&conflict_domain),
             project_key,
-            browser_session_partition(record, context)
+            state_session_partition(record, context)
         ))
     } else {
         None
@@ -284,7 +284,7 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         None
     };
 
-    let process_partition = if let Some(key) = &browser_profile_key {
+    let process_partition = if let Some(key) = &state_profile_key {
         key.clone()
     } else if let Some(key) = &host_lock_key {
         key.clone()
@@ -320,7 +320,7 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         sanitize_key(&process_partition)
     );
 
-    let session_affinity_key = Some(if let Some(key) = &browser_profile_key {
+    let session_affinity_key = Some(if let Some(key) = &state_profile_key {
         format!("session-affinity:{}", sanitize_key(key))
     } else if let Some(key) = &host_lock_key {
         format!("session-affinity:{}", sanitize_key(key))
@@ -328,10 +328,12 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         format!("session:{}", sanitize_key(&context.session_lease_id))
     });
 
-    let scheduler_lane = if browser_profile_key.is_some() {
-        "browser-profile-queue".to_string()
+    let scheduler_lane = if state_profile_key.is_some() {
+        "state-profile-queue".to_string()
     } else if host_lock_key.is_some() {
         "host-lock-queue".to_string()
+    } else if record.routing_group == "settings-only" {
+        "settings-only-conservative".to_string()
     } else if project_binding_key.is_some() {
         "project-queue".to_string()
     } else if record.concurrency_policy == "multi-reader" && record.parallelism_limit != 1 {
@@ -347,7 +349,7 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         worktree_binding_key,
         conflict_domain,
         host_lock_key,
-        browser_profile_key,
+        state_profile_key,
         parallelism_limit: record.parallelism_limit,
         scheduler_lane,
         startup_strategy: record.startup_strategy.clone(),
@@ -419,8 +421,8 @@ fn resolve_request_strategy(
             }
         }
         "single-writer" => {
-            let (name, mutex_key) = if let Some(key) = &scope.browser_profile_key {
-                ("serialize-per-browser-profile", key.clone())
+            let (name, mutex_key) = if let Some(key) = &scope.state_profile_key {
+                ("serialize-per-state-profile", key.clone())
             } else if let Some(key) = &scope.host_lock_key {
                 ("serialize-per-host-lock", key.clone())
             } else {
@@ -442,8 +444,8 @@ fn resolve_request_strategy(
             }
         }
         "single-session" => {
-            let (name, mutex_key) = if let Some(key) = &scope.browser_profile_key {
-                ("exclusive-browser-profile", key.clone())
+            let (name, mutex_key) = if let Some(key) = &scope.state_profile_key {
+                ("exclusive-state-profile", key.clone())
             } else if let Some(key) = &scope.host_lock_key {
                 ("exclusive-host-lock", key.clone())
             } else {
@@ -508,12 +510,11 @@ fn requires_host_lock(record: &ServerRecord) -> bool {
         || !is_none_marker(&record.host_lock)
 }
 
-fn is_browser_like(record: &ServerRecord) -> bool {
-    let name = record.name.to_ascii_lowercase();
-    record.routing_group == "browser"
-        || name.contains("browser")
+fn is_state_profiled(record: &ServerRecord) -> bool {
+    record.routing_group == "stateful"
+        || record.routing_group == "interactive"
         || record.state_binding == "host-session"
-        || !is_none_marker(&record.browser_profile_mode)
+        || !is_none_marker(&record.state_profile_mode)
 }
 
 fn resolve_project_binding_key(
@@ -546,8 +547,8 @@ fn optional_project_or_cwd_key(context: &ResolvedContext) -> String {
     }
 }
 
-fn browser_session_partition(record: &ServerRecord, context: &ResolvedContext) -> String {
-    match record.browser_profile_mode.as_str() {
+fn state_session_partition(record: &ServerRecord, context: &ResolvedContext) -> String {
+    match record.state_profile_mode.as_str() {
         "project" | "project-shared" => "project-shared".to_string(),
         "host" | "global" => "host-shared".to_string(),
         _ => sanitize_key(&context.session_lease_id),

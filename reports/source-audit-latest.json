@@ -1,0 +1,88 @@
+{
+  "ok": true,
+  "generatedAt": "2026-05-01T10:38:08.276Z",
+  "policy": {
+    "critical": [
+      "No production Rust todo! or unimplemented! macros.",
+      "No production Rust panic! macros.",
+      "Protocol primitives stay transport and command agnostic.",
+      "Resource defaults stay side-effect free.",
+      "Unsafe Rust and FFI declarations stay inside reviewed process boundary modules."
+    ],
+    "warnings": [
+      "Rust modules over 1500 lines are tracked as refactor candidates.",
+      "Direct thread spawns outside reviewed runtime modules are tracked for future abstraction.",
+      "Production unwrap counts are tracked as hardening backlog, not as an immediate blocker.",
+      "Unsafe operations and foreign function blocks are counted and allowed only in reviewed process-detach modules."
+    ]
+  },
+  "summary": {
+    "files": 140,
+    "rustFiles": 74,
+    "nodeFiles": 66,
+    "productionRustLines": 39193,
+    "testRustLines": 3149,
+    "nodeLines": 8860,
+    "largeModules": 5,
+    "directThreadSpawns": 8,
+    "commandSpawns": 24,
+    "productionUnwraps": 289,
+    "unsafeOperations": 6,
+    "foreignFunctionBlocks": 2
+  },
+  "architecture": {
+    "boundaries": [
+      {
+        "name": "protocol primitives stay transport and command agnostic",
+        "file": "src/mcp_protocol.rs",
+        "ok": true,
+        "violations": []
+      },
+      {
+        "name": "resource defaults stay side-effect free",
+        "file": "src/resources.rs",
+        "ok": true,
+        "violations": []
+      }
+    ]
+  },
+  "critical": [],
+  "warnings": [
+    {
+      "severity": "warning",
+      "file": "src/adapter.rs",
+      "line": 1,
+      "message": "large Rust module has 2723 lines; consider another split after behavior stabilizes",
+      "excerpt": "src/adapter.rs"
+    },
+    {
+      "severity": "warning",
+      "file": "src/client/actions.rs",
+      "line": 1,
+      "message": "large Rust module has 2569 lines; consider another split after behavior stabilizes",
+      "excerpt": "src/client/actions.rs"
+    },
+    {
+      "severity": "warning",
+      "file": "src/dashboard.rs",
+      "line": 1,
+      "message": "large Rust module has 5075 lines; consider another split after behavior stabilizes",
+      "excerpt": "src/dashboard.rs"
+    },
+    {
+      "severity": "warning",
+      "file": "src/mcp_server.rs",
+      "line": 1,
+      "message": "large Rust module has 2467 lines; consider another split after behavior stabilizes",
+      "excerpt": "src/mcp_server.rs"
+    },
+    {
+      "severity": "warning",
+      "file": "src/upstream.rs",
+      "line": 1,
+      "message": "large Rust module has 6153 lines; consider another split after behavior stabilizes",
+      "excerpt": "src/upstream.rs"
+    }
+  ],
+  "warningCount": 5
+}

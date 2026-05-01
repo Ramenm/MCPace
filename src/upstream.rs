@@ -3,16 +3,18 @@ use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
 use crate::profile;
-use std::collections::{BTreeMap, BTreeSet};
+use crate::resources;
+use std::collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet};
 use std::env;
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
     mpsc::{self, Receiver},
-    Arc, Mutex, OnceLock,
+    Arc, Condvar, Mutex, OnceLock,
 };
 use std::thread;
 use std::time::{Duration, Instant, UNIX_EPOCH};
@@ -20,10 +22,17 @@ use std::time::{Duration, Instant, UNIX_EPOCH};
 const DEFAULT_TIMEOUT_MS: u64 = 120_000;
 const DEFAULT_PROBE_TIMEOUT_MS: u64 = 30_000;
 const TOOL_LIST_CACHE_TTL: Duration = Duration::from_secs(30);
+const TOOL_LIST_CACHE_MAX_ENTRIES: usize = 128;
 const UPSTREAM_SESSION_IDLE_TTL: Duration = Duration::from_secs(300);
-const MAX_POOLED_UPSTREAM_SESSIONS: usize = 8;
+const STDERR_DIAGNOSTIC_MAX_LINES: usize = 6;
+const STDERR_DIAGNOSTIC_MAX_CHARS_PER_LINE: usize = 320;
+const DIAGNOSTIC_REDACTION: &str = "<redacted>";
 const INITIALIZE_ID: i64 = 1;
 const METHOD_ID: i64 = 2;
+
+fn max_pooled_upstream_sessions() -> usize {
+    resources::default_upstream_session_pool_limit()
+}
 
 #[derive(Clone, Debug)]
 struct UpstreamServerConfig {
@@ -34,6 +43,7 @@ struct UpstreamServerConfig {
     command: Option<String>,
     args: Vec<String>,
     env: BTreeMap<String, String>,
+    cwd: Option<PathBuf>,
     url: Option<String>,
     timeout_ms: u64,
     tool_policies: Vec<ToolRiskPolicy>,
@@ -90,6 +100,7 @@ struct UpstreamPoolCallOutcome {
     session_call_count: usize,
     session_age_ms: u128,
     pool_size: usize,
+    max_pool_size: usize,
     idle_ttl_ms: u128,
     evicted_idle_count: usize,
     evicted_capacity_count: usize,
@@ -103,9 +114,15 @@ struct UpstreamPoolInvocation<'a> {
     lease_lost: Option<&'a AtomicBool>,
 }
 
-#[derive(Default)]
 pub struct UpstreamSessionPool {
     sessions: BTreeMap<UpstreamSessionKey, PooledUpstreamSession>,
+    max_sessions: usize,
+}
+
+impl Default for UpstreamSessionPool {
+    fn default() -> Self {
+        Self::with_max_sessions(max_pooled_upstream_sessions())
+    }
 }
 
 struct UpstreamLeaseGuard {
@@ -176,6 +193,7 @@ struct CachedToolList {
 
 static TOOL_LIST_CACHE: OnceLock<Mutex<BTreeMap<ToolListCacheKey, CachedToolList>>> =
     OnceLock::new();
+static TOOL_LIST_INFLIGHT: OnceLock<(Mutex<BTreeSet<ToolListCacheKey>>, Condvar)> = OnceLock::new();
 
 impl Drop for RunningServer {
     fn drop(&mut self) {
@@ -316,6 +334,25 @@ impl PooledUpstreamSession {
 }
 
 impl UpstreamSessionPool {
+    pub fn with_max_sessions(max_sessions: usize) -> Self {
+        Self {
+            sessions: BTreeMap::new(),
+            max_sessions: max_sessions.max(1),
+        }
+    }
+
+    pub fn session_count(&self) -> usize {
+        self.sessions.len()
+    }
+
+    pub fn max_session_count(&self) -> usize {
+        self.max_sessions
+    }
+
+    pub fn idle_ttl_ms(&self) -> u128 {
+        UPSTREAM_SESSION_IDLE_TTL.as_millis()
+    }
+
     fn call_tool(
         &mut self,
         invocation: UpstreamPoolInvocation<'_>,
@@ -359,6 +396,7 @@ impl UpstreamSessionPool {
                     session_call_count: session.call_count,
                     session_age_ms: session.created_at.elapsed().as_millis(),
                     pool_size: self.sessions.len(),
+                    max_pool_size: self.max_session_count(),
                     idle_ttl_ms: UPSTREAM_SESSION_IDLE_TTL.as_millis(),
                     evicted_idle_count,
                     evicted_capacity_count,
@@ -408,6 +446,7 @@ impl UpstreamSessionPool {
                     session_call_count: session.call_count,
                     session_age_ms: session.created_at.elapsed().as_millis(),
                     pool_size: self.sessions.len(),
+                    max_pool_size: self.max_session_count(),
                     idle_ttl_ms: UPSTREAM_SESSION_IDLE_TTL.as_millis(),
                     evicted_idle_count,
                     evicted_capacity_count,
@@ -436,9 +475,7 @@ impl UpstreamSessionPool {
         });
 
         let mut evicted_capacity_count = 0usize;
-        while !self.sessions.contains_key(key)
-            && self.sessions.len() >= MAX_POOLED_UPSTREAM_SESSIONS
-        {
+        while !self.sessions.contains_key(key) && self.sessions.len() >= self.max_session_count() {
             let Some(oldest_key) = self
                 .sessions
                 .iter()
@@ -529,11 +566,11 @@ pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
     let servers = load_servers(root_path)?;
     let items = servers
         .values()
-        .map(server_inventory_item)
+        .map(|server| server_inventory_item(root_path, server))
         .collect::<Vec<_>>();
     let callable_stdio_count = servers
         .values()
-        .filter(|server| server_runtime_callable(server).0)
+        .filter(|server| server_runtime_callable(root_path, server).0)
         .count();
 
     Ok(JsonValue::object([
@@ -542,7 +579,7 @@ pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
         (
             "summary",
             JsonValue::string(
-                "Use upstream_tools with a server name to list a configured stdio upstream; use upstream_call with server/tool/arguments for one call or upstream_batch for stateful sequences. Browser is callable when configured as the Agent Browser Protocol stdio MCP server; HTTP upstreams remain inventory-only.",
+                "Use upstream_tools with a server name to list a configured stdio upstream; use upstream_call with server/tool/arguments for one call or upstream_batch for stateful sequences. HTTP upstream fan-out remains inventory-only until an HTTP forwarding adapter is configured.",
             ),
         ),
         ("stdioForwardingImplemented", JsonValue::bool(true)),
@@ -591,6 +628,41 @@ pub fn surface_manifest(
             JsonValue::string(transport),
         ),
         (
+            "configurationModel",
+            JsonValue::object([
+                ("name", JsonValue::string("bring-your-own-mcp-servers")),
+                (
+                    "serverSourceOfTruth",
+                    JsonValue::string("mcp_settings.json.mcpServers"),
+                ),
+                (
+                    "policyOverlay",
+                    JsonValue::string(
+                        "mcpace.config.json.servers is optional metadata for routing, concurrency, platform gates, required commands, and tool risk policies.",
+                    ),
+                ),
+                (
+                    "packagedDefaults",
+                    JsonValue::object([
+                        ("upstreamServersEnabled", JsonValue::bool(false)),
+                        ("candidateRecommendations", JsonValue::bool(false)),
+                        ("requiresHardcodedServerNames", JsonValue::bool(false)),
+                    ]),
+                ),
+                ("arbitraryServerNames", JsonValue::bool(true)),
+                ("requiresRecompileForNewServers", JsonValue::bool(false)),
+                ("installsUpstreamPackages", JsonValue::bool(false)),
+                (
+                    "userInstallResponsibility",
+                    JsonValue::string(
+                        "Users install any upstream MCP server package or binary they want, then reference its command/url in their own mcp_settings.json.",
+                    ),
+                ),
+                ("stdioAutoDiscovery", JsonValue::bool(true)),
+                ("httpUpstreamForwardingImplemented", JsonValue::bool(false)),
+            ]),
+        ),
+        (
             "topLevelTools",
             JsonValue::object([
                 (
@@ -612,7 +684,7 @@ pub fn surface_manifest(
                 (
                     "claim",
                     JsonValue::string(
-                        "Upstream tool names are not advertised as native top-level MCPace tools by default. Use upstream_catalog for concise live discovery, upstream_tools for one server's full schemas, then upstream_call or upstream_batch to execute.",
+                        "MCPace can advertise configured upstream tools as projected native top-level tools when the live catalog fits the configured budget. Broker tools remain available for large catalogs, strict clients, and explicit routing.",
                     ),
                 ),
                 ("configuredServerCount", JsonValue::number(configured_server_count)),
@@ -633,12 +705,13 @@ pub fn surface_manifest(
                 (
                     "directTopLevelProjection",
                     JsonValue::object([
-                        ("enabled", JsonValue::bool(false)),
-                        ("default", JsonValue::bool(false)),
+                        ("enabled", JsonValue::bool(true)),
+                        ("default", JsonValue::string("auto")),
+                        ("mode", JsonValue::string("budgeted-live-catalog")),
                         (
                             "reason",
                             JsonValue::string(
-                                "Direct projection would make upstream tools look native, inflate every client tools/list, and bypass MCPace's lease/policy diagnostics. MCPace keeps it explicit unless a future promoted-tool allowlist is added.",
+                                "Projection is decided from the live tools/list catalog, protocol-compatible tool schemas, and the MCPACE_TOOL_BUDGET/MCPACE_TOOL_EXPOSURE settings. Direct projected calls still go through MCPace leases and declarative tool policies.",
                             ),
                         ),
                     ]),
@@ -1160,7 +1233,8 @@ fn policy_suggestion_servers(
 
 fn suggested_policy_risk_class(server_name: &str, classes: &[String]) -> Option<String> {
     for stable in [
-        "browser-control",
+        "interaction-control",
+        "interaction-observation",
         "desktop-control",
         "desktop-observation",
         "system-control",
@@ -1314,106 +1388,319 @@ fn flatten_catalog_tools(results: &[JsonValue]) -> Vec<JsonValue> {
     flattened
 }
 
-pub fn browser_status(root_path: &Path) -> Result<JsonValue, String> {
-    let servers = load_servers(root_path)?;
-    let Some(server) = servers.get("browser") else {
-        return Ok(JsonValue::object([
-            ("ok", JsonValue::bool(false)),
-            ("server", JsonValue::string("browser")),
-            ("status", JsonValue::string("missing")),
-            ("runtimeCallable", JsonValue::bool(false)),
-            (
-                "reason",
-                JsonValue::string("No browser server is configured in mcp_settings.json."),
-            ),
-        ]));
-    };
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum UpstreamProjectionSafety {
+    /// Project only tools that look read-only or otherwise low-risk from MCP annotations/policies.
+    Safe,
+    /// Project low-risk tools plus tools with unknown semantics; keep policy-guarded tools hidden.
+    Review,
+    /// Project every callable upstream tool. Runtime policy checks still apply at call time.
+    All,
+}
 
-    let (runtime_callable, resolved_command, command_error) = server_runtime_callable(server);
-    if runtime_callable {
-        return Ok(JsonValue::object([
-            ("ok", JsonValue::bool(true)),
-            ("server", JsonValue::string("browser")),
-            ("enabled", JsonValue::bool(server.enabled)),
-            ("sourceType", JsonValue::string(&server.source_type)),
-            (
-                "command",
-                server
-                    .command
-                    .as_ref()
-                    .map(|value| JsonValue::string(redact_command(value)))
-                    .unwrap_or(JsonValue::Null),
-            ),
-            (
-                "resolvedCommand",
-                resolved_command
-                    .as_ref()
-                    .map(|value| JsonValue::string(value.display().to_string()))
-                    .unwrap_or(JsonValue::Null),
-            ),
-            ("argCount", JsonValue::number(server.args.len())),
-            ("runtimeCallable", JsonValue::bool(true)),
-            ("status", JsonValue::string("callable-stdio-abp")),
-            (
-                "reason",
-                JsonValue::string(
-                    "The browser entry is configured as an Agent Browser Protocol stdio MCP server. MCPace can list it with upstream_tools and call it with upstream_call. On Windows the helper process is launched with the no-console path; ABP_HEADLESS=0 intentionally uses a visible host browser window.",
-                ),
-            ),
-            (
-                "nextSafeAction",
-                JsonValue::string(
-                    "Call upstream_tools with server=browser, use upstream_call for browser_get_status, and use upstream_batch for stateful ABP sequences. Pass allowBrowserControl=true or allowToolRiskClasses=['browser-control'] when the sequence includes browser control tools such as browser_navigate or browser_action.",
-                ),
-            ),
-        ]));
+impl UpstreamProjectionSafety {
+    pub fn parse(value: &str) -> Self {
+        match value.trim().to_ascii_lowercase().replace('_', "-").as_str() {
+            "all" | "unsafe" | "maximum" | "max" => Self::All,
+            "review" | "unknown" | "balanced" => Self::Review,
+            _ => Self::Safe,
+        }
+    }
+}
+
+pub fn decode_projected_tool_name(name: &str) -> Option<(String, String)> {
+    let rest = name.strip_prefix("u_")?;
+    let (server, tool) = rest.split_once('_')?;
+    let server = decode_projected_component(server)?;
+    let tool = decode_projected_component(tool)?;
+    if server.trim().is_empty() || tool.trim().is_empty() {
+        return None;
+    }
+    Some((server, tool))
+}
+
+pub fn projected_tool_catalog(
+    root_path: &Path,
+    timeout_ms: Option<u64>,
+    refresh: bool,
+    safety: UpstreamProjectionSafety,
+    max_tools: Option<usize>,
+) -> Result<JsonValue, String> {
+    let started = Instant::now();
+    let servers = load_servers(root_path)?;
+    let mut projected = Vec::new();
+    let mut server_count = 0usize;
+    let mut ok_server_count = 0usize;
+    let mut skipped_server_count = 0usize;
+    let mut raw_tool_count = 0usize;
+    let mut projected_tool_count = 0usize;
+    let mut skipped_guarded_count = 0usize;
+    let mut skipped_unknown_count = 0usize;
+    let mut skipped_name_count = 0usize;
+    let mut truncated = false;
+
+    for server in servers.values() {
+        server_count = server_count.saturating_add(1);
+        let (runtime_callable, _, _) = server_runtime_callable(root_path, server);
+        if !runtime_callable {
+            skipped_server_count = skipped_server_count.saturating_add(1);
+            continue;
+        }
+        let effective_timeout = probe_timeout_for(server, timeout_ms);
+        let tools = match cached_tools_list(root_path, server, effective_timeout, refresh) {
+            Ok((tools, _)) => tools,
+            Err(_) => {
+                skipped_server_count = skipped_server_count.saturating_add(1);
+                continue;
+            }
+        };
+        ok_server_count = ok_server_count.saturating_add(1);
+        for tool in tools.as_array().unwrap_or(&[]) {
+            raw_tool_count = raw_tool_count.saturating_add(1);
+            let Some(original_tool_name) = json_helpers::string_at_path(tool, &["name"])
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            else {
+                skipped_name_count = skipped_name_count.saturating_add(1);
+                continue;
+            };
+
+            let audit = audit_tool(server, tool);
+            let policy_covered =
+                json_helpers::bool_at_path(&audit.value, &["policyCovered"]).unwrap_or(false);
+            let guard_recommended =
+                json_helpers::bool_at_path(&audit.value, &["guardRecommended"]).unwrap_or(false);
+            let unknown_semantics =
+                json_helpers::bool_at_path(&audit.value, &["unknownSemantics"]).unwrap_or(false);
+            let should_skip = match safety {
+                UpstreamProjectionSafety::All => false,
+                UpstreamProjectionSafety::Review => policy_covered || guard_recommended,
+                UpstreamProjectionSafety::Safe => {
+                    policy_covered || guard_recommended || unknown_semantics
+                }
+            };
+            if should_skip {
+                if unknown_semantics {
+                    skipped_unknown_count = skipped_unknown_count.saturating_add(1);
+                } else {
+                    skipped_guarded_count = skipped_guarded_count.saturating_add(1);
+                }
+                continue;
+            }
+
+            let Some(projected_name) = encode_projected_tool_name(&server.name, original_tool_name)
+            else {
+                skipped_name_count = skipped_name_count.saturating_add(1);
+                continue;
+            };
+            if let Some(max_tools) = max_tools {
+                if projected_tool_count >= max_tools {
+                    truncated = true;
+                    continue;
+                }
+            }
+            projected.push(project_tool_definition(
+                &server.name,
+                original_tool_name,
+                &projected_name,
+                tool,
+                &audit.value,
+            ));
+            projected_tool_count = projected_tool_count.saturating_add(1);
+        }
     }
 
-    let (status, reason, next_safe_action) = if !server.enabled {
-        (
-            "disabled",
-            server
-                .disabled_reason
-                .as_deref()
-                .unwrap_or("The browser entry exists but is disabled."),
-            "Enable the browser entry/profile on a supported platform and configure it as stdio with npx agent-browser-protocol --mcp, or keep it disabled intentionally.",
-        )
-    } else if server.source_type == "http" {
-        (
-            "blocked-http-browser-bridge",
-            "The configured browser entry is HTTP/host-bridge inventory. MCPace can report it, but this Rust HTTP adapter currently forwards stdio MCP upstreams only.",
-            "Configure browser as stdio ABP (npx agent-browser-protocol --mcp) or add a real HTTP upstream proxy before using HTTP browser calls.",
-        )
-    } else {
-        (
-            "blocked-missing-browser-command",
-            command_error
-                .as_deref()
-                .unwrap_or("The browser entry is not a callable stdio MCP server because it has no command or uses an unsupported transport."),
-            "Configure browser with type=stdio, command=npx, and args for agent-browser-protocol --mcp.",
-        )
-    };
-
     Ok(JsonValue::object([
-        ("ok", JsonValue::bool(false)),
-        ("server", JsonValue::string("browser")),
-        ("enabled", JsonValue::bool(server.enabled)),
-        ("sourceType", JsonValue::string(&server.source_type)),
+        ("ok", JsonValue::bool(true)),
+        ("mode", JsonValue::string("projected-upstream-tools")),
+        ("serverCount", JsonValue::number(server_count)),
+        ("okServerCount", JsonValue::number(ok_server_count)),
         (
-            "url",
-            server
-                .url
-                .as_ref()
-                .map(JsonValue::string)
-                .unwrap_or(JsonValue::Null),
+            "skippedServerCount",
+            JsonValue::number(skipped_server_count),
         ),
-        ("runtimeCallable", JsonValue::bool(false)),
-        ("status", JsonValue::string(status)),
-        ("reason", JsonValue::string(reason)),
-        ("nextSafeAction", JsonValue::string(next_safe_action)),
+        ("rawToolCount", JsonValue::number(raw_tool_count)),
+        (
+            "projectedToolCount",
+            JsonValue::number(projected_tool_count),
+        ),
+        (
+            "skippedGuardedToolCount",
+            JsonValue::number(skipped_guarded_count),
+        ),
+        (
+            "skippedUnknownToolCount",
+            JsonValue::number(skipped_unknown_count),
+        ),
+        (
+            "skippedNameToolCount",
+            JsonValue::number(skipped_name_count),
+        ),
+        ("truncated", JsonValue::bool(truncated)),
+        (
+            "safety",
+            JsonValue::string(match safety {
+                UpstreamProjectionSafety::Safe => "safe",
+                UpstreamProjectionSafety::Review => "review",
+                UpstreamProjectionSafety::All => "all",
+            }),
+        ),
+        (
+            "maxTools",
+            max_tools.map(JsonValue::number).unwrap_or(JsonValue::Null),
+        ),
+        (
+            "elapsedMs",
+            JsonValue::number(started.elapsed().as_millis()),
+        ),
+        ("tools", JsonValue::array(projected)),
     ]))
 }
 
+pub fn encode_projected_tool_name(server: &str, tool: &str) -> Option<String> {
+    let server = encode_projected_component(server.trim());
+    let tool = encode_projected_component(tool.trim());
+    if server.is_empty() || tool.is_empty() {
+        return None;
+    }
+    let name = format!("u_{}_{}", server, tool);
+    if projected_tool_name_is_recommended_shape(&name) {
+        Some(name)
+    } else {
+        None
+    }
+}
+
+fn encode_projected_component(value: &str) -> String {
+    value
+        .as_bytes()
+        .iter()
+        .map(|byte| format!("{:02x}", byte))
+        .collect::<String>()
+}
+
+fn decode_projected_component(value: &str) -> Option<String> {
+    if value.is_empty() || !value.len().is_multiple_of(2) {
+        return None;
+    }
+    let mut bytes = Vec::new();
+    for index in (0..value.len()).step_by(2) {
+        let byte = u8::from_str_radix(&value[index..index + 2], 16).ok()?;
+        bytes.push(byte);
+    }
+    String::from_utf8(bytes).ok()
+}
+
+fn projected_tool_name_is_recommended_shape(name: &str) -> bool {
+    !name.is_empty()
+        && name.len() <= 64
+        && !name.contains("__")
+        && name.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '_' || character == '-'
+        })
+}
+
+fn project_tool_definition(
+    server_name: &str,
+    original_tool_name: &str,
+    projected_name: &str,
+    tool: &JsonValue,
+    audit: &JsonValue,
+) -> JsonValue {
+    let mut object = tool.as_object().cloned().unwrap_or_default();
+    let title = json_helpers::string_at_path(tool, &["title"])
+        .or_else(|| json_helpers::string_at_path(tool, &["name"]))
+        .unwrap_or(original_tool_name)
+        .to_string();
+    let description = json_helpers::string_at_path(tool, &["description"])
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    object.insert("name".to_string(), JsonValue::string(projected_name));
+    object.insert(
+        "title".to_string(),
+        JsonValue::string(format!("{} · {}", server_name, title)),
+    );
+    object.insert(
+        "description".to_string(),
+        JsonValue::string(projected_description(
+            server_name,
+            original_tool_name,
+            &description,
+        )),
+    );
+    object
+        .entry("inputSchema".to_string())
+        .or_insert_with(default_tool_input_schema);
+    let mut meta = json_helpers::object_at_path(tool, &["_meta"])
+        .cloned()
+        .unwrap_or_default();
+    meta.insert(
+        "mcpace/upstreamServer".to_string(),
+        JsonValue::string(server_name),
+    );
+    meta.insert(
+        "mcpace/upstreamTool".to_string(),
+        JsonValue::string(original_tool_name),
+    );
+    meta.insert("mcpace/projected".to_string(), JsonValue::bool(true));
+    meta.insert(
+        "mcpace/policyStatus".to_string(),
+        json_helpers::string_at_path(audit, &["policyStatus"])
+            .map(JsonValue::string)
+            .unwrap_or(JsonValue::Null),
+    );
+    object.insert("_meta".to_string(), JsonValue::Object(meta));
+    JsonValue::Object(object)
+}
+
+fn projected_description(server_name: &str, original_tool_name: &str, description: &str) -> String {
+    let prefix = format!(
+        "Upstream MCP tool `{}` on server `{}` routed through MCPace. ",
+        original_tool_name, server_name
+    );
+    if description.is_empty() {
+        prefix
+    } else {
+        format!("{}{}", prefix, description)
+    }
+}
+
+fn default_tool_input_schema() -> JsonValue {
+    JsonValue::object([("type", JsonValue::string("object"))])
+}
+
+pub fn callable_server_names(root_path: &Path) -> Result<Vec<String>, String> {
+    let servers = load_servers(root_path)?;
+    Ok(servers
+        .values()
+        .filter(|server| server_runtime_callable(root_path, server).0)
+        .map(|server| server.name.clone())
+        .collect())
+}
+
+pub fn request_once(
+    root_path: &Path,
+    server_name: &str,
+    method: &str,
+    params: Option<JsonValue>,
+    timeout_ms: Option<u64>,
+) -> Result<JsonValue, String> {
+    let server_name = server_name.trim();
+    let method = method.trim();
+    if server_name.is_empty() {
+        return Err("upstream request requires a non-empty server name".to_string());
+    }
+    if method.is_empty() {
+        return Err("upstream request requires a non-empty method".to_string());
+    }
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    ensure_callable_stdio(root_path, server)?;
+    let effective_timeout = timeout_for(server, timeout_ms);
+    run_stdio_request(root_path, server, method, params, effective_timeout, None)
+}
 pub fn list_tools(
     root_path: &Path,
     server_name: Option<&str>,
@@ -1424,10 +1711,9 @@ pub fn list_tools(
         return configured_inventory(root_path);
     };
     let servers = load_servers(root_path)?;
-    let server = servers
-        .get(server_name)
+    let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
-    ensure_callable_stdio(server)?;
+    ensure_callable_stdio(root_path, server)?;
 
     let effective_timeout = timeout_for(server, timeout_ms);
     let (tools, cache_hit) = cached_tools_list(root_path, server, effective_timeout, refresh)?;
@@ -1485,10 +1771,9 @@ pub fn call_tool_with_context(
         return Err("upstream_call requires non-empty 'tool'".to_string());
     }
     let servers = load_servers(root_path)?;
-    let server = servers
-        .get(server_name)
+    let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
-    ensure_callable_stdio(server)?;
+    ensure_callable_stdio(root_path, server)?;
     validate_upstream_tool_policy(server, tool_name, context)?;
 
     let effective_timeout = timeout_for(server, timeout_ms);
@@ -1547,10 +1832,9 @@ pub fn call_tool_with_pooled_context(
         return Err("upstream_call requires non-empty 'tool'".to_string());
     }
     let servers = load_servers(root_path)?;
-    let server = servers
-        .get(server_name)
+    let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
-    ensure_callable_stdio(server)?;
+    ensure_callable_stdio(root_path, server)?;
     validate_upstream_tool_policy(server, tool_name, context)?;
 
     let effective_timeout = timeout_for(server, timeout_ms);
@@ -1622,10 +1906,9 @@ pub fn call_tools_with_context(
         return Err("upstream_batch requires at least one call".to_string());
     }
     let servers = load_servers(root_path)?;
-    let server = servers
-        .get(server_name)
+    let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
-    ensure_callable_stdio(server)?;
+    ensure_callable_stdio(root_path, server)?;
     validate_upstream_batch_tool_policy(server, calls, context)?;
 
     let effective_timeout = timeout_for(server, timeout_ms);
@@ -1681,10 +1964,9 @@ pub fn call_tools_with_pooled_context(
         return Err("upstream_batch requires at least one call".to_string());
     }
     let servers = load_servers(root_path)?;
-    let server = servers
-        .get(server_name)
+    let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
-    ensure_callable_stdio(server)?;
+    ensure_callable_stdio(root_path, server)?;
     validate_upstream_batch_tool_policy(server, calls, context)?;
 
     let effective_timeout = timeout_for(server, timeout_ms);
@@ -1737,6 +2019,63 @@ pub fn call_tools_with_pooled_context(
     entries.extend(upstream_pool_entries(pool_outcome));
     entries.extend(upstream_lease_entries(lease_outcome));
     Ok(JsonValue::object(entries))
+}
+
+pub fn tool_policy_info(
+    root_path: &Path,
+    server_name: &str,
+    tool_name: &str,
+) -> Result<JsonValue, String> {
+    let server_name = server_name.trim();
+    let tool_name = tool_name.trim();
+    if server_name.is_empty() {
+        return Err("tool_policy_info requires a non-empty server name".to_string());
+    }
+    if tool_name.is_empty() {
+        return Err("tool_policy_info requires a non-empty tool name".to_string());
+    }
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    let mut policies = Vec::new();
+    for policy in &server.tool_policies {
+        if !policy.matches_tool(tool_name) {
+            continue;
+        }
+        policies.push(JsonValue::object([
+            (
+                "riskClass",
+                policy
+                    .risk_class
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "allowArgument",
+                policy
+                    .allow_argument
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "description",
+                policy
+                    .description
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+        ]));
+    }
+    Ok(JsonValue::object([
+        ("server", JsonValue::string(server_name)),
+        ("tool", JsonValue::string(tool_name)),
+        ("guardRequired", JsonValue::bool(!policies.is_empty())),
+        ("policyCount", JsonValue::number(policies.len())),
+        ("policies", JsonValue::array(policies)),
+    ]))
 }
 
 fn validate_upstream_batch_tool_policy(
@@ -2069,6 +2408,10 @@ fn upstream_pool_entries(outcome: UpstreamPoolCallOutcome) -> Vec<(String, JsonV
             JsonValue::number(outcome.pool_size),
         ),
         (
+            "sessionPoolMaxSize".to_string(),
+            JsonValue::number(outcome.max_pool_size),
+        ),
+        (
             "sessionPoolIdleTtlMs".to_string(),
             JsonValue::number(outcome.idle_ttl_ms),
         ),
@@ -2248,15 +2591,18 @@ fn load_servers(root_path: &Path) -> Result<BTreeMap<String, UpstreamServerConfi
             None
         };
         let enabled = disabled_reason.is_none();
-        let source_type = json_helpers::string_at_path(raw, &["type"])
-            .unwrap_or("stdio")
-            .to_string();
         let command = json_helpers::string_at_path(raw, &["command"])
             .map(|value| expand_template(value, root_path));
         let args = json_helpers::strings_from_array(json_helpers::array_at_path(raw, &["args"]))
             .into_iter()
             .map(|value| expand_template(&value, root_path))
             .collect::<Vec<_>>();
+        let url = json_helpers::string_at_path(raw, &["url"]).map(str::to_string);
+        let source_type = infer_source_type(
+            json_helpers::string_at_path(raw, &["type"]).unwrap_or(""),
+            command.as_deref().unwrap_or(""),
+            url.as_deref().unwrap_or(""),
+        );
         let mut env_values = BTreeMap::new();
         if let Some(env_object) = json_helpers::object_at_path(raw, &["env"]) {
             for (key, value) in env_object {
@@ -2265,7 +2611,18 @@ fn load_servers(root_path: &Path) -> Result<BTreeMap<String, UpstreamServerConfi
                 }
             }
         }
-        let url = json_helpers::string_at_path(raw, &["url"]).map(str::to_string);
+        for key in env_var_names_from_array(json_helpers::array_at_path(raw, &["env_vars"])) {
+            if env_values.contains_key(&key) {
+                continue;
+            }
+            if let Ok(value) = env::var(&key) {
+                env_values.insert(key, value);
+            }
+        }
+        let cwd = json_helpers::string_at_path(raw, &["cwd"])
+            .map(|value| expand_template(value, root_path))
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from);
         let timeout_ms = json_helpers::value_at_path(raw, &["options", "timeout"])
             .and_then(JsonValue::as_i64)
             .or_else(|| {
@@ -2285,6 +2642,7 @@ fn load_servers(root_path: &Path) -> Result<BTreeMap<String, UpstreamServerConfi
                 command,
                 args,
                 env: env_values,
+                cwd,
                 url,
                 timeout_ms,
                 tool_policies: policy
@@ -2295,6 +2653,58 @@ fn load_servers(root_path: &Path) -> Result<BTreeMap<String, UpstreamServerConfi
     }
 
     Ok(parsed)
+}
+
+fn infer_source_type(raw_source_type: &str, command: &str, url: &str) -> String {
+    let normalized = normalize_source_type(raw_source_type);
+    if !normalized.is_empty() {
+        return normalized;
+    }
+    if !command.trim().is_empty() {
+        "stdio".to_string()
+    } else if !url.trim().is_empty() {
+        "http".to_string()
+    } else {
+        "stdio".to_string()
+    }
+}
+
+fn normalize_source_type(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" => String::new(),
+        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote-sse"
+        | "remote" | "http" | "sse" => "http".to_string(),
+        "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn env_var_names_from_array(value: Option<&[JsonValue]>) -> Vec<String> {
+    value
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|item| {
+            if let Some(name) = item.as_str() {
+                return Some(name.trim().to_string());
+            }
+
+            let object = item.as_object()?;
+            let source = object
+                .get("source")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("local")
+                .trim()
+                .to_ascii_lowercase();
+            if !source.is_empty() && source != "local" {
+                return None;
+            }
+            object
+                .get("name")
+                .and_then(JsonValue::as_str)
+                .map(|name| name.trim().to_string())
+        })
+        .filter(|name| !name.is_empty())
+        .collect()
 }
 
 fn load_upstream_server_policies(
@@ -2411,6 +2821,17 @@ fn normalize_platform(value: &str) -> String {
     }
 }
 
+fn find_server<'a>(
+    servers: &'a BTreeMap<String, UpstreamServerConfig>,
+    server_name: &str,
+) -> Option<&'a UpstreamServerConfig> {
+    servers.get(server_name).or_else(|| {
+        servers
+            .values()
+            .find(|server| server.name.eq_ignore_ascii_case(server_name))
+    })
+}
+
 fn select_servers(
     servers: &BTreeMap<String, UpstreamServerConfig>,
     selected: Option<&str>,
@@ -2435,41 +2856,85 @@ fn run_server_tasks<F>(
 where
     F: Fn(&Path, &UpstreamServerConfig, Option<u64>) -> JsonValue + Copy + Send + 'static,
 {
-    if servers.len() <= 1 {
+    let total = servers.len();
+    if total <= 1 {
         return servers
             .iter()
             .map(|server| task(root_path, server, timeout_ms))
             .collect();
     }
 
-    let handles = servers
-        .into_iter()
-        .map(|server| {
-            let name = server.name.clone();
-            let root_path = root_path.to_path_buf();
-            (
-                name,
-                thread::spawn(move || task(&root_path, &server, timeout_ms)),
-            )
-        })
+    let worker_limit = resources::default_worker_limit(total);
+    let names = servers
+        .iter()
+        .map(|server| server.name.clone())
         .collect::<Vec<_>>();
+    let pending = Arc::new(Mutex::new(servers.into_iter().enumerate()));
+    let (tx, rx) = mpsc::channel();
+    let mut handles = Vec::with_capacity(worker_limit);
 
-    handles
+    for _ in 0..worker_limit {
+        let root_path = root_path.to_path_buf();
+        let pending = Arc::clone(&pending);
+        let tx = tx.clone();
+        handles.push(thread::spawn(move || loop {
+            let next = {
+                let mut guard = pending
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                guard.next()
+            };
+            let Some((index, server)) = next else {
+                break;
+            };
+            let name = server.name.clone();
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                task(&root_path, &server, timeout_ms)
+            }))
+            .unwrap_or_else(|_| upstream_worker_panic_result(name));
+            if tx.send((index, result)).is_err() {
+                break;
+            }
+        }));
+    }
+    drop(tx);
+
+    let mut results = (0..total).map(|_| None).collect::<Vec<_>>();
+    for (index, result) in rx {
+        if let Some(slot) = results.get_mut(index) {
+            *slot = Some(result);
+        }
+    }
+    for handle in handles {
+        let _ = handle.join();
+    }
+
+    results
         .into_iter()
-        .map(|(name, handle)| {
-            handle.join().unwrap_or_else(|_| {
-                JsonValue::object([
-                    ("name", JsonValue::string(name)),
-                    ("ok", JsonValue::bool(false)),
-                    ("status", JsonValue::string("worker-panicked")),
-                    (
-                        "error",
-                        JsonValue::string("internal upstream discovery worker panicked"),
-                    ),
-                ])
+        .enumerate()
+        .map(|(index, result)| {
+            result.unwrap_or_else(|| {
+                upstream_worker_panic_result(
+                    names
+                        .get(index)
+                        .cloned()
+                        .unwrap_or_else(|| "unknown".to_string()),
+                )
             })
         })
         .collect()
+}
+
+fn upstream_worker_panic_result(name: String) -> JsonValue {
+    JsonValue::object([
+        ("name", JsonValue::string(name)),
+        ("ok", JsonValue::bool(false)),
+        ("status", JsonValue::string("worker-panicked")),
+        (
+            "error",
+            JsonValue::string("internal upstream discovery worker panicked"),
+        ),
+    ])
 }
 
 fn cached_tools_list(
@@ -2483,6 +2948,19 @@ fn cached_tools_list(
         if let Some(tools) = read_cached_tools(&key) {
             return Ok((tools, true));
         }
+        match acquire_tool_list_load_permit_or_cached(&key) {
+            ToolListCacheAcquire::Cached(tools) => return Ok((tools, true)),
+            ToolListCacheAcquire::Load(permit) => {
+                let result =
+                    run_stdio_request(root_path, server, "tools/list", None, timeout, None)?;
+                let tools = json_helpers::value_at_path(&result, &["tools"])
+                    .cloned()
+                    .unwrap_or_else(|| JsonValue::array([]));
+                write_cached_tools(key, tools.clone());
+                drop(permit);
+                return Ok((tools, false));
+            }
+        }
     }
 
     let result = run_stdio_request(root_path, server, "tools/list", None, timeout, None)?;
@@ -2491,6 +2969,56 @@ fn cached_tools_list(
         .unwrap_or_else(|| JsonValue::array([]));
     write_cached_tools(key, tools.clone());
     Ok((tools, false))
+}
+
+enum ToolListCacheAcquire {
+    Cached(JsonValue),
+    Load(ToolListLoadPermit),
+}
+
+struct ToolListLoadPermit {
+    key: ToolListCacheKey,
+    active: bool,
+}
+
+impl Drop for ToolListLoadPermit {
+    fn drop(&mut self) {
+        if !self.active {
+            return;
+        }
+        let (lock, available) = TOOL_LIST_INFLIGHT.get_or_init(tool_list_inflight_state);
+        let mut in_flight = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        in_flight.remove(&self.key);
+        self.active = false;
+        available.notify_all();
+    }
+}
+
+fn acquire_tool_list_load_permit_or_cached(key: &ToolListCacheKey) -> ToolListCacheAcquire {
+    loop {
+        let (lock, available) = TOOL_LIST_INFLIGHT.get_or_init(tool_list_inflight_state);
+        let mut in_flight = lock.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        if !in_flight.contains(key) {
+            in_flight.insert(key.clone());
+            return ToolListCacheAcquire::Load(ToolListLoadPermit {
+                key: key.clone(),
+                active: true,
+            });
+        }
+        while in_flight.contains(key) {
+            in_flight = available
+                .wait(in_flight)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        drop(in_flight);
+        if let Some(tools) = read_cached_tools(key) {
+            return ToolListCacheAcquire::Cached(tools);
+        }
+    }
+}
+
+fn tool_list_inflight_state() -> (Mutex<BTreeSet<ToolListCacheKey>>, Condvar) {
+    (Mutex::new(BTreeSet::new()), Condvar::new())
 }
 
 fn read_cached_tools(key: &ToolListCacheKey) -> Option<JsonValue> {
@@ -2514,6 +3042,20 @@ fn write_cached_tools(key: ToolListCacheKey, tools: JsonValue) {
                 tools,
             },
         );
+        prune_tool_list_cache(&mut guard);
+    }
+}
+
+fn prune_tool_list_cache(cache: &mut BTreeMap<ToolListCacheKey, CachedToolList>) {
+    while cache.len() > TOOL_LIST_CACHE_MAX_ENTRIES {
+        let Some(oldest_key) = cache
+            .iter()
+            .min_by_key(|(_key, entry)| entry.stored_at)
+            .map(|(key, _entry)| key.clone())
+        else {
+            break;
+        };
+        cache.remove(&oldest_key);
     }
 }
 
@@ -2762,8 +3304,8 @@ fn add_name_based_advisory_signals(
         "resize", "tab", "tabs", "upload", "dialog", "evaluate", "fill", "close",
     ] {
         if tokens.contains(token) {
-            let class = if lower.starts_with("browser") || lower.contains("browser_") {
-                "browser-control"
+            let class = if lower.contains("page") || lower.contains("web") {
+                "interaction-control"
             } else {
                 "desktop-control"
             };
@@ -2776,33 +3318,31 @@ fn add_name_based_advisory_signals(
         }
     }
 
-    if lower.starts_with("browser") || lower.contains("browser_") {
-        for token in [
-            "javascript",
-            "cdp",
-            "permission",
-            "permissions",
-            "downloads",
-            "files",
-            "action",
-            "clear",
-            "slider",
-        ] {
-            if tokens.contains(token) {
-                add_advisory_signal(
-                    risk_classes,
-                    signals,
-                    "browser-control",
-                    &format!("name-token:{}", token),
-                );
-            }
+    for token in [
+        "javascript",
+        "cdp",
+        "permission",
+        "permissions",
+        "downloads",
+        "files",
+        "action",
+        "clear",
+        "slider",
+    ] {
+        if tokens.contains(token) {
+            add_advisory_signal(
+                risk_classes,
+                signals,
+                "interaction-control",
+                &format!("name-token:{}", token),
+            );
         }
     }
 
     for token in ["screenshot", "snapshot", "scrape", "screen"] {
         if tokens.contains(token) {
-            let class = if lower.starts_with("browser") || lower.contains("browser_") {
-                "browser-observation"
+            let class = if lower.contains("page") || lower.contains("web") {
+                "interaction-observation"
             } else {
                 "desktop-observation"
             };
@@ -2840,7 +3380,8 @@ fn risk_class_recommends_policy(risk_class: &str) -> bool {
         risk_class,
         "mutation"
             | "not-readonly"
-            | "browser-control"
+            | "interaction-control"
+            | "interaction-observation"
             | "desktop-control"
             | "desktop-observation"
             | "system-control"
@@ -2856,7 +3397,7 @@ fn audit_recommendation(
     if guard_recommended && !policy_covered {
         "Add an explicit mcpace.config.json toolPolicies entry before using this tool routinely; keep runtime enforcement declarative instead of hardcoding this tool in Rust."
     } else if policy_status == "unprotected-advisory-risk" {
-        "Review the upstream tool semantics and add a toolPolicies guard if it can mutate local, remote, browser, or desktop state."
+        "Review the upstream tool semantics and add a toolPolicies guard if it can mutate local, remote, interactive, or host state."
     } else if unknown_semantics {
         "No MCP annotations or MCPace policy describe this tool; inspect the upstream server documentation before relying on parallel or unattended calls."
     } else if policy_covered {
@@ -2921,24 +3462,36 @@ fn server_fingerprint(server: &UpstreamServerConfig) -> String {
     let env_values = server
         .env
         .iter()
-        .map(|(key, value)| format!("{}={}", key, value))
+        .map(|(key, value)| format!("{}:{}", key, fingerprint_env_value(value)))
         .collect::<Vec<_>>()
         .join("\u{1f}");
     format!(
-        "protocol={}|enabled={}|type={}|command={}|args={}|env={}|url={}|timeout={}",
+        "protocol={}|enabled={}|type={}|command={}|args={}|env={}|cwd={}|url={}|timeout={}",
         mcp::CURRENT_PROTOCOL_VERSION,
         server.enabled,
         server.source_type,
         server.command.as_deref().unwrap_or_default(),
         server.args.join("\u{1f}"),
         env_values,
+        server
+            .cwd
+            .as_ref()
+            .map(|value| value.display().to_string())
+            .unwrap_or_default(),
         server.url.as_deref().unwrap_or_default(),
         server.timeout_ms
     )
 }
 
-fn ensure_callable_stdio(server: &UpstreamServerConfig) -> Result<(), String> {
-    let (runtime_callable, _resolved_command, command_error) = server_runtime_callable(server);
+fn fingerprint_env_value(value: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("len{}-hash{:016x}", value.len(), hasher.finish())
+}
+
+fn ensure_callable_stdio(root_path: &Path, server: &UpstreamServerConfig) -> Result<(), String> {
+    let (runtime_callable, _resolved_command, command_error) =
+        server_runtime_callable(root_path, server);
     if runtime_callable {
         return Ok(());
     }
@@ -2954,7 +3507,7 @@ fn ensure_callable_stdio(server: &UpstreamServerConfig) -> Result<(), String> {
     }
     if server.source_type != "stdio" {
         return Err(format!(
-            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio upstreams only; configure browser/host bridges as stdio or call browser_status/runtime_diagnostics for exact status.",
+            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio upstreams only; configure a stdio adapter or call runtime_diagnostics for exact status.",
             server.name, server.source_type
         ));
     }
@@ -2981,6 +3534,7 @@ fn probe_timeout_for(server: &UpstreamServerConfig, requested_ms: Option<u64>) -
 }
 
 fn server_runtime_callable(
+    root_path: &Path,
     server: &UpstreamServerConfig,
 ) -> (bool, Option<PathBuf>, Option<String>) {
     if !server.enabled {
@@ -3005,7 +3559,12 @@ fn server_runtime_callable(
         );
     };
 
-    match resolve_command(command) {
+    let cwd = server.cwd.as_deref().unwrap_or(root_path);
+    if let Some(cwd_error) = validate_stdio_cwd(cwd, &server.name) {
+        return (false, None, Some(cwd_error));
+    }
+
+    match resolve_command_for_cwd(command, cwd) {
         Ok(path) => (true, Some(path), None),
         Err(error) => (
             false,
@@ -3160,7 +3719,11 @@ fn spawn_stdio_server(
     server: &UpstreamServerConfig,
 ) -> Result<RunningServer, String> {
     let command_name = server.command.as_deref().unwrap_or_default();
-    let program = resolve_command(command_name).map_err(|error| {
+    let cwd = server.cwd.as_deref().unwrap_or(root_path);
+    if let Some(cwd_error) = validate_stdio_cwd(cwd, &server.name) {
+        return Err(cwd_error);
+    }
+    let program = resolve_command_for_cwd(command_name, cwd).map_err(|error| {
         format!(
             "failed to resolve command '{}' for upstream server '{}': {}",
             command_name, server.name, error
@@ -3168,9 +3731,13 @@ fn spawn_stdio_server(
     })?;
 
     let mut command = Command::new(&program);
+    command.env_clear();
+    for (key, value) in default_child_process_environment() {
+        command.env(key, value);
+    }
     command
         .args(&server.args)
-        .current_dir(root_path)
+        .current_dir(cwd)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -3250,6 +3817,37 @@ fn write_jsonrpc(stdin: &mut dyn Write, message: JsonValue) -> Result<(), String
     stdin
         .flush()
         .map_err(|error| format!("failed to flush upstream JSON-RPC message: {}", error))
+}
+
+fn default_child_process_environment() -> BTreeMap<String, String> {
+    let mut values = BTreeMap::new();
+    let names: &[&str] = if cfg!(windows) {
+        &[
+            "PATH",
+            "Path",
+            "PATHEXT",
+            "SystemRoot",
+            "ComSpec",
+            "TEMP",
+            "TMP",
+            "USERPROFILE",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+        ]
+    } else {
+        &[
+            "PATH", "HOME", "TMPDIR", "TEMP", "TMP", "USER", "LOGNAME", "SHELL",
+        ]
+    };
+
+    for name in names {
+        if let Ok(value) = env::var(name) {
+            values.insert((*name).to_string(), value);
+        }
+    }
+    values
 }
 
 fn read_response(
@@ -3350,9 +3948,9 @@ fn stderr_suffix(stderr_rx: &Receiver<String>) -> String {
     while let Ok(line) = stderr_rx.try_recv() {
         let trimmed = line.trim();
         if !trimmed.is_empty() {
-            lines.push(trimmed.to_string());
+            lines.push(sanitize_stderr_diagnostic(trimmed));
         }
-        if lines.len() >= 6 {
+        if lines.len() >= STDERR_DIAGNOSTIC_MAX_LINES {
             break;
         }
     }
@@ -3363,6 +3961,165 @@ fn stderr_suffix(stderr_rx: &Receiver<String>) -> String {
     }
 }
 
+fn sanitize_stderr_diagnostic(value: &str) -> String {
+    truncate_diagnostic_text(&redact_sensitive_assignments(&redact_bearer_tokens(value)))
+}
+
+fn redact_sensitive_assignments(value: &str) -> String {
+    let chars = value.chars().collect::<Vec<_>>();
+    let mut redacted = String::new();
+    let mut index = 0;
+
+    while index < chars.len() {
+        let current = chars[index];
+        if current == '=' || current == ':' {
+            let key_end = diagnostic_key_end(&chars, index);
+            let key_start = diagnostic_key_start(&chars, key_end);
+            let key = chars[key_start..key_end]
+                .iter()
+                .collect::<String>()
+                .trim()
+                .trim_matches(|ch| ch == '\'' || ch == '"')
+                .to_string();
+            if diagnostic_key_is_sensitive(&key) {
+                redacted.push(current);
+                index += 1;
+                while index < chars.len() && chars[index].is_whitespace() {
+                    redacted.push(chars[index]);
+                    index += 1;
+                }
+                redacted.push_str(DIAGNOSTIC_REDACTION);
+                index = skip_sensitive_diagnostic_value(&chars, index);
+                continue;
+            }
+        }
+        redacted.push(current);
+        index += 1;
+    }
+
+    redacted
+}
+
+fn diagnostic_key_end(chars: &[char], separator_index: usize) -> usize {
+    let mut end = separator_index;
+    while end > 0 && chars[end - 1].is_whitespace() {
+        end -= 1;
+    }
+    end
+}
+
+fn diagnostic_key_start(chars: &[char], key_end: usize) -> usize {
+    let mut start = key_end;
+    while start > 0 {
+        let previous = chars[start - 1];
+        if previous.is_alphanumeric()
+            || matches!(previous, '_' | '-' | '.')
+            || (matches!(previous, '\'' | '"') && start == key_end)
+        {
+            start -= 1;
+        } else {
+            break;
+        }
+    }
+    start
+}
+
+fn diagnostic_key_is_sensitive(key: &str) -> bool {
+    let normalized = key
+        .chars()
+        .filter(|ch| ch.is_ascii_alphanumeric() || *ch == '_')
+        .collect::<String>()
+        .to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+    [
+        "token",
+        "secret",
+        "password",
+        "passwd",
+        "api_key",
+        "apikey",
+        "access_key",
+        "accesskey",
+        "private_key",
+        "privatekey",
+        "authorization",
+        "credential",
+        "credentials",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
+}
+
+fn skip_sensitive_diagnostic_value(chars: &[char], mut index: usize) -> usize {
+    if index >= chars.len() {
+        return index;
+    }
+
+    if matches!(chars[index], '\'' | '"') {
+        let quote = chars[index];
+        index += 1;
+        while index < chars.len() {
+            let current = chars[index];
+            index += 1;
+            if current == quote {
+                break;
+            }
+        }
+        return index;
+    }
+
+    while index < chars.len()
+        && !chars[index].is_whitespace()
+        && !matches!(chars[index], ',' | ';' | '|' | ')' | '}')
+    {
+        index += 1;
+    }
+    index
+}
+
+fn redact_bearer_tokens(value: &str) -> String {
+    let mut redacted = String::new();
+    let lower = value.to_ascii_lowercase();
+    let mut index = 0;
+
+    while let Some(relative) = lower[index..].find("bearer ") {
+        let start = index + relative;
+        redacted.push_str(&value[index..start]);
+        redacted.push_str("Bearer ");
+        redacted.push_str(DIAGNOSTIC_REDACTION);
+        index = skip_bearer_token(value, start + "bearer ".len());
+    }
+
+    redacted.push_str(&value[index..]);
+    redacted
+}
+
+fn skip_bearer_token(value: &str, start: usize) -> usize {
+    let mut end = start;
+    for (relative, ch) in value[start..].char_indices() {
+        if ch.is_whitespace() || matches!(ch, ',' | ';' | '|' | ')' | '}') {
+            return start + relative;
+        }
+        end = start + relative + ch.len_utf8();
+    }
+    end
+}
+
+fn truncate_diagnostic_text(value: &str) -> String {
+    if value.chars().count() <= STDERR_DIAGNOSTIC_MAX_CHARS_PER_LINE {
+        return value.to_string();
+    }
+
+    let mut truncated = value
+        .chars()
+        .take(STDERR_DIAGNOSTIC_MAX_CHARS_PER_LINE)
+        .collect::<String>();
+    truncated.push_str("…<truncated>");
+    truncated
+}
+
 fn catalog_server(
     root_path: &Path,
     server: &UpstreamServerConfig,
@@ -3370,7 +4127,8 @@ fn catalog_server(
     refresh: bool,
 ) -> JsonValue {
     let started = Instant::now();
-    let (runtime_callable, resolved_command, command_error) = server_runtime_callable(server);
+    let (runtime_callable, resolved_command, command_error) =
+        server_runtime_callable(root_path, server);
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     if !runtime_callable {
         let status = if !server.enabled {
@@ -3551,7 +4309,8 @@ fn probe_server(
     refresh: bool,
 ) -> JsonValue {
     let started = Instant::now();
-    let (runtime_callable, resolved_command, command_error) = server_runtime_callable(server);
+    let (runtime_callable, resolved_command, command_error) =
+        server_runtime_callable(root_path, server);
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     if !runtime_callable {
         let status = if !server.enabled {
@@ -3715,7 +4474,8 @@ fn audit_server(
     refresh: bool,
 ) -> JsonValue {
     let started = Instant::now();
-    let (runtime_callable, resolved_command, command_error) = server_runtime_callable(server);
+    let (runtime_callable, resolved_command, command_error) =
+        server_runtime_callable(root_path, server);
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     let declared_policies = tool_policy_summaries(&server.tool_policies);
     if !runtime_callable {
@@ -3969,8 +4729,9 @@ fn audit_server(
     }
 }
 
-fn server_inventory_item(server: &UpstreamServerConfig) -> JsonValue {
-    let (runtime_callable, resolved_command, command_error) = server_runtime_callable(server);
+fn server_inventory_item(root_path: &Path, server: &UpstreamServerConfig) -> JsonValue {
+    let (runtime_callable, resolved_command, command_error) =
+        server_runtime_callable(root_path, server);
     let status = if !server.enabled {
         "disabled"
     } else if runtime_callable {
@@ -3991,9 +4752,8 @@ fn server_inventory_item(server: &UpstreamServerConfig) -> JsonValue {
         "enabled stdio server; list with upstream_tools and call with upstream_call".to_string()
     } else if let Some(error) = command_error {
         error
-    } else if server.name == "browser" || server.source_type == "http" {
-        "non-stdio browser/HTTP upstream fan-out is not implemented in this stdio bridge"
-            .to_string()
+    } else if server.source_type == "http" {
+        "non-stdio HTTP upstream fan-out is not implemented in this stdio bridge".to_string()
     } else {
         "server does not have a callable stdio command".to_string()
     };
@@ -4027,6 +4787,14 @@ fn server_inventory_item(server: &UpstreamServerConfig) -> JsonValue {
                 .url
                 .as_ref()
                 .map(JsonValue::string)
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "cwd",
+            server
+                .cwd
+                .as_ref()
+                .map(|value| JsonValue::string(value.display().to_string()))
                 .unwrap_or(JsonValue::Null),
         ),
     ])
@@ -4089,58 +4857,60 @@ fn empty_object() -> JsonValue {
     JsonValue::object::<String, Vec<(String, JsonValue)>>(Vec::new())
 }
 
-fn resolve_command(command: &str) -> Result<PathBuf, String> {
+fn validate_stdio_cwd(cwd: &Path, server_name: &str) -> Option<String> {
+    match fs::metadata(cwd) {
+        Ok(metadata) if metadata.is_dir() => None,
+        Ok(_) => Some(format!(
+            "configured cwd '{}' for upstream server '{}' is not a directory",
+            cwd.display(),
+            server_name
+        )),
+        Err(error) => Some(format!(
+            "configured cwd '{}' for upstream server '{}' is not accessible: {}",
+            cwd.display(),
+            server_name,
+            error
+        )),
+    }
+}
+
+fn resolve_command_for_cwd(command: &str, cwd: &Path) -> Result<PathBuf, String> {
     let command = command.trim();
     if command.is_empty() {
         return Err("empty command".to_string());
     }
+
     let raw = PathBuf::from(command);
-    if (raw.components().count() > 1 || raw.extension().is_some()) && raw.exists() {
-        return Ok(raw);
+    if raw.is_absolute() {
+        return if raw.exists() {
+            Ok(raw.canonicalize().unwrap_or(raw))
+        } else {
+            Err(format!(
+                "absolute command path '{}' does not exist",
+                raw.display()
+            ))
+        };
     }
 
-    #[cfg(windows)]
-    {
-        if raw.extension().is_none() && raw.components().count() == 1 {
-            if let Some(resolved) = resolve_windows_pathext(command) {
-                return Ok(resolved);
-            }
+    let looks_path_like = raw.components().count() > 1 || raw.extension().is_some();
+    if looks_path_like {
+        let cwd_candidate = cwd.join(&raw);
+        if cwd_candidate.exists() {
+            return Ok(cwd_candidate.canonicalize().unwrap_or(cwd_candidate));
+        }
+        if raw.exists() {
+            return Ok(raw.canonicalize().unwrap_or(raw));
         }
     }
 
     which::which(command).map_err(|error| error.to_string())
 }
 
-#[cfg(windows)]
-fn resolve_windows_pathext(command: &str) -> Option<PathBuf> {
-    let path_var = env::var_os("PATH")?;
-    let pathext = env::var("PATHEXT").unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_string());
-    let extensions = pathext
-        .split(';')
-        .filter(|item| !item.trim().is_empty())
-        .map(|item| item.trim().to_string())
-        .collect::<Vec<_>>();
-    for directory in env::split_paths(&path_var) {
-        for extension in &extensions {
-            let candidate = directory.join(format!("{}{}", command, extension));
-            if candidate.is_file() {
-                return Some(candidate);
-            }
-            let lower_candidate =
-                directory.join(format!("{}{}", command, extension.to_ascii_lowercase()));
-            if lower_candidate.is_file() {
-                return Some(lower_candidate);
-            }
-        }
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
-    use std::time::{SystemTime, UNIX_EPOCH};
+    use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
     fn temp_root() -> PathBuf {
         let unique = format!(
@@ -4166,6 +4936,7 @@ mod tests {
             command: Some("tool".to_string()),
             args: Vec::new(),
             env: BTreeMap::new(),
+            cwd: None,
             url: None,
             timeout_ms: DEFAULT_TIMEOUT_MS,
             tool_policies: vec![
@@ -4293,6 +5064,139 @@ mod tests {
     }
 
     #[test]
+    fn server_fingerprint_does_not_embed_secret_env_values() {
+        let mut env = BTreeMap::new();
+        env.insert("API_TOKEN".to_string(), "secret-value".to_string());
+        let server = UpstreamServerConfig {
+            name: "secret-probe".to_string(),
+            enabled: true,
+            disabled_reason: None,
+            source_type: "stdio".to_string(),
+            command: Some("node".to_string()),
+            args: Vec::new(),
+            env,
+            cwd: None,
+            url: None,
+            timeout_ms: 1_000,
+            tool_policies: Vec::new(),
+        };
+
+        let fingerprint = server_fingerprint(&server);
+
+        assert!(fingerprint.contains("API_TOKEN:"));
+        assert!(!fingerprint.contains("secret-value"));
+        assert!(fingerprint.contains("len12-hash"));
+    }
+
+    #[test]
+    fn env_var_names_accept_codex_local_object_entries_and_skip_remote_entries() {
+        let value = parse_str(
+            r#"[
+              "PLAIN_TOKEN",
+              { "name": "LOCAL_OBJECT_TOKEN", "source": "local" },
+              { "name": "DEFAULT_LOCAL_TOKEN" },
+              { "name": "REMOTE_ONLY_TOKEN", "source": "remote" },
+              { "source": "local" },
+              ""
+            ]"#,
+        )
+        .unwrap();
+        let names = env_var_names_from_array(value.as_array());
+
+        assert_eq!(
+            names,
+            vec![
+                "PLAIN_TOKEN".to_string(),
+                "LOCAL_OBJECT_TOKEN".to_string(),
+                "DEFAULT_LOCAL_TOKEN".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn stderr_suffix_redacts_sensitive_diagnostics_without_removing_context() {
+        let (tx, rx) = mpsc::channel();
+        tx.send(
+            "startup failed TOKEN = abc123 Authorization: Bearer bearer-secret workspace=/tmp/work"
+                .to_string(),
+        )
+        .unwrap();
+        drop(tx);
+
+        let suffix = stderr_suffix(&rx);
+
+        assert!(suffix.contains("startup failed"));
+        assert!(suffix.contains("workspace=/tmp/work"));
+        assert!(suffix.contains(DIAGNOSTIC_REDACTION));
+        assert!(!suffix.contains("abc123"));
+        assert!(!suffix.contains("bearer-secret"));
+    }
+
+    #[test]
+    fn stderr_suffix_bounds_diagnostic_line_count_and_length() {
+        let (tx, rx) = mpsc::channel();
+        for index in 0..8 {
+            tx.send(format!("line-{index}: {}", "x".repeat(512)))
+                .unwrap();
+        }
+        drop(tx);
+
+        let suffix = stderr_suffix(&rx);
+
+        assert!(suffix.contains("line-0"));
+        assert!(suffix.contains("line-5"));
+        assert!(!suffix.contains("line-6"));
+        assert!(suffix.contains("<truncated>"));
+        assert!(suffix.len() < 2_400);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn spawn_stdio_server_does_not_forward_unspecified_parent_environment() {
+        let root = temp_root();
+        env::set_var("MCPACE_PARENT_SECRET_DO_NOT_FORWARD", "secret-value");
+        env::set_var("MCPACE_ALLOWED_TOKEN_TEST", "allowed-value");
+        let mut explicit_env = BTreeMap::new();
+        explicit_env.insert("EXPLICIT_TOKEN".to_string(), "explicit-value".to_string());
+        explicit_env.insert(
+            "MCPACE_ALLOWED_TOKEN_TEST".to_string(),
+            env::var("MCPACE_ALLOWED_TOKEN_TEST").unwrap(),
+        );
+        let server = UpstreamServerConfig {
+            name: "env-probe".to_string(),
+            enabled: true,
+            disabled_reason: None,
+            source_type: "stdio".to_string(),
+            command: Some("sh".to_string()),
+            args: vec![
+                "-c".to_string(),
+                r#"printf '%s|%s|%s|%s\n' "$MCPACE_PARENT_SECRET_DO_NOT_FORWARD" "$MCPACE_ALLOWED_TOKEN_TEST" "$EXPLICIT_TOKEN" "$MCPACE_PRIMARY_WORKSPACE""#.to_string(),
+            ],
+            env: explicit_env,
+            cwd: None,
+            url: None,
+            timeout_ms: 1_000,
+            tool_policies: Vec::new(),
+        };
+
+        let running = spawn_stdio_server(&root, &server).expect("spawn env probe");
+        let line = running
+            .stdout_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("env probe output");
+        let fields = line.split('|').collect::<Vec<_>>();
+
+        assert_eq!(fields[0], "");
+        assert_eq!(fields[1], "allowed-value");
+        assert_eq!(fields[2], "explicit-value");
+        assert!(fields[3].contains(&root.display().to_string()));
+
+        env::remove_var("MCPACE_PARENT_SECRET_DO_NOT_FORWARD");
+        env::remove_var("MCPACE_ALLOWED_TOKEN_TEST");
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn load_servers_attaches_declarative_tool_policies_from_project_config() {
         let root = temp_root();
         fs::write(
@@ -4399,10 +5303,101 @@ mod tests {
             .unwrap_or_default()
             .contains("current platform"));
 
-        let error = ensure_callable_stdio(platform_blocked).expect_err("platform disabled");
+        let error = ensure_callable_stdio(&root, platform_blocked).expect_err("platform disabled");
         assert!(error.contains("disabled"));
         assert!(error.contains("current platform"));
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn server_runtime_callable_blocks_missing_cwd_before_spawn() {
+        let root = temp_root();
+        let missing_cwd = root.join("missing-workspace");
+        let server = UpstreamServerConfig {
+            name: "missing-cwd-probe".to_string(),
+            enabled: true,
+            disabled_reason: None,
+            source_type: "stdio".to_string(),
+            command: Some("node".to_string()),
+            args: Vec::new(),
+            env: BTreeMap::new(),
+            cwd: Some(missing_cwd.clone()),
+            url: None,
+            timeout_ms: 1_000,
+            tool_policies: Vec::new(),
+        };
+
+        let (callable, resolved, error) = server_runtime_callable(&root, &server);
+
+        assert!(!callable);
+        assert!(resolved.is_none());
+        let error = error.expect("missing cwd error");
+        assert!(error.contains("configured cwd"));
+        assert!(error.contains(&missing_cwd.display().to_string()));
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn relative_stdio_command_paths_resolve_against_configured_cwd() {
+        let root = temp_root();
+        let workspace = root.join("workspace");
+        let bin_dir = workspace.join("bin");
+        fs::create_dir_all(&bin_dir).unwrap();
+        let executable = bin_dir.join("server-probe");
+        fs::write(&executable, "#!/bin/sh\n").unwrap();
+
+        let resolved = resolve_command_for_cwd("./bin/server-probe", &workspace)
+            .expect("resolve relative command from cwd");
+
+        assert_eq!(resolved, executable.canonicalize().unwrap());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn load_servers_accepts_source_only_standard_mcp_shape() {
+        let root = temp_root();
+        fs::create_dir_all(root.join("workspace")).unwrap();
+        env::set_var("MCPACE_TEST_FORWARDED_ENV", "forwarded-value");
+        fs::write(
+            root.join("mcp_settings.json"),
+            r#"{
+  "mcpServers": {
+    "Server From Settings": {
+      "command": "node",
+      "args": ["${MCPACE_TEST_ARG:-fallback-arg}"],
+      "cwd": "${MCPACE_PRIMARY_WORKSPACE}/workspace",
+      "env": { "STATIC_ROOT": "${MCPACE_PRIMARY_WORKSPACE}" },
+      "env_vars": ["MCPACE_TEST_FORWARDED_ENV"]
+    }
+  }
+}"#,
+        )
+        .unwrap();
+
+        let servers = load_servers(&root).expect("source-only server config");
+        let server = servers
+            .get("Server From Settings")
+            .expect("server from settings");
+        assert!(server.enabled);
+        assert_eq!(server.source_type, "stdio");
+        assert_eq!(server.command.as_deref(), Some("node"));
+        assert_eq!(server.args, vec!["fallback-arg".to_string()]);
+        assert_eq!(
+            server
+                .env
+                .get("MCPACE_TEST_FORWARDED_ENV")
+                .map(String::as_str),
+            Some("forwarded-value")
+        );
+        assert!(server
+            .env
+            .get("STATIC_ROOT")
+            .map(|value| value.contains(&root.display().to_string()))
+            .unwrap_or(false));
+        assert!(server.cwd.as_ref().unwrap().ends_with("workspace"));
+
+        env::remove_var("MCPACE_TEST_FORWARDED_ENV");
         let _ = fs::remove_dir_all(root);
     }
 
@@ -4446,7 +5441,7 @@ mod tests {
             r#"{
   "mcpServers": {
     "memory": { "enabled": true, "type": "stdio", "command": "__COMMAND__", "args": ["-y", "server"] },
-    "browser": { "enabled": true, "type": "http", "url": "http://127.0.0.1:39022/mcp" },
+    "remote-demo": { "enabled": true, "type": "http", "url": "http://127.0.0.1:39022/mcp" },
     "off": { "enabled": false, "type": "stdio", "command": "uvx", "args": [] }
   }
 }"#
@@ -4460,16 +5455,16 @@ mod tests {
             .iter()
             .find(|item| json_helpers::string_at_path(item, &["name"]) == Some("memory"))
             .unwrap();
-        let browser = servers
+        let remote = servers
             .iter()
-            .find(|item| json_helpers::string_at_path(item, &["name"]) == Some("browser"))
+            .find(|item| json_helpers::string_at_path(item, &["name"]) == Some("remote-demo"))
             .unwrap();
         assert_eq!(
             json_helpers::string_at_path(memory, &["status"]),
             Some("callable-stdio")
         );
         assert_eq!(
-            json_helpers::string_at_path(browser, &["status"]),
+            json_helpers::string_at_path(remote, &["status"]),
             Some("blocked-http-upstream")
         );
         let _ = fs::remove_dir_all(root);
@@ -4509,7 +5504,7 @@ mod tests {
                 &manifest,
                 &["upstreamTools", "directTopLevelProjection", "enabled"]
             ),
-            Some(false)
+            Some(true)
         );
         assert_eq!(
             json_helpers::value_at_path(&manifest, &["topLevelTools", "count"])
@@ -4520,47 +5515,64 @@ mod tests {
             json_helpers::bool_at_path(&manifest, &["upstreamTools", "liveCatalogIncluded"]),
             Some(false)
         );
-        assert!(json_helpers::string_at_path(&manifest, &["summary"])
-            .unwrap_or_default()
-            .contains("disguised as native MCPace tools"));
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn browser_status_reports_stdio_abp_callable() {
-        let root = temp_root();
-        let command = std::env::current_exe()
-            .unwrap()
-            .display()
-            .to_string()
-            .replace('\\', "\\\\");
-        fs::write(
-            root.join("mcp_settings.json"),
-            r#"{
-  "mcpServers": {
-    "browser": {
-      "enabled": true,
-      "type": "stdio",
-      "command": "__COMMAND__",
-      "args": ["-y", "agent-browser-protocol@0.1.10", "--mcp"],
-      "env": { "ABP_HEADLESS": "0" }
-    }
-  }
-}"#
-            .replace("__COMMAND__", &command),
-        )
-        .unwrap();
-
-        let status = browser_status(&root).expect("browser status");
-        assert_eq!(json_helpers::bool_at_path(&status, &["ok"]), Some(true));
         assert_eq!(
-            json_helpers::bool_at_path(&status, &["runtimeCallable"]),
+            json_helpers::string_at_path(&manifest, &["configurationModel", "name"]),
+            Some("bring-your-own-mcp-servers")
+        );
+        assert_eq!(
+            json_helpers::string_at_path(&manifest, &["configurationModel", "serverSourceOfTruth"]),
+            Some("mcp_settings.json.mcpServers")
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(
+                &manifest,
+                &[
+                    "configurationModel",
+                    "packagedDefaults",
+                    "upstreamServersEnabled"
+                ]
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(
+                &manifest,
+                &[
+                    "configurationModel",
+                    "packagedDefaults",
+                    "requiresHardcodedServerNames"
+                ]
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(&manifest, &["configurationModel", "arbitraryServerNames"]),
             Some(true)
         );
         assert_eq!(
-            json_helpers::string_at_path(&status, &["status"]),
-            Some("callable-stdio-abp")
+            json_helpers::bool_at_path(
+                &manifest,
+                &["configurationModel", "requiresRecompileForNewServers"]
+            ),
+            Some(false)
         );
+        assert_eq!(
+            json_helpers::bool_at_path(
+                &manifest,
+                &["configurationModel", "installsUpstreamPackages"]
+            ),
+            Some(false)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(
+                &manifest,
+                &["configurationModel", "httpUpstreamForwardingImplemented"]
+            ),
+            Some(false)
+        );
+        assert!(json_helpers::string_at_path(&manifest, &["summary"])
+            .unwrap_or_default()
+            .contains("disguised as native MCPace tools"));
         let _ = fs::remove_dir_all(root);
     }
 
@@ -4710,6 +5722,88 @@ mod tests {
     }
 
     #[test]
+    fn bounded_server_task_runner_preserves_input_order() {
+        fn server(name: &str) -> UpstreamServerConfig {
+            UpstreamServerConfig {
+                name: name.to_string(),
+                enabled: true,
+                disabled_reason: None,
+                source_type: "stdio".to_string(),
+                command: Some("tool".to_string()),
+                args: Vec::new(),
+                env: BTreeMap::new(),
+                cwd: None,
+                url: None,
+                timeout_ms: DEFAULT_TIMEOUT_MS,
+                tool_policies: Vec::new(),
+            }
+        }
+
+        let root = temp_root();
+        let results = run_server_tasks(
+            &root,
+            vec![server("zeta"), server("alpha"), server("middle")],
+            None,
+            |_root, server, _timeout| {
+                JsonValue::object([("name", JsonValue::string(&server.name))])
+            },
+        );
+
+        let names = results
+            .iter()
+            .filter_map(|item| json_helpers::string_at_path(item, &["name"]))
+            .collect::<Vec<_>>();
+        assert_eq!(names, vec!["zeta", "alpha", "middle"]);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn bounded_server_task_runner_reports_worker_panics() {
+        fn server(name: &str) -> UpstreamServerConfig {
+            UpstreamServerConfig {
+                name: name.to_string(),
+                enabled: true,
+                disabled_reason: None,
+                source_type: "stdio".to_string(),
+                command: Some("tool".to_string()),
+                args: Vec::new(),
+                env: BTreeMap::new(),
+                cwd: None,
+                url: None,
+                timeout_ms: DEFAULT_TIMEOUT_MS,
+                tool_policies: Vec::new(),
+            }
+        }
+
+        let root = temp_root();
+        let results = run_server_tasks(
+            &root,
+            vec![server("ok"), server("panic")],
+            None,
+            |_root, server, _timeout| {
+                if server.name == "panic" {
+                    panic!("intentional task panic");
+                }
+                JsonValue::object([
+                    ("name", JsonValue::string(&server.name)),
+                    ("ok", JsonValue::bool(true)),
+                ])
+            },
+        );
+
+        assert_eq!(json_helpers::bool_at_path(&results[0], &["ok"]), Some(true));
+        assert_eq!(
+            json_helpers::string_at_path(&results[1], &["name"]),
+            Some("panic")
+        );
+        assert_eq!(
+            json_helpers::string_at_path(&results[1], &["status"]),
+            Some("worker-panicked")
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
     fn tool_list_cache_key_tracks_settings_metadata() {
         let root = temp_root();
         let settings_path = root.join("mcp_settings.json");
@@ -4767,6 +5861,34 @@ mod tests {
             },
         );
         assert_eq!(read_cached_tools(&key), None);
+    }
+
+    #[test]
+    fn tool_list_cache_prunes_oldest_entries_to_bound_memory() {
+        let mut cache = BTreeMap::new();
+        let now = Instant::now();
+        for index in 0..(TOOL_LIST_CACHE_MAX_ENTRIES + 5) {
+            cache.insert(
+                ToolListCacheKey {
+                    root_path: format!("test-prune-root-{}", std::process::id()),
+                    server_name: format!("server-{index:03}"),
+                    settings_modified_ms: index as u128,
+                    settings_len: index as u64,
+                    server_fingerprint: format!("fingerprint-{index:03}"),
+                },
+                CachedToolList {
+                    stored_at: now + Duration::from_millis(index as u64),
+                    tools: JsonValue::array([JsonValue::string(format!("tool-{index}"))]),
+                },
+            );
+        }
+
+        prune_tool_list_cache(&mut cache);
+
+        assert_eq!(cache.len(), TOOL_LIST_CACHE_MAX_ENTRIES);
+        assert!(cache
+            .keys()
+            .all(|key| key.server_name.as_str() >= "server-005"));
     }
 
     #[test]
@@ -4844,6 +5966,7 @@ mod tests {
             command: Some("tool".to_string()),
             args: Vec::new(),
             env: BTreeMap::new(),
+            cwd: None,
             url: None,
             timeout_ms: DEFAULT_TIMEOUT_MS,
             tool_policies: Vec::new(),
@@ -4888,6 +6011,7 @@ mod tests {
             command: Some("tool".to_string()),
             args: Vec::new(),
             env: BTreeMap::new(),
+            cwd: None,
             url: None,
             timeout_ms: DEFAULT_TIMEOUT_MS,
             tool_policies: vec![ToolRiskPolicy {
@@ -5001,16 +6125,16 @@ mod tests {
     }
 
     #[test]
-    fn policy_suggestions_keep_browser_control_as_stable_cross_server_risk_class() {
+    fn policy_suggestions_keep_interaction_control_as_stable_cross_server_risk_class() {
         let audit = JsonValue::object([(
             "servers",
             JsonValue::array([JsonValue::object([
-                ("name", JsonValue::string("browser")),
+                ("name", JsonValue::string("interactive")),
                 ("ok", JsonValue::bool(true)),
                 (
                     "tools",
                     JsonValue::array([JsonValue::object([
-                        ("name", JsonValue::string("browser_navigate")),
+                        ("name", JsonValue::string("page_navigate")),
                         ("guardRecommended", JsonValue::bool(true)),
                         ("policyCovered", JsonValue::bool(false)),
                         (
@@ -5019,7 +6143,7 @@ mod tests {
                         ),
                         (
                             "advisoryRiskClasses",
-                            JsonValue::array([JsonValue::string("browser-control")]),
+                            JsonValue::array([JsonValue::string("interaction-control")]),
                         ),
                         (
                             "advisorySignals",
@@ -5034,11 +6158,11 @@ mod tests {
         let suggestions = json_helpers::array_at_path(&report, &["suggestions"]).unwrap();
         assert_eq!(
             json_helpers::string_at_path(&suggestions[0], &["policy", "riskClass"]),
-            Some("browser-control")
+            Some("interaction-control")
         );
         assert_eq!(
             json_helpers::string_at_path(&suggestions[0], &["policy", "allowArgument"]),
-            Some("allowBrowserControl")
+            Some("allowInteractionControl")
         );
     }
 

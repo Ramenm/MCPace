@@ -1,5 +1,5 @@
 {
-  "version": "0.3.6",
+  "version": "0.4.1",
   "legacyShellEntrypointsRemoved": true,
   "nativeRustCommands": [
     "version",
@@ -62,7 +62,7 @@
     "init": "bootstrap only; seeds local state layout and reports readiness",
     "hub": "local lifecycle/state/log/repair plus file-backed runtime lease acquire/renew/release/list surface; explicit upstream wrapper calls now acquire/heartbeat-renew/release scheduler leases, while persistent process-pool/session ownership is still pending",
     "stdio-shim": "bootstrap-only proof surface; normalizes context and ensures hub up but does not forward live MCP stdio traffic",
-    "dashboard": "local browser control surface over native JSON read paths and safe lifecycle actions",
+    "dashboard": "local web control surface over native JSON read paths and safe lifecycle actions",
     "setup": "one-command local bootstrap that starts serve, installs supported local client config entries, verifies readiness, and smokes /healthz plus /mcp",
     "service": "user-level autostart install/status/uninstall/print via the auto-launch crate; uses the current executable path instead of requiring mcpace in PATH",
     "serve": "public one-port localhost HTTP surface with start/stop/status lifecycle commands",

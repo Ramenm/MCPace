@@ -1,14 +1,23 @@
+use crate::adapter;
 use crate::app;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
+use crate::mcp_protocol as mcp;
+use crate::resources;
 use crate::runtimepaths;
+use crate::tool_result::{self, ToolResultOptions};
 use crate::upstream;
-use std::collections::BTreeSet;
+use std::collections::{hash_map::DefaultHasher, BTreeMap, BTreeSet};
+use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::sync::{
+    atomic::{AtomicUsize, Ordering},
+    mpsc, Arc, Mutex,
+};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
 struct ParsedArgs {
@@ -17,6 +26,10 @@ struct ParsedArgs {
     host: String,
     port: u16,
     max_requests: Option<usize>,
+    max_connections: usize,
+    io_timeout: Duration,
+    max_body_bytes: usize,
+    overview_cache_ttl: Duration,
     error: Option<String>,
 }
 
@@ -28,7 +41,105 @@ impl Default for ParsedArgs {
             host: runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
             port: 0,
             max_requests: None,
+            max_connections: resources::default_http_connection_limit(),
+            io_timeout: resources::default_http_io_timeout(),
+            max_body_bytes: resources::DEFAULT_MAX_HTTP_BODY_BYTES,
+            overview_cache_ttl: resources::default_dashboard_overview_cache_ttl(),
             error: None,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
+struct CachedOverview {
+    stored_at: Instant,
+    value: JsonValue,
+}
+
+#[derive(Clone, Debug)]
+struct CachedHealth {
+    stored_at: Instant,
+    value: JsonValue,
+}
+
+#[derive(Default)]
+struct HttpRuntimeMetrics {
+    accepted_connections: AtomicUsize,
+    active_connections: AtomicUsize,
+    completed_connections: AtomicUsize,
+    failed_connections: AtomicUsize,
+    max_active_connections: AtomicUsize,
+}
+
+#[derive(Clone, Debug)]
+struct HttpRuntimeMetricsSnapshot {
+    accepted_connections: usize,
+    active_connections: usize,
+    completed_connections: usize,
+    failed_connections: usize,
+    max_active_connections: usize,
+}
+
+struct HttpRuntimeMetricsGuard<'a> {
+    metrics: &'a HttpRuntimeMetrics,
+    failed: bool,
+}
+
+impl HttpRuntimeMetrics {
+    fn begin(&self) -> HttpRuntimeMetricsGuard<'_> {
+        self.accepted_connections.fetch_add(1, Ordering::Relaxed);
+        let active = self.active_connections.fetch_add(1, Ordering::Relaxed) + 1;
+        self.record_max_active(active);
+        HttpRuntimeMetricsGuard {
+            metrics: self,
+            failed: false,
+        }
+    }
+
+    fn snapshot(&self) -> HttpRuntimeMetricsSnapshot {
+        HttpRuntimeMetricsSnapshot {
+            accepted_connections: self.accepted_connections.load(Ordering::Relaxed),
+            active_connections: self.active_connections.load(Ordering::Relaxed),
+            completed_connections: self.completed_connections.load(Ordering::Relaxed),
+            failed_connections: self.failed_connections.load(Ordering::Relaxed),
+            max_active_connections: self.max_active_connections.load(Ordering::Relaxed),
+        }
+    }
+
+    fn record_max_active(&self, active: usize) {
+        let mut observed = self.max_active_connections.load(Ordering::Relaxed);
+        while active > observed {
+            match self.max_active_connections.compare_exchange_weak(
+                observed,
+                active,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(value) => observed = value,
+            }
+        }
+    }
+}
+
+impl HttpRuntimeMetricsGuard<'_> {
+    fn mark_failed(&mut self) {
+        self.failed = true;
+    }
+}
+
+impl Drop for HttpRuntimeMetricsGuard<'_> {
+    fn drop(&mut self) {
+        self.metrics
+            .active_connections
+            .fetch_sub(1, Ordering::Relaxed);
+        self.metrics
+            .completed_connections
+            .fetch_add(1, Ordering::Relaxed);
+        if self.failed {
+            self.metrics
+                .failed_connections
+                .fetch_add(1, Ordering::Relaxed);
         }
     }
 }
@@ -36,8 +147,16 @@ impl Default for ParsedArgs {
 struct DashboardConfig {
     root_path: PathBuf,
     max_requests: Option<usize>,
+    max_connections: usize,
+    io_timeout: Duration,
+    max_body_bytes: usize,
+    overview_cache_ttl: Duration,
+    health_cache_ttl: Duration,
+    overview_cache: Mutex<Option<CachedOverview>>,
+    health_cache: Mutex<Option<CachedHealth>>,
+    metrics: HttpRuntimeMetrics,
     surface: ServeSurface,
-    upstream_session_pool: Mutex<upstream::UpstreamSessionPool>,
+    upstream_session_pools: Vec<Mutex<upstream::UpstreamSessionPool>>,
 }
 
 #[derive(Clone, Copy)]
@@ -127,8 +246,16 @@ fn run_internal(
         DashboardConfig {
             root_path,
             max_requests: parsed.max_requests,
+            max_connections: parsed.max_connections,
+            io_timeout: parsed.io_timeout,
+            max_body_bytes: parsed.max_body_bytes,
+            overview_cache_ttl: parsed.overview_cache_ttl,
+            health_cache_ttl: resources::default_dashboard_health_cache_ttl(),
+            overview_cache: Mutex::new(None),
+            health_cache: Mutex::new(None),
+            metrics: HttpRuntimeMetrics::default(),
             surface,
-            upstream_session_pool: Mutex::new(upstream::UpstreamSessionPool::default()),
+            upstream_session_pools: new_upstream_session_pools(),
         },
         stderr,
     )
@@ -176,11 +303,70 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                         Some("dashboard requires a value after --max-requests".to_string());
                     return parsed;
                 };
-                match value.parse::<usize>() {
+                match resources::parse_positive_usize(value, "dashboard --max-requests") {
                     Ok(limit) => parsed.max_requests = Some(limit),
-                    Err(_) => {
-                        parsed.error =
-                            Some("dashboard --max-requests must be a valid integer".to_string());
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--max-connections" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("dashboard requires a value after --max-connections".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "dashboard --max-connections") {
+                    Ok(limit) => parsed.max_connections = limit,
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--io-timeout-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("dashboard requires a value after --io-timeout-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_u64(value, "dashboard --io-timeout-ms") {
+                    Ok(timeout_ms) => parsed.io_timeout = Duration::from_millis(timeout_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--max-body-bytes" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("dashboard requires a value after --max-body-bytes".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "dashboard --max-body-bytes") {
+                    Ok(limit) => parsed.max_body_bytes = limit,
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--overview-cache-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("dashboard requires a value after --overview-cache-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_nonnegative_u64(value, "dashboard --overview-cache-ms") {
+                    Ok(ttl_ms) => parsed.overview_cache_ttl = Duration::from_millis(ttl_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
                         return parsed;
                     }
                 }
@@ -203,16 +389,25 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-requests <n>]"
+        "Usage: mcpace dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "dashboard serves a local browser UI for hub status, verification, servers, clients, and logs."
+        "dashboard serves a local web UI for hub status, verification, servers, clients, and logs."
     );
     let _ = writeln!(
         stdout,
         "The UI stays local-only and reuses existing native JSON command surfaces."
+    );
+    let _ = writeln!(
+        stdout,
+        "Resource defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms, health cache={}ms.",
+        resources::default_http_connection_limit(),
+        resources::DEFAULT_HTTP_IO_TIMEOUT_MS,
+        resources::DEFAULT_MAX_HTTP_BODY_BYTES,
+        resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS,
+        resources::DEFAULT_DASHBOARD_HEALTH_CACHE_MS
     );
 }
 
@@ -230,41 +425,199 @@ enum McpHttpResponse {
     Accepted,
 }
 
+fn new_upstream_session_pools() -> Vec<Mutex<upstream::UpstreamSessionPool>> {
+    let shard_count = resources::default_upstream_session_pool_shard_count();
+    let total_limit = resources::default_upstream_session_pool_limit().max(shard_count);
+    let base_limit = total_limit / shard_count;
+    let remainder = total_limit % shard_count;
+
+    (0..shard_count)
+        .map(|index| {
+            let shard_limit = base_limit + if index < remainder { 1 } else { 0 };
+            Mutex::new(upstream::UpstreamSessionPool::with_max_sessions(
+                shard_limit,
+            ))
+        })
+        .collect()
+}
+
+fn upstream_pool_for_context<'a>(
+    config: &'a DashboardConfig,
+    server: &str,
+    context: &upstream::UpstreamLeaseContext,
+) -> &'a Mutex<upstream::UpstreamSessionPool> {
+    let mut hasher = DefaultHasher::new();
+    server.hash(&mut hasher);
+    context.client_id.hash(&mut hasher);
+    context.session_id.hash(&mut hasher);
+    context.project_root.hash(&mut hasher);
+    context.transport.hash(&mut hasher);
+    let index = (hasher.finish() as usize) % config.upstream_session_pools.len().max(1);
+    &config.upstream_session_pools[index]
+}
+
 fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut dyn Write) -> i32 {
-    for (index, incoming) in listener.incoming().enumerate() {
+    let max_requests = config.max_requests;
+    let worker_count = config.max_connections.max(1);
+    let config = Arc::new(config);
+    let (request_tx, request_rx) = mpsc::sync_channel::<TcpStream>(0);
+    let request_rx = Arc::new(Mutex::new(request_rx));
+    let (log_tx, log_rx) = mpsc::channel::<String>();
+    let mut handles = Vec::with_capacity(worker_count);
+
+    for worker_index in 0..worker_count {
+        let worker_rx = Arc::clone(&request_rx);
+        let request_config = Arc::clone(&config);
+        let worker_log_tx = log_tx.clone();
+        handles.push(thread::spawn(move || loop {
+            let stream = {
+                let rx_guard = worker_rx
+                    .lock()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner());
+                rx_guard.recv()
+            };
+            let Ok(stream) = stream else {
+                break;
+            };
+            let mut metrics_guard = request_config.metrics.begin();
+            if let Err(error) = handle_connection(stream, request_config.as_ref()) {
+                metrics_guard.mark_failed();
+                let _ = worker_log_tx.send(format!(
+                    "dashboard worker {} request failed: {}",
+                    worker_index, error
+                ));
+            }
+        }));
+    }
+    drop(log_tx);
+
+    let mut accepted = 0usize;
+    for incoming in listener.incoming() {
+        drain_request_worker_logs(&log_rx, stderr);
         let stream = match incoming {
             Ok(value) => value,
             Err(error) => {
                 let _ = writeln!(stderr, "dashboard accept failed: {}", error);
+                drop(request_tx);
+                join_request_workers(handles, stderr);
+                drain_request_worker_logs(&log_rx, stderr);
                 return 1;
             }
         };
 
-        if let Err(error) = handle_connection(stream, &config) {
-            let _ = writeln!(stderr, "dashboard request failed: {}", error);
+        accepted = accepted.saturating_add(1);
+        if request_tx.send(stream).is_err() {
+            let _ = writeln!(stderr, "dashboard request worker pool stopped unexpectedly");
+            break;
         }
-        let handled = index + 1;
-        if config
-            .max_requests
-            .map(|limit| handled >= limit)
-            .unwrap_or(false)
-        {
+        drain_request_worker_logs(&log_rx, stderr);
+
+        if max_requests.map(|limit| accepted >= limit).unwrap_or(false) {
             break;
         }
     }
+
+    drop(request_tx);
+    join_request_workers(handles, stderr);
+    drain_request_worker_logs(&log_rx, stderr);
     0
 }
 
+fn join_request_workers(handles: Vec<thread::JoinHandle<()>>, stderr: &mut dyn Write) {
+    for handle in handles {
+        if handle.join().is_err() {
+            let _ = writeln!(stderr, "dashboard request worker panicked");
+        }
+    }
+}
+
+fn drain_request_worker_logs(log_rx: &mpsc::Receiver<String>, stderr: &mut dyn Write) {
+    while let Ok(message) = log_rx.try_recv() {
+        let _ = writeln!(stderr, "{}", message);
+    }
+}
+
+enum LimitedHttpLine {
+    Empty,
+    Line(String),
+    TooLong,
+}
+
+fn read_limited_http_line(
+    reader: &mut BufReader<TcpStream>,
+    max_bytes: usize,
+    label: &str,
+) -> Result<LimitedHttpLine, String> {
+    let mut line = Vec::new();
+    let max_with_sentinel = max_bytes.saturating_add(1);
+
+    loop {
+        let (take_len, newline_seen) = {
+            let available = reader
+                .fill_buf()
+                .map_err(|error| format!("read {}: {}", label, error))?;
+            if available.is_empty() {
+                if line.is_empty() {
+                    return Ok(LimitedHttpLine::Empty);
+                }
+                let rendered = String::from_utf8_lossy(&line).into_owned();
+                return Ok(LimitedHttpLine::Line(rendered));
+            }
+
+            let until_newline = available
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map(|position| position + 1)
+                .unwrap_or(available.len());
+            let remaining = max_with_sentinel.saturating_sub(line.len());
+            let take_len = until_newline.min(remaining);
+            line.extend_from_slice(&available[..take_len]);
+            (
+                take_len,
+                take_len == until_newline && available[..take_len].contains(&b'\n'),
+            )
+        };
+
+        reader.consume(take_len);
+
+        if line.len() > max_bytes {
+            return Ok(LimitedHttpLine::TooLong);
+        }
+        if newline_seen {
+            let rendered = String::from_utf8_lossy(&line).into_owned();
+            return Ok(LimitedHttpLine::Line(rendered));
+        }
+        if take_len == 0 {
+            return Ok(LimitedHttpLine::TooLong);
+        }
+    }
+}
+
 fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<(), String> {
+    let _ = stream.set_read_timeout(Some(config.io_timeout));
+    let _ = stream.set_write_timeout(Some(config.io_timeout));
     let mut reader = BufReader::new(
         stream
             .try_clone()
             .map_err(|error| format!("clone stream: {}", error))?,
     );
-    let mut request_line = String::new();
-    reader
-        .read_line(&mut request_line)
-        .map_err(|error| format!("read request line: {}", error))?;
+    let request_line = match read_limited_http_line(
+        &mut reader,
+        resources::MAX_HTTP_REQUEST_LINE_BYTES,
+        "request line",
+    )? {
+        LimitedHttpLine::Empty => return Ok(()),
+        LimitedHttpLine::Line(value) => value,
+        LimitedHttpLine::TooLong => {
+            write_text_response(
+                &mut stream,
+                "414 URI Too Long",
+                "text/plain; charset=utf-8",
+                "HTTP request line is too large",
+            )?;
+            return Ok(());
+        }
+    };
 
     if request_line.trim().is_empty() {
         return Ok(());
@@ -285,22 +638,78 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
 
     let mut headers = Vec::new();
     let mut content_length = 0usize;
+    let mut header_bytes = 0usize;
+    let mut header_count = 0usize;
     loop {
-        let mut header = String::new();
-        reader
-            .read_line(&mut header)
-            .map_err(|error| format!("read request header: {}", error))?;
+        let header = match read_limited_http_line(
+            &mut reader,
+            resources::MAX_HTTP_HEADER_LINE_BYTES,
+            "request header",
+        )? {
+            LimitedHttpLine::Empty => break,
+            LimitedHttpLine::Line(value) => value,
+            LimitedHttpLine::TooLong => {
+                write_text_response(
+                    &mut stream,
+                    "431 Request Header Fields Too Large",
+                    "text/plain; charset=utf-8",
+                    "HTTP request headers are too large",
+                )?;
+                return Ok(());
+            }
+        };
         if header == "\r\n" || header == "\n" || header.is_empty() {
             break;
+        }
+        header_count = header_count.saturating_add(1);
+        if header_count > resources::MAX_HTTP_HEADER_COUNT {
+            write_text_response(
+                &mut stream,
+                "431 Request Header Fields Too Large",
+                "text/plain; charset=utf-8",
+                "HTTP request headers are too large",
+            )?;
+            return Ok(());
+        }
+        header_bytes = header_bytes.saturating_add(header.len());
+        if header_bytes > resources::MAX_HTTP_HEADER_BYTES {
+            write_text_response(
+                &mut stream,
+                "431 Request Header Fields Too Large",
+                "text/plain; charset=utf-8",
+                "HTTP request headers are too large",
+            )?;
+            return Ok(());
         }
         if let Some((name, value)) = header.split_once(':') {
             let key = name.trim().to_ascii_lowercase();
             let trimmed = value.trim().to_string();
             if key == "content-length" {
-                content_length = trimmed.parse::<usize>().unwrap_or(0);
+                content_length = match trimmed.parse::<usize>() {
+                    Ok(value) => value,
+                    Err(_) => {
+                        write_text_response(
+                            &mut stream,
+                            "400 Bad Request",
+                            "text/plain; charset=utf-8",
+                            "Invalid Content-Length",
+                        )?;
+                        return Ok(());
+                    }
+                };
             }
             headers.push((key, trimmed));
         }
+    }
+
+    if content_length > config.max_body_bytes {
+        write_text_response(
+            &mut stream,
+            "413 Payload Too Large",
+            "text/plain; charset=utf-8",
+            "HTTP request body is too large",
+        )?;
+        return Ok(());
     }
 
     let mut body = vec![0u8; content_length];
@@ -320,32 +729,56 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
         body,
     };
 
-    match (request.method.as_str(), request.path.as_str()) {
-        ("GET", "/") => write_text_response(
+    if let Err(error) = handle_http_request(&mut stream, &request, config) {
+        write_json_error_response(
             &mut stream,
-            "200 OK",
-            "text/html; charset=utf-8",
-            DASHBOARD_HTML,
-        )?,
+            "500 Internal Server Error",
+            "internal_error",
+            &error,
+        )
+        .map_err(|response_error| {
+            format!(
+                "{}; failed to write HTTP error response: {}",
+                error, response_error
+            )
+        })?;
+        let _ = stream.shutdown(Shutdown::Both);
+        return Err(error);
+    }
+
+    let _ = stream.shutdown(Shutdown::Both);
+
+    Ok(())
+}
+
+fn handle_http_request(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    match (request.method.as_str(), request.path.as_str()) {
+        ("GET", "/") => {
+            write_text_response(stream, "200 OK", "text/html; charset=utf-8", DASHBOARD_HTML)?
+        }
         ("GET", "/healthz") => {
-            let readiness =
-                run_json_command(&config.root_path, &["verify", "readiness", "--json"])?;
-            let ok =
-                json_helpers::bool_at_path(&readiness, &["readyForRuntimeOps"]).unwrap_or(false);
-            let payload = JsonValue::object([
-                ("ok", JsonValue::bool(ok)),
-                ("generatedAtMs", JsonValue::number(now_ms())),
-                ("readiness", readiness),
-            ]);
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            let refresh = query_bool_flag(&request.query, "refresh")
+                || query_bool_flag(&request.query, "noCache");
+            let payload = cached_health_json(config, refresh)?;
+            write_json_response(stream, "200 OK", &payload)?;
         }
         ("GET", "/status") => {
             let payload = run_json_command(&config.root_path, &["hub", "status", "--json"])?;
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            write_json_response(stream, "200 OK", &payload)?;
         }
         ("GET", "/api/overview") => {
-            let payload = build_overview_json(&config.root_path)?;
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            let refresh = query_bool_flag(&request.query, "refresh")
+                || query_bool_flag(&request.query, "noCache");
+            let payload = cached_overview_json(config, refresh)?;
+            write_json_response(stream, "200 OK", &payload)?;
+        }
+        ("GET", "/api/resources") => {
+            let payload = runtime_resources_response(config);
+            write_json_response(stream, "200 OK", &payload)?;
         }
         ("GET", "/api/logs") => {
             let tail = query_parameter(&request.query, "tail")
@@ -361,11 +794,11 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
                     tail.to_string(),
                 ],
             )?;
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            write_json_response(stream, "200 OK", &payload)?;
         }
         ("GET", "/mcp") => {
-            if accepts(&request, "text/event-stream") {
-                write_empty_response(&mut stream, "405 Method Not Allowed")?;
+            if accepts(request, "text/event-stream") {
+                write_empty_response(stream, "405 Method Not Allowed")?;
                 return Ok(());
             }
             let payload = JsonValue::object([
@@ -384,10 +817,10 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
                     ),
                 ),
             ]);
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/mcp") => {
-            let response = match handle_mcp_http_request(&request, config) {
+            let response = match handle_mcp_http_request(request, config) {
                 Ok(value) => value,
                 Err(error) => McpHttpResponse::JsonStatus(
                     "400 Bad Request",
@@ -395,47 +828,45 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
                 ),
             };
             match response {
-                McpHttpResponse::Json(payload) => {
-                    write_json_response(&mut stream, "200 OK", &payload)?
-                }
+                McpHttpResponse::Json(payload) => write_json_response(stream, "200 OK", &payload)?,
                 McpHttpResponse::JsonStatus(status, payload) => {
-                    write_json_response(&mut stream, status, &payload)?
+                    write_json_response(stream, status, &payload)?
                 }
-                McpHttpResponse::Accepted => write_empty_response(&mut stream, "202 Accepted")?,
+                McpHttpResponse::Accepted => write_empty_response(stream, "202 Accepted")?,
             }
         }
         ("POST", "/api/actions/hub-up") => {
-            if reject_forbidden_origin(&mut stream, &request)? {
+            if reject_forbidden_origin(stream, request)? {
                 return Ok(());
             }
             let payload = action_response(
                 "hub-up",
                 run_json_command(&config.root_path, &["hub", "up", "--json"])?,
             );
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/hub-down") => {
-            if reject_forbidden_origin(&mut stream, &request)? {
+            if reject_forbidden_origin(stream, request)? {
                 return Ok(());
             }
             let payload = action_response(
                 "hub-down",
                 run_json_command(&config.root_path, &["hub", "down", "--json"])?,
             );
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/repair") => {
-            if reject_forbidden_origin(&mut stream, &request)? {
+            if reject_forbidden_origin(stream, request)? {
                 return Ok(());
             }
             let payload = action_response(
                 "repair",
                 run_json_command(&config.root_path, &["repair", "--json"])?,
             );
-            write_json_response(&mut stream, "200 OK", &payload)?;
+            write_json_response(stream, "200 OK", &payload)?;
         }
         _ => write_text_response(
-            &mut stream,
+            stream,
             "404 Not Found",
             "text/plain; charset=utf-8",
             "Not found",
@@ -445,12 +876,381 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
     Ok(())
 }
 
+fn write_json_error_response(
+    stream: &mut TcpStream,
+    status: &str,
+    code: &str,
+    message: &str,
+) -> Result<(), String> {
+    write_json_response(
+        stream,
+        status,
+        &JsonValue::object([
+            ("ok", JsonValue::bool(false)),
+            ("generatedAtMs", JsonValue::number(now_ms())),
+            (
+                "error",
+                JsonValue::object([
+                    ("code", JsonValue::string(code)),
+                    ("message", JsonValue::string(message)),
+                ]),
+            ),
+        ]),
+    )
+}
+
+fn cached_health_json(config: &DashboardConfig, refresh: bool) -> Result<JsonValue, String> {
+    if config.health_cache_ttl.is_zero() {
+        return build_health_json(config).map(|value| {
+            with_runtime_cache_metadata(
+                value,
+                config,
+                CacheMetadata {
+                    hit: false,
+                    bypassed: true,
+                    stale: false,
+                    ttl: config.health_cache_ttl,
+                    age: None,
+                    refresh_error: None,
+                },
+            )
+        });
+    }
+
+    let mut guard = config
+        .health_cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !refresh {
+        if let Some(cached) = guard.as_ref() {
+            let age = cached.stored_at.elapsed();
+            if age <= config.health_cache_ttl {
+                return Ok(with_runtime_cache_metadata(
+                    cached.value.clone(),
+                    config,
+                    CacheMetadata {
+                        hit: true,
+                        bypassed: false,
+                        stale: false,
+                        ttl: config.health_cache_ttl,
+                        age: Some(age),
+                        refresh_error: None,
+                    },
+                ));
+            }
+        }
+    }
+
+    match build_health_json(config) {
+        Ok(value) => {
+            *guard = Some(CachedHealth {
+                stored_at: Instant::now(),
+                value: value.clone(),
+            });
+            Ok(with_runtime_cache_metadata(
+                value,
+                config,
+                CacheMetadata {
+                    hit: false,
+                    bypassed: refresh,
+                    stale: false,
+                    ttl: config.health_cache_ttl,
+                    age: Some(Duration::from_millis(0)),
+                    refresh_error: None,
+                },
+            ))
+        }
+        Err(error) => {
+            if let Some(cached) = guard.as_ref() {
+                return Ok(with_runtime_cache_metadata(
+                    cached.value.clone(),
+                    config,
+                    CacheMetadata {
+                        hit: true,
+                        bypassed: refresh,
+                        stale: true,
+                        ttl: config.health_cache_ttl,
+                        age: Some(cached.stored_at.elapsed()),
+                        refresh_error: Some(error),
+                    },
+                ));
+            }
+            Err(error)
+        }
+    }
+}
+
+fn build_health_json(config: &DashboardConfig) -> Result<JsonValue, String> {
+    let readiness = run_json_command(&config.root_path, &["verify", "readiness", "--json"])?;
+    let ok = json_helpers::bool_at_path(&readiness, &["readyForRuntimeOps"]).unwrap_or(false);
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(ok)),
+        ("generatedAtMs", JsonValue::number(now_ms())),
+        ("readiness", readiness),
+    ]))
+}
+
+fn cached_overview_json(config: &DashboardConfig, refresh: bool) -> Result<JsonValue, String> {
+    if config.overview_cache_ttl.is_zero() {
+        return build_overview_json(&config.root_path).map(|value| {
+            with_runtime_cache_metadata(
+                value,
+                config,
+                CacheMetadata {
+                    hit: false,
+                    bypassed: true,
+                    stale: false,
+                    ttl: config.overview_cache_ttl,
+                    age: None,
+                    refresh_error: None,
+                },
+            )
+        });
+    }
+
+    let mut guard = config
+        .overview_cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    if !refresh {
+        if let Some(cached) = guard.as_ref() {
+            let age = cached.stored_at.elapsed();
+            if age <= config.overview_cache_ttl {
+                return Ok(with_runtime_cache_metadata(
+                    cached.value.clone(),
+                    config,
+                    CacheMetadata {
+                        hit: true,
+                        bypassed: false,
+                        stale: false,
+                        ttl: config.overview_cache_ttl,
+                        age: Some(age),
+                        refresh_error: None,
+                    },
+                ));
+            }
+        }
+    }
+
+    match build_overview_json(&config.root_path) {
+        Ok(value) => {
+            *guard = Some(CachedOverview {
+                stored_at: Instant::now(),
+                value: value.clone(),
+            });
+            Ok(with_runtime_cache_metadata(
+                value,
+                config,
+                CacheMetadata {
+                    hit: false,
+                    bypassed: refresh,
+                    stale: false,
+                    ttl: config.overview_cache_ttl,
+                    age: Some(Duration::from_millis(0)),
+                    refresh_error: None,
+                },
+            ))
+        }
+        Err(error) => {
+            if let Some(cached) = guard.as_ref() {
+                return Ok(with_runtime_cache_metadata(
+                    cached.value.clone(),
+                    config,
+                    CacheMetadata {
+                        hit: true,
+                        bypassed: refresh,
+                        stale: true,
+                        ttl: config.overview_cache_ttl,
+                        age: Some(cached.stored_at.elapsed()),
+                        refresh_error: Some(error),
+                    },
+                ));
+            }
+            Err(error)
+        }
+    }
+}
+
+struct CacheMetadata {
+    hit: bool,
+    bypassed: bool,
+    stale: bool,
+    ttl: Duration,
+    age: Option<Duration>,
+    refresh_error: Option<String>,
+}
+
+fn with_runtime_cache_metadata(
+    mut value: JsonValue,
+    config: &DashboardConfig,
+    cache: CacheMetadata,
+) -> JsonValue {
+    if let JsonValue::Object(map) = &mut value {
+        map.insert("cache".to_string(), cache_metadata_json(cache));
+        map.insert("runtime".to_string(), runtime_status_json(config));
+    }
+    value
+}
+
+fn cache_metadata_json(cache: CacheMetadata) -> JsonValue {
+    let mut entries = vec![
+        ("hit".to_string(), JsonValue::bool(cache.hit)),
+        ("bypassed".to_string(), JsonValue::bool(cache.bypassed)),
+        ("stale".to_string(), JsonValue::bool(cache.stale)),
+        (
+            "ttlMs".to_string(),
+            JsonValue::number(cache.ttl.as_millis()),
+        ),
+    ];
+    if let Some(age) = cache.age {
+        entries.push(("ageMs".to_string(), JsonValue::number(age.as_millis())));
+    }
+    if let Some(error) = cache.refresh_error {
+        entries.push(("refreshError".to_string(), JsonValue::string(error)));
+    }
+    JsonValue::object(entries)
+}
+
+fn runtime_resources_response(config: &DashboardConfig) -> JsonValue {
+    JsonValue::object([
+        ("ok", JsonValue::bool(true)),
+        ("generatedAtMs", JsonValue::number(now_ms())),
+        ("runtime", runtime_status_json(config)),
+    ])
+}
+
+fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
+    let metrics = config.metrics.snapshot();
+    let mut upstream_pool_size = 0usize;
+    let mut upstream_pool_max_size = 0usize;
+    let mut upstream_pool_idle_ttl_ms = 0u128;
+    let mut upstream_pool_locked_shards = 0usize;
+
+    for pool_lock in &config.upstream_session_pools {
+        if let Ok(pool) = pool_lock.lock() {
+            upstream_pool_size = upstream_pool_size.saturating_add(pool.session_count());
+            upstream_pool_max_size =
+                upstream_pool_max_size.saturating_add(pool.max_session_count());
+            upstream_pool_idle_ttl_ms = pool.idle_ttl_ms();
+            upstream_pool_locked_shards = upstream_pool_locked_shards.saturating_add(1);
+        }
+    }
+
+    JsonValue::object([
+        (
+            "surface",
+            JsonValue::string(match config.surface {
+                ServeSurface::Dashboard => "dashboard-http",
+                ServeSurface::UnifiedServe => "unified-serve-http",
+            }),
+        ),
+        (
+            "availableParallelism",
+            JsonValue::number(resources::available_parallelism()),
+        ),
+        (
+            "http",
+            JsonValue::object([
+                ("maxConnections", JsonValue::number(config.max_connections)),
+                (
+                    "activeConnections",
+                    JsonValue::number(metrics.active_connections),
+                ),
+                (
+                    "acceptedConnections",
+                    JsonValue::number(metrics.accepted_connections),
+                ),
+                (
+                    "completedConnections",
+                    JsonValue::number(metrics.completed_connections),
+                ),
+                (
+                    "failedConnections",
+                    JsonValue::number(metrics.failed_connections),
+                ),
+                (
+                    "maxObservedActiveConnections",
+                    JsonValue::number(metrics.max_active_connections),
+                ),
+                (
+                    "ioTimeoutMs",
+                    JsonValue::number(config.io_timeout.as_millis()),
+                ),
+                ("maxBodyBytes", JsonValue::number(config.max_body_bytes)),
+                (
+                    "maxRequestLineBytes",
+                    JsonValue::number(resources::MAX_HTTP_REQUEST_LINE_BYTES),
+                ),
+                (
+                    "maxHeaderLineBytes",
+                    JsonValue::number(resources::MAX_HTTP_HEADER_LINE_BYTES),
+                ),
+                (
+                    "maxHeaderBytes",
+                    JsonValue::number(resources::MAX_HTTP_HEADER_BYTES),
+                ),
+                (
+                    "maxHeaderCount",
+                    JsonValue::number(resources::MAX_HTTP_HEADER_COUNT),
+                ),
+            ]),
+        ),
+        (
+            "caches",
+            JsonValue::object([
+                (
+                    "overviewTtlMs",
+                    JsonValue::number(config.overview_cache_ttl.as_millis()),
+                ),
+                (
+                    "healthTtlMs",
+                    JsonValue::number(config.health_cache_ttl.as_millis()),
+                ),
+            ]),
+        ),
+        (
+            "upstreamSessionPool",
+            JsonValue::object([
+                ("size", JsonValue::number(upstream_pool_size)),
+                ("maxSize", JsonValue::number(upstream_pool_max_size)),
+                ("idleTtlMs", JsonValue::number(upstream_pool_idle_ttl_ms)),
+                (
+                    "shardCount",
+                    JsonValue::number(config.upstream_session_pools.len()),
+                ),
+                (
+                    "lockedShardCount",
+                    JsonValue::number(upstream_pool_locked_shards),
+                ),
+            ]),
+        ),
+    ])
+}
+
+fn query_bool_flag(query: &str, key: &str) -> bool {
+    query.split('&').any(|part| {
+        let (name, value) = part.split_once('=').unwrap_or((part, ""));
+        if !name.eq_ignore_ascii_case(key) {
+            return false;
+        }
+        value.is_empty()
+            || value == "1"
+            || value.eq_ignore_ascii_case("true")
+            || value.eq_ignore_ascii_case("yes")
+    })
+}
+
 fn build_overview_json(root_path: &Path) -> Result<JsonValue, String> {
-    let doctor = run_json_command(root_path, &["doctor", "--json"])?;
-    let hub = run_json_command(root_path, &["hub", "status", "--json"])?;
-    let readiness = run_json_command(root_path, &["verify", "readiness", "--json"])?;
-    let servers = run_json_command(root_path, &["server", "list", "--json"])?;
-    let clients = run_json_command(root_path, &["client", "list", "--json"])?;
+    let mut results = run_json_commands_parallel(
+        root_path,
+        vec![
+            ("doctor", vec!["doctor", "--json"]),
+            ("hub", vec!["hub", "status", "--json"]),
+            ("readiness", vec!["verify", "readiness", "--json"]),
+            ("servers", vec!["server", "list", "--json"]),
+            ("clients", vec!["client", "list", "--json"]),
+        ],
+    )?;
 
     Ok(JsonValue::object([
         ("generatedAtMs", JsonValue::number(now_ms())),
@@ -458,12 +1258,66 @@ fn build_overview_json(root_path: &Path) -> Result<JsonValue, String> {
             "rootPath",
             JsonValue::string(sanitize_root_path(&root_path.display().to_string())),
         ),
-        ("doctor", doctor),
-        ("hub", hub),
-        ("readiness", readiness),
-        ("servers", servers),
-        ("clients", clients),
+        ("doctor", take_parallel_result(&mut results, "doctor")?),
+        ("hub", take_parallel_result(&mut results, "hub")?),
+        (
+            "readiness",
+            take_parallel_result(&mut results, "readiness")?,
+        ),
+        ("servers", take_parallel_result(&mut results, "servers")?),
+        ("clients", take_parallel_result(&mut results, "clients")?),
     ]))
+}
+
+fn run_json_commands_parallel(
+    root_path: &Path,
+    commands: Vec<(&'static str, Vec<&'static str>)>,
+) -> Result<BTreeMap<&'static str, JsonValue>, String> {
+    if commands.len() <= 1 {
+        let mut results = BTreeMap::new();
+        for (name, args) in commands {
+            results.insert(
+                name,
+                run_json_command_vec(root_path, args.into_iter().map(str::to_string).collect())
+                    .map_err(|error| format!("{}: {}", name, error))?,
+            );
+        }
+        return Ok(results);
+    }
+
+    let handles = commands
+        .into_iter()
+        .map(|(name, args)| {
+            let root_path = root_path.to_path_buf();
+            (
+                name,
+                thread::spawn(move || {
+                    run_json_command_vec(&root_path, args.into_iter().map(str::to_string).collect())
+                }),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let mut results = BTreeMap::new();
+    for (name, handle) in handles {
+        match handle.join() {
+            Ok(Ok(value)) => {
+                results.insert(name, value);
+            }
+            Ok(Err(error)) => return Err(format!("{}: {}", name, error)),
+            Err(_) => return Err(format!("{}: command worker panicked", name)),
+        }
+    }
+    Ok(results)
+}
+
+fn take_parallel_result(
+    results: &mut BTreeMap<&'static str, JsonValue>,
+    name: &'static str,
+) -> Result<JsonValue, String> {
+    results
+        .remove(name)
+        .ok_or_else(|| format!("{}: command result missing", name))
 }
 
 fn action_response(action: &str, result: JsonValue) -> JsonValue {
@@ -497,15 +1351,28 @@ fn handle_mcp_http_request(
 
     let id = id.unwrap_or(JsonValue::Null);
     let method = method.ok_or_else(|| "missing JSON-RPC method".to_string())?;
+    if let Some(protocol_header) = request_header_string(Some(request), "mcp-protocol-version") {
+        let protocol_header = protocol_header.trim();
+        if !protocol_header.is_empty() && !mcp::is_supported_protocol_version(protocol_header) {
+            return Ok(McpHttpResponse::JsonStatus(
+                "400 Bad Request",
+                mcp_error_response(
+                    id,
+                    mcp::ERROR_INVALID_REQUEST,
+                    format!(
+                        "unsupported MCP-Protocol-Version header: {}",
+                        protocol_header
+                    ),
+                ),
+            ));
+        }
+    }
 
     match method {
         "initialize" => {
             let requested = json_helpers::string_at_path(&message, &["params", "protocolVersion"])
-                .unwrap_or("2025-11-25");
-            let negotiated = match requested {
-                "2025-11-25" | "2025-06-18" | "2025-03-26" | "2024-11-05" => requested,
-                _ => "2025-11-25",
-            };
+                .unwrap_or(mcp::CURRENT_PROTOCOL_VERSION);
+            let negotiated = mcp::negotiate_protocol_version(requested);
 
             Ok(McpHttpResponse::Json(JsonValue::object([
                 ("jsonrpc", JsonValue::string("2.0")),
@@ -514,7 +1381,7 @@ fn handle_mcp_http_request(
                     "result",
                     JsonValue::object([
                         ("protocolVersion", JsonValue::string(negotiated)),
-                        ("capabilities", JsonValue::object([("tools", empty_object())])),
+                        ("capabilities", adapter::adapter_capabilities()),
                         (
                             "serverInfo",
                             JsonValue::object([
@@ -524,9 +1391,7 @@ fn handle_mcp_http_request(
                         ),
                         (
                             "instructions",
-                            JsonValue::string(
-                            "Use MCPace over HTTP on this local port. Management tools are native here; configured stdio upstreams are discovered from mcp_settings.json, cataloged with upstream_catalog, probed with upstream_probe, audited with upstream_policy_audit, suggested with upstream_policy_suggest, listed with upstream_tools, called once through upstream_call, or called as a single state-preserving sequence through upstream_batch. Call surface_manifest for the exact native-vs-upstream surface contract. HTTP-only upstreams remain explicit diagnostics until a real proxy is configured.",
-                            ),
+                            JsonValue::string(adapter::adapter_instructions()),
                         ),
                     ]),
                 ),
@@ -537,20 +1402,165 @@ fn handle_mcp_http_request(
             ("id", id),
             ("result", empty_object()),
         ]))),
-        "tools/list" => Ok(McpHttpResponse::Json(JsonValue::object([
-            ("jsonrpc", JsonValue::string("2.0")),
-            ("id", id),
-            (
-                "result",
-                JsonValue::object([("tools", JsonValue::array(http_tool_definitions()))]),
-            ),
-        ]))),
+        "tools/list" => {
+            let cursor = json_helpers::string_at_path(&message, &["params", "cursor"]);
+            let protocol = request_header_string(Some(request), "mcp-protocol-version")
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .unwrap_or_else(|| mcp::STREAMABLE_HTTP_DEFAULT_PROTOCOL_VERSION.to_string());
+            let protocol_params =
+                JsonValue::object([("protocolVersion", JsonValue::string(protocol))]);
+            let result = adapter::tool_list_result(
+                &config.root_path,
+                http_tool_definitions_for_request(request),
+                Some(&protocol_params),
+                cursor,
+            );
+            Ok(McpHttpResponse::Json(JsonValue::object([
+                ("jsonrpc", JsonValue::string("2.0")),
+                ("id", id),
+                ("result", result),
+            ])))
+        }
+        "prompts/list" => {
+            let cursor = json_helpers::string_at_path(&message, &["params", "cursor"]);
+            Ok(McpHttpResponse::Json(JsonValue::object([
+                ("jsonrpc", JsonValue::string("2.0")),
+                ("id", id),
+                (
+                    "result",
+                    adapter::list_prompts(&config.root_path, None, cursor),
+                ),
+            ])))
+        }
+        "prompts/get" => {
+            let name = json_helpers::string_at_path(&message, &["params", "name"]);
+            let args = json_helpers::value_at_path(&message, &["params", "arguments"])
+                .cloned()
+                .unwrap_or_else(empty_object);
+            let result = match name {
+                Some(name) => match adapter::get_prompt(&config.root_path, name, args, None) {
+                    Ok(value) => JsonValue::object([
+                        ("jsonrpc", JsonValue::string("2.0")),
+                        ("id", id),
+                        ("result", value),
+                    ]),
+                    Err(error) => JsonValue::object([
+                        ("jsonrpc", JsonValue::string("2.0")),
+                        ("id", id),
+                        (
+                            "error",
+                            JsonValue::object([
+                                ("code", JsonValue::number(-32602)),
+                                ("message", JsonValue::string(error)),
+                            ]),
+                        ),
+                    ]),
+                },
+                None => JsonValue::object([
+                    ("jsonrpc", JsonValue::string("2.0")),
+                    ("id", id),
+                    (
+                        "error",
+                        JsonValue::object([
+                            ("code", JsonValue::number(-32602)),
+                            (
+                                "message",
+                                JsonValue::string("prompts/get requires a prompt name"),
+                            ),
+                        ]),
+                    ),
+                ]),
+            };
+            Ok(McpHttpResponse::Json(result))
+        }
+        "resources/list" => {
+            let cursor = json_helpers::string_at_path(&message, &["params", "cursor"]);
+            Ok(McpHttpResponse::Json(JsonValue::object([
+                ("jsonrpc", JsonValue::string("2.0")),
+                ("id", id),
+                (
+                    "result",
+                    adapter::list_resources(&config.root_path, None, cursor),
+                ),
+            ])))
+        }
+        "resources/templates/list" => {
+            let cursor = json_helpers::string_at_path(&message, &["params", "cursor"]);
+            Ok(McpHttpResponse::Json(JsonValue::object([
+                ("jsonrpc", JsonValue::string("2.0")),
+                ("id", id),
+                (
+                    "result",
+                    adapter::list_resource_templates(&config.root_path, None, cursor),
+                ),
+            ])))
+        }
+        "resources/read" => {
+            let uri = json_helpers::string_at_path(&message, &["params", "uri"]);
+            let result = match uri {
+                Some(uri) => match adapter::read_resource(&config.root_path, uri, None) {
+                    Ok(value) => JsonValue::object([
+                        ("jsonrpc", JsonValue::string("2.0")),
+                        ("id", id),
+                        ("result", value),
+                    ]),
+                    Err(error) => JsonValue::object([
+                        ("jsonrpc", JsonValue::string("2.0")),
+                        ("id", id),
+                        (
+                            "error",
+                            JsonValue::object([
+                                ("code", JsonValue::number(-32602)),
+                                ("message", JsonValue::string(error)),
+                            ]),
+                        ),
+                    ]),
+                },
+                None => JsonValue::object([
+                    ("jsonrpc", JsonValue::string("2.0")),
+                    ("id", id),
+                    (
+                        "error",
+                        JsonValue::object([
+                            ("code", JsonValue::number(-32602)),
+                            (
+                                "message",
+                                JsonValue::string("resources/read requires a uri"),
+                            ),
+                        ]),
+                    ),
+                ]),
+            };
+            Ok(McpHttpResponse::Json(result))
+        }
         "tools/call" => {
             let tool_name = json_helpers::string_at_path(&message, &["params", "name"])
                 .ok_or_else(|| "tools/call requires a tool name".to_string())?;
             let args = json_helpers::value_at_path(&message, &["params", "arguments"])
                 .cloned()
                 .unwrap_or_else(empty_object);
+            let projected_call = tool_name.starts_with("u_");
+            let option_arguments = if projected_call {
+                adapter::projected_adapter_control_arguments(&args)
+            } else {
+                args.clone()
+            };
+            let result_options = match tool_result::options_from_arguments(&option_arguments) {
+                Ok(options) => options,
+                Err(error) => {
+                    return Ok(mcp_tool_result(
+                        id,
+                        JsonValue::object([
+                            ("ok", JsonValue::bool(false)),
+                            ("tool", JsonValue::string(tool_name)),
+                            ("error", JsonValue::string(error)),
+                        ]),
+                        true,
+                        ToolResultOptions::default(),
+                    ));
+                }
+            };
             let (structured, is_error) =
                 match run_http_tool(config, tool_name, &args, Some(request)) {
                     Ok(value) => (value, false),
@@ -573,7 +1583,16 @@ fn handle_mcp_http_request(
                         true,
                     ),
                 };
-            Ok(mcp_tool_result(id, structured, is_error))
+            if !is_error
+                && (matches!(tool_name, "upstream_call" | "upstream_batch") || projected_call)
+            {
+                Ok(mcp_tool_result_payload(
+                    id,
+                    tool_result::upstream_tool_result_payload(structured, false, result_options),
+                ))
+            } else {
+                Ok(mcp_tool_result(id, structured, is_error, result_options))
+            }
         }
         _ => Ok(McpHttpResponse::Json(JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
@@ -592,25 +1611,23 @@ fn handle_mcp_http_request(
     }
 }
 
-fn mcp_tool_result(id: JsonValue, structured: JsonValue, is_error: bool) -> McpHttpResponse {
-    let text = structured.to_pretty_string();
+fn mcp_tool_result(
+    id: JsonValue,
+    structured: JsonValue,
+    is_error: bool,
+    options: ToolResultOptions,
+) -> McpHttpResponse {
+    mcp_tool_result_payload(
+        id,
+        tool_result::tool_result_payload(structured, is_error, options),
+    )
+}
+
+fn mcp_tool_result_payload(id: JsonValue, payload: JsonValue) -> McpHttpResponse {
     McpHttpResponse::Json(JsonValue::object([
         ("jsonrpc", JsonValue::string("2.0")),
         ("id", id),
-        (
-            "result",
-            JsonValue::object([
-                (
-                    "content",
-                    JsonValue::array([JsonValue::object([
-                        ("type", JsonValue::string("text")),
-                        ("text", JsonValue::string(text)),
-                    ])]),
-                ),
-                ("structuredContent", structured),
-                ("isError", JsonValue::bool(is_error)),
-            ]),
-        ),
+        ("result", payload),
     ]))
 }
 
@@ -730,6 +1747,177 @@ fn http_tool_definitions() -> Vec<JsonValue> {
         http_tool(
             "runtime_diagnostics",
             "Explain MCPace runtime and upstream tool availability",
+        ),
+        http_tool_with_schema(
+            "adapter_profile",
+            "Infer current client/protocol/transport and server coordination profile dynamically",
+            JsonValue::object([
+                (
+                    "includeLiveCatalog",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "When true, include a live upstream catalog/projection sample. Defaults to false.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional live upstream catalog timeout in milliseconds."),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string("Bypass the short successful upstream tools/list cache."),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
+        ),
+        http_tool_with_schema(
+            "adapter_route",
+            "Plan upstream call routing, batching, serialization, and parallel-safe lanes dynamically",
+            JsonValue::object([
+                (
+                    "calls",
+                    JsonValue::object([
+                        ("type", JsonValue::string("array")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Optional calls to plan. Each item may be [server, tool, arguments], {server, name/tool, arguments}, an upstream_search result, or an upstream_call object.",
+                            ),
+                        ),
+                        ("items", JsonValue::object([(
+                            "oneOf",
+                            JsonValue::array([
+                                JsonValue::object([
+                                    ("type", JsonValue::string("array")),
+                                    ("minItems", JsonValue::number(2)),
+                                    ("maxItems", JsonValue::number(3)),
+                                ]),
+                                JsonValue::object([("type", JsonValue::string("object"))]),
+                                JsonValue::object([("type", JsonValue::string("string"))]),
+                            ]),
+                        )])),
+                    ]),
+                ),
+                (
+                    "includeLiveCatalog",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string("When true, include live upstream catalog context in the route plan."),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional live upstream catalog timeout in milliseconds."),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string("Bypass the short tools/list cache when includeLiveCatalog=true."),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
+        ),
+        http_tool_with_schema(
+            "upstream_search",
+            "Search upstream tools without exposing every upstream schema as a top-level tool",
+            JsonValue::object([
+                (
+                    "query",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "Optional keyword query over server, tool name, title, and description.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "server",
+                    JsonValue::object([
+                        ("type", JsonValue::string("string")),
+                        (
+                            "description",
+                            JsonValue::string("Optional configured upstream server name to search inside."),
+                        ),
+                    ]),
+                ),
+                (
+                    "limit",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Maximum results to return, clamped to 1..100."),
+                        ),
+                    ]),
+                ),
+                (
+                    "includeSchema",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string(
+                                "When true, include compact input schemas in search results.",
+                            ),
+                        ),
+                    ]),
+                ),
+                (
+                    "timeoutMs",
+                    JsonValue::object([
+                        ("type", JsonValue::string("integer")),
+                        (
+                            "description",
+                            JsonValue::string("Optional per-server catalog timeout from 1000 to 300000 ms."),
+                        ),
+                    ]),
+                ),
+                (
+                    "refresh",
+                    JsonValue::object([
+                        ("type", JsonValue::string("boolean")),
+                        (
+                            "description",
+                            JsonValue::string("Bypass the short tools/list cache before searching."),
+                        ),
+                    ]),
+                ),
+            ]),
+            vec![],
         ),
         http_tool_with_schema(
             "surface_manifest",
@@ -1051,38 +2239,74 @@ fn http_tool_definitions() -> Vec<JsonValue> {
                     JsonValue::object([("type", JsonValue::string("object"))]),
                 ),
                 (
-                    "allowDesktopObservation",
+                    "resultMode",
                     JsonValue::object([
-                        ("type", JsonValue::string("boolean")),
+                        ("type", JsonValue::string("string")),
+                        (
+                            "enum",
+                            JsonValue::array([
+                                JsonValue::string("native"),
+                                JsonValue::string("compat"),
+                                JsonValue::string("compact"),
+                                JsonValue::string("summary"),
+                            ]),
+                        ),
                         (
                             "description",
                             JsonValue::string(
-                                "Explicitly allow windows-mcp observation tools such as Snapshot/Screenshot/Scrape for this call.",
+                                "Tool-result content mode: native, compat, compact, or summary.",
                             ),
                         ),
                     ]),
                 ),
                 (
-                    "allowDesktopControl",
+                    "diagnostics",
                     JsonValue::object([
-                        ("type", JsonValue::string("boolean")),
+                        ("type", JsonValue::string("string")),
+                        (
+                            "enum",
+                            JsonValue::array([
+                                JsonValue::string("full"),
+                                JsonValue::string("summary"),
+                                JsonValue::string("none"),
+                            ]),
+                        ),
                         (
                             "description",
-                            JsonValue::string(
-                                "Explicitly allow windows-mcp desktop-control tools such as App/Click/Type/Shortcut for this call.",
-                            ),
+                            JsonValue::string("MCPace lease/session diagnostics to retain."),
                         ),
                     ]),
                 ),
                 (
-                    "allowSystemControl",
+                    "nestedContent",
                     JsonValue::object([
-                        ("type", JsonValue::string("boolean")),
+                        ("type", JsonValue::string("string")),
+                        (
+                            "enum",
+                            JsonValue::array([
+                                JsonValue::string("full"),
+                                JsonValue::string("compact"),
+                            ]),
+                        ),
+                        (
+                            "description",
+                            JsonValue::string("Use compact to dedupe nested upstream content text."),
+                        ),
+                    ]),
+                ),
+                (
+                    "tokenReducerPlugins",
+                    JsonValue::object([
+                        ("type", JsonValue::string("array")),
                         (
                             "description",
                             JsonValue::string(
-                                "Explicitly allow windows-mcp system tools such as PowerShell/FileSystem/Clipboard/Process/Registry for this call.",
+                                "Optional built-in token reducers, e.g. mcpace.native-content.v1.",
                             ),
+                        ),
+                        (
+                            "items",
+                            JsonValue::object([("type", JsonValue::string("string"))]),
                         ),
                     ]),
                 ),
@@ -1139,48 +2363,10 @@ fn http_tool_definitions() -> Vec<JsonValue> {
                         (
                             "description",
                             JsonValue::string(
-                                "Ordered upstream calls to execute after one initialize handshake. Use this for stateful servers such as browser automation.",
+                                "Ordered upstream calls to execute after one initialize handshake. Use this for any stateful upstream server that needs a shared session.",
                             ),
                         ),
-                        (
-                            "items",
-                            JsonValue::object([
-                                ("type", JsonValue::string("object")),
-                                (
-                                    "properties",
-                                    JsonValue::object([
-                                        (
-                                            "tool",
-                                            JsonValue::object([
-                                                ("type", JsonValue::string("string")),
-                                                (
-                                                    "description",
-                                                    JsonValue::string("Upstream tool name."),
-                                                ),
-                                            ]),
-                                        ),
-                                        (
-                                            "arguments",
-                                            JsonValue::object([
-                                                ("type", JsonValue::string("object")),
-                                                (
-                                                    "description",
-                                                    JsonValue::string(
-                                                        "Arguments to pass to the upstream tool.",
-                                                    ),
-                                                ),
-                                                ("additionalProperties", JsonValue::bool(true)),
-                                            ]),
-                                        ),
-                                    ]),
-                                ),
-                                (
-                                    "required",
-                                    JsonValue::array([JsonValue::string("tool")]),
-                                ),
-                                ("additionalProperties", JsonValue::bool(false)),
-                            ]),
-                        ),
+                        ("items", http_upstream_batch_call_item_schema()),
                     ]),
                 ),
                 (
@@ -1224,38 +2410,74 @@ fn http_tool_definitions() -> Vec<JsonValue> {
                     JsonValue::object([("type", JsonValue::string("object"))]),
                 ),
                 (
-                    "allowDesktopObservation",
+                    "resultMode",
                     JsonValue::object([
-                        ("type", JsonValue::string("boolean")),
+                        ("type", JsonValue::string("string")),
+                        (
+                            "enum",
+                            JsonValue::array([
+                                JsonValue::string("native"),
+                                JsonValue::string("compat"),
+                                JsonValue::string("compact"),
+                                JsonValue::string("summary"),
+                            ]),
+                        ),
                         (
                             "description",
                             JsonValue::string(
-                                "Explicitly allow windows-mcp observation tools such as Snapshot/Screenshot/Scrape for this batch.",
+                                "Tool-result content mode: native, compat, compact, or summary.",
                             ),
                         ),
                     ]),
                 ),
                 (
-                    "allowDesktopControl",
+                    "diagnostics",
                     JsonValue::object([
-                        ("type", JsonValue::string("boolean")),
+                        ("type", JsonValue::string("string")),
+                        (
+                            "enum",
+                            JsonValue::array([
+                                JsonValue::string("full"),
+                                JsonValue::string("summary"),
+                                JsonValue::string("none"),
+                            ]),
+                        ),
                         (
                             "description",
-                            JsonValue::string(
-                                "Explicitly allow windows-mcp desktop-control tools such as App/Click/Type/Shortcut for this batch.",
-                            ),
+                            JsonValue::string("MCPace lease/session diagnostics to retain."),
                         ),
                     ]),
                 ),
                 (
-                    "allowSystemControl",
+                    "nestedContent",
                     JsonValue::object([
-                        ("type", JsonValue::string("boolean")),
+                        ("type", JsonValue::string("string")),
+                        (
+                            "enum",
+                            JsonValue::array([
+                                JsonValue::string("full"),
+                                JsonValue::string("compact"),
+                            ]),
+                        ),
+                        (
+                            "description",
+                            JsonValue::string("Use compact to dedupe nested upstream content text."),
+                        ),
+                    ]),
+                ),
+                (
+                    "tokenReducerPlugins",
+                    JsonValue::object([
+                        ("type", JsonValue::string("array")),
                         (
                             "description",
                             JsonValue::string(
-                                "Explicitly allow windows-mcp system tools such as PowerShell/FileSystem/Clipboard/Process/Registry for this batch.",
+                                "Optional built-in token reducers, e.g. mcpace.native-content.v1.",
                             ),
+                        ),
+                        (
+                            "items",
+                            JsonValue::object([("type", JsonValue::string("string"))]),
                         ),
                     ]),
                 ),
@@ -1294,13 +2516,113 @@ fn http_tool_definitions() -> Vec<JsonValue> {
             ]),
             vec!["server", "calls"],
         ),
-        http_tool("browser_status", "Explain browser MCP bridge status"),
         http_tool("client_list", "List known client targets"),
     ]
 }
 
+fn http_tool_definitions_for_request(request: &HttpRequest) -> Vec<JsonValue> {
+    let protocol = request_header_string(Some(request), "mcp-protocol-version");
+    let options = adapter::tool_surface_options_from_http_header(protocol.as_deref());
+    let names = http_tool_definitions()
+        .iter()
+        .filter_map(|tool| json_helpers::string_at_path(tool, &["name"]).map(str::to_string))
+        .collect::<Vec<_>>();
+    let visible_names = adapter::visible_tool_names(&names, None);
+    let visible = visible_names
+        .iter()
+        .map(String::as_str)
+        .collect::<std::collections::BTreeSet<_>>();
+    http_tool_definitions()
+        .into_iter()
+        .filter(|tool| {
+            json_helpers::string_at_path(tool, &["name"])
+                .map(|name| visible.contains(name))
+                .unwrap_or(false)
+        })
+        .map(|tool| shape_http_tool_for_client(tool, options))
+        .collect()
+}
+
+fn shape_http_tool_for_client(tool: JsonValue, options: adapter::ToolSurfaceOptions) -> JsonValue {
+    let JsonValue::Object(mut map) = tool else {
+        return tool;
+    };
+    if !options.include_title {
+        map.remove("title");
+    }
+    if !options.include_annotations {
+        map.remove("annotations");
+    }
+    JsonValue::Object(map)
+}
+
 fn http_tool(name: &str, description: &str) -> JsonValue {
     http_tool_with_schema(name, description, empty_object(), vec![])
+}
+
+fn http_tool_annotations(name: &str) -> JsonValue {
+    let read_only = matches!(
+        name,
+        "doctor"
+            | "hub_status"
+            | "hub_logs"
+            | "runtime_leases"
+            | "server_list"
+            | "server_capabilities"
+            | "client_list"
+            | "client_plan"
+            | "client_export"
+            | "adapter_profile"
+            | "adapter_route"
+            | "upstream_search"
+            | "surface_manifest"
+            | "upstream_tools"
+            | "upstream_catalog"
+            | "upstream_probe"
+            | "upstream_policy_audit"
+            | "upstream_policy_suggest"
+    );
+    let open_world = matches!(
+        name,
+        "adapter_route"
+            | "upstream_search"
+            | "upstream_tools"
+            | "upstream_catalog"
+            | "upstream_probe"
+            | "upstream_policy_audit"
+            | "upstream_policy_suggest"
+            | "upstream_call"
+            | "upstream_batch"
+    );
+    let destructive = matches!(name, "hub_down" | "upstream_call" | "upstream_batch");
+    let idempotent = matches!(
+        name,
+        "doctor"
+            | "hub_status"
+            | "hub_logs"
+            | "runtime_leases"
+            | "server_list"
+            | "server_capabilities"
+            | "client_list"
+            | "client_plan"
+            | "client_export"
+            | "adapter_profile"
+            | "adapter_route"
+            | "upstream_search"
+            | "surface_manifest"
+            | "upstream_tools"
+            | "upstream_catalog"
+            | "upstream_probe"
+            | "upstream_policy_audit"
+            | "upstream_policy_suggest"
+    );
+
+    JsonValue::object([
+        ("readOnlyHint", JsonValue::bool(read_only)),
+        ("destructiveHint", JsonValue::bool(destructive)),
+        ("idempotentHint", JsonValue::bool(idempotent)),
+        ("openWorldHint", JsonValue::bool(open_world)),
+    ])
 }
 
 fn http_tool_with_schema(
@@ -1313,6 +2635,7 @@ fn http_tool_with_schema(
         ("name", JsonValue::string(name)),
         ("title", JsonValue::string(description)),
         ("description", JsonValue::string(description)),
+        ("annotations", http_tool_annotations(name)),
         (
             "inputSchema",
             JsonValue::object([
@@ -1326,6 +2649,69 @@ fn http_tool_with_schema(
             ]),
         ),
     ])
+}
+
+fn http_upstream_batch_call_item_schema() -> JsonValue {
+    JsonValue::object([(
+        "oneOf",
+        JsonValue::array([
+            JsonValue::object([
+                ("type", JsonValue::string("object")),
+                (
+                    "properties",
+                    JsonValue::object([
+                        (
+                            "tool",
+                            JsonValue::object([
+                                ("type", JsonValue::string("string")),
+                                ("description", JsonValue::string("Upstream tool name.")),
+                            ]),
+                        ),
+                        (
+                            "arguments",
+                            JsonValue::object([
+                                ("type", JsonValue::string("object")),
+                                (
+                                    "description",
+                                    JsonValue::string("Arguments to pass to the upstream tool."),
+                                ),
+                                ("additionalProperties", JsonValue::bool(true)),
+                            ]),
+                        ),
+                    ]),
+                ),
+                ("required", JsonValue::array([JsonValue::string("tool")])),
+                ("additionalProperties", JsonValue::bool(false)),
+            ]),
+            JsonValue::object([
+                ("type", JsonValue::string("array")),
+                (
+                    "description",
+                    JsonValue::string("Compact tuple form: [tool] or [tool, arguments]."),
+                ),
+                ("minItems", JsonValue::number(1)),
+                ("maxItems", JsonValue::number(2)),
+                (
+                    "prefixItems",
+                    JsonValue::array([
+                        JsonValue::object([
+                            ("type", JsonValue::string("string")),
+                            ("description", JsonValue::string("Upstream tool name.")),
+                        ]),
+                        JsonValue::object([
+                            ("type", JsonValue::string("object")),
+                            (
+                                "description",
+                                JsonValue::string("Arguments to pass to the upstream tool."),
+                            ),
+                            ("additionalProperties", JsonValue::bool(true)),
+                        ]),
+                    ]),
+                ),
+                ("items", JsonValue::bool(false)),
+            ]),
+        ]),
+    )])
 }
 
 fn http_tool_names() -> Vec<String> {
@@ -1346,6 +2732,33 @@ fn run_http_tool(
     request: Option<&HttpRequest>,
 ) -> Result<JsonValue, String> {
     let root_path = &config.root_path;
+    if name.starts_with("u_") {
+        let reserved = http_tool_names().into_iter().collect::<BTreeSet<_>>();
+        let target = adapter::resolve_projected_tool(
+            root_path,
+            name,
+            &reserved,
+            &adapter::ToolExposureOptions::for_call_resolution(),
+        )?;
+        if let Some(target) = target {
+            let control_arguments = adapter::projected_adapter_control_arguments(args);
+            let context = http_upstream_lease_context(&control_arguments, request)?;
+            let upstream_arguments = adapter::strip_projected_adapter_arguments(args);
+            let timeout_ms = json_helpers::value_at_path(&control_arguments, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            return upstream::call_tool_with_pooled_context(
+                root_path,
+                &target.server,
+                &target.tool,
+                &upstream_arguments,
+                timeout_ms,
+                Some(&context),
+                upstream_pool_for_context(config, &target.server, &context),
+            );
+        }
+    }
     match name {
         "doctor" => run_json_command(root_path, &["doctor", "--json"]),
         "hub_status" => run_json_command(root_path, &["hub", "status", "--json"]),
@@ -1368,7 +2781,63 @@ fn run_http_tool(
             )
         }
         "server_list" => run_json_command(root_path, &["server", "list", "--json"]),
-        "runtime_diagnostics" => runtime_diagnostics(root_path),
+        "runtime_diagnostics" => runtime_diagnostics(config),
+        "adapter_profile" => {
+            let include_live_catalog =
+                json_helpers::bool_at_path(args, &["includeLiveCatalog"]).unwrap_or(false);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            let context = http_upstream_lease_context(args, request)?;
+            let visible_tools = adapter::visible_tool_names(&http_tool_names(), context.metadata.as_ref());
+            adapter::adapter_profile(
+                root_path,
+                context.metadata.as_ref(),
+                context.transport.as_deref().unwrap_or("streamable-http"),
+                &visible_tools,
+                include_live_catalog,
+                timeout_ms,
+                refresh,
+            )
+        }
+        "adapter_route" => {
+            let include_live_catalog =
+                json_helpers::bool_at_path(args, &["includeLiveCatalog"]).unwrap_or(false);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            let calls = json_helpers::value_at_path(args, &["calls"]);
+            adapter::adapter_route_plan(root_path, calls, include_live_catalog, timeout_ms, refresh)
+        }
+        "upstream_search" => {
+            let server = json_helpers::string_at_path(args, &["server"]);
+            let query = json_helpers::string_at_path(args, &["query"]);
+            let limit = json_helpers::value_at_path(args, &["limit"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as usize)
+                .unwrap_or(20);
+            let include_schema =
+                json_helpers::bool_at_path(args, &["includeSchema"]).unwrap_or(false);
+            let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
+                .and_then(JsonValue::as_i64)
+                .filter(|value| *value > 0)
+                .map(|value| value as u64);
+            let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
+            adapter::upstream_search(
+                root_path,
+                server,
+                query,
+                limit,
+                include_schema,
+                timeout_ms,
+                refresh,
+            )
+        }
         "surface_manifest" => {
             let include_live_catalog =
                 json_helpers::bool_at_path(args, &["includeLiveCatalog"]).unwrap_or(false);
@@ -1451,7 +2920,7 @@ fn run_http_tool(
                 &arguments,
                 timeout_ms,
                 Some(&context),
-                &config.upstream_session_pool,
+                upstream_pool_for_context(config, server, &context),
             )
         }
         "upstream_batch" => {
@@ -1461,17 +2930,7 @@ fn run_http_tool(
                 .ok_or_else(|| "upstream_batch requires a 'calls' array".to_string())?;
             let mut calls = Vec::new();
             for (index, raw_call) in raw_calls.iter().enumerate() {
-                let tool = json_helpers::string_at_path(raw_call, &["tool"])
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        format!("upstream_batch calls[{}] requires a non-empty 'tool'", index)
-                    })?
-                    .to_string();
-                let arguments = json_helpers::value_at_path(raw_call, &["arguments"])
-                    .cloned()
-                    .unwrap_or_else(empty_object);
-                calls.push(upstream::UpstreamToolCall { tool, arguments });
+                calls.push(parse_http_upstream_batch_call(raw_call, index)?);
             }
             let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
                 .and_then(JsonValue::as_i64)
@@ -1484,16 +2943,57 @@ fn run_http_tool(
                 &calls,
                 timeout_ms,
                 Some(&context),
-                &config.upstream_session_pool,
+                upstream_pool_for_context(config, server, &context),
             )
         }
-        "browser_status" => upstream::browser_status(root_path),
         "client_list" => run_json_command(root_path, &["client", "list", "--json"]),
         other => Err(format!(
-            "unsupported MCPace HTTP tool '{}'. This HTTP endpoint exposes MCPace management tools and stdio upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch. Direct upstream tool names are not advertised as native MCPace tools; call surface_manifest for the exact contract, upstream_catalog for concise descriptions, upstream_policy_audit for policy review, upstream_policy_suggest for generated policy candidates, upstream_tools for one server's full schemas, then upstream_call or upstream_batch. Call runtime_diagnostics for exact status.",
+            "unsupported MCPace HTTP tool '{}'. This HTTP endpoint exposes MCPace management tools plus adapter_profile/upstream_search and stdio upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch. In auto/native exposure mode, upstream tools may also appear as projected u_<server>_<tool>_<hash> names in tools/list; call adapter_profile for the current routing plan, upstream_search for concise discovery, upstream_tools for one server's full schemas, then upstream_call or upstream_batch when brokered routing is better. Call runtime_diagnostics for exact status.",
             other
         )),
     }
+}
+
+fn parse_http_upstream_batch_call(
+    raw_call: &JsonValue,
+    index: usize,
+) -> Result<upstream::UpstreamToolCall, String> {
+    if let Some(items) = raw_call.as_array() {
+        if items.is_empty() || items.len() > 2 {
+            return Err(format!(
+                "upstream_batch calls[{}] tuple form must be [tool] or [tool, arguments]",
+                index
+            ));
+        }
+        let tool = items[0]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                format!(
+                    "upstream_batch calls[{}][0] must be a non-empty tool string",
+                    index
+                )
+            })?
+            .to_string();
+        let arguments = items.get(1).cloned().unwrap_or_else(empty_object);
+        return Ok(upstream::UpstreamToolCall { tool, arguments });
+    }
+
+    let tool = json_helpers::string_at_path(raw_call, &["tool"])
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "upstream_batch calls[{}] requires a non-empty 'tool'",
+                index
+            )
+        })?
+        .to_string();
+    let arguments = json_helpers::value_at_path(raw_call, &["arguments"])
+        .cloned()
+        .unwrap_or_else(empty_object);
+    Ok(upstream::UpstreamToolCall { tool, arguments })
 }
 
 fn http_upstream_lease_context(
@@ -1602,17 +3102,40 @@ fn http_allowed_tool_risk_classes(args: &JsonValue) -> Result<BTreeSet<String>, 
         .map_err(|error| format!("{} when provided", error))
 }
 
-fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
-    let doctor = run_json_command(root_path, &["doctor", "--json"])?;
-    let hub_status = run_json_command(root_path, &["hub", "status", "--json"])?;
-    let server_capabilities = run_json_command(root_path, &["server", "capabilities", "--json"])?;
-    let upstream_inventory = upstream::configured_inventory(root_path).unwrap_or_else(|error| {
-        JsonValue::object([
+fn runtime_diagnostics(config: &DashboardConfig) -> Result<JsonValue, String> {
+    let root_path = &config.root_path;
+    let inventory_root = root_path.to_path_buf();
+    let inventory_handle = thread::spawn(move || upstream::configured_inventory(&inventory_root));
+    let mut command_results = run_json_commands_parallel(
+        root_path,
+        vec![
+            ("doctor", vec!["doctor", "--json"]),
+            ("hub", vec!["hub", "status", "--json"]),
+            (
+                "serverCapabilities",
+                vec!["server", "capabilities", "--json"],
+            ),
+        ],
+    )?;
+    let doctor = take_parallel_result(&mut command_results, "doctor")?;
+    let hub_status = take_parallel_result(&mut command_results, "hub")?;
+    let server_capabilities = take_parallel_result(&mut command_results, "serverCapabilities")?;
+    let upstream_inventory = match inventory_handle.join() {
+        Ok(Ok(value)) => value,
+        Ok(Err(error)) => JsonValue::object([
             ("ok", JsonValue::bool(false)),
             ("error", JsonValue::string(error)),
             ("servers", JsonValue::array([])),
-        ])
-    });
+        ]),
+        Err(_) => JsonValue::object([
+            ("ok", JsonValue::bool(false)),
+            (
+                "error",
+                JsonValue::string("upstream inventory worker panicked"),
+            ),
+            ("servers", JsonValue::array([])),
+        ]),
+    };
     let server_items = server_capabilities.as_array().unwrap_or(&[]);
     let server_diagnostics = server_items
         .iter()
@@ -1633,11 +3156,12 @@ fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
         (
             "summary",
             JsonValue::string(
-                "MCPace HTTP MCP is reachable. This build exposes management tools plus explicit stdio upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch; direct upstream tool names are intentionally not advertised as native MCPace tools.",
+                "MCPace HTTP MCP is reachable. This build exposes management tools plus dynamic adapter_profile/upstream_search and explicit stdio upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch; in auto/native exposure mode, upstream tools may also be advertised as projected u_<server>_<tool>_<hash> names when the live catalog fits the token budget.",
             ),
         ),
         ("doctor", doctor),
         ("hub", hub_status),
+        ("runtime", runtime_status_json(config)),
         (
             "upstreamForwarding",
             JsonValue::object([
@@ -1666,16 +3190,16 @@ fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
                 (
                     "nativeTopLevelClaim",
                     JsonValue::string(
-                        "Only the names in managementTools.names are returned by this endpoint's tools/list.",
+                        "tools/list returns adapter management tools plus budgeted projected upstream tools when MCPACE_TOOL_EXPOSURE allows them.",
                     ),
                 ),
                 (
                     "upstreamProjection",
                     JsonValue::string(
-                        "Configured upstream tool names remain upstream; use surface_manifest for this exact contract and upstream_catalog/upstream_tools for live discovery.",
+                        "Configured upstream tools can be exposed as stable u_<server>_<tool>_<hash> names when the live catalog fits the token budget; broker discovery remains available through upstream_search/upstream_catalog/upstream_tools.",
                     ),
                 ),
-                ("directTopLevelProjectionEnabled", JsonValue::bool(false)),
+                ("directTopLevelProjectionEnabled", JsonValue::bool(true)),
             ]),
         ),
         ("upstreamInventory", upstream_inventory),
@@ -1700,7 +3224,7 @@ fn runtime_diagnostics(root_path: &Path) -> Result<JsonValue, String> {
         (
             "nextSafeAction",
             JsonValue::string(
-                "Use surface_manifest to see the exact native-vs-upstream surface contract, upstream_probe to check all configured upstream MCP servers, upstream_policy_audit to review annotations/policy coverage, upstream_policy_suggest to generate policy candidates, then upstream_tools with a specific stdio server, then upstream_call for stateless calls or upstream_batch for stateful sequences. Use browser_status for browser bridge truth; direct upstream tool names are intentionally not advertised as native MCPace tools.",
+                "Use adapter_profile to see whether the current tools/list projected upstream tools natively or fell back to broker mode. Use upstream_search/upstream_catalog/upstream_tools for discovery, upstream_call for stateless calls, and upstream_batch for stateful same-server sequences.",
             ),
         ),
     ]))
@@ -1725,10 +3249,10 @@ fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
             "callable-stdio-bridge",
             "enabled stdio upstream can be listed with upstream_tools and called with upstream_call",
         )
-    } else if name == "browser" || kind == "host-bridge" {
+    } else if kind == "host-bridge" {
         (
             "blocked-preview-host-bridge",
-            "browser/host-bridge policy is configured, but MCPace does not currently launch or proxy a real browser bridge through this HTTP adapter",
+            "host-bridge policy is configured, but MCPace does not currently launch or proxy non-stdio bridges through this HTTP adapter",
         )
     } else if kind == "container-stdio" {
         (
@@ -2274,6 +3798,18 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
             <div class="meta-label">Warnings</div>
             <div class="meta-value" id="warning-count">—</div>
           </div>
+          <div class="meta-card">
+            <div class="meta-label">Overview cache</div>
+            <div class="meta-value" id="overview-cache">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">HTTP workers</div>
+            <div class="meta-value" id="runtime-workers">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Upstream pool</div>
+            <div class="meta-value" id="upstream-pool">—</div>
+          </div>
         </div>
       </section>
 
@@ -2379,6 +3915,9 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
         lastRefresh: document.getElementById("last-refresh"),
         heroHubState: document.getElementById("hero-hub-state"),
         warningCount: document.getElementById("warning-count"),
+        overviewCache: document.getElementById("overview-cache"),
+        runtimeWorkers: document.getElementById("runtime-workers"),
+        upstreamPool: document.getElementById("upstream-pool"),
         runtimeReady: document.getElementById("runtime-ready"),
         runtimeReadyNote: document.getElementById("runtime-ready-note"),
         enabledServers: document.getElementById("enabled-servers"),
@@ -2407,10 +3946,11 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
         return response.json();
       }
 
-      async function refreshDashboard() {
+      async function refreshDashboard(options = {}) {
         try {
+          const overviewUrl = options.force ? "/api/overview?refresh=1" : "/api/overview";
           const [overview, logs] = await Promise.all([
-            fetchJson("/api/overview"),
+            fetchJson(overviewUrl),
             fetchJson("/api/logs?tail=18")
           ]);
           state.overview = overview;
@@ -2425,7 +3965,7 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
       async function runAction(path) {
         try {
           await fetchJson(path, { method: "POST" });
-          await refreshDashboard();
+          await refreshDashboard({ force: true });
         } catch (error) {
           console.error(error);
           els.runtimeSummary.textContent = `Action failed: ${error.message}`;
@@ -2486,6 +4026,13 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
         els.lastRefresh.textContent = formatDate(overview.generatedAtMs);
         els.heroHubState.textContent = hub.status || hub.health || "unknown";
         els.warningCount.textContent = String(warnings.length);
+        const cache = overview.cache || {};
+        const runtime = overview.runtime || {};
+        const http = runtime.http || {};
+        const upstreamPool = runtime.upstreamSessionPool || {};
+        els.overviewCache.textContent = cache.hit ? `hit · ${cache.ttlMs ?? "?"}ms` : cache.bypassed ? "fresh bypass" : "fresh";
+        els.runtimeWorkers.textContent = `${http.activeConnections ?? 0}/${http.maxConnections ?? "?"} active`;
+        els.upstreamPool.textContent = `${upstreamPool.size ?? 0}/${upstreamPool.maxSize ?? "?"} · ${upstreamPool.shardCount ?? 1} shard${(upstreamPool.shardCount ?? 1) === 1 ? "" : "s"}`;
 
         els.runtimeReady.textContent = readiness.runtimePrerequisitesReady ? "Ready" : "Blocked";
         els.runtimeReadyNote.textContent =
@@ -2504,6 +4051,8 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
           chip(`Hub ${hub.status || "unknown"}`, toneForHub(hub.status || hub.health)),
           chip(`Read-only ops ${hub.readyForReadOnlyOps ? "ready" : "blocked"}`, toneForBoolean(Boolean(hub.readyForReadOnlyOps))),
           chip(`Runtime ops ${hub.readyForRuntimeOps ? "ready" : "blocked"}`, toneForBoolean(Boolean(hub.readyForRuntimeOps))),
+          chip(`HTTP ${http.activeConnections ?? 0}/${http.maxConnections ?? "?"}`, (http.activeConnections ?? 0) < (http.maxConnections ?? 1) ? "good" : "warn"),
+          chip(`Pool shards ${upstreamPool.shardCount ?? 1}`, "warn"),
           chip(`Profile ${hub.activeProfile || readiness.activeProfile || "unknown"}`, "warn"),
           chip(`Client key ${clientCatalog.configuredClientKeyName || "none"}`, "warn")
         ].join("");
@@ -2626,7 +4175,7 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
         `).join("");
       }
 
-      document.getElementById("refresh-button").addEventListener("click", refreshDashboard);
+      document.getElementById("refresh-button").addEventListener("click", () => refreshDashboard({ force: true }));
       document.getElementById("hub-up-button").addEventListener("click", () => runAction("/api/actions/hub-up"));
       document.getElementById("hub-down-button").addEventListener("click", () => runAction("/api/actions/hub-down"));
       document.getElementById("repair-button").addEventListener("click", () => runAction("/api/actions/repair"));
@@ -2650,8 +4199,8 @@ const DASHBOARD_HTML: &str = r#"<!doctype html>
 #[cfg(test)]
 mod tests {
     use super::{
-        build_overview_json, is_allowed_local_origin, run_http_tool, run_json_command,
-        serve_listener,
+        build_overview_json, cached_health_json, cached_overview_json, is_allowed_local_origin,
+        query_bool_flag, run_http_tool, run_json_command, runtime_status_json, serve_listener,
     };
     use crate::json::JsonValue;
     use crate::json_helpers;
@@ -2788,8 +4337,16 @@ rl.on('line', (line) => {
         super::DashboardConfig {
             root_path,
             max_requests,
+            max_connections: crate::resources::default_http_connection_limit(),
+            io_timeout: crate::resources::default_http_io_timeout(),
+            max_body_bytes: crate::resources::DEFAULT_MAX_HTTP_BODY_BYTES,
+            overview_cache_ttl: crate::resources::default_dashboard_overview_cache_ttl(),
+            health_cache_ttl: crate::resources::default_dashboard_health_cache_ttl(),
+            overview_cache: Mutex::new(None),
+            health_cache: Mutex::new(None),
+            metrics: super::HttpRuntimeMetrics::default(),
             surface,
-            upstream_session_pool: Mutex::new(crate::upstream::UpstreamSessionPool::default()),
+            upstream_session_pools: super::new_upstream_session_pools(),
         }
     }
 
@@ -2805,6 +4362,183 @@ rl.on('line', (line) => {
         assert!(object.contains_key("servers"));
         assert!(object.contains_key("clients"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn overview_cache_reuses_recent_payload_and_allows_refresh_bypass() {
+        let root = temp_root();
+        write_minimal_config(&root);
+        let config = test_config(root.clone(), None, super::ServeSurface::Dashboard);
+
+        let first = cached_overview_json(&config, false).expect("first overview");
+        assert_eq!(
+            json_helpers::bool_at_path(&first, &["cache", "hit"]),
+            Some(false)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(&first, &["cache", "bypassed"]),
+            Some(false)
+        );
+
+        let second = cached_overview_json(&config, false).expect("cached overview");
+        assert_eq!(
+            json_helpers::bool_at_path(&second, &["cache", "hit"]),
+            Some(true)
+        );
+        assert_eq!(
+            json_helpers::value_at_path(&second, &["cache", "ttlMs"]).and_then(JsonValue::as_i64),
+            Some(crate::resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS as i64)
+        );
+
+        let refresh = cached_overview_json(&config, true).expect("refresh overview");
+        assert_eq!(
+            json_helpers::bool_at_path(&refresh, &["cache", "hit"]),
+            Some(false)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(&refresh, &["cache", "bypassed"]),
+            Some(true)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn health_cache_reuses_recent_payload_and_exposes_runtime_status() {
+        let root = temp_root();
+        write_minimal_config(&root);
+        let config = test_config(root.clone(), None, super::ServeSurface::UnifiedServe);
+
+        let first = cached_health_json(&config, false).expect("first health");
+        assert_eq!(
+            json_helpers::bool_at_path(&first, &["cache", "hit"]),
+            Some(false)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(&first, &["cache", "stale"]),
+            Some(false)
+        );
+        assert_eq!(
+            json_helpers::value_at_path(&first, &["runtime", "caches", "healthTtlMs"])
+                .and_then(JsonValue::as_i64),
+            Some(crate::resources::DEFAULT_DASHBOARD_HEALTH_CACHE_MS as i64)
+        );
+        assert_eq!(
+            json_helpers::value_at_path(&first, &["runtime", "http", "maxConnections"])
+                .and_then(JsonValue::as_i64),
+            Some(crate::resources::default_http_connection_limit() as i64)
+        );
+
+        let second = cached_health_json(&config, false).expect("cached health");
+        assert_eq!(
+            json_helpers::bool_at_path(&second, &["cache", "hit"]),
+            Some(true)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn health_cache_returns_stale_snapshot_when_refresh_fails() {
+        let root = temp_root();
+        write_minimal_config(&root);
+        let config = test_config(root.clone(), None, super::ServeSurface::UnifiedServe);
+
+        let first = cached_health_json(&config, false).expect("first health");
+        assert_eq!(
+            json_helpers::bool_at_path(&first, &["cache", "stale"]),
+            Some(false)
+        );
+
+        fs::remove_file(root.join("mcpace.config.json")).expect("remove config to force failure");
+        let stale = cached_health_json(&config, true).expect("stale health fallback");
+        assert_eq!(
+            json_helpers::bool_at_path(&stale, &["cache", "hit"]),
+            Some(true)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(&stale, &["cache", "bypassed"]),
+            Some(true)
+        );
+        assert_eq!(
+            json_helpers::bool_at_path(&stale, &["cache", "stale"]),
+            Some(true)
+        );
+        assert!(json_helpers::string_at_path(&stale, &["cache", "refreshError"]).is_some());
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn runtime_status_reports_live_connection_metrics() {
+        let root = temp_root();
+        write_minimal_config(&root);
+        let config = test_config(root.clone(), None, super::ServeSurface::Dashboard);
+
+        {
+            let _guard = config.metrics.begin();
+            let status = runtime_status_json(&config);
+            assert_eq!(
+                json_helpers::value_at_path(&status, &["http", "activeConnections"])
+                    .and_then(JsonValue::as_i64),
+                Some(1)
+            );
+            assert_eq!(
+                json_helpers::value_at_path(&status, &["http", "acceptedConnections"])
+                    .and_then(JsonValue::as_i64),
+                Some(1)
+            );
+        }
+
+        let status = runtime_status_json(&config);
+        assert_eq!(
+            json_helpers::value_at_path(&status, &["http", "activeConnections"])
+                .and_then(JsonValue::as_i64),
+            Some(0)
+        );
+        assert_eq!(
+            json_helpers::value_at_path(&status, &["http", "completedConnections"])
+                .and_then(JsonValue::as_i64),
+            Some(1)
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn runtime_resources_response_reports_live_limits_and_pool_shards() {
+        let root = temp_root();
+        write_minimal_config(&root);
+        let config = test_config(root.clone(), None, super::ServeSurface::Dashboard);
+
+        let response = super::runtime_resources_response(&config);
+        assert_eq!(json_helpers::bool_at_path(&response, &["ok"]), Some(true));
+        assert_eq!(
+            json_helpers::value_at_path(&response, &["runtime", "http", "maxConnections"])
+                .and_then(JsonValue::as_i64),
+            Some(crate::resources::default_http_connection_limit() as i64)
+        );
+        assert!(
+            json_helpers::value_at_path(
+                &response,
+                &["runtime", "upstreamSessionPool", "shardCount"],
+            )
+            .and_then(JsonValue::as_i64)
+            .unwrap_or(0)
+                >= 1
+        );
+        assert!(
+            json_helpers::value_at_path(&response, &["runtime", "upstreamSessionPool", "maxSize"])
+                .and_then(JsonValue::as_i64)
+                .unwrap_or(0)
+                >= crate::resources::default_upstream_session_pool_limit() as i64
+        );
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn query_bool_flag_accepts_common_truthy_refresh_values() {
+        assert!(query_bool_flag("refresh=1", "refresh"));
+        assert!(query_bool_flag("tail=20&noCache=true", "noCache"));
+        assert!(query_bool_flag("refresh", "refresh"));
+        assert!(!query_bool_flag("refresh=0", "refresh"));
+        assert!(!query_bool_flag("other=true", "refresh"));
     }
 
     #[test]
@@ -2912,9 +4646,6 @@ rl.on('line', (line) => {
             &JsonValue::object([
                 ("clientId", JsonValue::string("explicit-client")),
                 ("sessionId", JsonValue::string("explicit-session")),
-                ("allowDesktopObservation", JsonValue::bool(true)),
-                ("allowDesktopControl", JsonValue::bool(true)),
-                ("allowSystemControl", JsonValue::bool(true)),
                 (
                     "allowToolRiskClasses",
                     JsonValue::array([JsonValue::string("custom-risk")]),
@@ -2935,15 +4666,6 @@ rl.on('line', (line) => {
             explicit_context.session_id.as_deref(),
             Some("explicit-session")
         );
-        assert!(explicit_context
-            .allow_arguments
-            .contains("allowDesktopObservation"));
-        assert!(explicit_context
-            .allow_arguments
-            .contains("allowDesktopControl"));
-        assert!(explicit_context
-            .allow_arguments
-            .contains("allowSystemControl"));
         assert!(explicit_context
             .allowed_tool_risk_classes
             .contains("custom-risk"));
@@ -3001,7 +4723,7 @@ rl.on('line', (line) => {
             let mut stderr = Vec::new();
             serve_listener(
                 listener,
-                test_config(server_root, Some(2), super::ServeSurface::Dashboard),
+                test_config(server_root, Some(3), super::ServeSurface::Dashboard),
                 &mut stderr,
             )
         });
@@ -3029,6 +4751,57 @@ rl.on('line', (line) => {
         stream.read_to_string(&mut api_response).unwrap();
         assert!(api_response.contains("\"doctor\""));
         assert!(api_response.contains("\"servers\""));
+
+        let mut resources_response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "GET /api/resources HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+            addr
+        )
+        .unwrap();
+        stream.read_to_string(&mut resources_response).unwrap();
+        assert!(resources_response.contains("\"upstreamSessionPool\""));
+        assert!(resources_response.contains("\"activeConnections\""));
+
+        assert_eq!(handle.join().unwrap(), 0);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dashboard_rejects_http_payloads_above_limit_without_reading_body() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let root = temp_root();
+        write_minimal_config(&root);
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let mut stderr = Vec::new();
+            let mut config = test_config(server_root, Some(1), super::ServeSurface::UnifiedServe);
+            config.max_body_bytes = 8;
+            config.max_connections = 1;
+            serve_listener(listener, config, &mut stderr)
+        });
+
+        let mut response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: 128\r\nConnection: close\r\n\r\n",
+            addr
+        )
+        .unwrap();
+        stream.shutdown(std::net::Shutdown::Write).unwrap();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(
+            response.starts_with("HTTP/1.1 413 Payload Too Large"),
+            "oversized response: {}",
+            response
+        );
 
         assert_eq!(handle.join().unwrap(), 0);
         let _ = fs::remove_dir_all(root);
@@ -3131,21 +4904,21 @@ rl.on('line', (line) => {
         )
         .unwrap();
         stream.read_to_string(&mut tools_response).unwrap();
-        assert!(tools_response.contains("\"doctor\""));
-        assert!(tools_response.contains("\"hub_status\""));
-        assert!(tools_response.contains("\"hub_repair\""));
-        assert!(tools_response.contains("\"runtime_diagnostics\""));
+        assert!(tools_response.contains("\"adapter_profile\""));
+        assert!(tools_response.contains("\"adapter_route\""));
+        assert!(tools_response.contains("\"upstream_search\""));
         assert!(tools_response.contains("\"surface_manifest\""));
         assert!(tools_response.contains("\"upstream_tools\""));
         assert!(tools_response.contains("\"upstream_catalog\""));
-        assert!(tools_response.contains("\"upstream_probe\""));
-        assert!(tools_response.contains("\"upstream_policy_audit\""));
-        assert!(tools_response.contains("\"upstream_policy_suggest\""));
         assert!(tools_response.contains("\"upstream_call\""));
         assert!(tools_response.contains("\"upstream_batch\""));
-        assert!(tools_response.contains("\"browser_status\""));
+        assert!(
+            !tools_response.contains("\"doctor\""),
+            "default adapter surface should keep diagnostic helpers callable but unlisted: {}",
+            tools_response
+        );
 
-        let unsupported_call = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"browser","arguments":{}}}"#;
+        let unsupported_call = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"unsupported_tool","arguments":{}}}"#;
         let mut unsupported_response = String::new();
         let mut stream = TcpStream::connect(addr).unwrap();
         write!(
@@ -3228,6 +5001,54 @@ rl.on('line', (line) => {
 
         assert_eq!(handle.join().unwrap(), 0);
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn dashboard_returns_json_500_for_internal_route_errors() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let root = temp_root();
+        fs::remove_dir_all(&root).unwrap();
+
+        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let addr = listener.local_addr().unwrap();
+        let server_root = root.clone();
+        let handle = thread::spawn(move || {
+            let mut stderr = Vec::new();
+            serve_listener(
+                listener,
+                test_config(server_root, Some(1), super::ServeSurface::Dashboard),
+                &mut stderr,
+            )
+        });
+
+        let mut response = String::new();
+        let mut stream = TcpStream::connect(addr).unwrap();
+        write!(
+            stream,
+            "GET /api/overview?refresh=1 HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+            addr
+        )
+        .unwrap();
+        stream.read_to_string(&mut response).unwrap();
+        assert!(
+            response.starts_with("HTTP/1.1 500 Internal Server Error"),
+            "internal error response: {}",
+            response
+        );
+        assert!(
+            response.contains("\"ok\": false"),
+            "internal error response: {}",
+            response
+        );
+        assert!(
+            response.contains("\"code\": \"internal_error\""),
+            "internal error response: {}",
+            response
+        );
+
+        assert_eq!(handle.join().unwrap(), 0);
     }
 
     #[test]

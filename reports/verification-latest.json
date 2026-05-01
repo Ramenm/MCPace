@@ -1,9 +1,9 @@
 {
-  "version": "0.3.6",
-  "checkedAt": "2026-04-28T21:46:37.331Z",
+  "version": "0.4.1",
+  "checkedAt": "2026-05-01T13:20:59.560Z",
   "productTruth": {
-    "version": "0.3.6",
-    "currentPromise": "One local MCPace endpoint, simpler install on selected local clients, and honest diagnostics for what is configured versus actually usable.",
+    "version": "0.4.1",
+    "currentPromise": "One local MCPace endpoint and generic MCP brokering/diagnostics with no bundled upstream MCP servers enabled or recommended by default.",
     "firstICP": "advanced integrator / solo power user with 2-3 local MCP clients and hand-maintained config drift",
     "productShape": "local-first control plane plus onboarding layer with a connectable local MCP endpoint and preview runtime lanes",
     "entrypointContract": {
@@ -137,7 +137,7 @@
     "checks": [
       "npm test"
     ],
-    "durationMs": 13233
+    "durationMs": 10624
   },
   "buildProof": {
     "status": "not-run",
@@ -157,9 +157,9 @@
       "node scripts/archive-release.mjs --json"
     ],
     "archive": {
-      "name": "mcpace-v0.3.6-290426-004651.zip",
-      "path": "dist/mcpace-v0.3.6-290426-004651.zip",
-      "stamp": "290426-004651"
+      "name": "mcpace-v0.4.1-010526-162111.zip",
+      "path": "dist/mcpace-v0.4.1-010526-162111.zip",
+      "stamp": "010526-162111"
     },
     "npmPackage": {
       "status": "pass",
@@ -177,9 +177,9 @@
       ],
       "repoVendoredBinaryFiles": [],
       "packageName": "@mcpace/cli",
-      "packageVersion": "0.3.6",
-      "expectedVersion": "0.3.6",
-      "packFilename": "mcpace-cli-0.3.6.tgz",
+      "packageVersion": "0.4.1",
+      "expectedVersion": "0.4.1",
+      "packFilename": "mcpace-cli-0.4.1.tgz",
       "entryCount": 8,
       "unpackedSize": 21790,
       "files": [

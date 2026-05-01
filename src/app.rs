@@ -1,5 +1,6 @@
 use crate::catalog::{find, normalize, COMMANDS};
 use crate::client_catalog::client_install_support_summary;
+use crate::resources;
 use crate::runtimepaths;
 use crate::{
     candidates, client, dashboard, doctor, hub, init, lab, mcp_server, profile, projects, release,
@@ -168,23 +169,32 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  doctor [--json] [--root <path>]");
     let _ = writeln!(
         stdout,
-        "  setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--skip-client-install] [--install-service|--install-autostart] [--no-enable]"
+        "  setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--skip-client-install] [--install-service|--install-autostart] [--no-enable]"
     );
     let _ = writeln!(
         stdout,
-        "  service install|status|uninstall|print [--json] [--root <path>] [--host <addr>] [--port <n>] [--dry-run] [--no-enable]"
+        "  service install|status|uninstall|print [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]"
     );
     let _ = writeln!(
         stdout,
-        "  dashboard [--root <path>] [--host <addr>] [--port <n>]"
+        "  dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
     );
     let _ = writeln!(
         stdout,
-        "  serve [--root <path>] [--host <addr>] [--port <n>]"
+        "  serve [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
     );
     let _ = writeln!(
         stdout,
-        "  serve start|stop|status [--json] [--root <path>] [--host <addr>] [--port <n>]"
+        "  serve start|stop|status [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  local HTTP defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms, health cache={}ms",
+        resources::default_http_connection_limit(),
+        resources::DEFAULT_HTTP_IO_TIMEOUT_MS,
+        resources::DEFAULT_MAX_HTTP_BODY_BYTES,
+        resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS,
+        resources::DEFAULT_DASHBOARD_HEALTH_CACHE_MS
     );
     let _ = writeln!(stdout, "  init [--json] [--root <path>]");
     let _ = writeln!(stdout, "  hub up [--json] [--root <path>] [--foreground]");
@@ -241,7 +251,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes /healthz plus /mcp in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/stop/status lifecycle commands, dashboard provides the same local browser control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and release build now wraps the local artifact/proof bundle without publishing.",
+        "doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes /healthz plus /mcp in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/stop/status lifecycle commands, dashboard provides the same local web control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and release build now wraps the local artifact/proof bundle without publishing.",
         runtimepaths::default_local_mcp_url(),
         client_install_support_summary()
     );

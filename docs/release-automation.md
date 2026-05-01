@@ -67,8 +67,8 @@ Planned but not published until separately proved:
 
 ```sh
 mcpace update check --json
-mcpace update check --json --latest-version 0.3.6
-MCPACE_LATEST_VERSION=0.3.6 mcpace update check --source env --json
+mcpace update check --json --latest-version 0.4.1
+MCPACE_LATEST_VERSION=0.4.1 mcpace update check --source env --json
 MCPACE_UPDATE_SOURCE=npm mcpace update check --source npm --json
 ```
 

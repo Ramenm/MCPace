@@ -15,11 +15,15 @@
 - prompt/agent eval scenario map, rubric, and dataset plan parse and stay aligned with fixture ids
 - thin module roots for large command families stay split instead of collapsing back into giant files
 - `scripts/proof-report.mjs` can regenerate `reports/verification-latest.json` from executed source/release checks without overclaiming blocked proof layers
+- proof-report child commands use a configurable output buffer (`MCPACE_PROOF_COMMAND_MAX_BUFFER_BYTES`) so verbose source checks do not create false proof failures
+- `scripts/audit-source.mjs` reports zero critical production hazards, verifies explicit protocol/resource architecture boundaries, and keeps unsafe/FFI centralized in reviewed process-detach modules
+- Node coverage can be run with `npm run test:node:coverage` using the built-in `node:test` coverage lane
 
 ## Build proof
 
 Requires a Rust-capable host:
 
+- `npm run verify:rust-quality` writes `reports/rust-quality-latest.json` and passes fmt, Clippy with `-D warnings`, suite-isolated Rust tests, and release build
 - Rust binary builds successfully
 - Rust tests run successfully
 - npm launcher dry-run package succeeds

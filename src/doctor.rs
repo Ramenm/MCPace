@@ -399,60 +399,60 @@ fn collect_runtime_prerequisites(root_path: Option<&Path>) -> Vec<RuntimePrerequ
         return Vec::new();
     };
     let config_path = root_path.join("mcpace.config.json");
-    let Ok(config) = json_helpers::read_json_file(&config_path) else {
-        return Vec::new();
-    };
-    let Some(servers) = json_helpers::object_at_path(&config, &["servers"]) else {
-        return Vec::new();
-    };
+    let config = json_helpers::read_json_file(&config_path).ok();
+    let servers = config
+        .as_ref()
+        .and_then(|value| json_helpers::object_at_path(value, &["servers"]));
     let source_settings = load_source_runtime_commands(root_path);
 
     let mut required_commands: BTreeMap<String, Vec<String>> = BTreeMap::new();
-    for (server_name, server) in servers {
-        let Some(server) = server.as_object() else {
-            continue;
-        };
-        let kind = server
-            .get("kind")
-            .and_then(JsonValue::as_str)
-            .map(|value| value.trim().to_ascii_lowercase())
-            .unwrap_or_default();
-        let runtime_enabled = ["required", "defaultEnabled", "autoStart"]
-            .iter()
-            .any(|key| {
-                server
-                    .get(*key)
-                    .and_then(JsonValue::as_bool)
-                    .unwrap_or(false)
-            });
-        if !runtime_enabled {
-            continue;
-        }
+    for (server_name, command) in &source_settings {
+        add_runtime_prerequisite(
+            &mut required_commands,
+            command,
+            format!("enabled stdio source command for server '{}'", server_name),
+        );
+    }
 
-        if kind.starts_with("container-") {
-            add_runtime_prerequisite(
-                &mut required_commands,
-                "docker",
-                format!("container runtime required by server '{}'", server_name),
-            );
-        }
+    if let Some(servers) = servers {
+        for (server_name, server) in servers {
+            let Some(server) = server.as_object() else {
+                continue;
+            };
+            let kind = server
+                .get("kind")
+                .and_then(JsonValue::as_str)
+                .map(|value| value.trim().to_ascii_lowercase())
+                .unwrap_or_default();
+            let runtime_enabled = ["required", "defaultEnabled", "autoStart"]
+                .iter()
+                .any(|key| {
+                    server
+                        .get(*key)
+                        .and_then(JsonValue::as_bool)
+                        .unwrap_or(false)
+                });
+            if !runtime_enabled {
+                continue;
+            }
 
-        for command in json_helpers::strings_from_array(
-            server.get("requiredCommands").and_then(JsonValue::as_array),
-        ) {
-            add_runtime_prerequisite(
-                &mut required_commands,
-                &command,
-                format!("requiredCommands entry for server '{}'", server_name),
-            );
-        }
+            if kind.starts_with("container-") {
+                add_runtime_prerequisite(
+                    &mut required_commands,
+                    "docker",
+                    format!("container runtime required by server '{}'", server_name),
+                );
+            }
 
-        if let Some(command) = source_settings.get(&server_name.trim().to_ascii_lowercase()) {
-            add_runtime_prerequisite(
-                &mut required_commands,
-                command,
-                format!("enabled stdio source command for server '{}'", server_name),
-            );
+            for command in json_helpers::strings_from_array(
+                server.get("requiredCommands").and_then(JsonValue::as_array),
+            ) {
+                add_runtime_prerequisite(
+                    &mut required_commands,
+                    &command,
+                    format!("requiredCommands entry for server '{}'", server_name),
+                );
+            }
         }
     }
 
@@ -483,23 +483,52 @@ fn load_source_runtime_commands(root_path: &Path) -> BTreeMap<String, String> {
         let enabled = server
             .get("enabled")
             .and_then(JsonValue::as_bool)
-            .unwrap_or(false);
-        let source_type = server
-            .get("type")
-            .and_then(JsonValue::as_str)
-            .map(|value| value.trim().to_ascii_lowercase())
-            .unwrap_or_default();
+            .unwrap_or(true);
         let command = server
             .get("command")
             .and_then(JsonValue::as_str)
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .unwrap_or("");
+        let url = server
+            .get("url")
+            .and_then(JsonValue::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        let source_type = infer_runtime_source_type(
+            server.get("type").and_then(JsonValue::as_str).unwrap_or(""),
+            command,
+            url,
+        );
         if enabled && source_type == "stdio" && !command.is_empty() {
             commands.insert(name.trim().to_ascii_lowercase(), command.to_string());
         }
     }
     commands
+}
+
+fn infer_runtime_source_type(raw_source_type: &str, command: &str, url: &str) -> String {
+    let normalized = normalize_runtime_source_type(raw_source_type);
+    if !normalized.is_empty() {
+        return normalized;
+    }
+    if !command.trim().is_empty() {
+        "stdio".to_string()
+    } else if !url.trim().is_empty() {
+        "http".to_string()
+    } else {
+        "stdio".to_string()
+    }
+}
+
+fn normalize_runtime_source_type(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" => String::new(),
+        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote-sse"
+        | "remote" | "http" | "sse" => "http".to_string(),
+        "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
+        other => other.to_string(),
+    }
 }
 
 fn add_runtime_prerequisite(

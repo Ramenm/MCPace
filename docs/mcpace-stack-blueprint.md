@@ -82,7 +82,7 @@ Only later should MCPace consider:
 ### Deferred product layers
 
 - desktop shell (`Tauri` or `Electron`)
-- browser control UI beyond a thin local diagnostics page
+- interaction control UI beyond a thin local diagnostics page
 - hosted cloud task runner
 - mobile surfaces
 - multi-channel/chat surfaces

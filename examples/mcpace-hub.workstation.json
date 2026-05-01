@@ -5,9 +5,7 @@
     "stateDir": "data/runtime",
     "logDir": "logs",
     "ingress": {
-      "stdioLaunchers": {
-        "enabled": true
-      },
+      "stdioLaunchers": { "enabled": true },
       "streamableHttp": {
         "enabled": true,
         "bind": "127.0.0.1:12223",
@@ -16,128 +14,29 @@
     }
   },
   "clients": {
-    "default": "cursor",
-    "supported": [
-      "cursor",
-      "vscode",
-      "claude-desktop",
-      "windsurf",
-      "generic-stdio",
-      "generic-http"
-    ]
+    "default": "generic-stdio",
+    "supported": ["cursor", "vscode", "claude-desktop", "windsurf", "generic-stdio", "generic-http"]
   },
   "profiles": {
-    "default": "safe",
+    "default": "manual",
     "definitions": {
-      "safe": {
-        "description": "Required local path with safe defaults.",
-        "serverIds": [
-          "browser",
-          "filesystem",
-          "fetch",
-          "serena"
-        ]
+      "manual": {
+        "description": "No upstream MCP servers are enabled by default.",
+        "serverIds": []
       },
       "extended": {
-        "description": "Adds credential-backed remote servers.",
-        "serverIds": [
-          "browser",
-          "filesystem",
-          "fetch",
-          "serena",
-          "github",
-          "sentry"
-        ]
+        "description": "Opt-in profile. Add user-supplied upstream MCP server IDs before using it.",
+        "serverIds": []
       }
     }
   },
-  "servers": [
-    {
-      "id": "browser",
-      "kind": "host-bridge",
-      "enabledByDefault": true,
-      "required": true,
-      "scope": "host-session",
-      "rootsPolicy": "none",
-      "credentialMode": "none",
-      "upstream": {
-        "mode": "url",
-        "url": "http://127.0.0.1:{abpPort}/mcp",
-        "healthCheckUrl": "http://127.0.0.1:{abpPort}/api/v1/tabs"
-      }
-    },
-    {
-      "id": "filesystem",
-      "kind": "local-stdio",
-      "enabledByDefault": true,
-      "required": true,
-      "scope": "project-local",
-      "rootsPolicy": "required",
-      "credentialMode": "none",
-      "upstream": {
-        "mode": "command",
-        "command": "npx",
-        "args": [
-          "@modelcontextprotocol/server-filesystem"
-        ]
-      }
-    },
-    {
-      "id": "serena",
-      "kind": "local-stdio",
-      "enabledByDefault": true,
-      "required": true,
-      "scope": "project-local",
-      "rootsPolicy": "required",
-      "credentialMode": "none",
-      "upstream": {
-        "mode": "command",
-        "command": "docker",
-        "args": [
-          "exec",
-          "mcpace",
-          "serena-server"
-        ]
-      }
-    },
-    {
-      "id": "github",
-      "kind": "remote-http",
-      "enabledByDefault": false,
-      "required": false,
-      "scope": "credential-scoped",
-      "rootsPolicy": "none",
-      "credentialMode": "token",
-      "upstream": {
-        "mode": "url",
-        "url": "https://api.githubcopilot.com/mcp/",
-        "healthCheckUrl": "https://api.githubcopilot.com/mcp/"
-      }
-    },
-    {
-      "id": "sentry",
-      "kind": "remote-http",
-      "enabledByDefault": false,
-      "required": false,
-      "scope": "credential-scoped",
-      "rootsPolicy": "none",
-      "credentialMode": "oauth",
-      "upstream": {
-        "mode": "url",
-        "url": "https://mcp.sentry.dev/mcp",
-        "healthCheckUrl": "https://mcp.sentry.dev/mcp"
-      }
-    }
-  ],
+  "servers": [],
   "projects": {
-    "discoveryRoots": [
-      "~/work",
-      "~/src"
-    ],
+    "discoveryRoots": [],
     "stickySessions": true
   },
   "compatibility": {
-    "legacyManagerBridge": true,
-    "legacyScriptAliases": true
+    "legacyManagerBridge": false,
+    "legacyScriptAliases": false
   }
 }

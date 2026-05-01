@@ -120,6 +120,6 @@ The client plan command should therefore answer two different questions:
 The local HTTP MCP endpoint also applies the same intent for runtime
 `upstream_call` / `upstream_batch` routing: explicit tool arguments win, then
 tool `metadata` hints, then stable bridge headers. This lets MCP clients keep
-the wrapper surface small while still giving stateful upstreams (browser,
+the wrapper surface small while still giving stateful upstreams (interactive servers,
 containers, host bridges) a real session-affinity key instead of one anonymous
 shared context.
