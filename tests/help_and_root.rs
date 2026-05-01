@@ -48,6 +48,15 @@ fn version_uses_mcpace_root_env_override_before_repo_scan() {
 }
 
 #[test]
+fn version_flag_aliases_version_command() {
+    for flag in ["--version", "-V"] {
+        let output = run(&[flag]);
+        assert!(output.status.success(), "stderr: {}", stderr(&output));
+        assert_eq!(stdout(&output).trim(), env!("CARGO_PKG_VERSION"));
+    }
+}
+
+#[test]
 fn check_alias_routes_to_grouped_verify_doctor() {
     let output = run(&["check"]);
     assert!(output.status.success());

@@ -16,7 +16,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         name: "version",
         description: "Print the MCPace version from mcpace.config.json.",
-        aliases: &[],
+        aliases: &["--version", "-v"],
         implemented: true,
     },
     CommandSpec {
