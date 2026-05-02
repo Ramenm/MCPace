@@ -39,12 +39,18 @@ CI workflow, and the docs together.
 ## CI policy
 
 - GitHub Actions use **`actions/checkout@v6`** and **`actions/setup-node@v6`**;
-- Node source validation runs a slim matrix: **Ubuntu** carries both maintained
-  Node majors, while **Windows** and **macOS** run the default local line;
+- default pull-request/push CI is intentionally budget-first: **Ubuntu** carries
+  both maintained Node majors, **Ubuntu** runs the full Rust quality/lifecycle
+  gates, and **Windows** keeps a single targeted launcher smoke for host-specific
+  process behavior;
 - npm package dry-run proof is a separate Ubuntu job that resolves Node from
   **`.nvmrc`**;
-- Rust build proof runs on **Ubuntu, Windows, and macOS** with the pinned
-  toolchain;
+- expensive hosted platform lanes (**Windows** full source/Rust validation,
+  **macOS** hosted validation, and Docker proofs) are opt-in through
+  `workflow_dispatch` with `full_ci: true` or a pull-request label named
+  **`full-ci`**;
+- release dry-runs are manual-only; run `release-dry-run` before cutting a tag
+  when native package proof is needed across Linux, Windows, and macOS;
 - the workflow uses read-only permissions and cancels superseded runs so the CI
   surface stays cheaper to maintain.
 

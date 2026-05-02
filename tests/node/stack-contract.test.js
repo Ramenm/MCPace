@@ -54,7 +54,10 @@ test('toolchain support policy stays aligned across manifests, local version fil
     assert.ok(workflow.includes(snippet), `workflow should include ${snippet}`);
   }
   for (const os of policy.ci.rustHosts) {
-    assert.ok(workflow.includes(`- ${os}`), `workflow should include Rust host ${os}`);
+    assert.ok(
+      workflow.includes(`- ${os}`) || workflow.includes(`runs-on: ${os}`),
+      `workflow should include Rust host ${os}`
+    );
   }
 
   for (const major of policy.node.supportedLtsMajors) {

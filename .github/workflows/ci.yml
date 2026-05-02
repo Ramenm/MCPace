@@ -1,7 +1,20 @@
 name: ci
 
 on:
+  workflow_dispatch:
+    inputs:
+      full_ci:
+        description: Run expensive Windows/macOS/Docker proof lanes.
+        required: false
+        default: false
+        type: boolean
   pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+      - labeled
   push:
     branches:
       - main
@@ -14,6 +27,7 @@ concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+
 jobs:
   node-source-validation:
     runs-on: ${{ matrix.os }}
@@ -25,10 +39,6 @@ jobs:
           - os: ubuntu-latest
             node: '22'
           - os: ubuntu-latest
-            node: '24'
-          - os: windows-latest
-            node: '24'
-          - os: macos-latest
             node: '24'
     steps:
       - uses: actions/checkout@v6
@@ -63,15 +73,8 @@ jobs:
           npm run pack:npm:dry-run
 
   rust-build-validation:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - ubuntu-latest
-          - windows-latest
-          - macos-latest
     steps:
       - uses: actions/checkout@v6
         with:
@@ -104,27 +107,19 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: rust-quality-${{ matrix.os }}
+          name: rust-quality-${{ runner.os }}
           path: reports/rust-quality-latest.json
 
-
   rust-lifecycle-validation:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            suite: test:hub_runtime
-          - os: ubuntu-latest
-            suite: test:mcp_server
-          - os: ubuntu-latest
-            suite: test:stdio_shim
-          - os: windows-latest
-            suite: test:hub_runtime
-          - os: macos-latest
-            suite: test:hub_runtime
+        suite:
+          - test:hub_runtime
+          - test:mcp_server
+          - test:stdio_shim
     steps:
       - uses: actions/checkout@v6
         with:
@@ -153,14 +148,86 @@ jobs:
       - name: Run isolated Rust lifecycle suite
         run: node scripts/run-rust-tests.mjs --json --suite ${{ matrix.suite }}
 
+  windows-launcher-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Cache Cargo registry and build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-rust-1.95.0-launcher-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-rust-1.95.0-
+
+      - name: Run targeted Windows launcher smoke test
+        run: cargo test --test hub_runtime hub_up_releases_captured_stdio_for_background_launcher -- --exact
+
+  hosted-platform-validation:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            node: '24'
+          - os: macos-latest
+            node: '24'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.95.0
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry and build outputs
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-rust-1.95.0-hosted-platform-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-rust-1.95.0-
+
+      - name: Run hosted platform source tests
+        run: npm test
+
+      - name: Run hosted platform Rust quality gate
+        run: npm run verify:rust-quality
+
+      - name: Verify platform package manifests
+        run: npm run verify:platform-packages
+
   launcher-fast-hosted:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         os:
-          - windows-latest
           - macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -182,10 +249,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-rust-1.95.0-
 
-      - name: Run targeted launcher smoke test
+      - name: Run targeted hosted launcher smoke test
         run: cargo test --test hub_runtime hub_up_releases_captured_stdio_for_background_launcher -- --exact
 
   launcher-fast-ubuntu-docker:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -201,6 +269,7 @@ jobs:
         run: node scripts/verify-ubuntu-docker-fast.mjs --json
 
   launcher-e2e-ubuntu-docker:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -216,6 +285,7 @@ jobs:
         run: node scripts/verify-ubuntu-docker-e2e.mjs --json
 
   full-work-ubuntu-docker:
+    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:

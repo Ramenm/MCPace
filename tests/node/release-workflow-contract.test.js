@@ -7,6 +7,7 @@ test('release dry-run workflow proves source and platform package lanes without 
   const workflow = read(path.join('.github', 'workflows', 'release-dry-run.yml'));
   assert.match(workflow, /name: release-dry-run/);
   assert.match(workflow, /workflow_dispatch:/);
+  assert.doesNotMatch(workflow, /pull_request:/);
   assert.match(workflow, /source-and-contracts:/);
   assert.match(workflow, /native_matrix:/);
   assert.match(workflow, /node scripts\/github-release-matrix\.mjs --github-output/);

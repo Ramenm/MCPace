@@ -82,6 +82,11 @@ test('CI workflow includes Rust quality, build, test validation, and determinist
   assert.match(workflow, /node scripts\/run-rust-tests\.mjs --json --suite/);
   assert.match(workflow, /ubuntu-latest/);
   assert.match(workflow, /windows-latest/);
+  assert.match(workflow, /workflow_dispatch:/);
+  assert.match(workflow, /full_ci:/);
+  assert.match(workflow, /pull_request\.labels\.\*\.name, 'full-ci'/);
+  assert.match(workflow, /hosted-platform-validation:/);
+  assert.match(workflow, /macos-latest/);
   assert.match(workflow, /actions\/cache@v4/);
   assert.match(workflow, /~\/\.cargo\/registry/);
   assert.match(workflow, /~\/\.cargo\/git/);
