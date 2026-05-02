@@ -340,6 +340,10 @@ fn query_bool_flag_accepts_common_truthy_refresh_values() {
 
 #[test]
 fn http_upstream_call_attaches_and_releases_runtime_lease() {
+    if which::which("node").is_err() {
+        eprintln!("skipping upstream HTTP lease smoke because node is not on PATH");
+        return;
+    }
     let root = temp_root();
     write_fake_upstream_config(&root);
     let config = test_config(root.clone(), None, super::ServeSurface::UnifiedServe);

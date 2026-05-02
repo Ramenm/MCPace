@@ -1,3 +1,4 @@
+use super::process_config::manager_data_path;
 #[cfg(unix)]
 use super::stdio_runtime::spawn_stdio_server;
 use super::*;
@@ -497,7 +498,7 @@ fn expands_workspace_and_fallback_placeholders() {
         &root,
     );
     assert!(expanded.contains(r"C:\workspace\project"));
-    assert!(expanded.contains(r"data\runtime"));
+    assert!(expanded.contains(&manager_data_path(&root).display().to_string()));
     assert!(expanded.ends_with("fallback"));
 }
 
