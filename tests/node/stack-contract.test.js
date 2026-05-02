@@ -44,9 +44,11 @@ test('toolchain support policy stays aligned across manifests, local version fil
 
   assert.match(workflow, new RegExp(`actions/checkout@${policy.githubActions.checkout}`));
   assert.match(workflow, new RegExp(`actions/setup-node@${policy.githubActions.setupNode}`));
+  assert.match(workflow, new RegExp(`actions/upload-artifact@${policy.githubActions.uploadArtifact}`));
   assert.match(workflow, /concurrency:/);
   assert.match(workflow, /package-dry-run:/);
   assert.match(workflow, /node-version-file:\s*\.nvmrc/);
+  assert.match(workflow, /package-manager-cache:\s*false/);
   assert.match(workflow, new RegExp(`toolchain:\\s*${policy.rust.toolchain.replace(/\./g, '\\.')}`));
 
   for (const entry of policy.ci.nodeSourceValidationMatrix) {

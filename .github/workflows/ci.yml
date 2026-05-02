@@ -48,7 +48,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-
+          package-manager-cache: false
       - name: Run source and launcher tests
         run: npm test
 
@@ -66,7 +66,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - name: Validate npm package dry-run
         run: |
           npm run verify:platform-packages
@@ -83,7 +83,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
@@ -105,7 +105,7 @@ jobs:
 
       - name: Upload Rust quality report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: rust-quality-${{ runner.os }}
           path: reports/rust-quality-latest.json
@@ -128,7 +128,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
@@ -194,7 +194,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-
+          package-manager-cache: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
@@ -264,7 +264,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - name: Run targeted launcher smoke test in Ubuntu Docker
         run: node scripts/verify-ubuntu-docker-fast.mjs --json
 
@@ -280,7 +280,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - name: Run constrained Ubuntu Docker E2E smoke
         run: node scripts/verify-ubuntu-docker-e2e.mjs --json
 
@@ -296,6 +296,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - name: Run constrained Ubuntu Docker full-work verification
         run: node scripts/verify-ubuntu-docker-full.mjs --json

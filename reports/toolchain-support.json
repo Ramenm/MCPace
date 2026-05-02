@@ -24,7 +24,10 @@
   "githubActions": {
     "checkout": "v6",
     "setupNode": "v6",
-    "rustToolchain": "dtolnay/rust-toolchain@stable"
+    "rustToolchain": "dtolnay/rust-toolchain@stable",
+    "uploadArtifact": "v7",
+    "downloadArtifact": "v8",
+    "setupNodePackageManagerCache": "disabled"
   },
   "ci": {
     "budgetMode": "default PR/push CI runs Ubuntu source checks, Ubuntu Rust quality/lifecycle, and one Windows launcher smoke; expensive hosted platform and Docker lanes require workflow_dispatch full_ci=true or a pull_request label named full-ci; release-dry-run is manual-only",

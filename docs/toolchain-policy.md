@@ -45,6 +45,12 @@ CI workflow, and the docs together.
   process behavior;
 - npm package dry-run proof is a separate Ubuntu job that resolves Node from
   **`.nvmrc`**;
+- `actions/setup-node` has `package-manager-cache: false` because the repo has no
+  npm lockfile and CI should not fail before tests while trying to auto-enable a
+  dependency cache;
+- artifact upload/download actions should stay on Node 24-compatible major
+  versions so the workflows do not break when GitHub removes Node 20 action
+  support;
 - expensive hosted platform lanes (**Windows** full source/Rust validation,
   **macOS** hosted validation, and Docker proofs) are opt-in through
   `workflow_dispatch` with `full_ci: true` or a pull-request label named
