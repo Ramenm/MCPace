@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use super::stdio_runtime::spawn_stdio_server;
 use super::*;
 use std::fs;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};

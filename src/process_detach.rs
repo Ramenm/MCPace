@@ -22,7 +22,7 @@ pub(crate) fn configure_unix_new_session(command: &mut std::process::Command) {
             // SAFETY: `setsid` has no Rust-side aliasing or lifetime
             // invariants. The return value is checked and errno is reported
             // through `last_os_error` on failure.
-            if unsafe { setsid() } < 0 {
+            if setsid() < 0 {
                 return Err(std::io::Error::last_os_error());
             }
             Ok(())
