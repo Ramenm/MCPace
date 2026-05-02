@@ -1,6 +1,6 @@
 {
   "version": "0.5.9",
-  "generatedAt": "2026-05-02T12:41:40Z",
+  "generatedAt": "2026-05-02T17:30:06Z",
   "sourceProof": {
     "status": "partial",
     "checks": [
@@ -26,16 +26,21 @@
     "reason": "cargo fmt passed; cargo check/clippy/test/build are blocked by crates.io DNS/dependency access in this environment."
   },
   "runtimeProof": {
-    "status": "blocked",
-    "reason": "Tiny stdio MCP fixture now exists, but no compiled/staged MCPace binary and no real-client /mcp -> upstream stdio tools/list/tools/call trace were executed in this environment."
+    "status": "pass",
+    "checks": [
+      "node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md",
+      "spawned local target/release/mcpace.exe serve endpoint",
+      "HTTP MCP initialize -> tools/list -> tools/call/upstream_call -> tiny/tiny_echo"
+    ],
+    "reason": "Local runtime trace passed: MCPace minted an MCP session, advertised upstream_call, called the deterministic tiny stdio MCP fixture, returned tiny_echo:trace-ok, and released the runtime lease."
   },
   "installReadiness": {
     "status": "ready-with-warnings",
-    "reason": "Source tree, npm thin-launcher package, inventory, boot harness, product-practice harness, and runtime-trace checklist are verified; published binary install readiness still needs staged native binaries/platform packages and Node/npm policy host."
+    "reason": "Source tree, npm thin-launcher package, inventory, boot harness, product-practice harness, and local runtime trace are verified; published binary install readiness still needs staged native binaries/platform packages and Node/npm policy host."
   },
   "releaseProof": {
     "status": "partial",
-    "reason": "npm thin-launcher pack verification passed; Rust binary packaging/release build remains blocked by Cargo dependency access and missing runtime proof."
+    "reason": "npm thin-launcher pack verification passed; published release readiness still needs staged native binaries/platform packages, GitHub Release publication, and npm provenance proof."
   },
   "productTruth": {
     "currentPromise": "One local MCPace endpoint and generic MCP brokering/diagnostics with no bundled upstream MCP servers enabled or recommended by default.",

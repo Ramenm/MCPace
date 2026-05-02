@@ -15,8 +15,8 @@ Interpretation:
 
 - `lint:npm` checks every JS/MJS source by discovery. Do not add hardcoded file lists to `package.json`.
 - `verify:boot` answers whether the source tree, package shape, toolchain, and install mode are coherent.
-- `verify:product-practice` prevents a common bad practice: adding more features and reports while the core broker proof remains missing.
-- `verify:runtime-trace` is the required next runtime proof lane. It stays blocked until a compiled binary and real `/mcp` trace exist.
+- `verify:product-practice` prevents a common bad practice: adding more features and reports while publish/install proof remains missing.
+- `verify:runtime-trace` records the local broker loop proof when a compiled binary exists: `/mcp` initialize, tools/list, and `upstream_call` into the tiny stdio fixture.
 
 First user path:
 

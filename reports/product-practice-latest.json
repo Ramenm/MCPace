@@ -1,15 +1,15 @@
 {
   "schema": "mcpace.productPractice.v1",
-  "generatedAt": "2026-05-02T14:32:51.766Z",
+  "generatedAt": "2026-05-02T17:31:05.673Z",
   "project": {
     "name": "mcpace",
     "version": "0.5.9"
   },
-  "status": "prove-runtime-before-more-features",
+  "status": "stage-binary-before-publish-claims",
   "canClaim": {
     "sourceTreeHealthy": true,
     "sourceThinLauncherInstall": true,
-    "runtimeBeta": false,
+    "runtimeBeta": true,
     "publishedBinaryInstall": false,
     "universalRemoteMcpBroker": false
   },
@@ -40,9 +40,9 @@
     },
     {
       "id": "runtime-trace",
-      "status": "blocked",
-      "evidence": "ready-to-run",
-      "nextAction": "Capture runtime trace: client -> /mcp -> tools/list -> tools/call -> stdio upstream trace."
+      "status": "pass",
+      "evidence": "pass",
+      "nextAction": "Keep the runtime trace passing before runtime claims."
     },
     {
       "id": "published-binary-install",
@@ -52,11 +52,9 @@
     }
   ],
   "wrongPracticeRisks": [
-    "Feature accumulation can make the project feel done before the actual broker loop is proven.",
     "Thin npm launcher install can be useful, but it is not the same as published native binary install."
   ],
   "nextMoves": [
-    "Capture runtime trace: client -> /mcp -> tools/list -> tools/call -> stdio upstream trace.",
     "Stage and verify at least one native binary/platform package before claiming published install readiness."
   ]
 }

@@ -45,11 +45,13 @@ test('product practice harness separates source health from runtime and publishe
 
   assert.equal(report.schema, 'mcpace.productPractice.v1');
   assert.equal(report.canClaim.sourceTreeHealthy, true);
-  assert.equal(report.canClaim.runtimeBeta, false);
   assert.equal(report.canClaim.universalRemoteMcpBroker, false);
-  assert.ok(report.gates.some((gate) => gate.id === 'runtime-trace' && gate.status === 'blocked'));
+  const runtimeGate = report.gates.find((gate) => gate.id === 'runtime-trace');
+  assert.ok(runtimeGate, 'runtime-trace gate must stay explicit');
+  assert.equal(report.canClaim.runtimeBeta, runtimeGate.status === 'pass');
+  assert.ok(report.gates.some((gate) => gate.id === 'published-binary-install' && gate.status === 'blocked'));
   assert.match(report.wrongPracticeRisks.join('\n'), /feel done|not the same/i);
-  assert.ok(report.nextMoves.some((move) => /cargo check|runtime/i.test(move)));
+  assert.ok(report.nextMoves.some((move) => /cargo check|runtime|binary|Stage/i.test(move)));
   assert.equal(JSON.parse(fs.readFileSync(jsonPath, 'utf8')).schema, 'mcpace.productPractice.v1');
   assert.match(fs.readFileSync(mdPath, 'utf8'), /product-practice harness/i);
 });

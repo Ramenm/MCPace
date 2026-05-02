@@ -1,14 +1,39 @@
 {
   "schema": "mcpace.runtimeTraceHarness.v1",
-  "generatedAt": "2026-05-02T14:12:38.318Z",
+  "generatedAt": "2026-05-02T17:27:03.229Z",
   "project": {
     "name": "mcpace",
     "version": "0.5.9"
   },
-  "status": "ready-to-run",
-  "endpoint": "http://127.0.0.1:39022/mcp",
+  "status": "pass",
+  "endpoint": "http://127.0.0.1:58701/mcp",
   "binary": "target/release/mcpace.exe",
+  "mode": "spawned-local-serve",
   "blockers": [],
+  "failures": [],
+  "trace": {
+    "endpoint": "http://127.0.0.1:58701/mcp",
+    "sessionId": "mcpace-a34ddbe9751caa5122313dd0d560bc07",
+    "protocolVersion": "2025-11-25",
+    "topLevelToolCount": 9,
+    "upstreamCallAdvertised": true,
+    "projectedTinyToolAdvertised": true,
+    "upstream": {
+      "server": "tiny",
+      "tool": "tiny_echo",
+      "text": "tiny_echo:trace-ok",
+      "upstreamOk": true,
+      "leaseAttached": true,
+      "leaseReleased": true,
+      "sessionPoolEnabled": true,
+      "sessionPoolReused": false
+    },
+    "childProcess": {
+      "stdoutTail": "Server running at http://127.0.0.1:58701 (UI: /, MCP: /mcp, health: /healthz)\n",
+      "stderrTail": ""
+    },
+    "cleanup": "temporary trace root removed after run"
+  },
   "steps": [
     {
       "id": "binary",
@@ -20,37 +45,36 @@
       "id": "tiny-upstream-fixture",
       "required": true,
       "status": "pass",
-      "evidence": "tiny stdio MCP fixture for deterministic upstream_tools/upstream_call proof"
+      "evidence": "tests/fixtures/tiny-mcp-stdio-server.mjs"
     },
     {
       "id": "serve-endpoint",
       "required": true,
-      "status": "manual",
-      "evidence": "http://127.0.0.1:39022/mcp"
+      "status": "pass",
+      "evidence": "http://127.0.0.1:58701/mcp (spawned from target/release/mcpace.exe)"
     },
     {
       "id": "initialize",
       "required": true,
-      "status": "manual",
-      "evidence": "POST JSON-RPC initialize with Accept: application/json, text/event-stream"
+      "status": "pass",
+      "evidence": "protocol=2025-11-25; session=mcpace-a34ddbe9751caa5122313dd0d560bc07"
     },
     {
       "id": "tools-list",
       "required": true,
-      "status": "manual",
-      "evidence": "POST JSON-RPC tools/list through MCPace"
+      "status": "pass",
+      "evidence": "9 tools; upstream_call advertised"
     },
     {
       "id": "upstream-call",
       "required": true,
-      "status": "manual",
-      "evidence": "POST JSON-RPC tools/call -> upstream_call against tiny stdio server"
+      "status": "pass",
+      "evidence": "tiny_echo returned \"tiny_echo:trace-ok\"; leaseReleased=true"
     }
   ],
   "nextCommands": [
-    "cargo build --release --locked",
-    "node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md",
-    "./target/release/mcpace serve --port 39022",
-    "Use MCP Inspector or a real client to run initialize -> tools/list -> tools/call -> upstream_call."
+    "npm run verify:product-practice",
+    "Stage and verify at least one native binary/platform package before claiming published install readiness.",
+    "Keep durable HTTP session storage and remote HTTP upstream forwarding as separate future runtime hardening work."
   ]
 }

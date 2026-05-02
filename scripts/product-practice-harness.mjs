@@ -61,7 +61,14 @@ function buildReport() {
     gate('node-syntax', nodeSyntax.status, `${nodeSyntax.checkedCount}/${nodeSyntax.fileCount} JS/MJS files checked`, 'Run npm run lint:npm.'),
     gate('lint-hardcode', lintHardcoded ? 'blocked' : 'pass', pkg.scripts['lint:npm'], 'Keep lint:npm as a small auto-discovery harness, not a hand-maintained file list.'),
     gate('rust-build', rustReady ? 'pass' : 'blocked', reportStatus('reports/rust-quality-latest.json'), 'Run cargo check/test/build on a host with dependency access.'),
-    gate('runtime-trace', runtimeReady ? 'pass' : 'blocked', runtimeTrace ? runtimeTrace.status : 'missing reports/runtime-trace-latest.json', 'Capture runtime trace: client -> /mcp -> tools/list -> tools/call -> stdio upstream trace.'),
+    gate(
+      'runtime-trace',
+      runtimeReady ? 'pass' : 'blocked',
+      runtimeTrace ? runtimeTrace.status : 'missing reports/runtime-trace-latest.json',
+      runtimeReady
+        ? 'Keep the runtime trace passing before runtime claims.'
+        : 'Capture runtime trace: client -> /mcp -> tools/list -> tools/call -> stdio upstream trace.'
+    ),
     gate('published-binary-install', binaryReady ? 'pass' : 'blocked', reportStatus('reports/install-readiness-latest.json'), 'Stage and verify at least one native binary/platform package before claiming published install readiness.'),
   ];
   const wrongPracticeRisks = [];

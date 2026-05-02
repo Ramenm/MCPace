@@ -34,7 +34,10 @@ published binary install ready
 universal remote MCP broker ready
 ```
 
-Only the first two are currently allowed. Runtime beta, published binary install, and universal remote MCP brokering remain blocked until the corresponding proof exists.
+The first three are currently allowed when the latest reports pass: source tree
+health, thin npm launcher usability, and a local runtime trace through a stdio
+upstream fixture. Published binary install and universal remote MCP brokering
+remain blocked until the corresponding proof exists.
 
 ### Security posture guardrails
 
@@ -71,7 +74,10 @@ tools/list
 tools/call -> tiny_echo
 ```
 
-The runtime-trace harness now has the upstream fixture it needs. The remaining runtime-trace blocker is the compiled/staged MCPace binary plus a real client or inspector trace.
+The runtime-trace harness now starts a temporary local `mcpace serve`, sends
+HTTP MCP `initialize`, `tools/list`, and `tools/call/upstream_call`, and proves
+the tiny stdio fixture returns `tiny_echo:trace-ok` while the runtime lease is
+released.
 
 ### Start-here path
 
@@ -119,14 +125,14 @@ productionUnwraps: 0
 - `node scripts/verify-npm-pack.mjs --json` — PASS for `@mcpace/cli@0.5.9` thin launcher.
 - `node scripts/boot-harness.mjs --json --write reports/boot-harness-latest.json --markdown reports/boot-harness-latest.md` — PASS with install readiness `partial` in this environment.
 - `node scripts/install-readiness-harness.mjs --json --write reports/install-readiness-latest.json` — PASS with public status `ready-with-warnings`.
-- `node scripts/product-practice-harness.mjs --json --write reports/product-practice-latest.json --markdown reports/product-practice-latest.md` — PASS with status `prove-rust-before-runtime-claims`.
-- `node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md` — PASS as a harness, status `blocked` because no compiled/staged binary is present.
+- `node scripts/product-practice-harness.mjs --json --write reports/product-practice-latest.json --markdown reports/product-practice-latest.md` — PASS with status `stage-binary-before-publish-claims`.
+- `node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md` — PASS with local HTTP MCP trace: `initialize -> tools/list -> upstream_call tiny/tiny_echo`.
 
 ## Blocked / not verified
 
 - `cargo check --all-targets --locked` is blocked by crates.io DNS/dependency access in this environment.
 - Full Rust `cargo test` and `cargo build --release` are not confirmed in this sandbox.
-- A full end-to-end real-client runtime trace is not confirmed: `client -> /mcp -> initialize -> initialized -> tools/list -> tools/call -> real stdio upstream`.
+- A packaged/external real-client trace remains separate from the local harness trace; current proof is a spawned local `/mcp` endpoint plus deterministic stdio upstream fixture.
 - Durable HTTP session store is still not implemented.
 - Remote Streamable HTTP upstream forwarding is still not implemented as a callable path; remote entries are registry/inventory entries only.
 - Published npm install readiness still needs staged native binaries or platform binary packages; current npm package mode is a thin launcher.
@@ -135,7 +141,7 @@ productionUnwraps: 0
 
 1. Run full Cargo check/test/build with dependency access.
 2. Stage at least one native binary/platform package before claiming published npm install readiness.
-3. Run the runtime-trace harness again after the binary exists; then record one real-client MCP runtime trace through the tiny stdio upstream fixture.
+3. Stage at least one native binary/platform package before claiming published npm install readiness.
 4. Add durable HTTP session storage and strict session lifecycle semantics.
 5. Implement remote Streamable HTTP upstream connector with auth/token isolation and SSRF controls.
 6. Add registry-backed discovery/import as a separate data source, not a hardcoded Rust catalog.

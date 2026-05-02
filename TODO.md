@@ -11,7 +11,7 @@
 
 - done baseline: planner/read-path surface, hub lifecycle shell, runtime lab, archive builder, and Node/source proof loop
 - in progress: moving from read-path honesty to live runtime correctness
-- blocked: live runtime proof, remaining OS-lane proof, real-client compatibility traces, published release proof
+- blocked: remaining OS-lane runtime proof, real-client compatibility traces, published release proof
 - honest completion view: roughly **50%–60%** of the currently known roadmap; the repo is further along on **control plane + source proof** than on **durable live runtime + release proof**
 
 ## Recently done baseline
