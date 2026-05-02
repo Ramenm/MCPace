@@ -1,6 +1,7 @@
 use super::model::{ServerRecord, SourceServerRecord};
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::mcp_sources;
 use crate::profile;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -47,49 +48,43 @@ pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String
 }
 
 fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServerRecord>, String> {
-    let path = root_path.join("mcp_settings.json");
-    if !path.is_file() {
-        return Ok(BTreeMap::new());
-    }
-
-    let json = json_helpers::read_json_file(&path)?;
+    let registry = mcp_sources::load_mcp_server_registry(root_path)?;
     let mut map = BTreeMap::new();
-    if let Some(servers_object) = json_helpers::object_at_path(&json, &["mcpServers"]) {
-        for (name, value) in servers_object {
-            let enabled = value
-                .get("enabled")
-                .and_then(JsonValue::as_bool)
-                .unwrap_or(true);
-            let raw_source_type = value
-                .get("type")
-                .and_then(JsonValue::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            let command = value
-                .get("command")
-                .and_then(JsonValue::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            let url = value
-                .get("url")
-                .and_then(JsonValue::as_str)
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            let source_type = infer_source_type(&raw_source_type, &command, &url);
-            map.insert(
-                name.trim().to_ascii_lowercase(),
-                SourceServerRecord {
-                    name: name.trim().to_string(),
-                    enabled,
-                    source_type,
-                    command,
-                    url,
-                },
-            );
-        }
+    for entry in registry.servers.values() {
+        let value = &entry.value;
+        let enabled = value
+            .get("enabled")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(true);
+        let raw_source_type = value
+            .get("type")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let command = value
+            .get("command")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let url = value
+            .get("url")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let source_type = infer_source_type(&raw_source_type, &command, &url);
+        map.insert(
+            entry.normalized_name.clone(),
+            SourceServerRecord {
+                name: entry.name.trim().to_string(),
+                enabled,
+                source_type,
+                command,
+                url,
+            },
+        );
     }
     Ok(map)
 }

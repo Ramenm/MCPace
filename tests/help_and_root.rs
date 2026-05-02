@@ -8,7 +8,7 @@ fn help_mentions_grouped_native_read_paths() {
     let output = run(&["help"]);
     assert!(output.status.success());
     let text = stdout(&output);
-    assert!(text.contains("doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths"));
+    assert!(text.contains("doctor/profile/projects/candidates/connect/client-plan/lab/server/verify have native Rust read paths"));
     assert!(text.contains("repair [--json] [--root <path>]"));
     assert!(text.contains("release [build] [--json] [--root <path>]"));
     assert!(text.contains("setup [--json]"));

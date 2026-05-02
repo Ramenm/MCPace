@@ -4,6 +4,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { repoRoot, deriveProjectVersion } from './lib/project-metadata.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
 const DEFAULT_WORKSPACE = '@mcpace/cli';
 const DEFAULT_NPM_PACK_TIMEOUT_MS = 120000;
@@ -24,11 +25,6 @@ function parseTimeoutEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function npmCommandArgs(args) {
   return process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args;

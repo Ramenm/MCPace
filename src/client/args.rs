@@ -177,7 +177,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(
         stdout,
-        "client export is HTTP-first: for local clients that document Streamable HTTP, it emits the MCPace URL {}. Stdio remains an internal compatibility fallback for clients that still need it.",
+        "client export is HTTP-first: for local clients that document Streamable HTTP, it emits the configured MCPace URL (default {}). Override it with mcpace.config.json serve.publicUrl or MCPACE_PUBLIC_MCP_URL when a cloud/public connector must reach MCPace.",
         runtimepaths::default_local_mcp_url()
     );
 }

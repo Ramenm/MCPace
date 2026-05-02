@@ -18,6 +18,9 @@
 - proof-report child commands use a configurable output buffer (`MCPACE_PROOF_COMMAND_MAX_BUFFER_BYTES`) so verbose source checks do not create false proof failures
 - `scripts/audit-source.mjs` reports zero critical production hazards, verifies explicit protocol/resource architecture boundaries, and keeps unsafe/FFI centralized in reviewed process-detach modules
 - Node coverage can be run with `npm run test:node:coverage` using the built-in `node:test` coverage lane
+- Node source/npm test scripts run serially with per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs` for deterministic child-process cleanup
+- source/release proof child commands use `scripts/lib/safe-child-env.mjs` instead of inheriting the full parent environment
+- `/mcp` rejects conflicting `Mcp-Method` / `Mcp-Name` headers when clients send them
 
 ## Build proof
 
@@ -40,6 +43,7 @@ Requires a Rust-capable host:
 - `mcpace server list` and `mcpace server capabilities` read real config/state honestly
 - `mcpace verify doctor` and `mcpace verify readiness` work on real supported hosts
 - later lifecycle commands work on Ubuntu, Windows, and macOS
+- strict `Mcp-Method` / `Mcp-Name` enforcement remains gated on a future protocol/session decision
 
 ## Release proof
 

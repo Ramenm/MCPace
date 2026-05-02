@@ -1,0 +1,633 @@
+{
+  "schema": "mcpace.bootHarness.v1",
+  "generatedAt": "2026-05-02T14:32:39.914Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "toolchain": {
+    "engines": {
+      "node": ">=22.0.0",
+      "npm": ">=10.0.0"
+    },
+    "node": {
+      "version": "v24.15.0",
+      "major": 24,
+      "supported": true
+    },
+    "npm": {
+      "available": false,
+      "status": null,
+      "signal": null,
+      "versionText": null,
+      "error": "spawnSync npm.cmd EINVAL",
+      "major": null,
+      "supported": false
+    },
+    "rust": {
+      "cargo": {
+        "available": true,
+        "status": 0,
+        "signal": null,
+        "versionText": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
+        "error": null
+      },
+      "rustc": {
+        "available": true,
+        "status": 0,
+        "signal": null,
+        "versionText": "rustc 1.95.0 (59807616e 2026-04-14)",
+        "error": null
+      },
+      "available": true
+    }
+  },
+  "inventory": {
+    "schema": "mcpace.sourceInventory.v1",
+    "generatedAt": "2026-05-02T14:32:33.830Z",
+    "project": {
+      "name": "mcpace",
+      "version": "0.5.9"
+    },
+    "summary": {
+      "totalFiles": 535,
+      "textFiles": 503,
+      "totalTextLines": 107287,
+      "rustFiles": 128,
+      "nodeFiles": 80,
+      "markdownFiles": 144,
+      "jsonFiles": 132,
+      "testFiles": 49,
+      "docsFiles": 71,
+      "reportsFiles": 54,
+      "schemaFiles": 2,
+      "presetCatalogs": 1
+    },
+    "byExtension": {
+      ".toml": 5,
+      "[none]": 22,
+      ".example": 1,
+      ".yml": 11,
+      ".md": 144,
+      ".xml": 5,
+      ".iml": 1,
+      ".json": 132,
+      ".tmp": 1,
+      ".lock": 1,
+      ".py": 1,
+      ".js": 39,
+      ".mjs": 41,
+      ".dockerfile": 1,
+      ".txt": 1,
+      ".rs": 128,
+      ".html": 1
+    },
+    "byCategory": {
+      "root-or-other": 106,
+      "config": 1,
+      "github": 9,
+      "docs": 71,
+      "eval": 44,
+      "examples": 2,
+      "memory-bank": 7,
+      "npm-platform-packages": 24,
+      "npm-cli": 11,
+      "presets": 2,
+      "reports": 54,
+      "schemas": 2,
+      "scripts": 38,
+      "rust-source": 118,
+      "tests": 46
+    },
+    "largestTextFiles": [
+      {
+        "path": "reports/mcp-real-smoke-20260427-165024.json",
+        "lines": 20736,
+        "category": "reports"
+      },
+      {
+        "path": "reports/mcp-current-upstream-real-calls-20260427-165554.json",
+        "lines": 1772,
+        "category": "reports"
+      },
+      {
+        "path": "tests/client_surface.rs",
+        "lines": 1628,
+        "category": "tests"
+      },
+      {
+        "path": "src/hub/leases.rs",
+        "lines": 1310,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/upstream/tests.rs",
+        "lines": 1277,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/adapter/discovery.rs",
+        "lines": 1276,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/serve.rs",
+        "lines": 1230,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/mcp_server.rs",
+        "lines": 1219,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/mcp_server/tool_surface.rs",
+        "lines": 1212,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/adapter.rs",
+        "lines": 1149,
+        "category": "rust-source"
+      },
+      {
+        "path": "tests/mcp_server.rs",
+        "lines": 1095,
+        "category": "tests"
+      },
+      {
+        "path": "src/client/actions.rs",
+        "lines": 1056,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/dashboard/tests.rs",
+        "lines": 1027,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/upstream/lease_runtime.rs",
+        "lines": 1003,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/dashboard/http_tools.rs",
+        "lines": 995,
+        "category": "rust-source"
+      },
+      {
+        "path": "reports/deep-runtime-sweep-20260427T152252Z.json",
+        "lines": 982,
+        "category": "reports"
+      },
+      {
+        "path": "src/dashboard.rs",
+        "lines": 970,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/upstream.rs",
+        "lines": 948,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/client_catalog.rs",
+        "lines": 913,
+        "category": "rust-source"
+      },
+      {
+        "path": "reports/deep-runtime-sweep-20260427T154219Z.json",
+        "lines": 848,
+        "category": "reports"
+      },
+      {
+        "path": "reports/mcp-final-real-enabled-smoke-20260427-172519.json",
+        "lines": 847,
+        "category": "reports"
+      },
+      {
+        "path": "src/client/actions/config_update.rs",
+        "lines": 790,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/dashboard/index.html",
+        "lines": 784,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/service.rs",
+        "lines": 744,
+        "category": "rust-source"
+      },
+      {
+        "path": "src/tool_result.rs",
+        "lines": 689,
+        "category": "rust-source"
+      }
+    ],
+    "largestRustModules": [
+      {
+        "path": "src/hub/leases.rs",
+        "lines": 1310
+      },
+      {
+        "path": "src/upstream/tests.rs",
+        "lines": 1277
+      },
+      {
+        "path": "src/adapter/discovery.rs",
+        "lines": 1276
+      },
+      {
+        "path": "src/serve.rs",
+        "lines": 1230
+      },
+      {
+        "path": "src/mcp_server.rs",
+        "lines": 1219
+      },
+      {
+        "path": "src/mcp_server/tool_surface.rs",
+        "lines": 1212
+      },
+      {
+        "path": "src/adapter.rs",
+        "lines": 1149
+      },
+      {
+        "path": "src/client/actions.rs",
+        "lines": 1056
+      },
+      {
+        "path": "src/dashboard/tests.rs",
+        "lines": 1027
+      },
+      {
+        "path": "src/upstream/lease_runtime.rs",
+        "lines": 1003
+      },
+      {
+        "path": "src/dashboard/http_tools.rs",
+        "lines": 995
+      },
+      {
+        "path": "src/dashboard.rs",
+        "lines": 970
+      },
+      {
+        "path": "src/upstream.rs",
+        "lines": 948
+      },
+      {
+        "path": "src/client_catalog.rs",
+        "lines": 913
+      },
+      {
+        "path": "src/client/actions/config_update.rs",
+        "lines": 790
+      },
+      {
+        "path": "src/service.rs",
+        "lines": 744
+      },
+      {
+        "path": "src/tool_result.rs",
+        "lines": 689
+      },
+      {
+        "path": "src/setup.rs",
+        "lines": 673
+      },
+      {
+        "path": "src/client/plan.rs",
+        "lines": 655
+      },
+      {
+        "path": "src/doctor.rs",
+        "lines": 640
+      },
+      {
+        "path": "src/lab/render.rs",
+        "lines": 640
+      },
+      {
+        "path": "src/mcp_presets.rs",
+        "lines": 615
+      },
+      {
+        "path": "src/client/actions/render_models.rs",
+        "lines": 607
+      },
+      {
+        "path": "src/mcp_sources/write.rs",
+        "lines": 566
+      },
+      {
+        "path": "src/upstream/inventory.rs",
+        "lines": 557
+      }
+    ],
+    "versions": {
+      "expectedVersion": "0.5.9",
+      "entries": [
+        {
+          "name": "cargo-package",
+          "version": "0.5.9",
+          "file": "Cargo.toml",
+          "matchesExpected": true
+        },
+        {
+          "name": "workspace-package",
+          "version": "0.5.9",
+          "file": "package.json",
+          "matchesExpected": true
+        },
+        {
+          "name": "npm-cli",
+          "version": "0.5.9",
+          "file": "packages/npm/cli/package.json",
+          "matchesExpected": true
+        },
+        {
+          "name": "mcpace-config",
+          "version": "0.5.9",
+          "file": "mcpace.config.json",
+          "matchesExpected": true
+        },
+        {
+          "name": "npm-platform:cli-darwin-arm64",
+          "version": "0.5.9",
+          "file": "packages/npm/cli-darwin-arm64/package.json",
+          "matchesExpected": true
+        },
+        {
+          "name": "npm-platform:cli-darwin-x64",
+          "version": "0.5.9",
+          "file": "packages/npm/cli-darwin-x64/package.json",
+          "matchesExpected": true
+        },
+        {
+          "name": "npm-platform:cli-linux-arm64-gnu",
+          "version": "0.5.9",
+          "file": "packages/npm/cli-linux-arm64-gnu/package.json",
+          "matchesExpected": true
+        },
+        {
+          "name": "npm-platform:cli-linux-x64-gnu",
+          "version": "0.5.9",
+          "file": "packages/npm/cli-linux-x64-gnu/package.json",
+          "matchesExpected": true
+        },
+        {
+          "name": "npm-platform:cli-win32-arm64-msvc",
+          "version": "0.5.9",
+          "file": "packages/npm/cli-win32-arm64-msvc/package.json",
+          "matchesExpected": true
+        },
+        {
+          "name": "npm-platform:cli-win32-x64-msvc",
+          "version": "0.5.9",
+          "file": "packages/npm/cli-win32-x64-msvc/package.json",
+          "matchesExpected": true
+        }
+      ],
+      "drift": []
+    },
+    "releaseManifest": {
+      "includePathCount": 39,
+      "optionalIncludePathCount": 1,
+      "missing": [],
+      "optionalPresent": [],
+      "optionalMissing": [
+        "packages/npm/cli/vendor"
+      ]
+    },
+    "presets": {
+      "status": "ok",
+      "schema": "mcpace.mcpPresetCatalog.v1",
+      "version": "2",
+      "presetCount": 4,
+      "ids": [
+        "context7",
+        "filesystem",
+        "git",
+        "playwright"
+      ],
+      "starterPresetCount": 1
+    },
+    "firstUseAssets": {
+      "required": [
+        {
+          "relativePath": "README.md",
+          "exists": true
+        },
+        {
+          "relativePath": "docs/README.md",
+          "exists": true
+        },
+        {
+          "relativePath": "docs/universal-mcp-connectivity.md",
+          "exists": true
+        },
+        {
+          "relativePath": "docs/mcp-http-api-spec.md",
+          "exists": true
+        },
+        {
+          "relativePath": "presets/mcp-servers.json",
+          "exists": true
+        },
+        {
+          "relativePath": "mcp_settings.d/README.md",
+          "exists": true
+        },
+        {
+          "relativePath": "schemas/mcpace-config.schema.json",
+          "exists": true
+        },
+        {
+          "relativePath": "reports/summary.md",
+          "exists": true
+        },
+        {
+          "relativePath": "memory-bank/activeContext.md",
+          "exists": true
+        }
+      ],
+      "missing": []
+    },
+    "ok": true,
+    "warnings": []
+  },
+  "sourceAudit": {
+    "status": "pass",
+    "command": "node scripts/audit-source.mjs --json --fail-on-critical",
+    "exitCode": 0,
+    "signal": null,
+    "error": null,
+    "report": {
+      "ok": true,
+      "generatedAt": "2026-05-02T14:32:33.952Z",
+      "policy": {
+        "critical": [
+          "No production Rust todo! or unimplemented! macros.",
+          "No production Rust panic! macros.",
+          "Protocol primitives stay transport and command agnostic.",
+          "Resource defaults stay side-effect free.",
+          "Unsafe Rust and FFI declarations stay inside reviewed process boundary modules."
+        ],
+        "warnings": [
+          "Rust modules over 1500 lines are tracked as refactor candidates.",
+          "Direct thread spawns outside reviewed runtime modules are tracked for future abstraction.",
+          "Production unwrap counts are tracked as hardening backlog, not as an immediate blocker.",
+          "Unsafe operations and foreign function blocks are counted and allowed only in reviewed process-detach modules."
+        ]
+      },
+      "summary": {
+        "files": 208,
+        "rustFiles": 128,
+        "nodeFiles": 80,
+        "productionRustLines": 43804,
+        "testRustLines": 2956,
+        "nodeLines": 11040,
+        "largeModules": 0,
+        "directThreadSpawns": 13,
+        "commandSpawns": 24,
+        "productionUnwraps": 422,
+        "unsafeOperations": 6,
+        "foreignFunctionBlocks": 2
+      },
+      "architecture": {
+        "boundaries": [
+          {
+            "name": "protocol primitives stay transport and command agnostic",
+            "file": "src/mcp_protocol.rs",
+            "ok": true,
+            "violations": []
+          },
+          {
+            "name": "resource defaults stay side-effect free",
+            "file": "src/resources.rs",
+            "ok": true,
+            "violations": []
+          }
+        ]
+      },
+      "critical": [],
+      "warnings": [],
+      "warningCount": 0
+    },
+    "output": "{\n  \"ok\": true,\n  \"generatedAt\": \"2026-05-02T14:32:33.952Z\",\n  \"policy\": {\n    \"critical\": [\n      \"No production Rust todo! or unimplemented! macros.\",\n      \"No production Rust panic! macros.\",\n      \"Protocol primitives stay transport and command agnostic.\",\n      \"Resource defaults stay side-effect free.\",\n      \"Unsafe Rust and FFI declarations stay inside reviewed process boundary modules.\"\n    ],\n    \"warnings\": [\n      \"Rust modules over 1500 lines are tracked as refactor candidates.\",\n      \"Direct thread spawns outside reviewed runtime modules are tracked for future abstraction.\",\n      \"Production unwrap counts are tracked as hardening backlog, not as an immediate blocker.\",\n      \"Unsafe operations and foreign function blocks are counted and allowed only in reviewed process-detach modules.\"\n    ]\n  },\n  \"summary\": {\n    \"files\": 208,\n    \"rustFiles\": 128,\n    \"nodeFiles\": 80,\n    \"productionRustLines\": 43804,\n    \"testRustLines\": 2956,\n    \"nodeLines\": 11040,"
+  },
+  "nodeSyntax": {
+    "schema": "mcpace.nodeSyntaxCheck.v1",
+    "generatedAt": "2026-05-02T14:32:39.281Z",
+    "root": "C:\\Users\\rmatv\\Projects\\mcpace",
+    "sourceRoots": [
+      "packages/npm/cli",
+      "scripts",
+      "tests/node",
+      "tests/fixtures",
+      "examples"
+    ],
+    "status": "pass",
+    "fileCount": 80,
+    "checkedCount": 80,
+    "failureCount": 0,
+    "failures": []
+  },
+  "npmPack": {
+    "status": "pass",
+    "workspace": "@mcpace/cli",
+    "command": "npm pack --workspace @mcpace/cli --json --dry-run",
+    "packageMode": "thin-launcher",
+    "requiredFiles": [
+      "README.md",
+      "LICENSE",
+      "package.json",
+      "bin/mcpace.js",
+      "lib/platform.js",
+      "lib/resolve-binary.js",
+      "lib/runtime.js"
+    ],
+    "repoVendoredBinaryFiles": [],
+    "packageName": "@mcpace/cli",
+    "packageVersion": "0.5.9",
+    "expectedVersion": "0.5.9",
+    "packFilename": "mcpace-cli-0.5.9.tgz",
+    "entryCount": 8,
+    "unpackedSize": 21790,
+    "files": [
+      "LICENSE",
+      "README.md",
+      "bin/mcpace.js",
+      "lib/platform.js",
+      "lib/resolve-binary.js",
+      "lib/runtime.js",
+      "lib/targets.js",
+      "package.json"
+    ],
+    "missingFiles": [],
+    "packedVendoredBinaryFiles": [],
+    "missingVendoredBinaryFiles": []
+  },
+  "binaryDistribution": {
+    "mode": "thin-launcher",
+    "readyForPublishedInstall": false,
+    "vendoredFiles": [],
+    "platformPackages": [
+      {
+        "key": "linux-x64-gnu",
+        "packageName": "@mcpace/cli-linux-x64-gnu",
+        "binary": "packages/npm/cli-linux-x64-gnu/bin/mcpace",
+        "present": false
+      },
+      {
+        "key": "linux-arm64-gnu",
+        "packageName": "@mcpace/cli-linux-arm64-gnu",
+        "binary": "packages/npm/cli-linux-arm64-gnu/bin/mcpace",
+        "present": false
+      },
+      {
+        "key": "darwin-x64",
+        "packageName": "@mcpace/cli-darwin-x64",
+        "binary": "packages/npm/cli-darwin-x64/bin/mcpace",
+        "present": false
+      },
+      {
+        "key": "darwin-arm64",
+        "packageName": "@mcpace/cli-darwin-arm64",
+        "binary": "packages/npm/cli-darwin-arm64/bin/mcpace",
+        "present": false
+      },
+      {
+        "key": "win32-x64-msvc",
+        "packageName": "@mcpace/cli-win32-x64-msvc",
+        "binary": "packages/npm/cli-win32-x64-msvc/bin/mcpace.exe",
+        "present": false
+      },
+      {
+        "key": "win32-arm64-msvc",
+        "packageName": "@mcpace/cli-win32-arm64-msvc",
+        "binary": "packages/npm/cli-win32-arm64-msvc/bin/mcpace.exe",
+        "present": false
+      }
+    ],
+    "platformBinaryCount": 0
+  },
+  "installReadiness": {
+    "status": "partial",
+    "blockers": [],
+    "warnings": [
+      "current npm missing is below project policy >=10.0.0",
+      "no vendored/platform native binary staged; npm package remains a thin launcher/source-install artifact"
+    ]
+  },
+  "nextActions": [
+    "Use Node 22+ and npm 10+ for official source proof and install checks.",
+    "Run `cargo check --all-targets --locked` and `cargo test --all-targets --locked` on a host with Cargo dependency access.",
+    "Stage a native binary with `node scripts/stage-platform-package-binary.mjs ...` before claiming published npm install readiness.",
+    "Record a real runtime trace: client -> /mcp -> initialize -> tools/list -> tools/call -> stdio upstream response."
+  ]
+}

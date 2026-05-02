@@ -13,6 +13,7 @@ pub const ERROR_PARSE: i64 = -32700;
 pub const ERROR_INVALID_REQUEST: i64 = -32600;
 pub const ERROR_METHOD_NOT_FOUND: i64 = -32601;
 pub const ERROR_INVALID_PARAMS: i64 = -32602;
+pub const ERROR_HEADER_MISMATCH: i64 = -32001;
 pub const ERROR_NOT_INITIALIZED: i64 = -32002;
 
 pub fn is_supported_protocol_version(requested: &str) -> bool {

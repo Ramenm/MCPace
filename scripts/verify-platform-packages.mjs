@@ -12,6 +12,7 @@ import {
   platformPackageJson,
   targetByKey
 } from './lib/npm-platform-packages.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
 const NPM_COMMAND = process.platform === 'win32' ? 'cmd.exe' : 'npm';
 
@@ -38,11 +39,6 @@ function sameJson(left, right) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function npmCommandArgs(args) {
   return process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args;

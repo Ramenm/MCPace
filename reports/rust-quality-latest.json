@@ -1,8 +1,8 @@
 {
   "ok": true,
   "status": "pass",
-  "generatedAt": "2026-05-01T13:20:51.713Z",
-  "durationMs": 99836,
+  "generatedAt": "2026-05-02T14:09:10.203Z",
+  "durationMs": 134643,
   "toolchain": {
     "cargoAvailable": true,
     "cargoVersion": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
@@ -37,7 +37,7 @@
       "ok": true,
       "code": 0,
       "signal": null,
-      "durationMs": 628,
+      "durationMs": 862,
       "timeoutMs": 300000,
       "maxBufferBytes": 16777216,
       "stdoutSummary": "",
@@ -51,11 +51,11 @@
       "ok": true,
       "code": 0,
       "signal": null,
-      "durationMs": 1867,
+      "durationMs": 2792,
       "timeoutMs": 300000,
       "maxBufferBytes": 16777216,
       "stdoutSummary": "",
-      "stderrSummary": "    Checking mcpace v0.4.1 (C:\\Users\\rmatv\\Projects\\mcpace)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.69s",
+      "stderrSummary": "    Checking mcpace v0.5.9 (C:\\Users\\rmatv\\Projects\\mcpace)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.56s",
       "error": null
     },
     {
@@ -65,11 +65,11 @@
       "ok": true,
       "code": 0,
       "signal": null,
-      "durationMs": 44111,
+      "durationMs": 62135,
       "timeoutMs": 300000,
       "maxBufferBytes": 16777216,
-      "stdoutSummary": "      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"timedOut\": false,\n      \"durationMs\": 13081,\n      \"stdoutBytes\": 6865,\n      \"stderrBytes\": 155\n    },\n    {\n      \"name\": \"doc\",\n      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"timedOut\": false,\n      \"durationMs\": 557,\n      \"stdoutBytes\": 113,\n      \"stderrBytes\": 93\n    }\n  ]\n}",
-      "stderrSummary": "test upstream::tests::policy_suggestions_keep_interaction_control_as_stable_cross_server_risk_class ... ok\ntest upstream::tests::probe_reuses_successful_tool_list_cache_for_callable_stdio_servers ... ok\ntest upstream::tests::relative_stdio_command_paths_resolve_against_configured_cwd ... ok\ntest upstream::tests::server_fingerprint_does_not_embed_secret_env_values ... ok\ntest upstream::tests::server_runtime_callable_blocks_missing_cwd_before_spawn ... ok\ntest upstream::tests::stderr_suffix_bounds_diagnostic_line_count_and_length ... ok\ntest upstream::tests::stderr_suffix_redacts_sensitive_diagnostics_without_removing_context ... ok\ntest upstream::tests::surface_manifest_is_explicit_about_wrapper_projection ... ok\ntest upstream::tests::tool_list_cache_key_tracks_settings_metadata ... ok\ntest upstream::tests::tool_list_cache_prunes_oldest_entries_to_bound_memory ... ok\ntest upstream::tests::tool_list_cache_returns_fresh_entries_and_drops_stale_entries ... ok\ntest upstream::tests::tool_policy_audit_flags_unprotected_mutating_tools_without_enforcing_heuristics ... ok\ntest upstream::tests::tool_policy_audit_reports_declarative_policy_coverage ... ok\ntest upstream::tests::tool_summary_uses_upstream_name_title_and_description ... ok\ntest result: ok. 79 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.80s\n[mcpace rust-test] doc: cargo test --doc --locked -- --test-threads=1\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.12s\n   Doc-tests mcpace\nrunning 0 tests\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "stdoutSummary": "      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"timedOut\": false,\n      \"durationMs\": 14363,\n      \"stdoutBytes\": 7194,\n      \"stderrBytes\": 155\n    },\n    {\n      \"name\": \"doc\",\n      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"timedOut\": false,\n      \"durationMs\": 748,\n      \"stdoutBytes\": 113,\n      \"stderrBytes\": 93\n    }\n  ]\n}",
+      "stderrSummary": "test upstream::tests::policy_suggestions_keep_interaction_control_as_stable_cross_server_risk_class ... ok\ntest upstream::tests::probe_reuses_successful_tool_list_cache_for_callable_stdio_servers ... ok\ntest upstream::tests::relative_stdio_command_paths_resolve_against_configured_cwd ... ok\ntest upstream::tests::server_fingerprint_does_not_embed_secret_env_values ... ok\ntest upstream::tests::server_runtime_callable_blocks_missing_cwd_before_spawn ... ok\ntest upstream::tests::stderr_suffix_bounds_diagnostic_line_count_and_length ... ok\ntest upstream::tests::stderr_suffix_redacts_sensitive_diagnostics_without_removing_context ... ok\ntest upstream::tests::surface_manifest_is_explicit_about_wrapper_projection ... ok\ntest upstream::tests::tool_list_cache_key_tracks_settings_metadata ... ok\ntest upstream::tests::tool_list_cache_prunes_oldest_entries_to_bound_memory ... ok\ntest upstream::tests::tool_list_cache_returns_fresh_entries_and_drops_stale_entries ... ok\ntest upstream::tests::tool_policy_audit_flags_unprotected_mutating_tools_without_enforcing_heuristics ... ok\ntest upstream::tests::tool_policy_audit_reports_declarative_policy_coverage ... ok\ntest upstream::tests::tool_summary_uses_upstream_name_title_and_description ... ok\ntest result: ok. 82 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 14.09s\n[mcpace rust-test] doc: cargo test --doc --locked -- --test-threads=1\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.13s\n   Doc-tests mcpace\nrunning 0 tests\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
       "error": null
     },
     {
@@ -79,11 +79,11 @@
       "ok": true,
       "code": 0,
       "signal": null,
-      "durationMs": 52726,
+      "durationMs": 68283,
       "timeoutMs": 300000,
       "maxBufferBytes": 16777216,
       "stdoutSummary": "",
-      "stderrSummary": "   Compiling mcpace v0.4.1 (C:\\Users\\rmatv\\Projects\\mcpace)\n    Finished `release` profile [optimized] target(s) in 52.65s",
+      "stderrSummary": "   Compiling mcpace v0.5.9 (C:\\Users\\rmatv\\Projects\\mcpace)\n    Finished `release` profile [optimized] target(s) in 1m 08s",
       "error": null
     }
   ]

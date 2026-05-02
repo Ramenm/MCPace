@@ -12,12 +12,12 @@
 !/.env.example
 
 # Local IDE and agent state
+# memory-bank/ is intentionally tracked because release-manifest.json requires it.
 /.omx/
 /.playwright-mcp/
 /.serena/
 /.vscode/
 /.idea/
-/memory-bank/
 /TestResults/
 
 # Temporary packaging output
@@ -29,3 +29,7 @@
 /node_modules/
 /packages/**/node_modules/
 /*.tgz
+
+# Local MCP settings fragments are machine-specific; keep README/examples tracked.
+/mcp_settings.d/*.json
+!/mcp_settings.d/*.example.json

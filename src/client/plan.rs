@@ -1,6 +1,7 @@
 use crate::client_catalog::ClientTargetRecord;
 use crate::runtimepaths;
 use crate::server::ServerRecord;
+use std::path::Path;
 
 use super::model::{
     ClientPlan, RequestStrategy, ResolvedContext, ScopeResolution, ServerCoordinationPlan,
@@ -124,7 +125,7 @@ pub(super) fn build_plan(
         warnings.push(
             format!(
                 "Streamable HTTP is available through the one-port local MCPace server on {}; keep cloud/public relay expectations separate from this localhost lane.",
-                runtimepaths::default_local_mcp_url()
+                runtimepaths::configured_mcp_url(Path::new(&root_path))
             ),
         );
     }

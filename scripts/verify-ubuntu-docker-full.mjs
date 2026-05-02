@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 const DEFAULT_IMAGE_TAG = 'mcpace-verify:local';
 const DEFAULT_CPUS = '1.0';
 const DEFAULT_MEMORY = '768m';
@@ -24,11 +25,6 @@ function parseTimeoutEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function parseArgs(argv) {
   const parsed = {

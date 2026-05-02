@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { childEnvForCommand } from './lib/safe-child-env.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUTPUT_PATH = path.join(repoRoot, 'reports', 'rust-quality-latest.json');
@@ -188,10 +189,7 @@ function runLane(lane, options) {
   const [command, args] = lane.command;
   const invocation = resolveCommandInvocation(command, args);
   const startedAt = Date.now();
-  const env = { ...process.env };
-  if (command === 'cargo' && !env.RUSTUP_TOOLCHAIN) {
-    env.RUSTUP_TOOLCHAIN = 'stable';
-  }
+  const env = childEnvForCommand(command);
 
   const result = spawnSync(invocation.bin, invocation.args, {
     cwd: repoRoot,

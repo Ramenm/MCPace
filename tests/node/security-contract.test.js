@@ -1,9 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { read } = require('./helpers');
+const { cleanChildEnv, read } = require('./helpers');
 
 test('upstream stderr diagnostics are bounded and redact likely secrets before surfacing errors', () => {
-  const upstream = read('src/upstream.rs');
+  const upstream = [
+    read('src/upstream.rs'),
+    read('src/upstream/diagnostics.rs'),
+    read('src/upstream/policy_suggestions.rs'),
+    read('src/upstream/policy_audit.rs'),
+    read('src/upstream/inventory.rs'),
+    read('src/upstream/process_config.rs'),
+    read('src/upstream/projection.rs'),
+    read('src/upstream/source_type.rs'),
+    read('src/upstream/stdio_runtime.rs'),
+    read('src/upstream/tests.rs'),
+  ].join('\n');
 
   assert.match(upstream, /fn stderr_suffix\(/);
   assert.match(upstream, /sanitize_stderr_diagnostic/);
@@ -24,4 +35,92 @@ test('security posture documentation covers MCP stderr redaction and explicit en
   assert.match(summary, /redact/i);
   assert.match(summary, /env/i);
   assert.match(memory, /environment is cleared/i);
+});
+
+test('HTTP MCP route validates standard header/body agreement when clients send MCP headers', () => {
+  const dashboard = [
+    read('src/dashboard.rs'),
+    read('src/dashboard/http_boundary.rs'),
+    read('src/dashboard/http_headers.rs'),
+    read('src/dashboard/http_session.rs'),
+    read('src/dashboard/http_tools.rs'),
+    read('src/dashboard/mcp_http.rs'),
+    read('src/dashboard/tool_runtime.rs'),
+    read('src/dashboard/tests.rs'),
+    read('src/dashboard/index.html'),
+  ].join('\n');
+  const spec = read('docs/mcp-http-api-spec.md');
+
+  assert.match(dashboard, /fn validate_mcp_standard_headers\(/);
+  assert.match(dashboard, /fn mcp_standard_header_name/);
+  assert.match(dashboard, /request_header_string\(Some\(request\), "mcp-method"\)/);
+  assert.match(dashboard, /request_header_string\(Some\(request\), "mcp-name"\)/);
+  assert.match(dashboard, /Mcp-Method header/);
+  assert.match(dashboard, /Mcp-Name header/);
+  assert.match(read('src/mcp_protocol.rs'), /ERROR_HEADER_MISMATCH:\s*i64\s*=\s*-32001/);
+  assert.match(dashboard, /mismatched Mcp-Method response/);
+  assert.match(dashboard, /mismatched Mcp-Name response/);
+  assert.match(spec, /Mcp-Method/);
+  assert.match(spec, /Mcp-Name/);
+  assert.match(spec, /header\/body request smuggling/i);
+});
+
+
+test('child process test helpers do not pass registry credentials or sandbox secrets by default', () => {
+  const env = cleanChildEnv();
+
+  assert.equal(env.NPM_CONFIG_REGISTRY, undefined);
+  assert.equal(env.PIP_INDEX_URL, undefined);
+  assert.equal(env.UV_INDEX_URL, undefined);
+  assert.equal(env.CAAS_ARTIFACTORY_READER_PASSWORD, undefined);
+  assert.equal(env.NODE_TEST_CONTEXT, undefined);
+  assert.equal(env.CI, undefined);
+  assert.equal(env.PATH || env.Path, process.env.PATH || process.env.Path);
+});
+
+
+test('source proof child-process runners use sanitized environment helpers', () => {
+  // Arrange
+  const helper = read('scripts/lib/safe-child-env.mjs');
+  const files = [
+    'scripts/archive-release.mjs',
+    'scripts/proof-report.mjs',
+    'scripts/run-rust-tests.mjs',
+    'scripts/verify-rust-quality.mjs',
+    'scripts/verify-npm-pack.mjs',
+    'scripts/verify-platform-packages.mjs',
+    'scripts/publish-npm-artifacts.mjs'
+  ];
+
+  // Act / Assert
+  assert.match(helper, /SAFE_CHILD_ENV_KEYS/);
+  assert.doesNotMatch(helper, /NPM_CONFIG_REGISTRY/);
+  for (const file of files) {
+    const source = read(file);
+    assert.match(source, /safe-child-env\.mjs/, `${file} should import the shared safe child env helper`);
+    assert.doesNotMatch(source, /env:\s*\{\s*\.\.\.process\.env\s*\}/, `${file} should not pass the full parent environment to child processes`);
+  }
+});
+
+
+
+test('HTTP MCP session ids are visible-ASCII bounded and generated from OS randomness when available', () => {
+  const dashboard = [
+    read('src/dashboard.rs'),
+    read('src/dashboard/http_boundary.rs'),
+    read('src/dashboard/http_headers.rs'),
+    read('src/dashboard/http_session.rs'),
+    read('src/dashboard/http_tools.rs'),
+    read('src/dashboard/mcp_http.rs'),
+    read('src/dashboard/tool_runtime.rs'),
+    read('src/dashboard/tests.rs'),
+    read('src/dashboard/index.html'),
+  ].join('\n');
+
+  assert.match(dashboard, /fn normalize_mcp_http_session_id\(/);
+  assert.match(dashboard, /0x21\.\.=0x7e/);
+  assert.match(dashboard, /resources::MAX_HTTP_HEADER_LINE_BYTES/);
+  assert.match(dashboard, /fn os_random_hex\(/);
+  assert.match(dashboard, /getrandom::getrandom/);
+  assert.match(dashboard, /mcpace-fallback-/);
 });

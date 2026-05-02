@@ -17,11 +17,12 @@ Run in this repo today:
 - seed prompt/agent eval contract checks
 - evidence-path checks for runtime capabilities and seed evals
 - eval scenario-map / rubric / dataset-plan validation
-- security contract checks for upstream stderr redaction and MCP child-env isolation
+- security contract checks for upstream stderr redaction, MCP child-env isolation, and `/mcp` standard-header/body agreement
 - stack-policy drift checks across `package.json`, `.nvmrc`, `.node-version`, CI, and docs
 - machine-generated verification report contract checks for `scripts/proof-report.mjs`, including verbose-child-output buffer hardening
 - source/architecture audit for deterministic production-code hazards, unsafe/FFI boundary drift, and boundary violations (`npm run audit:source`)
 - optional built-in Node coverage lane for contract tests: `npm run test:node:coverage`
+- source/npm Node tests run with per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs` to keep child-process-heavy contract checks deterministic in constrained sandboxes
 
 ## 2. Build checks
 
@@ -155,7 +156,10 @@ If a future lane needs higher limits, raise them deliberately and document why.
 - eval changes improve a vanity score while hiding unsupported-claim regressions;
 - packaged MCP defaults reintroduce upstream server IDs, commands, or candidate recommendations;
 - stdio upstream launch regresses to forwarding the whole parent environment instead of explicit `env` / local `env_vars`;
-- upstream stderr diagnostics leak raw Authorization headers, bearer tokens, passwords, or unbounded secret-bearing output.
+- upstream stderr diagnostics leak raw Authorization headers, bearer tokens, passwords, or unbounded secret-bearing output;
+- `/mcp` requests carry `Mcp-Method` / `Mcp-Name` values that disagree with the JSON-RPC body;
+- proof subprocesses inherit registry credentials, package-index credentials, or sandbox secrets from the parent shell;
+- Node source proof hangs after printing passing TAP output because child-process-heavy test files run in parallel.
 
 Additional source-quality failure classes now guarded:
 

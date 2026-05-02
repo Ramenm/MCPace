@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-import { readText } from './project-metadata.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+import { readText, repoRoot } from './project-metadata.mjs';
 
 const TARGET_BLOCK_PATTERN = /^\s{4}ClientTarget\s*\{[\s\S]*?^\s{4}\},/gm;
 
-function extractCatalogSection(source) {
+function extractCatalogSection(source, sourcePath) {
   const startMarker = 'pub const CLIENT_TARGETS: &[ClientTarget] = &[';
   const start = source.indexOf(startMarker);
   if (start === -1) {
@@ -65,13 +67,27 @@ function parseTargetBlock(block) {
   };
 }
 
+function readCatalogSource() {
+  for (const sourcePath of ['src/client_catalog/builtin.rs', 'src/client_catalog.rs']) {
+    const absolutePath = path.join(repoRoot, sourcePath);
+    if (!fs.existsSync(absolutePath)) {
+      continue;
+    }
+    const source = readText(sourcePath);
+    if (source.includes('pub const CLIENT_TARGETS: &[ClientTarget] = &[')) {
+      return { source, sourcePath };
+    }
+  }
+  throw new Error('failed to locate CLIENT_TARGETS catalog in src/client_catalog/builtin.rs or src/client_catalog.rs');
+}
+
 export function readClientCatalog() {
-  const source = readText('src/client_catalog.rs');
-  const catalogSection = extractCatalogSection(source);
+  const { source, sourcePath } = readCatalogSource();
+  const catalogSection = extractCatalogSection(source, sourcePath);
   const blocks = catalogSection.match(TARGET_BLOCK_PATTERN) || [];
   const targets = blocks.map(parseTargetBlock).filter((target) => target.id);
   if (targets.length === 0) {
-    throw new Error('failed to parse any client targets from src/client_catalog.rs');
+    throw new Error(`failed to parse any client targets from ${sourcePath}`);
   }
   return targets;
 }

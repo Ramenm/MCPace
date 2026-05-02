@@ -9,6 +9,7 @@ import {
   readJson,
   repoRoot
 } from './lib/project-metadata.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 const DEFAULT_OUTPUT_DIR = path.join(repoRoot, 'dist');
 const DEFAULT_ARCHIVE_COMMAND_TIMEOUT_MS = 120000;
 const ARCHIVE_COMMAND_TIMEOUT_MS = parseTimeoutEnv(
@@ -29,11 +30,6 @@ function parseTimeoutEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function parseArgs(argv) {
   const parsed = {
@@ -219,6 +215,7 @@ function createArchive(stagingParent, rootName, archivePath) {
     return zipResult;
   }
 
+  const escapedStagingParent = stagingParent.replace(/'/g, "''");
   const escapedRoot = rootName.replace(/'/g, "''");
   const escapedArchivePath = archivePath.replace(/'/g, "''");
   return spawnSync(
@@ -226,7 +223,26 @@ function createArchive(stagingParent, rootName, archivePath) {
     [
       '-NoProfile',
       '-Command',
-      `Compress-Archive -Path '${escapedRoot}' -DestinationPath '${escapedArchivePath}' -Force`
+      [
+        'Add-Type -AssemblyName System.IO.Compression',
+        'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+        `$staging = '${escapedStagingParent}'`,
+        `$rootName = '${escapedRoot}'`,
+        `$archivePath = '${escapedArchivePath}'`,
+        '$root = Join-Path $staging $rootName',
+        'if (Test-Path -LiteralPath $archivePath) { Remove-Item -LiteralPath $archivePath -Force }',
+        '$archive = [System.IO.Compression.ZipFile]::Open($archivePath, [System.IO.Compression.ZipArchiveMode]::Create)',
+        'try {',
+        '  $prefix = $staging.TrimEnd([char[]]@([char]92, [char]47)) + [System.IO.Path]::DirectorySeparatorChar',
+        '  Get-ChildItem -LiteralPath $root -Recurse -File | ForEach-Object {',
+        '    $relative = $_.FullName.Substring($prefix.Length)',
+        "    $entry = $relative -replace '\\\\', '/'",
+        '    [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile($archive, $_.FullName, $entry, [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null',
+        '  }',
+        '} finally {',
+        '  $archive.Dispose()',
+        '}'
+      ].join('; ')
     ],
     {
       cwd: stagingParent,

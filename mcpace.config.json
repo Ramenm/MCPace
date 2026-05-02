@@ -1,8 +1,9 @@
 {
   "name": "mcpace",
-  "version": "0.4.1",
+  "version": "0.5.9",
   "ports": {
-    "hub": 12223
+    "hub": 12223,
+    "serve": 39022
   },
   "hub": {
     "containerName": "mcpace",
@@ -67,5 +68,25 @@
     "paths": [],
     "targets": [],
     "description": "Optional external client target catalog. Built-ins remain a fallback; entries here or MCPACE_CLIENT_CATALOG can add/override clients without recompiling."
+  },
+  "serve": {
+    "host": "127.0.0.1",
+    "port": 39022,
+    "mcpPath": "/mcp",
+    "publicUrl": "",
+    "description": "Advertised Streamable HTTP endpoint. publicUrl overrides local host/port/path for client install/export when a relay or public ingress is used."
+  },
+  "mcpSettings": {
+    "includePaths": [],
+    "description": "Optional additional MCP settings JSON files/directories. Sources are merged in order: mcp_settings.json, default mcp_settings.d/*.json, includePaths/includeDirs, MCPACE_MCP_SETTINGS, then MCPACE_MCP_SETTINGS_DIRS; later duplicate server names override earlier ones.",
+    "includeDirs": [
+      "mcp_settings.d"
+    ]
+  },
+  "mcpPresets": {
+    "includePaths": [
+      "presets/mcp-servers.json"
+    ],
+    "description": "Editable useful-MCP preset catalogs. Sources are merged in order and can be extended with MCPACE_MCP_PRESETS; later duplicate preset ids override earlier ones."
   }
 }

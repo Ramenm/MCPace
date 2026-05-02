@@ -1,0 +1,62 @@
+{
+  "schema": "mcpace.productPractice.v1",
+  "generatedAt": "2026-05-02T14:32:51.766Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "prove-runtime-before-more-features",
+  "canClaim": {
+    "sourceTreeHealthy": true,
+    "sourceThinLauncherInstall": true,
+    "runtimeBeta": false,
+    "publishedBinaryInstall": false,
+    "universalRemoteMcpBroker": false
+  },
+  "gates": [
+    {
+      "id": "source-inventory",
+      "status": "pass",
+      "evidence": "inventory ok",
+      "nextAction": "Run npm run inventory:source and fix missing required source assets."
+    },
+    {
+      "id": "node-syntax",
+      "status": "pass",
+      "evidence": "80/80 JS/MJS files checked",
+      "nextAction": "Run npm run lint:npm."
+    },
+    {
+      "id": "lint-hardcode",
+      "status": "pass",
+      "evidence": "node scripts/check-node-syntax.mjs --json",
+      "nextAction": "Keep lint:npm as a small auto-discovery harness, not a hand-maintained file list."
+    },
+    {
+      "id": "rust-build",
+      "status": "pass",
+      "evidence": "pass",
+      "nextAction": "Run cargo check/test/build on a host with dependency access."
+    },
+    {
+      "id": "runtime-trace",
+      "status": "blocked",
+      "evidence": "ready-to-run",
+      "nextAction": "Capture runtime trace: client -> /mcp -> tools/list -> tools/call -> stdio upstream trace."
+    },
+    {
+      "id": "published-binary-install",
+      "status": "blocked",
+      "evidence": "ready-with-warnings",
+      "nextAction": "Stage and verify at least one native binary/platform package before claiming published install readiness."
+    }
+  ],
+  "wrongPracticeRisks": [
+    "Feature accumulation can make the project feel done before the actual broker loop is proven.",
+    "Thin npm launcher install can be useful, but it is not the same as published native binary install."
+  ],
+  "nextMoves": [
+    "Capture runtime trace: client -> /mcp -> tools/list -> tools/call -> stdio upstream trace.",
+    "Stage and verify at least one native binary/platform package before claiming published install readiness."
+  ]
+}

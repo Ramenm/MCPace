@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -10,7 +11,11 @@ function read(relativePath) {
 }
 
 test('local HTTP serving uses a fixed rendezvous-backed worker pool with runtime telemetry', () => {
-  const dashboard = read('src/dashboard.rs');
+  const dashboard = [
+    read('src/dashboard.rs'),
+    read('src/dashboard/overview.rs'),
+    read('src/dashboard/tool_runtime.rs'),
+  ].join('\n');
   const resources = read('src/resources.rs');
 
   assert.match(dashboard, /mpsc::sync_channel::<TcpStream>\(0\)/);
@@ -25,8 +30,17 @@ test('local HTTP serving uses a fixed rendezvous-backed worker pool with runtime
 });
 
 test('HTTP upstream session pooling is sharded and capacity remains bounded', () => {
-  const dashboard = read('src/dashboard.rs');
-  const upstream = read('src/upstream.rs');
+  const dashboard = [
+    read('src/dashboard.rs'),
+    read('src/dashboard/overview.rs'),
+    read('src/dashboard/tool_runtime.rs'),
+  ].join('\n');
+  const upstream = [
+    read('src/upstream.rs'),
+    read('src/upstream/lease_runtime.rs'),
+    read('src/upstream/session_pool.rs'),
+    read('src/upstream/tool_cache.rs'),
+  ].join('\n');
   const resources = read('src/resources.rs');
 
   assert.match(dashboard, /upstream_session_pools: Vec<Mutex<upstream::UpstreamSessionPool>>/);
@@ -47,7 +61,10 @@ test('runtime benchmark helper is wired into package scripts and documents opera
   const readme = read('README.md');
 
   assert.equal(packageJson.scripts['benchmark:runtime'], 'node scripts/benchmark-runtime.mjs');
-  assert.match(packageJson.scripts['lint:npm'], /scripts\/benchmark-runtime\.mjs/);
+  assert.equal(packageJson.scripts['lint:npm'], 'node scripts/check-node-syntax.mjs --json');
+  const syntax = spawnSync(process.execPath, ['scripts/check-node-syntax.mjs', '--json', '--list'], { cwd: repoRoot, encoding: 'utf8' });
+  assert.equal(syntax.status, 0, syntax.stderr || syntax.stdout);
+  assert.ok(JSON.parse(syntax.stdout).files.includes('scripts/benchmark-runtime.mjs'));
   assert.match(benchmarkScript, /--url/);
   assert.match(benchmarkScript, /--concurrency/);
   assert.match(benchmarkScript, /p95/);

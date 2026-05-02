@@ -12,6 +12,7 @@ import {
 import { readClientCatalog, resolveInstallSupportTargets, resolveProofFocusTargets } from './lib/client-catalog.mjs';
 import { verifyNpmPack } from './verify-npm-pack.mjs';
 import { verifyVendoredBinary } from './verify-vendored-binary.mjs';
+import { childEnvForCommand } from './lib/safe-child-env.mjs';
 const DEFAULT_OUTPUT_PATH = path.join(repoRoot, 'reports', 'verification-latest.json');
 const DEFAULT_ARCHIVE_OUTPUT_DIR = path.join(repoRoot, 'dist');
 const DEFAULT_VERSION_PROBE_TIMEOUT_MS = 3000;
@@ -45,16 +46,6 @@ function parsePositiveIntegerEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function childEnvForCommand(command) {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-
-  if ((command === 'cargo' || command === 'rustc') && !env.RUSTUP_TOOLCHAIN) {
-    env.RUSTUP_TOOLCHAIN = 'stable';
-  }
-
-  return env;
-}
 
 export function resolveCommandInvocation(command, args = [], platform = process.platform) {
   if (platform === 'win32' && command === 'npm') {

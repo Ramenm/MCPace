@@ -8,12 +8,12 @@ use std::time::Duration;
 
 const HTTP_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct ParsedArgs {
     help: bool,
     json_output: bool,
     root_override: Option<PathBuf>,
-    host: String,
+    host: Option<String>,
     port: u16,
     max_connections: Option<usize>,
     io_timeout_ms: Option<u64>,
@@ -23,26 +23,6 @@ struct ParsedArgs {
     install_service: bool,
     no_enable_service: bool,
     error: Option<String>,
-}
-
-impl Default for ParsedArgs {
-    fn default() -> Self {
-        Self {
-            help: false,
-            json_output: false,
-            root_override: None,
-            host: runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
-            port: runtimepaths::DEFAULT_LOCAL_MCP_PORT,
-            max_connections: None,
-            io_timeout_ms: None,
-            max_body_bytes: None,
-            overview_cache_ms: None,
-            skip_client_install: false,
-            install_service: false,
-            no_enable_service: false,
-            error: None,
-        }
-    }
 }
 
 struct CommandResult {
@@ -114,7 +94,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                     parsed.error = Some("setup requires a value after --host".to_string());
                     return parsed;
                 };
-                parsed.host = value.to_string();
+                parsed.host = Some(value.to_string());
                 index += 2;
             }
             "--port" => {
@@ -224,7 +204,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "Starts the local MCPace endpoint, installs supported local client config entries, and verifies /healthz plus /mcp."
+        "Starts the configured local MCPace endpoint, installs supported local client config entries, and verifies health plus MCP routes."
     );
     let _ = writeln!(
         stdout,
@@ -262,8 +242,20 @@ fn append_serve_resource_args(
 }
 
 fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
+    let resolved_endpoint = runtimepaths::resolve_serve_endpoint(Some(&root_path));
+    let host = parsed
+        .host
+        .clone()
+        .unwrap_or_else(|| resolved_endpoint.host.clone());
+    let port = if parsed.port == 0 {
+        resolved_endpoint.port
+    } else {
+        parsed.port
+    };
+    let mcp_path = resolved_endpoint.mcp_path.clone();
+    let health_path = resolved_endpoint.health_path.clone();
     let root_text = root_path.display().to_string();
-    let endpoint = http_url(&parsed.host, parsed.port, "/mcp");
+    let endpoint = runtimepaths::http_url(&host, port, &mcp_path);
     let mut warnings = Vec::new();
     let current_executable = std::env::current_exe()
         .ok()
@@ -282,9 +274,9 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         "start".to_string(),
         "--json".to_string(),
         "--host".to_string(),
-        parsed.host.clone(),
+        host.clone(),
         "--port".to_string(),
-        parsed.port.to_string(),
+        port.to_string(),
         "--root".to_string(),
         root_text.clone(),
     ];
@@ -327,9 +319,9 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
             "install".to_string(),
             "--json".to_string(),
             "--host".to_string(),
-            parsed.host.clone(),
+            host.clone(),
             "--port".to_string(),
-            parsed.port.to_string(),
+            port.to_string(),
             "--root".to_string(),
             root_text.clone(),
         ];
@@ -348,11 +340,12 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         None
     };
 
-    let probe_host = probe_host(&parsed.host);
-    let health = http_json_get(&probe_host, parsed.port, "/healthz");
+    let probe_host = probe_host(&host);
+    let health = http_json_get(&probe_host, port, &health_path);
     let initialize = http_mcp_request(
         &probe_host,
-        parsed.port,
+        port,
+        &mcp_path,
         JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("id", JsonValue::number(1)),
@@ -375,7 +368,8 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
     );
     let tools_list = http_mcp_request(
         &probe_host,
-        parsed.port,
+        port,
+        &mcp_path,
         JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("id", JsonValue::number(2)),
@@ -445,8 +439,8 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         ("jsonOutput", JsonValue::bool(parsed.json_output)),
         ("rootPath", JsonValue::string(root_text)),
         ("endpoint", JsonValue::string(endpoint.clone())),
-        ("host", JsonValue::string(parsed.host)),
-        ("port", JsonValue::number(parsed.port)),
+        ("host", JsonValue::string(host.clone())),
+        ("port", JsonValue::number(port)),
         (
             "serveResources",
             JsonValue::object([
@@ -596,10 +590,17 @@ fn http_json_get(host: &str, port: u16, path: &str) -> Result<JsonValue, String>
     http_json_request(host, port, &request)
 }
 
-fn http_mcp_request(host: &str, port: u16, body: JsonValue) -> Result<JsonValue, String> {
+fn http_mcp_request(
+    host: &str,
+    port: u16,
+    path: &str,
+    body: JsonValue,
+) -> Result<JsonValue, String> {
     let body = body.to_compact_string();
+    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_MCP_PATH);
     let request = format!(
-        "POST /mcp HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        path,
         host,
         body.len(),
         body
@@ -633,10 +634,6 @@ fn http_json_request(host: &str, port: u16, request: &str) -> Result<JsonValue, 
         return Err(format!("HTTP request failed: {}", status));
     }
     parse_str(body.trim()).map_err(|error| format!("parse HTTP JSON response: {}", error))
-}
-
-fn http_url(host: &str, port: u16, path: &str) -> String {
-    format!("http://{}:{}{}", host, port, path)
 }
 
 fn probe_host(host: &str) -> String {

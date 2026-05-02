@@ -1,6 +1,7 @@
 use crate::codex_config;
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::mcp_sources;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -467,17 +468,13 @@ fn collect_runtime_prerequisites(root_path: Option<&Path>) -> Vec<RuntimePrerequ
 }
 
 fn load_source_runtime_commands(root_path: &Path) -> BTreeMap<String, String> {
-    let path = root_path.join("mcp_settings.json");
-    let Ok(json) = json_helpers::read_json_file(&path) else {
-        return BTreeMap::new();
-    };
-    let Some(servers) = json_helpers::object_at_path(&json, &["mcpServers"]) else {
+    let Ok(registry) = mcp_sources::load_mcp_server_registry(root_path) else {
         return BTreeMap::new();
     };
 
     let mut commands = BTreeMap::new();
-    for (name, value) in servers {
-        let Some(server) = value.as_object() else {
+    for entry in registry.servers.values() {
+        let Some(server) = entry.value.as_object() else {
             continue;
         };
         let enabled = server
@@ -501,7 +498,7 @@ fn load_source_runtime_commands(root_path: &Path) -> BTreeMap<String, String> {
             url,
         );
         if enabled && source_type == "stdio" && !command.is_empty() {
-            commands.insert(name.trim().to_ascii_lowercase(), command.to_string());
+            commands.insert(entry.normalized_name.clone(), command.to_string());
         }
     }
     commands

@@ -60,8 +60,12 @@ test('Rust quality gate is wired into package scripts, CI, and docs', () => {
   assert.equal(packageJson.scripts['verify:rust-quality'], 'node scripts/verify-rust-quality.mjs --json --write reports/rust-quality-latest.json');
   assert.equal(packageJson.scripts['verify:rust-quality:plan'], 'node scripts/verify-rust-quality.mjs --json --plan-only');
   assert.equal(packageJson.scripts['prove:rust-host'], 'npm run verify:rust-quality');
-  assert.match(packageJson.scripts['lint:npm'], /verify-rust-quality\.mjs/);
-  assert.match(packageJson.scripts['lint:npm'], /rust-quality-contract\.test\.js/);
+  assert.equal(packageJson.scripts['lint:npm'], 'node scripts/check-node-syntax.mjs --json');
+  const syntax = spawnSync(process.execPath, ['scripts/check-node-syntax.mjs', '--json', '--list'], CHILD_OPTIONS);
+  assert.equal(syntax.status, 0, syntax.stderr || syntax.stdout);
+  const syntaxFiles = JSON.parse(syntax.stdout).files;
+  assert.ok(syntaxFiles.includes('scripts/verify-rust-quality.mjs'));
+  assert.ok(syntaxFiles.includes('tests/node/rust-quality-contract.test.js'));
   assert.match(ci, /verify:rust-quality/);
   assert.match(testStrategy, /verify:rust-quality/);
   assert.match(verification, /rust-quality-latest\.json/);

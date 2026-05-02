@@ -1,0 +1,221 @@
+{
+  "version": "0.5.5",
+  "generatedAt": "2026-05-02",
+  "scope": "clean source tree excluding .git, node_modules, target, dist, and temporary artifacts",
+  "counts": {
+    "totalFiles": 396,
+    "rustFiles": 111,
+    "nodeFiles": 69,
+    "markdownFiles": 96,
+    "jsonFiles": 84,
+    "docsFiles": 61,
+    "reportFiles": 37,
+    "schemaFiles": 2
+  },
+  "largestRustModules": [
+    {
+      "file": "tests/client_surface.rs",
+      "lines": 1628
+    },
+    {
+      "file": "src/client/actions.rs",
+      "lines": 1453
+    },
+    {
+      "file": "src/adapter.rs",
+      "lines": 1452
+    },
+    {
+      "file": "src/client_catalog.rs",
+      "lines": 1311
+    },
+    {
+      "file": "src/mcp_server.rs",
+      "lines": 1310
+    },
+    {
+      "file": "src/hub/leases.rs",
+      "lines": 1310
+    },
+    {
+      "file": "src/adapter/discovery.rs",
+      "lines": 1279
+    },
+    {
+      "file": "src/upstream/tests.rs",
+      "lines": 1277
+    },
+    {
+      "file": "src/serve.rs",
+      "lines": 1229
+    },
+    {
+      "file": "src/mcp_server/tool_surface.rs",
+      "lines": 1212
+    },
+    {
+      "file": "tests/mcp_server.rs",
+      "lines": 1095
+    },
+    {
+      "file": "src/dashboard/tests.rs",
+      "lines": 1027
+    },
+    {
+      "file": "src/dashboard/http_tools.rs",
+      "lines": 996
+    },
+    {
+      "file": "src/upstream/lease_runtime.rs",
+      "lines": 988
+    },
+    {
+      "file": "src/dashboard.rs",
+      "lines": 965
+    },
+    {
+      "file": "src/upstream.rs",
+      "lines": 934
+    },
+    {
+      "file": "src/service.rs",
+      "lines": 744
+    },
+    {
+      "file": "src/setup.rs",
+      "lines": 693
+    },
+    {
+      "file": "src/tool_result.rs",
+      "lines": 689
+    },
+    {
+      "file": "tests/hub_leases.rs",
+      "lines": 681
+    },
+    {
+      "file": "src/client/plan.rs",
+      "lines": 655
+    },
+    {
+      "file": "src/doctor.rs",
+      "lines": 640
+    },
+    {
+      "file": "src/lab/render.rs",
+      "lines": 640
+    },
+    {
+      "file": "src/client/actions/render_models.rs",
+      "lines": 607
+    },
+    {
+      "file": "tests/config_and_server.rs",
+      "lines": 568
+    },
+    {
+      "file": "src/upstream/inventory.rs",
+      "lines": 557
+    },
+    {
+      "file": "src/hub/runtime.rs",
+      "lines": 551
+    },
+    {
+      "file": "src/client/render.rs",
+      "lines": 548
+    },
+    {
+      "file": "src/client/actions/config_update.rs",
+      "lines": 547
+    },
+    {
+      "file": "src/client/context.rs",
+      "lines": 487
+    },
+    {
+      "file": "src/hub/lifecycle.rs",
+      "lines": 472
+    },
+    {
+      "file": "src/dashboard/mcp_http.rs",
+      "lines": 459
+    },
+    {
+      "file": "src/server/loader.rs",
+      "lines": 458
+    },
+    {
+      "file": "src/update.rs",
+      "lines": 453
+    },
+    {
+      "file": "src/dashboard/overview.rs",
+      "lines": 448
+    },
+    {
+      "file": "src/profile.rs",
+      "lines": 438
+    },
+    {
+      "file": "src/upstream/stdio_runtime.rs",
+      "lines": 411
+    },
+    {
+      "file": "src/upstream/server_config.rs",
+      "lines": 401
+    },
+    {
+      "file": "src/client/metadata.rs",
+      "lines": 397
+    },
+    {
+      "file": "src/dashboard/tool_runtime.rs",
+      "lines": 382
+    },
+    {
+      "file": "tests/hub_runtime.rs",
+      "lines": 380
+    },
+    {
+      "file": "src/mcp_sources/write.rs",
+      "lines": 378
+    },
+    {
+      "file": "src/upstream/policy_audit.rs",
+      "lines": 371
+    },
+    {
+      "file": "src/server/render.rs",
+      "lines": 355
+    },
+    {
+      "file": "src/upstream/session_pool.rs",
+      "lines": 348
+    },
+    {
+      "file": "src/init.rs",
+      "lines": 323
+    },
+    {
+      "file": "src/runtimepaths.rs",
+      "lines": 320
+    },
+    {
+      "file": "src/hub/status.rs",
+      "lines": 317
+    },
+    {
+      "file": "src/mcp_sources.rs",
+      "lines": 294
+    },
+    {
+      "file": "src/upstream/projection.rs",
+      "lines": 290
+    }
+  ],
+  "notes": [
+    "No production Rust module currently exceeds the source-audit large-module threshold of 1500 lines.",
+    "Further refactors should be behavior-driven and cargo-gated rather than line-count-only."
+  ]
+}

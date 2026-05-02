@@ -1,0 +1,328 @@
+{
+  "schema": "mcpace.codeInventory.v2",
+  "projectName": "mcpace",
+  "version": "0.5.9",
+  "generatedAt": "2026-05-02T12:40:55.852Z",
+  "sourceInventorySchema": "mcpace.sourceInventory.v1",
+  "counts": {
+    "totalFiles": 454,
+    "textFiles": 432,
+    "totalTextLines": 102424,
+    "rustFiles": 128,
+    "nodeFiles": 80,
+    "markdownFiles": 119,
+    "jsonFiles": 91,
+    "testFiles": 49,
+    "docsFiles": 71,
+    "reportsFiles": 54,
+    "schemaFiles": 2
+  },
+  "topDirectories": [
+    {
+      "directory": "src",
+      "files": 118
+    },
+    {
+      "directory": "docs",
+      "files": 71
+    },
+    {
+      "directory": "reports",
+      "files": 54
+    },
+    {
+      "directory": "tests",
+      "files": 46
+    },
+    {
+      "directory": "eval",
+      "files": 44
+    },
+    {
+      "directory": "scripts",
+      "files": 38
+    },
+    {
+      "directory": "root-or-other",
+      "files": 26
+    },
+    {
+      "directory": "npm-platform-packages",
+      "files": 24
+    },
+    {
+      "directory": "npm-cli",
+      "files": 11
+    },
+    {
+      "directory": "github",
+      "files": 9
+    },
+    {
+      "directory": "memory-bank",
+      "files": 6
+    },
+    {
+      "directory": "examples",
+      "files": 2
+    },
+    {
+      "directory": "presets",
+      "files": 2
+    },
+    {
+      "directory": "schemas",
+      "files": 2
+    },
+    {
+      "directory": "config",
+      "files": 1
+    }
+  ],
+  "largestRustFiles": [
+    {
+      "path": "src/hub/leases.rs",
+      "lines": 1310
+    },
+    {
+      "path": "src/adapter/discovery.rs",
+      "lines": 1279
+    },
+    {
+      "path": "src/upstream/tests.rs",
+      "lines": 1277
+    },
+    {
+      "path": "src/serve.rs",
+      "lines": 1229
+    },
+    {
+      "path": "src/mcp_server.rs",
+      "lines": 1219
+    },
+    {
+      "path": "src/mcp_server/tool_surface.rs",
+      "lines": 1212
+    },
+    {
+      "path": "src/adapter.rs",
+      "lines": 1148
+    },
+    {
+      "path": "src/client/actions.rs",
+      "lines": 1065
+    },
+    {
+      "path": "src/dashboard/tests.rs",
+      "lines": 1027
+    },
+    {
+      "path": "src/dashboard/http_tools.rs",
+      "lines": 996
+    },
+    {
+      "path": "src/upstream/lease_runtime.rs",
+      "lines": 988
+    },
+    {
+      "path": "src/dashboard.rs",
+      "lines": 965
+    },
+    {
+      "path": "src/upstream.rs",
+      "lines": 934
+    },
+    {
+      "path": "src/client_catalog.rs",
+      "lines": 913
+    },
+    {
+      "path": "src/service.rs",
+      "lines": 744
+    },
+    {
+      "path": "src/setup.rs",
+      "lines": 693
+    },
+    {
+      "path": "src/tool_result.rs",
+      "lines": 689
+    },
+    {
+      "path": "src/client/plan.rs",
+      "lines": 655
+    },
+    {
+      "path": "src/doctor.rs",
+      "lines": 640
+    },
+    {
+      "path": "src/lab/render.rs",
+      "lines": 640
+    },
+    {
+      "path": "src/mcp_presets.rs",
+      "lines": 614
+    },
+    {
+      "path": "src/client/actions/render_models.rs",
+      "lines": 607
+    },
+    {
+      "path": "src/mcp_sources/write.rs",
+      "lines": 566
+    },
+    {
+      "path": "src/upstream/inventory.rs",
+      "lines": 557
+    },
+    {
+      "path": "src/hub/runtime.rs",
+      "lines": 551
+    }
+  ],
+  "largestTextFiles": [
+    {
+      "path": "reports/mcp-real-smoke-20260427-165024.json",
+      "lines": 20736,
+      "category": "reports"
+    },
+    {
+      "path": "reports/mcp-current-upstream-real-calls-20260427-165554.json",
+      "lines": 1772,
+      "category": "reports"
+    },
+    {
+      "path": "tests/client_surface.rs",
+      "lines": 1628,
+      "category": "tests"
+    },
+    {
+      "path": "src/hub/leases.rs",
+      "lines": 1310,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/adapter/discovery.rs",
+      "lines": 1279,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/upstream/tests.rs",
+      "lines": 1277,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/serve.rs",
+      "lines": 1229,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/mcp_server.rs",
+      "lines": 1219,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/mcp_server/tool_surface.rs",
+      "lines": 1212,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/adapter.rs",
+      "lines": 1148,
+      "category": "rust-source"
+    },
+    {
+      "path": "tests/mcp_server.rs",
+      "lines": 1095,
+      "category": "tests"
+    },
+    {
+      "path": "src/client/actions.rs",
+      "lines": 1065,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/dashboard/tests.rs",
+      "lines": 1027,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/dashboard/http_tools.rs",
+      "lines": 996,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/upstream/lease_runtime.rs",
+      "lines": 988,
+      "category": "rust-source"
+    },
+    {
+      "path": "reports/deep-runtime-sweep-20260427T152252Z.json",
+      "lines": 982,
+      "category": "reports"
+    },
+    {
+      "path": "src/dashboard.rs",
+      "lines": 965,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/upstream.rs",
+      "lines": 934,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/client_catalog.rs",
+      "lines": 913,
+      "category": "rust-source"
+    },
+    {
+      "path": "reports/deep-runtime-sweep-20260427T154219Z.json",
+      "lines": 848,
+      "category": "reports"
+    },
+    {
+      "path": "reports/mcp-final-real-enabled-smoke-20260427-172519.json",
+      "lines": 847,
+      "category": "reports"
+    },
+    {
+      "path": "src/dashboard/index.html",
+      "lines": 784,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/service.rs",
+      "lines": 744,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/setup.rs",
+      "lines": 693,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/tool_result.rs",
+      "lines": 689,
+      "category": "rust-source"
+    }
+  ],
+  "versionDrift": [],
+  "releaseManifestMissing": [],
+  "presetSummary": {
+    "status": "ok",
+    "schema": "mcpace.mcpPresetCatalog.v1",
+    "version": "2",
+    "presetCount": 4,
+    "ids": [
+      "context7",
+      "filesystem",
+      "git",
+      "playwright"
+    ],
+    "starterPresetCount": 1
+  },
+  "ok": true,
+  "warnings": []
+}

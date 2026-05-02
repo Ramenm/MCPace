@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
 import { PLATFORM_PACKAGE_TARGETS } from './lib/npm-platform-packages.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
 const DEFAULT_ARTIFACT_DIR = path.join(repoRoot, 'dist', 'npm');
 
@@ -28,6 +29,16 @@ function tarballNameForPackage(packageName, version) {
   return `${packageName.replace(/^@/, '').replace('/', '-')}-${version}.tgz`;
 }
 
+export function npmPublishChildEnv() {
+  return cleanChildEnv({
+    MCPACE_NPM_EXEC_PACKAGE: process.env.MCPACE_NPM_EXEC_PACKAGE,
+    NPM_CONFIG_REGISTRY: process.env.NPM_CONFIG_REGISTRY,
+    NPM_CONFIG_USERCONFIG: process.env.NPM_CONFIG_USERCONFIG,
+    NODE_AUTH_TOKEN: process.env.NODE_AUTH_TOKEN,
+    NPM_TOKEN: process.env.NPM_TOKEN
+  });
+}
+
 export function buildNpmInvocation(args, options = {}) {
   const platform = options.platform || process.platform;
   const env = options.env || process.env;
@@ -46,8 +57,9 @@ export function buildNpmInvocation(args, options = {}) {
 }
 
 function runNpm(args) {
-  const invocation = buildNpmInvocation(args);
-  const result = spawnSync(invocation.command, invocation.args, { cwd: repoRoot, encoding: 'utf8', env: { ...process.env }, timeout: 120000, windowsHide: true });
+  const env = npmPublishChildEnv();
+  const invocation = buildNpmInvocation(args, { env });
+  const result = spawnSync(invocation.command, invocation.args, { cwd: repoRoot, encoding: 'utf8', env, timeout: 120000, windowsHide: true });
   return { command: invocation.displayCommand, status: result.status, ok: result.status === 0, stdout: result.stdout || '', stderr: result.stderr || '', error: result.error ? String(result.error.message || result.error) : null };
 }
 

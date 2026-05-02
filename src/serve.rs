@@ -247,7 +247,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "serve is the public one-port MCPace surface. The default local MCP endpoint is {}.",
+        "serve is the public one-port MCPace surface. The default local MCP endpoint is {}; override with mcpace.config.json serve.* or MCPACE_SERVE_*/MCPACE_PUBLIC_MCP_URL when needed.",
         runtimepaths::default_local_mcp_url()
     );
     let _ = writeln!(
@@ -279,11 +279,10 @@ fn run_start(
         return 1;
     };
 
-    let host = parsed
-        .host
-        .unwrap_or_else(|| runtimepaths::DEFAULT_LOCAL_HOST.to_string());
-    let port = parsed.port.unwrap_or(runtimepaths::DEFAULT_LOCAL_MCP_PORT);
     let canonical_root = canonicalize_or_original(&root_path);
+    let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
+    let host = parsed.host.unwrap_or_else(|| endpoint.host.clone());
+    let port = parsed.port.unwrap_or(endpoint.port);
     let state_root = runtimepaths::resolve_state_root(&canonical_root);
     if let Err(error) = runtimepaths::ensure_runtime_dir(&state_root) {
         let _ = writeln!(stderr, "{}", error);
@@ -374,7 +373,7 @@ fn run_start(
         io_timeout_ms,
         max_body_bytes,
         overview_cache_ms,
-        url: http_url(&host, port, "/mcp"),
+        url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
         pid,
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runner_path),
@@ -386,7 +385,13 @@ fn run_start(
         return 1;
     }
 
-    if let Err(error) = wait_for_health(&host, port, 60, Duration::from_millis(100)) {
+    if let Err(error) = wait_for_health(
+        &host,
+        port,
+        &endpoint.health_path,
+        60,
+        Duration::from_millis(100),
+    ) {
         let _ = kill_process(state.pid);
         let _ = fs::remove_file(runtimepaths::serve_state_path(&state_root));
         let _ = writeln!(stderr, "{}", error);
@@ -422,7 +427,8 @@ fn run_stop(
     if let Some(state) = &existing {
         let _ = kill_process(state.pid);
         for _ in 0..40 {
-            if !health_check(&state.host, state.port).unwrap_or(false) {
+            let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
+            if !health_check(&state.host, state.port, &endpoint.health_path).unwrap_or(false) {
                 break;
             }
             thread::sleep(Duration::from_millis(100));
@@ -487,17 +493,18 @@ fn collect_status(
     host_override: Option<String>,
     port_override: Option<u16>,
 ) -> Result<ServeStatus, String> {
+    let endpoint = runtimepaths::resolve_serve_endpoint(Some(root_path));
     let state_root = runtimepaths::resolve_state_root(root_path);
     let state_path = runtimepaths::serve_state_path(&state_root);
     let state = read_state(&state_path).ok();
     let should_probe = state.is_some() || host_override.is_some() || port_override.is_some();
     let host = host_override
         .or_else(|| state.as_ref().map(|value| value.host.clone()))
-        .unwrap_or_else(|| runtimepaths::DEFAULT_LOCAL_HOST.to_string());
+        .unwrap_or_else(|| endpoint.host.clone());
     let port = port_override
         .or_else(|| state.as_ref().map(|value| value.port))
-        .unwrap_or(runtimepaths::DEFAULT_LOCAL_MCP_PORT);
-    let running = should_probe && health_check(&host, port).unwrap_or(false);
+        .unwrap_or(endpoint.port);
+    let running = should_probe && health_check(&host, port, &endpoint.health_path).unwrap_or(false);
     let mut warnings = Vec::new();
     let status = if running {
         "running".to_string()
@@ -520,7 +527,7 @@ fn collect_status(
         io_timeout_ms: state.as_ref().and_then(|value| value.io_timeout_ms),
         max_body_bytes: state.as_ref().and_then(|value| value.max_body_bytes),
         overview_cache_ms: state.as_ref().and_then(|value| value.overview_cache_ms),
-        url: http_url(&host, port, "/mcp"),
+        url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
         status,
         pid: state.as_ref().map(|value| value.pid).filter(|_| running),
         started_at_ms: state
@@ -734,7 +741,9 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
             .get("url")
             .and_then(JsonValue::as_str)
             .map(|value| value.to_string())
-            .unwrap_or_else(|| http_url(&host, port, "/mcp")),
+            .unwrap_or_else(|| {
+                runtimepaths::http_url(&host, port, runtimepaths::DEFAULT_LOCAL_MCP_PATH)
+            }),
         pid,
         started_at_ms,
         runner_path: json
@@ -755,7 +764,7 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
     })
 }
 
-fn health_check(host: &str, port: u16) -> Result<bool, String> {
+fn health_check(host: &str, port: u16, path: &str) -> Result<bool, String> {
     let probe_host = probe_host(host);
     let mut addrs = (probe_host.as_str(), port)
         .to_socket_addrs()
@@ -775,9 +784,10 @@ fn health_check(host: &str, port: u16) -> Result<bool, String> {
     let timeout = Some(HEALTH_PROBE_IO_TIMEOUT);
     let _ = stream.set_read_timeout(timeout);
     let _ = stream.set_write_timeout(timeout);
+    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
     let request = format!(
-        "GET /healthz HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-        probe_host
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        path, probe_host
     );
     if stream.write_all(request.as_bytes()).is_err() {
         return Ok(false);
@@ -802,23 +812,31 @@ fn health_check(host: &str, port: u16) -> Result<bool, String> {
     ))
 }
 
-fn wait_for_health(host: &str, port: u16, attempts: usize, delay: Duration) -> Result<(), String> {
+fn wait_for_health(
+    host: &str,
+    port: u16,
+    path: &str,
+    attempts: usize,
+    delay: Duration,
+) -> Result<(), String> {
+    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
     for _ in 0..attempts {
-        if health_check(host, port).unwrap_or(false) {
+        if health_check(host, port, &path).unwrap_or(false) {
             return Ok(());
         }
         thread::sleep(delay);
     }
     Err(format!(
         "serve did not become healthy on {} in time",
-        http_url(host, port, "/healthz")
+        http_url(host, port, &path)
     ))
 }
 
 fn http_url(host: &str, port: u16, path: &str) -> String {
-    format!("http://{}:{}{}", host_for_url(host), port, path)
+    runtimepaths::http_url(host, port, path)
 }
 
+#[allow(dead_code)]
 fn host_for_url(host: &str) -> String {
     let trimmed = host.trim();
     let unbracketed = trimmed.trim_start_matches('[').trim_end_matches(']');
@@ -1149,7 +1167,10 @@ mod tests {
             "stdout: {}",
             start_text
         );
-        assert!(health_check("127.0.0.1", port).unwrap_or(false));
+        assert!(
+            health_check("127.0.0.1", port, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH)
+                .unwrap_or(false)
+        );
 
         let mut status_stdout = Vec::new();
         let mut status_stderr = Vec::new();

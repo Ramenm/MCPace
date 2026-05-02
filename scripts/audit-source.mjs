@@ -12,6 +12,16 @@ const CODE_EXTENSIONS = new Set(['.rs', '.js', '.mjs']);
 const LARGE_MODULE_LINE_THRESHOLD = 1500;
 const MAX_WARNING_SAMPLES = 40;
 const APPROVED_UNSAFE_RUST_FILES = new Set(['src/process_detach.rs', 'src/windows_process.rs']);
+const APPROVED_THREAD_FANOUT_RUST_FILES = new Set([
+  'src/dashboard.rs',
+  'src/dashboard/diagnostics.rs',
+  'src/dashboard/overview.rs',
+  'src/upstream.rs',
+  'src/upstream/lease_runtime.rs',
+  'src/upstream/server_config.rs',
+  'src/upstream/stdio_runtime.rs',
+  'src/hub/lifecycle.rs',
+]);
 
 const ARCHITECTURE_BOUNDARIES = [
   {
@@ -110,7 +120,10 @@ function walkCodeFiles(includeDirs) {
   return files.sort();
 }
 
-function splitProductionAndTestRust(lines) {
+function splitProductionAndTestRust(lines, relative = '') {
+  if (/^src\/.+\/tests\.rs$/.test(relative) || /^tests\/.+\.rs$/.test(relative)) {
+    return { productionLines: [], testLines: lines };
+  }
   const cfgTestIndex = lines.findIndex((line) => /^\s*#\[cfg\(test\)\]/.test(line));
   if (cfgTestIndex === -1) {
     return { productionLines: lines, testLines: [] };
@@ -165,7 +178,7 @@ function auditArchitectureBoundaries(critical) {
     }
 
     const lines = fs.readFileSync(filePath, 'utf8').split(/\r?\n/);
-    const { productionLines } = splitProductionAndTestRust(lines);
+    const { productionLines } = splitProductionAndTestRust(lines, boundary.file);
     productionLines.forEach((line, offset) => {
       for (const rule of boundary.forbiddenPatterns) {
         if (rule.pattern.test(line)) {
@@ -219,7 +232,7 @@ function audit(options = {}) {
 
     if (ext === '.rs') {
       counters.rustFiles += 1;
-      const { productionLines, testLines } = splitProductionAndTestRust(lines);
+      const { productionLines, testLines } = splitProductionAndTestRust(lines, relative);
       counters.productionRustLines += productionLines.length;
       counters.testRustLines += testLines.length;
       counters.productionUnwraps += countRegex(productionLines, /\.unwrap\s*\(/);
@@ -234,7 +247,7 @@ function audit(options = {}) {
         }
         if (/thread::spawn\s*\(/.test(line)) {
           counters.directThreadSpawns += 1;
-          if (relative.startsWith('src/') && !['src/dashboard.rs', 'src/upstream.rs', 'src/hub/lifecycle.rs'].includes(relative)) {
+          if (relative.startsWith('src/') && !APPROVED_THREAD_FANOUT_RUST_FILES.has(relative)) {
             addFinding(warnings, 'warning', filePath, lineNumber, 'direct thread spawn outside reviewed runtime fan-out modules', line);
           }
         }

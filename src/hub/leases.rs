@@ -335,7 +335,7 @@ fn conservative_settings_only_route(
         upstream_transport,
         parallelism_limit: 1,
         warnings: vec![format!(
-            "server '{}' exists in mcp_settings.json but is not declared in mcpace.config.json; MCPace assigned a conservative single-writer request lease instead of bypassing scheduling",
+            "server '{}' exists in the merged MCP settings registry but is not declared in mcpace.config.json; MCPace assigned a conservative single-writer request lease instead of bypassing scheduling",
             server_name
         )],
         client_id: client_id.clone(),

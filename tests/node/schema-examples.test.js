@@ -29,3 +29,20 @@ test('hub schema and examples parse and satisfy the repo subset contract', () =>
   validateSubset(schema, minimal);
   validateSubset(schema, workstation);
 });
+
+
+test('project config schema covers current serve and MCP settings registry fields', () => {
+  const schema = readJson('schemas/mcpace-config.schema.json');
+  const config = readJson('mcpace.config.json');
+  assert.equal(schema.type, 'object');
+  for (const field of ['name', 'version', 'ports', 'serve', 'mcpSettings', 'servers']) {
+    assert.ok(schema.required.includes(field), `schema should require ${field}`);
+    assert.ok(Object.hasOwn(config, field), `config should include ${field}`);
+  }
+  assert.ok(schema.properties.serve.required.includes('mcpPath'));
+  assert.ok(schema.properties.serve.required.includes('publicUrl'));
+  assert.ok(schema.properties.mcpSettings.required.includes('includePaths'));
+  assert.ok(schema.properties.mcpSettings.required.includes('includeDirs'));
+  assert.equal(config.serve.mcpPath, '/mcp');
+  assert.deepEqual(config.mcpSettings.includeDirs, ['mcp_settings.d']);
+});

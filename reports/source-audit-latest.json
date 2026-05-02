@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generatedAt": "2026-05-01T10:38:08.276Z",
+  "generatedAt": "2026-05-02T12:40:43.904Z",
   "policy": {
     "critical": [
       "No production Rust todo! or unimplemented! macros.",
@@ -17,16 +17,16 @@
     ]
   },
   "summary": {
-    "files": 140,
-    "rustFiles": 74,
-    "nodeFiles": 66,
-    "productionRustLines": 39193,
-    "testRustLines": 3149,
-    "nodeLines": 8860,
-    "largeModules": 5,
-    "directThreadSpawns": 8,
-    "commandSpawns": 24,
-    "productionUnwraps": 289,
+    "files": 208,
+    "rustFiles": 128,
+    "nodeFiles": 80,
+    "productionRustLines": 36883,
+    "testRustLines": 9618,
+    "nodeLines": 11020,
+    "largeModules": 0,
+    "directThreadSpawns": 7,
+    "commandSpawns": 9,
+    "productionUnwraps": 0,
     "unsafeOperations": 6,
     "foreignFunctionBlocks": 2
   },
@@ -47,42 +47,6 @@
     ]
   },
   "critical": [],
-  "warnings": [
-    {
-      "severity": "warning",
-      "file": "src/adapter.rs",
-      "line": 1,
-      "message": "large Rust module has 2723 lines; consider another split after behavior stabilizes",
-      "excerpt": "src/adapter.rs"
-    },
-    {
-      "severity": "warning",
-      "file": "src/client/actions.rs",
-      "line": 1,
-      "message": "large Rust module has 2569 lines; consider another split after behavior stabilizes",
-      "excerpt": "src/client/actions.rs"
-    },
-    {
-      "severity": "warning",
-      "file": "src/dashboard.rs",
-      "line": 1,
-      "message": "large Rust module has 5075 lines; consider another split after behavior stabilizes",
-      "excerpt": "src/dashboard.rs"
-    },
-    {
-      "severity": "warning",
-      "file": "src/mcp_server.rs",
-      "line": 1,
-      "message": "large Rust module has 2467 lines; consider another split after behavior stabilizes",
-      "excerpt": "src/mcp_server.rs"
-    },
-    {
-      "severity": "warning",
-      "file": "src/upstream.rs",
-      "line": 1,
-      "message": "large Rust module has 6153 lines; consider another split after behavior stabilizes",
-      "excerpt": "src/upstream.rs"
-    }
-  ],
-  "warningCount": 5
+  "warnings": [],
+  "warningCount": 0
 }

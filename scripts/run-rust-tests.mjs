@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { childEnvForCommand } from './lib/safe-child-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -171,7 +172,7 @@ function runCommand(suite, options) {
     const startedAt = Date.now();
     const child = spawn(bin, args, {
       cwd: repoRoot,
-      env: process.env,
+      env: childEnvForCommand(bin),
       detached: process.platform !== 'win32',
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe']

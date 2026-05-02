@@ -23,7 +23,21 @@ test('packaged MCP defaults do not ship upstream servers or candidate recommenda
 });
 
 test('stdio upstream launch keeps parent environment opt-in and supports Codex-shaped env_vars', () => {
-  const upstream = read('src/upstream.rs');
+  const upstream = [
+    read('src/upstream.rs'),
+    read('src/upstream/diagnostics.rs'),
+    read('src/upstream/policy_suggestions.rs'),
+    read('src/upstream/policy_audit.rs'),
+    read('src/upstream/inventory.rs'),
+    read('src/upstream/process_config.rs'),
+    read('src/upstream/projection.rs'),
+    read('src/upstream/source_type.rs'),
+    read('src/upstream/server_config.rs'),
+    read('src/upstream/stdio_runtime.rs'),
+    read('src/upstream/tool_cache.rs'),
+    read('src/upstream/lease_runtime.rs'),
+    read('src/upstream/tests.rs'),
+  ].join('\n');
 
   assert.match(upstream, /fn env_var_names_from_array/);
   assert.match(upstream, /source\s*!=\s*"local"/);
@@ -40,7 +54,12 @@ test('BYO MCP server model is documented and surfaced in the runtime manifest', 
   const readme = read('README.md');
   const dynamicAdapter = read('docs/dynamic-adapter.md');
   const codexGuide = read('docs/codex-mcpace-guide.md');
-  const upstream = read('src/upstream.rs');
+  const upstream = [
+    read('src/upstream.rs'),
+    read('src/upstream/inventory.rs'),
+    read('src/upstream/policy_audit.rs'),
+    read('src/upstream/policy_suggestions.rs'),
+  ].join('\n');
 
   assert.match(readme, /Bring Your Own MCP servers \(BYO MCP\)/);
   assert.match(readme, /server-candidates\.json` stay empty/);

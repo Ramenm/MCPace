@@ -1,0 +1,56 @@
+{
+  "schema": "mcpace.runtimeTraceHarness.v1",
+  "generatedAt": "2026-05-02T14:12:38.318Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "ready-to-run",
+  "endpoint": "http://127.0.0.1:39022/mcp",
+  "binary": "target/release/mcpace.exe",
+  "blockers": [],
+  "steps": [
+    {
+      "id": "binary",
+      "required": true,
+      "status": "pass",
+      "evidence": "C:\\Users\\rmatv\\Projects\\mcpace\\target\\release\\mcpace.exe"
+    },
+    {
+      "id": "tiny-upstream-fixture",
+      "required": true,
+      "status": "pass",
+      "evidence": "tiny stdio MCP fixture for deterministic upstream_tools/upstream_call proof"
+    },
+    {
+      "id": "serve-endpoint",
+      "required": true,
+      "status": "manual",
+      "evidence": "http://127.0.0.1:39022/mcp"
+    },
+    {
+      "id": "initialize",
+      "required": true,
+      "status": "manual",
+      "evidence": "POST JSON-RPC initialize with Accept: application/json, text/event-stream"
+    },
+    {
+      "id": "tools-list",
+      "required": true,
+      "status": "manual",
+      "evidence": "POST JSON-RPC tools/list through MCPace"
+    },
+    {
+      "id": "upstream-call",
+      "required": true,
+      "status": "manual",
+      "evidence": "POST JSON-RPC tools/call -> upstream_call against tiny stdio server"
+    }
+  ],
+  "nextCommands": [
+    "cargo build --release --locked",
+    "node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md",
+    "./target/release/mcpace serve --port 39022",
+    "Use MCP Inspector or a real client to run initialize -> tools/list -> tools/call -> upstream_call."
+  ]
+}

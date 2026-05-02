@@ -18,10 +18,7 @@ into two classes:
   thread spawns outside reviewed runtime fan-out modules, production `unwrap()`
   counts, and script patterns worth revisiting when architecture work continues.
 
-Warnings do not fail the command because this repository still has known large
-modules (`dashboard`, `upstream`, `client/actions`, and protocol/tooling
-surfaces) that are better split after the behavior contracts are fully locked
-down. Treat warning counts as an architecture backlog, not as a release blocker.
+Warnings do not fail the command because they are refactor-planning signals, not always correctness defects. After the v0.5.5 modularization pass, the current source audit reports zero production large-module warnings; if warnings return, treat them as an architecture backlog, not as a release blocker unless a critical boundary is also violated.
 
 ## Architecture boundaries covered now
 
@@ -82,3 +79,44 @@ fixed order: `cargo fmt --all -- --check`, `cargo clippy --all-targets --locked 
 `cargo build --release --locked`. In constrained environments, use
 `node scripts/verify-rust-quality.mjs --json --allow-missing-cargo` only to
 produce an honest partial report; do not treat that as build proof.
+
+
+## v0.5.5 module split update
+
+The source audit now treats `src/**/tests.rs` files as test modules. This keeps extracted Rust tests from being counted as production code after the dashboard/upstream/adapter/MCP-server test modules were moved out of their parent files.
+
+After the v0.5.5 split, source audit reports zero production large-module warnings. Further splitting should be behavior-driven and should wait for a Cargo check/test gate when it touches high-coupling runtime behavior.
+
+## v0.5.5 adapter boundary update
+
+The adapter root now has two additional focused child modules:
+
+- `src/adapter/profile.rs` for adapter profile rendering and initialize-derived client capability summaries.
+- `src/adapter/proxy_uri.rs` for proxied upstream resource URI encoding/decoding and upstream error metadata helpers.
+
+A source-quality contract now verifies this split and checks that helper functions used by the adapter root from `discovery.rs` are explicitly `pub(super)`. This is a source-level guard against module extraction drifting into Rust visibility errors before a full Cargo check is available.
+
+
+## v0.5.5 catalog/stdio boundary update
+
+The source-quality contract now also guards two additional module boundaries:
+
+- `src/client_catalog/builtin.rs` owns static built-in client defaults; `src/client_catalog.rs` owns registry loading, merge behavior, and selector resolution.
+- `src/mcp_server/args.rs` owns stdio MCP argv parsing/help; `src/mcp_server.rs` owns JSON-RPC lifecycle and command dispatch.
+
+`scripts/lib/client-catalog.mjs` reads the built-in catalog file first and retains old-location fallback only for transition compatibility. This prevents test/report tooling from silently drifting when catalog defaults are moved to a focused boundary.
+
+
+## v0.5.5 client action backup boundary update
+
+Client install backup/restore helpers now live in `src/client/actions/backup.rs`. The source-quality contract checks that `src/client/actions.rs` declares `mod backup`, imports backup helpers through that child module, and stays under the client action dispatcher line-count target. Keep future mutation-support helpers in focused child modules instead of expanding the dispatcher root.
+
+
+## v0.5.5 client-first connect boundary
+
+`mcpace connect` is a read-only orchestration command. Its implementation is split across `src/connect.rs` and focused `src/connect/*` modules, and Node contract tests assert that it uses existing read paths while avoiding MCP settings and client-config mutation helpers.
+
+
+## v0.5.9 server preset rendering boundary
+
+Preset-specific text/JSON rendering now lives in `src/server/preset_render.rs`. The generic `src/server/render.rs` stays focused on configured-server list, capability, test, remove, and toggle output. A source-quality contract checks this boundary so useful-MCP onboarding can grow without turning the generic server renderer back into a mixed command surface.
