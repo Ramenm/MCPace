@@ -118,7 +118,7 @@ jobs:
           toolchain: 1.95.0
 
       - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry
@@ -158,7 +158,7 @@ jobs:
           targets: ${{ matrix.rust_target }}
 
       - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             ~/.cargo/registry

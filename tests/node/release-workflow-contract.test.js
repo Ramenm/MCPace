@@ -19,7 +19,7 @@ test('release dry-run workflow proves source and platform package lanes without 
   assert.match(workflow, /npm run build:release-artifacts/);
   assert.match(workflow, /node scripts\/stage-platform-package-binary\.mjs --json/);
   assert.match(workflow, /node scripts\/verify-platform-packages\.mjs --json/);
-  assert.match(workflow, /actions\/cache@v4/);
+  assert.match(workflow, /actions\/cache@v5/);
   assert.match(workflow, /hashFiles\('Cargo\.lock', 'rust-toolchain\.toml'\)/);
   assert.match(workflow, /persist-credentials: false/);
   assert.doesNotMatch(workflow, /target_key: linux-x64-gnu/);
@@ -52,7 +52,7 @@ test('release workflow creates attestable assets and only drafts a GitHub Releas
   assert.match(workflow, /node scripts\/verify-vendored-binary\.mjs --json/);
   assert.match(workflow, /node scripts\/stage-platform-package-binary\.mjs --json/);
   assert.match(workflow, /node scripts\/verify-platform-packages\.mjs --json/);
-  assert.match(workflow, /actions\/cache@v4/);
+  assert.match(workflow, /actions\/cache@v5/);
   assert.match(workflow, /hashFiles\('Cargo\.lock', 'rust-toolchain\.toml'\)/);
   assert.match(workflow, /persist-credentials: false/);
   assert.doesNotMatch(workflow, /target_key: linux-x64-gnu/);
@@ -98,6 +98,24 @@ test('full docker proof script derives the expected binary version dynamically',
   assert.match(script, /deriveProjectVersion/);
   assert.doesNotMatch(script, /0\\\.3\\\.0/);
   assert.ok(script.includes("expectedVersion.replace(/\\./g, '\\\\.')"));
+});
+
+test('docker proof scripts restore bind-mount permissions before host cleanup', () => {
+  for (const scriptPath of [
+    path.join('scripts', 'verify-ubuntu-docker-fast.mjs'),
+    path.join('scripts', 'verify-ubuntu-docker-e2e.mjs'),
+    path.join('scripts', 'verify-ubuntu-docker-full.mjs')
+  ]) {
+    const script = read(scriptPath);
+    assert.match(script, /chmod -R a\+rwX \/work/);
+  }
+});
+
+test('windows release archives avoid zip.exe backslash entries', () => {
+  const script = read(path.join('scripts', 'archive-release.mjs'));
+  assert.match(script, /process\.platform === 'win32'/);
+  assert.match(script, /createArchiveWithPowerShell/);
+  assert.match(script, /\$entry = \$relative -replace '\\\\\\\\', '\/'/);
 });
 
 test('linux npm install docker proof validates local tarballs without publishing', () => {

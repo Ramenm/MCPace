@@ -199,6 +199,10 @@ function buildArchive(parsed) {
 }
 
 function createArchive(stagingParent, rootName, archivePath) {
+  if (process.platform === 'win32') {
+    return createArchiveWithPowerShell(stagingParent, rootName, archivePath);
+  }
+
   const zipResult = spawnSync('zip', ['-qr', archivePath, rootName], {
     cwd: stagingParent,
     encoding: 'utf8',
@@ -207,14 +211,10 @@ function createArchive(stagingParent, rootName, archivePath) {
     windowsHide: true
   });
 
-  if (zipResult.status === 0 || process.platform !== 'win32') {
-    return zipResult;
-  }
+  return zipResult;
+}
 
-  if (zipResult.error?.code !== 'ENOENT') {
-    return zipResult;
-  }
-
+function createArchiveWithPowerShell(stagingParent, rootName, archivePath) {
   const escapedStagingParent = stagingParent.replace(/'/g, "''");
   const escapedRoot = rootName.replace(/'/g, "''");
   const escapedArchivePath = archivePath.replace(/'/g, "''");

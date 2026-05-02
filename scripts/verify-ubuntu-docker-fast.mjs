@@ -92,7 +92,11 @@ function runDockerCheck({ image, testName, cpus, memory, pidsLimit }) {
         image,
         'sh',
         '-lc',
-        `export PATH="/usr/local/cargo/bin:$PATH"; cargo test --test hub_runtime ${testName} -- --exact`
+        [
+          "trap 'chmod -R a+rwX /work 2>/dev/null || true' EXIT",
+          'export PATH="/usr/local/cargo/bin:$PATH"',
+          `cargo test --test hub_runtime ${testName} -- --exact`
+        ].join('; ')
       ],
       {
         encoding: 'utf8',

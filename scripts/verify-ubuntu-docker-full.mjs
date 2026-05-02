@@ -120,6 +120,7 @@ function buildAndRun({ imageTag, cpus, memory, pidsLimit }) {
 
     const shellScript = `
 set -eu
+trap 'chmod -R a+rwX /work 2>/dev/null || true' EXIT
 export PATH="/usr/local/cargo/bin:$PATH"
 printf '== build release ==\\n'
 cargo build --release >/tmp/mcpace-build.log 2>&1

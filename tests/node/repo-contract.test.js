@@ -87,7 +87,7 @@ test('CI workflow includes Rust quality, build, test validation, and determinist
   assert.match(workflow, /pull_request\.labels\.\*\.name, 'full-ci'/);
   assert.match(workflow, /hosted-platform-validation:/);
   assert.match(workflow, /macos-latest/);
-  assert.match(workflow, /actions\/cache@v4/);
+  assert.match(workflow, /actions\/cache@v5/);
   assert.match(workflow, /~\/\.cargo\/registry/);
   assert.match(workflow, /~\/\.cargo\/git/);
   assert.match(workflow, /hashFiles\('Cargo\.lock', 'rust-toolchain\.toml'\)/);

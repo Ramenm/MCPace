@@ -76,6 +76,7 @@ ROOT="$(mktemp -d)"
 cleanup() {
   ./target/debug/mcpace hub down --json --root "$ROOT" >/tmp/mcpace-down.log 2>&1 || true
   rm -rf "$ROOT"
+  chmod -R a+rwX /work 2>/dev/null || true
 }
 trap cleanup EXIT
 cat >"$ROOT/mcpace.config.json" <<'EOF'
