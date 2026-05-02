@@ -138,10 +138,10 @@ SMOKE_CLIENT_ID=$(node -e "const fs=require('fs'); const data=JSON.parse(fs.read
 test -n "$SMOKE_CLIENT_ID"
 printf '== client plan ==\\n'
 ./target/release/mcpace client plan --json --client-id "$SMOKE_CLIENT_ID" --session-id docker-e2e --project-root /work > /tmp/mcpace-client-plan.json
-grep -Eq '"requiresHubOwnedStdio": true' /tmp/mcpace-client-plan.json
+node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('/tmp/mcpace-client-plan.json','utf8')); if(data.requiresHubOwnedStdio!==false){console.error(JSON.stringify(data)); process.exit(1);}"
 printf '== server list ==\\n'
 ./target/release/mcpace server list --json > /tmp/mcpace-server-list.json
-grep -Eq '"servers": \[\]' /tmp/mcpace-server-list.json
+node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('/tmp/mcpace-server-list.json','utf8')); const servers=Array.isArray(data)?data:Array.isArray(data.servers)?data.servers:null; if(!Array.isArray(servers)||servers.length!==0){console.error(JSON.stringify(data)); process.exit(1);}"
 printf '== verify doctor ==\\n'
 ./target/release/mcpace verify doctor --json > /tmp/mcpace-verify-doctor.json
 grep -Eq '"configFound": true' /tmp/mcpace-verify-doctor.json

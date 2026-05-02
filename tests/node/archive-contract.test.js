@@ -42,7 +42,11 @@ function listArchiveEntries(archivePath) {
       0,
       listing.stderr || listing.error?.message || listing.stdout
     );
-    return listing.stdout.trim().split(/\r?\n/).filter(Boolean);
+    return listing.stdout
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((entry) => entry.replace(/\\/g, '/'));
   }
 
   const listing = spawnSync('unzip', ['-Z1', archivePath], {

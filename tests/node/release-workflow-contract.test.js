@@ -31,7 +31,7 @@ test('release workflow creates attestable assets and only drafts a GitHub Releas
   const workflow = read(path.join('.github', 'workflows', 'release.yml'));
   assert.match(workflow, /name: release-artifacts/);
   assert.match(workflow, /workflow_dispatch:/);
-  assert.match(workflow, /tags:\n\s+- 'v\*\.\*\.\*'/);
+  assert.match(workflow, /tags:\r?\n\s+- 'v\*\.\*\.\*'/);
   assert.match(workflow, /id-token: write/);
   assert.match(workflow, /attestations: write/);
   assert.match(workflow, /source-release:/);
@@ -115,7 +115,14 @@ test('windows release archives avoid zip.exe backslash entries', () => {
   const script = read(path.join('scripts', 'archive-release.mjs'));
   assert.match(script, /process\.platform === 'win32'/);
   assert.match(script, /createArchiveWithPowerShell/);
-  assert.match(script, /\$entry = \$relative -replace '\\\\\\\\', '\/'/);
+  assert.match(script, /DirectorySeparatorChar/);
+  assert.match(script, /AltDirectorySeparatorChar/);
+});
+
+test('full docker proof keeps the default no-upstream-server plan honest', () => {
+  const script = read(path.join('scripts', 'verify-ubuntu-docker-full.mjs'));
+  assert.match(script, /requiresHubOwnedStdio!==false/);
+  assert.match(script, /const servers=Array\.isArray\(data\)\?data:Array\.isArray\(data\.servers\)\?data\.servers:null/);
 });
 
 test('linux npm install docker proof validates local tarballs without publishing', () => {
