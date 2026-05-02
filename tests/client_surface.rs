@@ -656,9 +656,9 @@ api_key = "super-secret"
 env = { api_secret = "nested-secret" }
 args = ["serve", "--api-token=array-secret"]
 private_key = """
------BEGIN PRIVATE KEY-----
+-----BEGIN MCPACE TEST REDACTION BLOCK-----
 multi-line-secret
------END PRIVATE KEY-----
+-----END MCPACE TEST REDACTION BLOCK-----
 """
 [mcp_servers.other.extra]
 enabled = true
@@ -692,7 +692,7 @@ enabled = true
     assert!(!text.contains("nested-secret"));
     assert!(!text.contains("array-secret"));
     assert!(!text.contains("multi-line-secret"));
-    assert!(!text.contains("BEGIN PRIVATE KEY"));
+    assert!(!text.contains("BEGIN MCPACE TEST REDACTION BLOCK"));
     assert!(text.contains(r#"-api_key = \"[redacted]\""#));
     assert!(text.contains("-[REDACTED]"));
     assert!(text.contains("[mcp_servers.other.extra]"));
