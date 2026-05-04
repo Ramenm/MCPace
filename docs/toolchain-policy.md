@@ -19,7 +19,7 @@ CI workflow, and the docs together.
 - supported contributor and CI lanes are **Node 22 LTS** and **Node 24 LTS**;
 - the default local-development line is **Node 24**, recorded in **`.nvmrc`** and
   **`.node-version`**;
-- the repo engine floor is **`>=22.0.0`** and the workspace expects **npm 10+** while pinning **`npm@11.12.1`** as the default `packageManager`;
+- the repo engine floor is **`>=22.0.0`** and the workspace expects **npm 10+** while pinning **`npm@11.13.0`** as the default `packageManager`;
 - `package.json` keeps a pinned `packageManager` plus `devEngines` ranges so
   unsupported stacks fail fast instead of drifting silently;
 - future platform-specific binary packages should declare `os`, `cpu`, and

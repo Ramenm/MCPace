@@ -32,7 +32,7 @@ pub struct ReadinessReport {
 }
 
 pub fn collect_readiness(root_path: &Path) -> Result<ReadinessReport, String> {
-    let doctor_report = doctor::run(Some(root_path.to_path_buf()));
+    let doctor_report = doctor::run_without_version_probes(Some(root_path.to_path_buf()));
     let server_records = server::load_server_records(root_path)?;
     let runtime_profile = profile::load_runtime_profile_selection(root_path)?;
     Ok(build_readiness_report(

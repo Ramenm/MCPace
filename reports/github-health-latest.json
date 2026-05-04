@@ -1,0 +1,254 @@
+{
+  "schema": "mcpace.githubHealth.v1",
+  "generatedAt": "2026-05-04T13:21:15.561Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "score": 100,
+  "summary": {
+    "total": 30,
+    "pass": 30,
+    "blocked": 0,
+    "byCategory": {
+      "community": {
+        "pass": 11,
+        "blocked": 0
+      },
+      "security": {
+        "pass": 3,
+        "blocked": 0
+      },
+      "release": {
+        "pass": 4,
+        "blocked": 0
+      },
+      "automation": {
+        "pass": 3,
+        "blocked": 0
+      },
+      "docs": {
+        "pass": 6,
+        "blocked": 0
+      },
+      "proof": {
+        "pass": 3,
+        "blocked": 0
+      }
+    }
+  },
+  "checks": [
+    {
+      "id": "file:README.md",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:LICENSE",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:CONTRIBUTING.md",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:SECURITY.md",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:SUPPORT.md",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:CODE_OF_CONDUCT.md",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:CHANGELOG.md",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:ROADMAP.md",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:CODEOWNERS",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:.github/pull_request_template.md",
+      "category": "community",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:.github/dependabot.yml",
+      "category": "security",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:.github/release.yml",
+      "category": "release",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:.github/workflows/ci.yml",
+      "category": "automation",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:.github/workflows/release.yml",
+      "category": "automation",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:.github/workflows/publish-npm.yml",
+      "category": "automation",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:docs/github-launch-playbook.md",
+      "category": "docs",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:docs/product-truth-and-beta-gate.md",
+      "category": "docs",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "file:docs/release-automation.md",
+      "category": "docs",
+      "status": "pass",
+      "evidence": "present",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "readme:first-working-path",
+      "category": "docs",
+      "status": "pass",
+      "evidence": "README exposes a fast first path.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "readme:byo-upstream",
+      "category": "docs",
+      "status": "pass",
+      "evidence": "README states BYO upstream model.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "readme:honest-http-upstream",
+      "category": "docs",
+      "status": "pass",
+      "evidence": "README does not overclaim HTTP upstream fan-out.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "security:private-reporting",
+      "category": "security",
+      "status": "pass",
+      "evidence": "SECURITY.md directs private reporting.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "support:redaction",
+      "category": "security",
+      "status": "pass",
+      "evidence": "SUPPORT.md tells users to redact secrets.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "release:trusted-publishing",
+      "category": "release",
+      "status": "pass",
+      "evidence": "publish workflow is OIDC/trusted-publishing shaped.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "release:prebuilt-artifacts",
+      "category": "release",
+      "status": "pass",
+      "evidence": "publish workflow verifies prebuilt release artifacts before npm publish.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "release:checksums",
+      "category": "release",
+      "status": "pass",
+      "evidence": "release workflow generates checksum assets.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "proof:product-practice",
+      "category": "proof",
+      "status": "pass",
+      "evidence": "package scripts expose product-practice proof gate.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "proof:runtime-trace",
+      "category": "proof",
+      "status": "pass",
+      "evidence": "package scripts expose runtime trace proof gate.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "proof:github-health",
+      "category": "proof",
+      "status": "pass",
+      "evidence": "package scripts expose GitHub launch health audit.",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    },
+    {
+      "id": "issues:template-count",
+      "category": "community",
+      "status": "pass",
+      "evidence": "8 issue templates",
+      "nextAction": "Keep this health gate maintained as the project changes."
+    }
+  ],
+  "nextActions": []
+}

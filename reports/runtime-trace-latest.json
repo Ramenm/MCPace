@@ -1,19 +1,35 @@
 {
   "schema": "mcpace.runtimeTraceHarness.v1",
-  "generatedAt": "2026-05-02T17:27:03.229Z",
+  "generatedAt": "2026-05-04T13:22:15.068Z",
   "project": {
     "name": "mcpace",
     "version": "0.5.9"
   },
   "status": "pass",
-  "endpoint": "http://127.0.0.1:58701/mcp",
+  "endpoint": "http://127.0.0.1:63382/mcp",
   "binary": "target/release/mcpace.exe",
+  "host": {
+    "key": "win32-x64-msvc",
+    "detected": true,
+    "platform": "win32",
+    "arch": "x64",
+    "libc": null,
+    "rustTarget": "x86_64-pc-windows-msvc"
+  },
+  "binaryCandidates": [
+    "target/release/mcpace.exe",
+    "target/debug/mcpace.exe",
+    "target/x86_64-pc-windows-msvc/release/mcpace.exe",
+    "dist/mcpace.exe",
+    "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe",
+    "packages/npm/cli/vendor/mcpace.exe"
+  ],
   "mode": "spawned-local-serve",
   "blockers": [],
   "failures": [],
   "trace": {
-    "endpoint": "http://127.0.0.1:58701/mcp",
-    "sessionId": "mcpace-a34ddbe9751caa5122313dd0d560bc07",
+    "endpoint": "http://127.0.0.1:63382/mcp",
+    "sessionId": "mcpace-5ed2115957f3d8d5beb35eacef408cbd",
     "protocolVersion": "2025-11-25",
     "topLevelToolCount": 9,
     "upstreamCallAdvertised": true,
@@ -29,7 +45,7 @@
       "sessionPoolReused": false
     },
     "childProcess": {
-      "stdoutTail": "Server running at http://127.0.0.1:58701 (UI: /, MCP: /mcp, health: /healthz)\n",
+      "stdoutTail": "Server running at http://127.0.0.1:63382 (UI: /, MCP: /mcp, health: /healthz)\n",
       "stderrTail": ""
     },
     "cleanup": "temporary trace root removed after run"
@@ -51,13 +67,13 @@
       "id": "serve-endpoint",
       "required": true,
       "status": "pass",
-      "evidence": "http://127.0.0.1:58701/mcp (spawned from target/release/mcpace.exe)"
+      "evidence": "http://127.0.0.1:63382/mcp (spawned from target/release/mcpace.exe)"
     },
     {
       "id": "initialize",
       "required": true,
       "status": "pass",
-      "evidence": "protocol=2025-11-25; session=mcpace-a34ddbe9751caa5122313dd0d560bc07"
+      "evidence": "protocol=2025-11-25; session=mcpace-5ed2115957f3d8d5beb35eacef408cbd"
     },
     {
       "id": "tools-list",

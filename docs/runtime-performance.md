@@ -70,6 +70,24 @@ how much parallel work the process should use by default. It is still only a
 default: constrained hosts, unusual CPU topologies, and real upstream behavior
 can make manual tuning worthwhile.
 
+
+## Environment override knobs
+
+The CLI flags remain the most explicit tuning surface, but local services can now inherit bounded resource overrides from environment variables when no flag is supplied:
+
+| Variable | Applies to | Behavior |
+| --- | --- | --- |
+| `MCPACE_HTTP_MAX_CONNECTIONS` | local HTTP worker pool | positive integer, capped at 256 |
+| `MCPACE_HTTP_IO_TIMEOUT_MS` | socket read/write timeout | positive integer milliseconds |
+| `MCPACE_HTTP_MAX_BODY_BYTES` | JSON-RPC request body limit | positive integer bytes |
+| `MCPACE_DASHBOARD_OVERVIEW_CACHE_MS` | `/api/overview` cache | non-negative milliseconds; `0` disables |
+| `MCPACE_DASHBOARD_HEALTH_CACHE_MS` | `/healthz` cache | non-negative milliseconds; `0` disables |
+| `MCPACE_UPSTREAM_WORKERS` | upstream discovery/probe fan-out | positive integer, capped at 64 and never above task count |
+| `MCPACE_UPSTREAM_SESSION_POOL_LIMIT` | in-process upstream session reuse | positive integer, capped at 128 |
+| `MCPACE_UPSTREAM_SESSION_POOL_SHARDS` | session-pool mutex sharding | positive integer, capped at pool size and 32 |
+
+Invalid values are ignored so an accidental bad shell export does not prevent the local endpoint from starting. Explicit command-line flags still win because they are parsed into the serve/dashboard config before defaults are used.
+
 ## Tuning commands
 
 For a foreground one-port endpoint:

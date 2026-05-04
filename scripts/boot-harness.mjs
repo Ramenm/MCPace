@@ -44,9 +44,17 @@ function printHelp() {
 }
 
 function commandExists(command, args = ['--version'], timeoutMs = 15000) {
-  const result = spawnSync(command, args, { cwd: repoRoot, encoding: 'utf8', env: cleanChildEnv(), timeout: timeoutMs, windowsHide: true });
+  const invocation = commandInvocation(command, args);
+  const result = spawnSync(invocation.command, invocation.args, { cwd: repoRoot, encoding: 'utf8', env: cleanChildEnv(), timeout: timeoutMs, windowsHide: true });
   const text = [result.stdout, result.stderr].filter(Boolean).join('\n').trim().split(/\r?\n/)[0] || null;
   return { available: result.status === 0, status: result.status, signal: result.signal || null, versionText: text, error: result.error ? result.error.message : null };
+}
+
+function commandInvocation(command, args) {
+  if (process.platform === 'win32' && command === 'npm') {
+    return { command: 'cmd.exe', args: ['/d', '/s', '/c', 'npm', ...args] };
+  }
+  return { command, args };
 }
 
 function parseMajor(versionText) {
@@ -58,7 +66,7 @@ function collectToolchain() {
   const pkg = readJson('package.json');
   const engines = pkg.engines || {};
   const nodeVersion = process.version;
-  const npm = commandExists(process.platform === 'win32' ? 'npm.cmd' : 'npm', ['--version']);
+  const npm = commandExists('npm', ['--version']);
   const cargo = commandExists('cargo', ['--version']);
   const rustc = commandExists('rustc', ['--version']);
   const nodeMajor = parseMajor(nodeVersion);
@@ -180,7 +188,7 @@ export function renderBootHarnessMarkdown(report) {
   const lines = ['# MCPace boot harness','',`Generated: ${report.generatedAt}`,'',`Project: \`${report.project.name}\` v\`${report.project.version}\``,'',`Install readiness: **${report.installReadiness.status}**`,'','## Toolchain','','| tool | value | supported |','|---|---|---|',`| node | ${report.toolchain.node.version} | ${report.toolchain.node.supported ? 'yes' : 'no'} |`,`| npm | ${report.toolchain.npm.versionText || 'missing'} | ${report.toolchain.npm.supported ? 'yes' : 'no'} |`,`| cargo | ${report.toolchain.rust.cargo.versionText || 'missing'} | ${report.toolchain.rust.cargo.available ? 'yes' : 'no'} |`,`| rustc | ${report.toolchain.rust.rustc.versionText || 'missing'} | ${report.toolchain.rust.rustc.available ? 'yes' : 'no'} |`,'','## Checks','','| check | status |','|---|---|',`| source inventory | ${report.inventory.ok ? 'pass' : 'attention'} |`,`| source audit | ${report.sourceAudit.status} |`,`| node syntax | ${report.nodeSyntax.status} |`,`| npm pack | ${report.npmPack.status} |`,`| binary distribution | ${report.binaryDistribution.mode} |`,''];
   if (report.installReadiness.blockers.length > 0) { lines.push('## Blockers',''); for (const blocker of report.installReadiness.blockers) lines.push(`- ${blocker}`); lines.push(''); }
   if (report.installReadiness.warnings.length > 0) { lines.push('## Warnings',''); for (const warning of report.installReadiness.warnings) lines.push(`- ${warning}`); lines.push(''); }
-  lines.push('## Next actions',''); for (const action of report.nextActions) lines.push(`- ${action}`); lines.push('');
+  lines.push('## Next actions',''); for (const action of report.nextActions) lines.push(`- ${action}`);
   return `${lines.join('\n')}\n`;
 }
 

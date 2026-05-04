@@ -15,7 +15,7 @@ test('publish npm artifact runner uses exact npm exec package without global ins
   // Act
   const invocation = buildNpmInvocation(['publish', 'dist/npm/mcpace.tgz', '--dry-run'], {
     platform: 'linux',
-    env: { MCPACE_NPM_EXEC_PACKAGE: 'npm@11.12.1' },
+    env: { MCPACE_NPM_EXEC_PACKAGE: 'npm@11.13.0' },
   });
 
   // Assert
@@ -23,14 +23,14 @@ test('publish npm artifact runner uses exact npm exec package without global ins
   assert.deepEqual(invocation.args, [
     'exec',
     '--yes',
-    '--package=npm@11.12.1',
+    '--package=npm@11.13.0',
     '--',
     'npm',
     'publish',
     'dist/npm/mcpace.tgz',
     '--dry-run',
   ]);
-  assert.match(invocation.displayCommand, /npm exec --yes --package=npm@11\.12\.1 -- npm publish/);
+  assert.match(invocation.displayCommand, /npm exec --yes --package=npm@11\.13\.0 -- npm publish/);
 });
 
 test('publish npm artifact runner falls back to normal npm command when exact package is not configured', async () => {
@@ -56,7 +56,7 @@ test('publish npm artifact runner keeps Windows shell invocation deterministic',
   // Act
   const invocation = buildNpmInvocation(['publish', 'artifact.tgz'], {
     platform: 'win32',
-    env: { MCPACE_NPM_EXEC_PACKAGE: 'npm@11.12.1' },
+    env: { MCPACE_NPM_EXEC_PACKAGE: 'npm@11.13.0' },
   });
 
   // Assert
@@ -68,7 +68,7 @@ test('publish npm artifact runner keeps Windows shell invocation deterministic',
     'npm',
     'exec',
     '--yes',
-    '--package=npm@11.12.1',
+    '--package=npm@11.13.0',
     '--',
     'npm',
     'publish',

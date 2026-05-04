@@ -1,0 +1,32 @@
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+      - internal-only
+  categories:
+    - title: Runtime and MCP protocol
+      labels:
+        - runtime
+        - mcp
+        - protocol
+    - title: Client and upstream compatibility
+      labels:
+        - client-compatibility
+        - upstream-compatibility
+        - compatibility
+    - title: Install, release, and packaging
+      labels:
+        - install
+        - release
+        - packaging
+    - title: Security and hardening
+      labels:
+        - security
+        - hardening
+    - title: Documentation and examples
+      labels:
+        - docs
+        - examples
+    - title: Other changes
+      labels:
+        - "*"

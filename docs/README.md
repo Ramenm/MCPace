@@ -6,6 +6,12 @@ MCPace is a Rust-first local MCP hub. It ships with no upstream MCP servers enab
 
 Start with:
 
+- `../ROADMAP.md` for the public-facing roadmap and what to star/watch/fork for.
+- `github-launch-playbook.md` for GitHub launch, repository settings, maintainer loops, and growth without overclaiming.
+- `ideal-product-backlog.md` for the maximum-quality backlog ordered by product impact.
+- `maintainer-playbook.md` for triage, release, issue, and contribution routines.
+- `bug-lifecycle.md` for reproduce-first bug fixing, root-cause notes, regression guards, and runtime traces.
+- `bug-hunting-and-fix-playbook.md`, `defect-taxonomy-and-labels.md`, and `maintainer-debugging-guide.md` for the maintainer bug-sweep operating model.
 - `product-truth.json` for the machine-readable product promise.
 - `mcp-spec-alignment.md` for the checked MCP baseline.
 - `client-surface-matrix.md` and `client-metadata-routing.md` for client routing.
@@ -36,6 +42,8 @@ npm run inventory:project
 npm run verify:boot
 npm run verify:install-readiness
 npm run verify:product-practice
+npm run verify:defect-gates
+npm run verify:bug-sweep
 npm run verify:runtime-trace
 npm run verify:rust-quality
 cargo fmt --all -- --check

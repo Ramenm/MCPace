@@ -8,7 +8,13 @@ const { spawnSync } = require('node:child_process');
 const repoRoot = path.resolve(__dirname, '..', '..');
 
 function runNode(args, options = {}) {
-  const result = spawnSync('node', args, { cwd: repoRoot, encoding: 'utf8', ...options });
+  const result = spawnSync('node', args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    timeout: 60_000,
+    maxBuffer: 4 * 1024 * 1024,
+    ...options,
+  });
   assert.equal(result.status, 0, `${args.join(' ')} failed\nSTDOUT:\n${result.stdout}\nSTDERR:\n${result.stderr}`);
   return result;
 }
@@ -54,6 +60,13 @@ test('boot harness summarizes install readiness without mutating the tree', () =
   assert.equal(report.nodeSyntax.status, 'pass');
   assert.ok(report.nodeSyntax.fileCount > 20);
   assert.equal(report.npmPack.status, 'skipped');
+  const npmProbe = process.platform === 'win32'
+    ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'npm', '--version'], { cwd: repoRoot, encoding: 'utf8' })
+    : spawnSync('npm', ['--version'], { cwd: repoRoot, encoding: 'utf8' });
+  if (npmProbe.status === 0) {
+    assert.equal(report.toolchain.npm.available, true, report.toolchain.npm.error || 'npm should be detected when available to the invoking shell');
+    assert.equal(report.toolchain.npm.supported, true, `npm ${report.toolchain.npm.versionText} should satisfy ${rootPkg.engines.npm}`);
+  }
   assert.match(report.binaryDistribution.mode, /thin-launcher|vendored-binary-bundle|platform-binary-packages/);
   assert.ok(['pass', 'partial', 'blocked'].includes(report.installReadiness.status));
   assert.ok(report.nextActions.some((entry) => entry.includes('cargo check --all-targets --locked')));

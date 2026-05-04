@@ -1,6 +1,6 @@
 # MCPace source inventory
 
-Generated: 2026-05-02T12:40:55.650Z
+Generated: 2026-05-04T12:15:22.716Z
 
 Project: `mcpace` v`0.5.9`
 
@@ -10,16 +10,16 @@ Status: **ok**
 
 | metric | value |
 |---|---:|
-| totalFiles | 454 |
-| textFiles | 432 |
-| totalTextLines | 102424 |
-| rustFiles | 128 |
-| nodeFiles | 80 |
-| markdownFiles | 119 |
-| jsonFiles | 91 |
-| testFiles | 49 |
-| docsFiles | 71 |
-| reportsFiles | 54 |
+| totalFiles | 658 |
+| textFiles | 624 |
+| totalTextLines | 126768 |
+| rustFiles | 132 |
+| nodeFiles | 99 |
+| markdownFiles | 187 |
+| jsonFiles | 169 |
+| testFiles | 54 |
+| docsFiles | 84 |
+| reportsFiles | 110 |
 | schemaFiles | 2 |
 | presetCatalogs | 1 |
 
@@ -28,40 +28,40 @@ Status: **ok**
 | category | files |
 |---|---:|
 | config | 1 |
-| docs | 71 |
+| docs | 84 |
 | eval | 44 |
 | examples | 2 |
-| github | 9 |
-| memory-bank | 6 |
+| github | 20 |
+| memory-bank | 7 |
 | npm-cli | 11 |
 | npm-platform-packages | 24 |
 | presets | 2 |
-| reports | 54 |
-| root-or-other | 26 |
+| reports | 110 |
+| root-or-other | 129 |
 | rust-source | 118 |
 | schemas | 2 |
-| scripts | 38 |
-| tests | 46 |
+| scripts | 53 |
+| tests | 51 |
 
 ## Largest Rust modules
 
 | file | lines |
 |---|---:|
+| src/dashboard/tests.rs | 1409 |
 | src/hub/leases.rs | 1310 |
-| src/adapter/discovery.rs | 1279 |
-| src/upstream/tests.rs | 1277 |
-| src/serve.rs | 1229 |
+| src/upstream/tests.rs | 1280 |
+| src/adapter/discovery.rs | 1276 |
+| src/serve.rs | 1230 |
 | src/mcp_server.rs | 1219 |
 | src/mcp_server/tool_surface.rs | 1212 |
-| src/adapter.rs | 1148 |
-| src/client/actions.rs | 1065 |
-| src/dashboard/tests.rs | 1027 |
-| src/dashboard/http_tools.rs | 996 |
-| src/upstream/lease_runtime.rs | 988 |
-| src/dashboard.rs | 965 |
-| src/upstream.rs | 934 |
+| src/adapter.rs | 1149 |
+| src/client/actions.rs | 1056 |
+| src/dashboard.rs | 1005 |
+| src/upstream/lease_runtime.rs | 1003 |
+| src/dashboard/http_tools.rs | 995 |
+| src/upstream.rs | 948 |
 | src/client_catalog.rs | 913 |
-| src/service.rs | 744 |
+| src/client/actions/config_update.rs | 790 |
 
 ## Version drift
 

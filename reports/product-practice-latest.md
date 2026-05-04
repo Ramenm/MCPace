@@ -1,7 +1,7 @@
 # MCPace product-practice harness
 
 Project: `mcpace` v`0.5.9`
-Status: `stage-binary-before-publish-claims`
+Status: `ready-for-release-candidate-review`
 
 ## Claims
 
@@ -10,24 +10,25 @@ Status: `stage-binary-before-publish-claims`
 | sourceTreeHealthy | yes |
 | sourceThinLauncherInstall | yes |
 | runtimeBeta | yes |
-| publishedBinaryInstall | no |
+| publishedBinaryInstall | yes |
 | universalRemoteMcpBroker | no |
+
+## Proof validity
+
+Current host: `win32-x64-msvc`
+Max report age: `6h`
 
 ## Gates
 
 | gate | status | evidence |
 |---|---:|---|
 | source-inventory | pass | inventory ok |
-| node-syntax | pass | 80/80 JS/MJS files checked |
+| node-syntax | pass | 99/99 JS/MJS files checked |
 | lint-hardcode | pass | node scripts/check-node-syntax.mjs --json |
 | rust-build | pass | pass |
-| runtime-trace | pass | pass |
-| published-binary-install | blocked | ready-with-warnings |
-
-## Wrong-practice risks
-
-- Thin npm launcher install can be useful, but it is not the same as published native binary install.
+| runtime-trace | pass | usable |
+| published-binary-install | pass | reports/vendored-binary-win32-x64-msvc.json: pass |
 
 ## Next moves
 
-- Stage and verify at least one native binary/platform package before claiming published install readiness.
+- None.

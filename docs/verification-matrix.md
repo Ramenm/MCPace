@@ -26,7 +26,7 @@
 
 Requires a Rust-capable host:
 
-- `npm run verify:rust-quality` writes `reports/rust-quality-latest.json` and passes fmt, Clippy with `-D warnings`, suite-isolated Rust tests, and release build
+- `npm run verify:rust-quality` writes `reports/rust-quality-latest.json` and passes fmt, `cargo check --all-targets --locked`, Clippy with `-D warnings`, full suite-isolated Rust tests, and release build
 - Rust binary builds successfully
 - Rust tests run successfully
 - npm launcher dry-run package succeeds
@@ -53,3 +53,5 @@ Requires a Rust-capable host:
 - CI includes Rust and Node validation before publication
 - held-out runtime fixtures stay reserved for release gates
 - held-out seed prompt/agent cases stay out of the day-to-day tuning loop
+
+- `npm run verify:npm-pack` persists `reports/verify-npm-pack-latest.json` and checks npm dry-run contents, version, required files, vendored binary inclusion, and POSIX executable mode.

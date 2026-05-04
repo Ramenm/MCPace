@@ -5,6 +5,7 @@ use super::{
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
+use crate::tool_result;
 use crate::upstream;
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -185,13 +186,11 @@ pub fn adapter_profile(
             JsonValue::object([
                 (
                     "tokenReducers",
-                    JsonValue::array([
-                        JsonValue::string("mcpace.native-content.v1"),
-                        JsonValue::string("mcpace.drop-upstream-diagnostics.v1"),
-                        JsonValue::string("mcpace.dedupe-nested-upstream-content.v1"),
-                        JsonValue::string("mcpace.schema-compact.v1"),
-                        JsonValue::string("mcpace.catalog-budget.v1"),
-                    ]),
+                    JsonValue::array(
+                        tool_result::supported_token_reducer_plugins()
+                            .iter()
+                            .map(|plugin| JsonValue::string(*plugin)),
+                    ),
                 ),
                 (
                     "futureExternalPlugins",

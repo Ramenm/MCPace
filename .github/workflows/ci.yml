@@ -55,6 +55,15 @@ jobs:
       - name: Verify platform package manifests
         run: npm run verify:platform-packages
 
+      - name: Verify GitHub readiness contract
+        run: npm run verify:github-readiness
+
+      - name: Verify defect gates
+        run: npm run verify:defect-gates
+
+      - name: Verify bug-fix hygiene sweep
+        run: npm run verify:bug-sweep
+
   package-dry-run:
     runs-on: ubuntu-latest
     timeout-minutes: 10

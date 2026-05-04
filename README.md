@@ -1,12 +1,27 @@
 # MCPace
 
-MCPace is a Rust-first local MCP hub for many clients. It keeps a single local MCP hub for many clients, exposes one local MCPace endpoint, and brokers upstream MCP servers generically with no bundled upstream MCP servers enabled or recommended by default. The repository tracks the MCP 2025-11-25 baseline. Current promise: One local MCPace endpoint and generic MCP brokering/diagnostics with no bundled upstream MCP servers enabled or recommended by default.
+MCPace is a Rust-first local MCP hub: a single local MCP hub for many clients. It exposes one local MCPace endpoint and brokers user-chosen upstream MCP servers with no bundled upstream MCP servers enabled or recommended by default. The repository tracks the MCP 2025-11-25 baseline.
 
 `serve` is the product. `hub` is internal/operator-facing lifecycle machinery. The default runtime profile is `manual`, so `mcp_settings.json.mcpServers`, `mcpace.config.json.servers`, and the packaged candidate catalog start empty.
 
+## Why MCPace exists
+
+MCP clients often ask users to wire the same upstream servers one app at a time. MCPace is meant to make that workflow local-first, repeatable, and inspectable:
+
+- one localhost MCP URL that clients can point at;
+- BYO upstream MCP servers instead of a hidden bundled catalog;
+- dry-run/diff/backup-oriented client config changes;
+- upstream smoke tests before client wiring;
+- clear diagnostics before a client touches an upstream server;
+- proof-first release claims, so docs say what is really working and what is still preview.
+
+## Current status
+
+MCPace is best described today as a **local-first MCP control plane with a connectable runtime preview**. Current promise: One local MCPace endpoint and generic MCP brokering/diagnostics with no bundled upstream MCP servers enabled or recommended by default. The source/control-plane surface is strong, stdio upstream smoke paths are implemented, and an in-process Streamable HTTP session store is now present in source. Fresh release-binary runtime proof, real-client traces, HTTP/Streamable HTTP upstream fan-out, and published native install proof are still explicit roadmap gates. See `ROADMAP.md`, `START-HERE.md`, `docs/github-launch-playbook.md`, and `docs/product-truth-and-beta-gate.md` before making stronger public claims.
+
 ## First working path
 
-For the top-level proof order, read `START-HERE.md` and `docs/product-practice.md`.
+For the top-level proof order, read `START-HERE.md` and `docs/product-practice.md`. For bug intake, reproduction, root-cause, regression-proof standards, and maintainer debugging, read `docs/bug-lifecycle.md`, `docs/bug-hunting-and-fix-playbook.md`, and `docs/maintainer-debugging-guide.md`. For public repository polish, launch sequencing, and star-friendly GitHub readiness, read `ROADMAP.md` and `docs/github-launch-playbook.md`. For offline-first verification that does not depend on paid GitHub features, read `docs/offline-quality-and-publish-gates.md`, `docs/local-quality-without-paid-github.md`, `docs/release-decision-runbook.md`, and `docs/tooling-stack.md`.
 
 
 From a user/client point of view, the shortest safe path is:
@@ -91,7 +106,7 @@ Stdio upstream processes do not inherit the full MCPace parent environment. MCPa
 Runtime cache fingerprints include env variable names and hashed values only, not plaintext secret values.
 When upstream startup, timeout, or JSON-RPC errors include stderr, MCPace keeps bounded diagnostic context but redacts likely tokens, passwords, credentials, API keys, private keys, Authorization values, and bearer tokens before surfacing the error.
 
-HTTP/Streamable HTTP entries are inventoried and reported, but the current stdio bridge only forwards callable stdio upstreams. HTTP upstream fan-out remains blocked honestly in diagnostics until implemented.
+HTTP/Streamable HTTP entries are inventoried and reported, but the current stdio bridge only forwards callable stdio upstreams. HTTP upstream fan-out remains blocked; it is not implemented yet and stays blocked honestly in diagnostics until implemented. The local `/mcp` endpoint now keeps a bounded in-process Streamable HTTP session store: `initialize` creates a server-generated session record, subsequent stateful requests must echo a known `Mcp-Session-Id`, and `DELETE /mcp` closes it. Client-supplied session ids on initialize are not trusted. Cross-process persistence and relay-grade auth/session binding remain future work.
 
 ## Configure the MCPace endpoint advertised to clients
 
@@ -116,17 +131,32 @@ For different local ports, tunnels, relays, or cloud/API client surfaces, config
 
 Environment overrides are also supported: `MCPACE_SERVE_HOST`, `MCPACE_SERVE_PORT`, `MCPACE_SERVE_PATH`, and `MCPACE_PUBLIC_MCP_URL`. `client install` and `client export` use this resolver, so different clients do not have to share a compiled-in URL.
 
-During Streamable HTTP `initialize`, MCPace now returns `Mcp-Session-Id` and `MCP-Protocol-Version` response headers. Upstream lease affinity also recognizes common client/chat/project-root headers so different clients, chats, and workspaces can stay separable while the durable HTTP session store remains future work.
+During Streamable HTTP `initialize`, MCPace returns `Mcp-Session-Id` and `MCP-Protocol-Version` response headers. The source implementation keeps an in-process HTTP session store, requires a known session ID after initialization, rejects missing, unknown, expired, and protocol-mismatched sessions, and lets clients close sessions with `DELETE /mcp`. Upstream lease affinity also recognizes common client/chat/project-root headers so different clients, chats, and workspaces can stay separable. Keep stronger release claims tied to fresh runtime traces and real-client proof.
 
 ## Useful commands
 
 ```bash
 npm test
+npm run verify:toolbox
+npm run verify:local:smoke
+npm run verify:local:source
+npm run verify:publish-decision
+npm run prove:local-first
 npm run inventory:source
 npm run inventory:project
 npm run verify:boot
 npm run verify:install-readiness
 npm run verify:product-practice
+npm run verify:tooling
+npm run verify:local-prepublish:quick
+npm run verify:local-prepublish
+npm run hooks:install:dry-run
+npm run verify:secrets
+npm run verify:supply-chain
+npm run verify:free-tier
+npm run verify:github-readiness
+npm run verify:defect-gates
+npm run verify:bug-sweep
 npm run verify:runtime-trace
 npm run verify:rust-quality
 npm run benchmark:runtime
@@ -138,9 +168,11 @@ cargo build --release --locked
 
 In constrained sandboxes, local Node checks can run with the project npm surface. Full Cargo check/test/build need the pinned Rust toolchain and crates.io dependencies available through the configured network/cache. CI Rust jobs cache Cargo registry/git/target with keys derived from OS, Rust version, target or suite, `Cargo.lock`, and `rust-toolchain.toml`.
 
+MCPace can be proved locally without a paid GitHub plan. Use `npm run verify:local:smoke` during editing, `npm run verify:local:source` before sharing a public source snapshot, and `npm run verify:publish-decision` for the final source-vs-native publication answer. Public GitHub workflows and security checks are extra trust signals, not the only proof path.
+
 ## Read paths and diagnostics
 
-Runtime HTTP controls remain explicit: `--max-connections`, `--io-timeout-ms`, `--max-body-bytes`, and `--overview-cache-ms`.
+Runtime HTTP controls remain explicit: `--max-connections`, `--io-timeout-ms`, `--max-body-bytes`, and `--overview-cache-ms`. When no flag is supplied, bounded environment overrides are also honored: `MCPACE_HTTP_MAX_CONNECTIONS`, `MCPACE_HTTP_IO_TIMEOUT_MS`, `MCPACE_HTTP_MAX_BODY_BYTES`, `MCPACE_DASHBOARD_OVERVIEW_CACHE_MS`, `MCPACE_DASHBOARD_HEALTH_CACHE_MS`, `MCPACE_UPSTREAM_WORKERS`, `MCPACE_UPSTREAM_SESSION_POOL_LIMIT`, and `MCPACE_UPSTREAM_SESSION_POOL_SHARDS`. Serve/dashboard bind to loopback hosts by default; non-loopback bind hosts such as `0.0.0.0` require the explicit `--allow-nonlocal-bind` escape hatch and are not a substitute for a real public auth mode.
 
 
 - `mcpace client plan --json` shows the client plan.
@@ -160,4 +192,4 @@ Runtime HTTP controls remain explicit: `--max-connections`, `--io-timeout-ms`, `
 
 ## Not implemented yet
 
-Network publication, HTTP upstream fan-out from the stdio bridge, durable HTTP session enforcement, cloud relay support as a product lane, and enterprise/team policy management are not implemented yet. Keep those claims out of product docs until they have proof artifacts.
+Network publication, HTTP upstream fan-out from the stdio bridge, cloud relay support as a product lane, and enterprise/team policy management are not implemented yet. Keep those claims out of product docs until they have proof artifacts.

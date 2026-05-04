@@ -496,6 +496,81 @@ fn verify_readiness_reports_source_only_stdio_command_prerequisite() {
 }
 
 #[test]
+fn verify_readiness_ignores_disabled_source_only_servers() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.5.9",
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("mcp_settings.json"),
+        r#"{
+  "mcpServers": {
+    "disabled-loose-tool": {
+      "enabled": false,
+      "command": "definitely-missing-disabled-mcpace-source-tool"
+    }
+  }
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("Cargo.toml"),
+        "[package]\nname='x'\nversion='0.1.0'\n",
+    )
+    .unwrap();
+    fs::write(root.join("package.json"), "{}\n").unwrap();
+    fs::create_dir_all(root.join("packages")).unwrap();
+    fs::write(root.join("release-manifest.json"), "{}\n").unwrap();
+
+    let list_output = run(&["server", "list", "--json", "--root", root.to_str().unwrap()]);
+    assert!(list_output.status.success());
+    let list_text = stdout(&list_output);
+    assert!(list_text.contains(r#""name": "disabled-loose-tool""#));
+    assert!(
+        list_text.contains(r#""profileEnabled": false"#),
+        "{}",
+        list_text
+    );
+    assert!(
+        list_text.contains(r#""sourceEnabled": false"#),
+        "{}",
+        list_text
+    );
+    assert!(
+        list_text.contains(r#""effectiveEnabled": false"#),
+        "{}",
+        list_text
+    );
+
+    let output = run(&[
+        "verify",
+        "readiness",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(output.status.success());
+    let text = stdout(&output);
+    assert!(
+        text.contains(r#""missingProfileSourceEnablement": []"#),
+        "{}",
+        text
+    );
+    assert!(text.contains(r#""readyForRuntimeOps": true"#), "{}", text);
+    assert!(
+        !text.contains("definitely-missing-disabled-mcpace-source-tool"),
+        "{}",
+        text
+    );
+}
+
+#[test]
 fn verify_readiness_reports_broken_codex_client_config_without_failing_runtime_readiness() {
     let temp = TempDir::new();
     let root = temp.path();

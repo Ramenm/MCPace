@@ -174,7 +174,7 @@ export function renderInventoryMarkdown(report) {
   lines.push('','## Presets','',`Preset catalog status: \`${report.presets.status}\`; presets: ${report.presets.presetCount}; starter entries: ${report.presets.starterPresetCount}.`);
   if (report.presets.ids.length > 0) lines.push(`Preset ids: ${report.presets.ids.map((id) => `\`${id}\``).join(', ')}.`);
   if (report.warnings.length > 0) { lines.push('','## Warnings',''); for (const warning of report.warnings) lines.push(`- ${warning}`); }
-  lines.push(''); return `${lines.join('\n')}\n`;
+  return `${lines.join('\n')}\n`;
 }
 function writeFileEnsuringDir(relativeOrAbsolutePath, contents) { const target = path.resolve(relativeOrAbsolutePath); fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, contents, 'utf8'); }
 function isCliInvocation() { const entry = process.argv[1]; return entry ? pathToFileURL(path.resolve(entry)).href === import.meta.url : false; }

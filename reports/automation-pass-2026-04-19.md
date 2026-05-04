@@ -5,7 +5,7 @@
 - the npm launcher declared **Node 22+** support but did not fail fast on older Node runtimes;
 - the repo had no canonical builder for a clean project source archive;
 - `verify` was still a large single Rust file instead of a thin command-family root;
-- CI still used `actions/checkout@v5` even though the maintained stack moved forward;
+- CI checkout action version drift is now tracked by `reports/toolchain-support.json` and contract tests;
 - archive shape, root naming, and junk-file exclusions were not machine-checked.
 
 ## What changed

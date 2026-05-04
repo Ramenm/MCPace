@@ -115,7 +115,7 @@ fn generic_source_server_record(
         kind,
         required: false,
         default_enabled: false,
-        profile_enabled: true,
+        profile_enabled: source_record.enabled,
         platform_supported: true,
         effective_enabled: source_record.enabled,
         auto_start: false,

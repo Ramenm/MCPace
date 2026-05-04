@@ -1,0 +1,139 @@
+{
+  "schema": "mcpace.bugSweep.v1",
+  "generatedAt": "2026-05-04T13:21:15.499Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "summary": {
+    "checks": 13,
+    "blocked": 0,
+    "warnings": 0,
+    "issueTemplates": [
+      "bug_report.yml",
+      "cleanup-request.yml",
+      "client-upstream-compatibility.yml",
+      "config.yml",
+      "docs_request.yml",
+      "feature_request.yml",
+      "flaky-test.yml",
+      "repair-report.yml",
+      "runtime-proof.yml"
+    ],
+    "generatedReports": [
+      {
+        "relative": "reports/product-practice-latest.json",
+        "status": "ready-for-release-candidate-review",
+        "generatedAt": "2026-05-04T12:58:04.730Z",
+        "version": "0.5.9"
+      },
+      {
+        "relative": "reports/runtime-trace-latest.json",
+        "status": "pass",
+        "generatedAt": "2026-05-04T13:20:57.217Z",
+        "version": "0.5.9"
+      },
+      {
+        "relative": "reports/rust-quality-latest.json",
+        "status": "pass",
+        "generatedAt": "2026-05-04T13:19:16.973Z",
+        "version": "0.5.9"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "id": "file:docs/bug-hunting-and-fix-playbook.md",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "the reproducible bug-fix lifecycle; 155 lines",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "file:docs/defect-taxonomy-and-labels.md",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "maintainer triage labels and severity routing; 69 lines",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "file:docs/maintainer-debugging-guide.md",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "area-specific debugging commands; 67 lines",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "script:verify:bug-sweep",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "node scripts/bug-sweep.mjs --json --write reports/bug-sweep-latest.json --markdown reports/bug-sweep-latest.md",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "workflow:ci-bug-sweep",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "CI runs verify:bug-sweep in the source validation lane.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "template:pr-bug-fix-discipline",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "PR template requires root cause, regression proof, and not-tested disclosure.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "template:bug-report-repro",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "Bug template captures reproduction and regression context.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "template:flaky-test",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "Dedicated flaky-test issue form is present.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "source:prod-rust-stub-macros",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "No todo!, unimplemented!, or dbg! macros found in production Rust files.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "runtime:http-origin-host-boundary",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "Local HTTP boundary validates Host and Origin and explicitly rejects Origin: null by default.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "runtime:server-minted-session-id",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "Initialize path uses a server-minted session id.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "runtime:session-id-bounds-randomness",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "Session ids are bounded and generated from OS randomness with fallback diagnostics.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    },
+    {
+      "id": "reports:runtime-trace-present",
+      "severity": "info",
+      "status": "pass",
+      "evidence": "runtime trace report is present and passing.",
+      "nextAction": "Keep this invariant covered while changing nearby code."
+    }
+  ],
+  "nextMoves": []
+}

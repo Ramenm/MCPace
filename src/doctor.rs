@@ -214,9 +214,17 @@ impl RuntimePrerequisiteStatus {
 }
 
 pub fn run(root_path: Option<PathBuf>) -> Report {
+    run_with_version_probe_policy(root_path, true)
+}
+
+pub fn run_without_version_probes(root_path: Option<PathBuf>) -> Report {
+    run_with_version_probe_policy(root_path, false)
+}
+
+fn run_with_version_probe_policy(root_path: Option<PathBuf>, probe_versions: bool) -> Report {
     let tools = TOOL_PROBE_SPECS
         .iter()
-        .map(|spec| tool_status(spec.name, spec.required, spec.version_args))
+        .map(|spec| tool_status(spec.name, spec.required, spec.version_args, probe_versions))
         .collect::<Vec<_>>();
     let project = load_project_status(root_path.as_deref(), &tools);
     Report { project, tools }
@@ -551,9 +559,9 @@ fn tool_found(tools: &[ToolStatus], name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn tool_status(name: &str, required: bool, args: &[&str]) -> ToolStatus {
+fn tool_status(name: &str, required: bool, args: &[&str], probe_versions: bool) -> ToolStatus {
     let found = command_available(name);
-    let version = if found {
+    let version = if found && probe_versions {
         command_version(name, args)
     } else {
         None

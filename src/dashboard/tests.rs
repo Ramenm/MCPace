@@ -1,6 +1,7 @@
 use super::{
-    build_overview_json, cached_health_json, cached_overview_json, is_allowed_local_origin,
-    query_bool_flag, run_http_tool, run_json_command, runtime_status_json, serve_listener,
+    build_overview_json, cached_health_json, cached_overview_json, is_allowed_local_host,
+    is_allowed_local_origin, query_bool_flag, run_http_tool, run_json_command, runtime_status_json,
+    serve_listener,
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
@@ -129,6 +130,17 @@ fn json_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn response_header(response: &str, name: &str) -> Option<String> {
+    response.lines().find_map(|line| {
+        let (candidate, value) = line.split_once(':')?;
+        if candidate.trim().eq_ignore_ascii_case(name) {
+            Some(value.trim().to_string())
+        } else {
+            None
+        }
+    })
+}
+
 fn test_config(
     root_path: PathBuf,
     max_requests: Option<usize>,
@@ -144,6 +156,7 @@ fn test_config(
         health_cache_ttl: crate::resources::default_dashboard_health_cache_ttl(),
         overview_cache: Mutex::new(None),
         health_cache: Mutex::new(None),
+        http_session_store: Mutex::new(super::http_session::McpHttpSessionStore::default()),
         metrics: super::HttpRuntimeMetrics::default(),
         surface,
         upstream_session_pools: super::new_upstream_session_pools(),
@@ -475,7 +488,6 @@ fn http_upstream_lease_context_derives_affinity_from_metadata_and_headers() {
 #[test]
 fn origin_validation_allows_only_exact_loopback_hosts() {
     for origin in [
-        "null",
         "http://127.0.0.1",
         "http://127.0.0.1:39022",
         "https://127.0.0.1:39022",
@@ -493,6 +505,7 @@ fn origin_validation_allows_only_exact_loopback_hosts() {
 
     for origin in [
         "",
+        "null",
         "file://local",
         "http://127.0.0.1.evil.example",
         "http://localhost.evil.example",
@@ -504,6 +517,105 @@ fn origin_validation_allows_only_exact_loopback_hosts() {
         assert!(
             !is_allowed_local_origin(origin),
             "origin should be rejected: {origin}"
+        );
+    }
+}
+
+#[test]
+fn host_validation_allows_only_exact_loopback_authorities() {
+    for host in [
+        "127.0.0.1",
+        "127.0.0.1:39022",
+        "localhost",
+        "LOCALHOST:39022",
+        "[::1]",
+        "[::1]:39022",
+    ] {
+        assert!(
+            is_allowed_local_host(host),
+            "host should be allowed: {host}"
+        );
+    }
+
+    for host in [
+        "",
+        "0.0.0.0",
+        "::",
+        "192.168.1.10",
+        "127.0.0.1.evil.example",
+        "localhost.evil.example",
+        "127.0.0.1@evil.example",
+        "evil.example/127.0.0.1",
+        "[::1].evil.example",
+        "[::1]:not-a-port",
+    ] {
+        assert!(
+            !is_allowed_local_host(host),
+            "host should be rejected: {host}"
+        );
+    }
+}
+
+#[test]
+fn serve_refuses_nonlocal_bind_without_explicit_opt_in() {
+    let root = temp_root();
+    write_minimal_config(&root);
+
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let exit_code = super::run_serve(
+        &[
+            "--host".to_string(),
+            "0.0.0.0".to_string(),
+            "--port".to_string(),
+            "0".to_string(),
+        ],
+        Some(root.clone()),
+        &mut stdout,
+        &mut stderr,
+    );
+
+    assert_eq!(exit_code, 2);
+    assert!(
+        stdout.is_empty(),
+        "nonlocal bind refusal should not start a server: {}",
+        String::from_utf8_lossy(&stdout)
+    );
+    let stderr_text = String::from_utf8_lossy(&stderr);
+    assert!(
+        stderr_text.contains("refusing to bind non-loopback host '0.0.0.0'"),
+        "stderr: {}",
+        stderr_text
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn loopback_bind_host_policy_accepts_only_loopback_names_or_ips() {
+    for host in [
+        "localhost",
+        "LOCALHOST",
+        "127.0.0.1",
+        "127.42.0.1",
+        "::1",
+        "[::1]",
+    ] {
+        assert!(
+            super::is_loopback_bind_host(host),
+            "host should be loopback: {host}"
+        );
+    }
+    for host in [
+        "",
+        "0.0.0.0",
+        "::",
+        "192.168.1.10",
+        "localhost.evil.example",
+        "127.0.0.1.evil.example",
+    ] {
+        assert!(
+            !super::is_loopback_bind_host(host),
+            "host should be rejected: {host}"
         );
     }
 }
@@ -653,14 +765,17 @@ fn unified_serve_exposes_health_and_mcp_routes() {
     stream.read_to_string(&mut mcp_response).unwrap();
     assert!(mcp_response.contains("\"protocolVersion\": \"2025-11-25\""));
     assert!(mcp_response.contains("\"serverInfo\""));
+    let session_id = response_header(&mcp_response, "Mcp-Session-Id")
+        .expect("initialize should return Mcp-Session-Id");
 
     let initialized = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
     let mut initialized_response = String::new();
     let mut stream = TcpStream::connect(addr).unwrap();
     write!(
             stream,
-            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             addr,
+            session_id,
             initialized.len(),
             initialized
         )
@@ -702,8 +817,9 @@ fn unified_serve_exposes_health_and_mcp_routes() {
     let mut stream = TcpStream::connect(addr).unwrap();
     write!(
             stream,
-            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             addr,
+            session_id,
             tools_list.len(),
             tools_list
         )
@@ -728,8 +844,9 @@ fn unified_serve_exposes_health_and_mcp_routes() {
     let mut stream = TcpStream::connect(addr).unwrap();
     write!(
             stream,
-            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             addr,
+            session_id,
             unsupported_call.len(),
             unsupported_call
         )
@@ -753,8 +870,9 @@ fn unified_serve_exposes_health_and_mcp_routes() {
     let mut stream = TcpStream::connect(addr).unwrap();
     write!(
             stream,
-            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+            "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
             addr,
+            session_id,
             diagnostics_call.len(),
             diagnostics_call
         )
@@ -802,6 +920,266 @@ fn unified_serve_exposes_health_and_mcp_routes() {
         malformed_response.contains("invalid JSON-RPC body"),
         "malformed response: {}",
         malformed_response
+    );
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn unified_serve_generates_session_id_instead_of_trusting_initialize_header() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_minimal_config(&root);
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_root = root.clone();
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(
+            listener,
+            test_config(server_root, Some(3), super::ServeSurface::UnifiedServe),
+            &mut stderr,
+        )
+    });
+
+    let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixation-test","version":"0.1.0"}}}"#;
+    let mut initialize_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: attacker-fixed-session\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        initialize.len(),
+        initialize
+    )
+    .unwrap();
+    stream.read_to_string(&mut initialize_response).unwrap();
+    let generated_session_id = response_header(&initialize_response, "Mcp-Session-Id")
+        .expect("initialize should return a session id");
+    assert_ne!(
+        generated_session_id, "attacker-fixed-session",
+        "server must not trust a client-supplied session id during initialize"
+    );
+
+    let tools_list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
+    let mut fixed_session_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: attacker-fixed-session\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        tools_list.len(),
+        tools_list
+    )
+    .unwrap();
+    stream.read_to_string(&mut fixed_session_response).unwrap();
+    assert!(
+        fixed_session_response.starts_with("HTTP/1.1 404 Not Found"),
+        "client-supplied session id should not be registered: {}",
+        fixed_session_response
+    );
+
+    let mut generated_session_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        generated_session_id,
+        tools_list.len(),
+        tools_list
+    )
+    .unwrap();
+    stream
+        .read_to_string(&mut generated_session_response)
+        .unwrap();
+    assert!(
+        generated_session_response.starts_with("HTTP/1.1 200 OK"),
+        "server-generated session id should remain valid: {}",
+        generated_session_response
+    );
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn unified_serve_enforces_mcp_http_session_lifecycle() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_minimal_config(&root);
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_root = root.clone();
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(
+            listener,
+            test_config(server_root, Some(7), super::ServeSurface::UnifiedServe),
+            &mut stderr,
+        )
+    });
+
+    let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"session-test","version":"0.1.0"}}}"#;
+    let mut initialize_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        initialize.len(),
+        initialize
+    )
+    .unwrap();
+    stream.read_to_string(&mut initialize_response).unwrap();
+    assert!(
+        initialize_response.starts_with("HTTP/1.1 200 OK"),
+        "initialize response: {}",
+        initialize_response
+    );
+    let session_id = response_header(&initialize_response, "Mcp-Session-Id")
+        .expect("initialize should return a session id");
+
+    let tools_list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
+    let mut missing_session_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        tools_list.len(),
+        tools_list
+    )
+    .unwrap();
+    stream
+        .read_to_string(&mut missing_session_response)
+        .unwrap();
+    assert!(
+        missing_session_response.starts_with("HTTP/1.1 400 Bad Request"),
+        "missing session response: {}",
+        missing_session_response
+    );
+    assert!(
+        missing_session_response.contains("Mcp-Session-Id"),
+        "missing session response: {}",
+        missing_session_response
+    );
+
+    let mut unknown_session_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: mcpace-unknown-session\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        tools_list.len(),
+        tools_list
+    )
+    .unwrap();
+    stream
+        .read_to_string(&mut unknown_session_response)
+        .unwrap();
+    assert!(
+        unknown_session_response.starts_with("HTTP/1.1 404 Not Found"),
+        "unknown session response: {}",
+        unknown_session_response
+    );
+    assert!(
+        unknown_session_response.contains("unknown MCP HTTP session"),
+        "unknown session response: {}",
+        unknown_session_response
+    );
+
+    let mut protocol_mismatch_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1
+Host: {}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+Mcp-Session-Id: {}
+MCP-Protocol-Version: 2025-06-18
+Content-Length: {}
+Connection: close
+
+{}",
+        addr,
+        session_id,
+        tools_list.len(),
+        tools_list
+    )
+    .unwrap();
+    stream
+        .read_to_string(&mut protocol_mismatch_response)
+        .unwrap();
+    assert!(
+        protocol_mismatch_response.starts_with("HTTP/1.1 400 Bad Request"),
+        "protocol mismatch response: {}",
+        protocol_mismatch_response
+    );
+    assert!(
+        protocol_mismatch_response.contains("does not match initialized session protocol"),
+        "protocol mismatch response: {}",
+        protocol_mismatch_response
+    );
+
+    let mut valid_session_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        session_id,
+        tools_list.len(),
+        tools_list
+    )
+    .unwrap();
+    stream.read_to_string(&mut valid_session_response).unwrap();
+    assert!(
+        valid_session_response.starts_with("HTTP/1.1 200 OK"),
+        "valid session response: {}",
+        valid_session_response
+    );
+    assert!(valid_session_response.contains("adapter_profile"));
+
+    let mut delete_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "DELETE /mcp HTTP/1.1\r\nHost: {}\r\nMcp-Session-Id: {}\r\nConnection: close\r\n\r\n",
+        addr, session_id
+    )
+    .unwrap();
+    stream.read_to_string(&mut delete_response).unwrap();
+    assert!(
+        delete_response.starts_with("HTTP/1.1 202 Accepted"),
+        "delete response: {}",
+        delete_response
+    );
+
+    let mut closed_session_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        session_id,
+        tools_list.len(),
+        tools_list
+    )
+    .unwrap();
+    stream.read_to_string(&mut closed_session_response).unwrap();
+    assert!(
+        closed_session_response.starts_with("HTTP/1.1 404 Not Found"),
+        "closed session response: {}",
+        closed_session_response
     );
 
     assert_eq!(handle.join().unwrap(), 0);

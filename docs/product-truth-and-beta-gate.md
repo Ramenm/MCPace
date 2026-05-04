@@ -19,7 +19,7 @@ That is narrower than the north star in
 `docs/universal-mcp-runtime-north-star.md`. Request-time leases with heartbeat
 renewal, conservative settings-only leases, stale-id filtering, and lost-lease
 cancellation now protect explicit upstream wrapper calls, but until durable
-session ownership and real-host proof exist, do not collapse the north star into
+cross-process session/process ownership and real-host proof exist, do not collapse the north star into
 a present-tense claim.
 
 ## First ICP
@@ -61,7 +61,7 @@ Beta-quality activation is stricter:
 Source tests now prove request-time lease gates, settings-only conservative
 leases, short-TTL heartbeat renewal, stale-id filtering, and lost-heartbeat
 cancellation around explicit upstream wrapper calls. Until the stricter beta
-definition is proven on supported hosts with durable session/process ownership,
+definition is proven on supported hosts with durable process ownership and real-client traces,
 do not talk as if the current connectable endpoint equals a fully proven runtime.
 
 ## Product shape for the current cycle

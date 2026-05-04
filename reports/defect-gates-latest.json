@@ -1,0 +1,139 @@
+{
+  "schema": "mcpace.defectGates.v1",
+  "generatedAt": "2026-05-04T13:21:15.413Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "summary": {
+    "total": 13,
+    "passed": 13,
+    "warnings": 0,
+    "blockers": 0
+  },
+  "checks": [
+    {
+      "id": "bug-template-reproducibility",
+      "title": "Bug reports require reproducibility, environment, severity, and regression context",
+      "severity": "required",
+      "file": ".github/ISSUE_TEMPLATE/bug_report.yml",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "label-taxonomy",
+      "title": "Repository has a label taxonomy for severity, area, type, and status triage",
+      "severity": "required",
+      "file": ".github/labels.yml",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "bug-lifecycle-doc",
+      "title": "Maintainers have a written bug lifecycle and fix standard",
+      "severity": "required",
+      "file": "docs/bug-lifecycle.md",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "pr-template-regression-proof",
+      "title": "Pull requests require proof for fixes and explicit not-tested disclosure",
+      "severity": "required",
+      "file": ".github/pull_request_template.md",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "ci-runs-defect-gates",
+      "title": "CI runs defect gates alongside source and GitHub readiness checks",
+      "severity": "required",
+      "file": ".github/workflows/ci.yml",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "package-script",
+      "title": "npm script exposes the defect gate as a first-class verification command",
+      "severity": "required",
+      "file": null,
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "session-fixation-guard",
+      "title": "MCP HTTP initialize generates server-owned session ids",
+      "severity": "required",
+      "file": "src/dashboard/mcp_http.rs",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "null-origin-rejected",
+      "title": "Local browser-origin guard rejects null Origin instead of treating it as local",
+      "severity": "required",
+      "file": "src/dashboard/http_boundary.rs",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "nonlocal-bind-guard",
+      "title": "Local HTTP mode refuses non-loopback bind hosts unless explicitly opted in",
+      "severity": "required",
+      "file": "src/dashboard.rs",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "security-disclosure-path",
+      "title": "Security issues have a private disclosure path and public policy",
+      "severity": "required",
+      "file": "SECURITY.md",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "source-audit-script",
+      "title": "Source audit remains available for structural bug smells",
+      "severity": "required",
+      "file": "scripts/audit-source.mjs",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "runtime-trace-gate",
+      "title": "Runtime trace gate exists for behavioral bugs beyond static checks",
+      "severity": "required",
+      "file": "scripts/runtime-trace-harness.mjs",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    },
+    {
+      "id": "product-practice-freshness",
+      "title": "Product-practice gate rejects stale runtime proof",
+      "severity": "required",
+      "file": "scripts/product-practice-harness.mjs",
+      "status": "pass",
+      "missing": [],
+      "recommendation": null
+    }
+  ],
+  "operatingModel": {
+    "intake": "Every bug starts with a reproducible issue, severity, affected area, version/platform, and expected-vs-actual behavior.",
+    "repair": "Every fix gets a minimal failing test or runtime trace first, then root-cause notes, implementation, regression guard, and not-tested disclosure.",
+    "release": "Bugfix releases are accepted only after source gates, Rust gates, runtime trace, npm/install readiness, and security gates are fresh."
+  }
+}

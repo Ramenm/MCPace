@@ -1,0 +1,212 @@
+{
+  "schema": "mcpace.githubReadiness.v1",
+  "generatedAt": "2026-05-04T13:21:15.617Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "ready-with-warnings",
+  "summary": {
+    "requiredPassed": 24,
+    "requiredTotal": 24,
+    "warnings": 1,
+    "issueTemplates": [
+      "bug_report.yml",
+      "cleanup-request.yml",
+      "client-upstream-compatibility.yml",
+      "config.yml",
+      "docs_request.yml",
+      "feature_request.yml",
+      "flaky-test.yml",
+      "repair-report.yml",
+      "runtime-proof.yml"
+    ]
+  },
+  "checks": [
+    {
+      "id": "file:README.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "public landing page; 196 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:LICENSE",
+      "required": true,
+      "status": "pass",
+      "evidence": "license clarity; 109 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:CONTRIBUTING.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "contribution workflow; 110 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:SECURITY.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "private vulnerability reporting; 61 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:CODE_OF_CONDUCT.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "community behavior rules; 27 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:SUPPORT.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "support boundaries and issue routing; 44 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:CODEOWNERS",
+      "required": true,
+      "status": "pass",
+      "evidence": "review ownership; 11 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:.github/pull_request_template.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "review discipline; 51 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:.github/dependabot.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "dependency update automation; 26 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:.github/ISSUE_TEMPLATE/bug_report.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "bug reports with repro and redacted logs; 125 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:.github/ISSUE_TEMPLATE/feature_request.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "feature requests tied to product proof; 56 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:.github/ISSUE_TEMPLATE/runtime-proof.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "community runtime proof submissions; 63 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:ROADMAP.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "public roadmap without overclaiming; 40 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:docs/github-launch-playbook.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "public launch operating plan; 225 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:docs/runtime-beta-roadmap.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "runtime beta acceptance criteria; 49 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:docs/product-truth-and-beta-gate.md",
+      "required": true,
+      "status": "pass",
+      "evidence": "truth taxonomy and beta/GA gates; 173 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "workflow:.github/workflows/ci.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "normal source, Rust, launcher, and hosted proof CI; 311 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "workflow:.github/workflows/release.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "draft GitHub Release and platform artifact proof; 276 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "workflow:.github/workflows/publish-npm.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "npm trusted-publishing lane from release artifacts; 67 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "workflow:.github/workflows/security.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "supply-chain security review lanes; 116 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "workflow:.github/workflows/codeql.yml",
+      "required": true,
+      "status": "pass",
+      "evidence": "CodeQL scan for the JavaScript/launcher surface; 49 lines",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "script:verify:github-readiness",
+      "required": true,
+      "status": "pass",
+      "evidence": "node scripts/verify-github-readiness.mjs --json --write reports/github-readiness-latest.json --markdown reports/github-readiness-latest.md",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "truthful-readme-claims",
+      "required": true,
+      "status": "pass",
+      "evidence": "README keeps runtime/session/HTTP-upstream limitations explicit.",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "issue-template-set",
+      "required": true,
+      "status": "pass",
+      "evidence": "bug_report.yml, cleanup-request.yml, client-upstream-compatibility.yml, config.yml, docs_request.yml, feature_request.yml, flaky-test.yml, repair-report.yml, runtime-proof.yml",
+      "nextAction": "Keep this repo surface maintained as code and docs change."
+    },
+    {
+      "id": "file:FUNDING.yml",
+      "required": false,
+      "status": "warn",
+      "evidence": "missing",
+      "nextAction": "Add FUNDING.yml when this project needs funding/sponsorship links once the project is public."
+    },
+    {
+      "id": "file:CITATION.cff",
+      "required": false,
+      "status": "pass",
+      "evidence": "academic/software citation metadata if MCPace becomes research-facing; 9 lines",
+      "nextAction": "Keep this optional repo surface maintained."
+    }
+  ],
+  "nextMoves": [
+    "Add FUNDING.yml when this project needs funding/sponsorship links once the project is public."
+  ]
+}

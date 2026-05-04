@@ -8,6 +8,21 @@ use std::time::Duration;
 
 const HTTP_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
+#[derive(Clone, Debug)]
+struct HttpJsonResponse {
+    headers: Vec<(String, String)>,
+    json: JsonValue,
+}
+
+impl HttpJsonResponse {
+    fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+}
+
 #[derive(Debug, Default)]
 struct ParsedArgs {
     help: bool,
@@ -210,9 +225,9 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Serve resource defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms.",
         resources::default_http_connection_limit(),
-        resources::DEFAULT_HTTP_IO_TIMEOUT_MS,
-        resources::DEFAULT_MAX_HTTP_BODY_BYTES,
-        resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS
+        resources::default_http_io_timeout_ms(),
+        resources::default_max_http_body_bytes(),
+        resources::default_dashboard_overview_cache_ms()
     );
 }
 
@@ -342,7 +357,7 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
 
     let probe_host = probe_host(&host);
     let health = http_json_get(&probe_host, port, &health_path);
-    let initialize = http_mcp_request(
+    let initialize_response = http_mcp_request(
         &probe_host,
         port,
         &mcp_path,
@@ -365,7 +380,14 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
                 ]),
             ),
         ]),
+        None,
     );
+    let setup_session_id = initialize_response
+        .as_ref()
+        .ok()
+        .and_then(|response| response.header("Mcp-Session-Id"))
+        .map(ToOwned::to_owned);
+    let initialize = initialize_response.map(|response| response.json);
     let tools_list = http_mcp_request(
         &probe_host,
         port,
@@ -376,7 +398,9 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
             ("method", JsonValue::string("tools/list")),
             ("params", empty_object()),
         ]),
-    );
+        setup_session_id.as_deref(),
+    )
+    .map(|response| response.json);
 
     warnings.push(
         "Cloud/public connector surfaces still require a public relay and are not made ready by local setup."
@@ -457,7 +481,7 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
                     JsonValue::number(
                         parsed
                             .io_timeout_ms
-                            .unwrap_or(resources::DEFAULT_HTTP_IO_TIMEOUT_MS),
+                            .unwrap_or_else(resources::default_http_io_timeout_ms),
                     ),
                 ),
                 (
@@ -465,7 +489,7 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
                     JsonValue::number(
                         parsed
                             .max_body_bytes
-                            .unwrap_or(resources::DEFAULT_MAX_HTTP_BODY_BYTES),
+                            .unwrap_or_else(resources::default_max_http_body_bytes),
                     ),
                 ),
             ]),
@@ -595,20 +619,29 @@ fn http_mcp_request(
     port: u16,
     path: &str,
     body: JsonValue,
-) -> Result<JsonValue, String> {
+    session_id: Option<&str>,
+) -> Result<HttpJsonResponse, String> {
     let body = body.to_compact_string();
     let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_MCP_PATH);
+    let session_header = session_id
+        .map(|value| format!("Mcp-Session-Id: {}\r\n", value))
+        .unwrap_or_default();
     let request = format!(
-        "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
         path,
         host,
+        session_header,
         body.len(),
         body
     );
-    http_json_request(host, port, &request)
+    http_json_response(host, port, &request)
 }
 
 fn http_json_request(host: &str, port: u16, request: &str) -> Result<JsonValue, String> {
+    http_json_response(host, port, request).map(|response| response.json)
+}
+
+fn http_json_response(host: &str, port: u16, request: &str) -> Result<HttpJsonResponse, String> {
     let mut stream = TcpStream::connect((host, port))
         .map_err(|error| format!("connect {}:{}: {}", host, port, error))?;
     stream
@@ -626,14 +659,23 @@ fn http_json_request(host: &str, port: u16, request: &str) -> Result<JsonValue, 
     stream
         .read_to_string(&mut response)
         .map_err(|error| format!("read response: {}", error))?;
-    let (headers, body) = response
+    let (headers_text, body) = response
         .split_once("\r\n\r\n")
         .ok_or_else(|| "HTTP response missing header/body separator".to_string())?;
-    let status = headers.lines().next().unwrap_or_default();
+    let mut lines = headers_text.lines();
+    let status = lines.next().unwrap_or_default();
     if !status.contains(" 200 ") {
         return Err(format!("HTTP request failed: {}", status));
     }
-    parse_str(body.trim()).map_err(|error| format!("parse HTTP JSON response: {}", error))
+    let headers = lines
+        .filter_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            Some((name.trim().to_string(), value.trim().to_string()))
+        })
+        .collect::<Vec<_>>();
+    let json =
+        parse_str(body.trim()).map_err(|error| format!("parse HTTP JSON response: {}", error))?;
+    Ok(HttpJsonResponse { headers, json })
 }
 
 fn probe_host(host: &str) -> String {

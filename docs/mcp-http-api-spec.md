@@ -21,16 +21,17 @@ The advertised client URL is resolved from `MCPACE_PUBLIC_MCP_URL`, `mcpace.conf
 
 Current local endpoint authentication is **НЕ ПОДТВЕРЖДЕНО** in this archive.
 For local mode, the implemented hardening is origin validation, localhost-first
-binding policy, and explicit MCP request validation. Do not treat this as a
-remote authenticated API.
+binding policy, and explicit MCP request validation. Non-loopback bind hosts such
+as `0.0.0.0` are rejected by default and require the explicit
+`--allow-nonlocal-bind` operator escape hatch. Do not treat this as a remote
+authenticated API.
 
 ## Common headers
 
 ### Request headers
 
-- `Origin`: optional. When present, it must be an allowed local origin such as
-  `http://127.0.0.1:<port>`, `http://localhost:<port>`, `http://[::1]:<port>`,
-  or `null`.
+- `Host`: when present, must resolve to an exact loopback authority: `127.0.0.1`, `localhost`, or `[::1]`, with an optional numeric port. Host-suffix tricks, userinfo, paths, and non-loopback hosts are rejected.
+- `Origin`: optional. Native clients normally omit it. When present, it must be an allowed loopback browser origin such as `http://127.0.0.1:<port>`, `http://localhost:<port>`, or `http://[::1]:<port>`. `null`, `file://`, userinfo, and host-suffix tricks are rejected.
 - `Accept`: required for POST. Must include both `application/json` and
   `text/event-stream`.
 - `Content-Type`: expected to be `application/json` for POST bodies.
@@ -50,7 +51,7 @@ remote authenticated API.
 - `Content-Type: application/json; charset=utf-8` for JSON responses.
 - `Cache-Control: no-store`.
 - `Allow: POST` when GET SSE is not supported and the route returns `405`.
-- `Mcp-Session-Id` on `initialize` responses. MCPace currently mints a compatible session id for clients to echo on later requests; durable server-side HTTP session storage is still a future hardening step.
+- `Mcp-Session-Id` on `initialize` responses. MCPace generates this server-side, stores the negotiated protocol and client metadata in a bounded in-process session store, and intentionally does not trust client-supplied session ids during initialize. Later stateful requests must echo the server-issued value.
 - `MCP-Protocol-Version` on `initialize` responses.
 
 ## Operations
@@ -110,9 +111,15 @@ Empty body.
 #### Error statuses
 
 - `400 Bad Request`: invalid JSON-RPC body, unsupported protocol version,
-  missing required POST `Accept` entries, or a `Mcp-Method` / `Mcp-Name`
-  header that disagrees with the JSON-RPC request body. Header/body mismatches use JSON-RPC error code `-32001` (`HeaderMismatch`).
-- `403 Forbidden`: invalid `Origin`.
+  missing required POST `Accept` entries, missing/invalid `Mcp-Session-Id`
+  after initialization, a protocol-version mismatch for the active session, or
+  a `Mcp-Method` / `Mcp-Name` header that disagrees with the JSON-RPC request
+  body. Header/body mismatches use JSON-RPC error code `-32001`
+  (`HeaderMismatch`).
+- `403 Forbidden`: invalid `Host` or `Origin`.
+- `404 Not Found`: unknown, expired, or already-closed `Mcp-Session-Id` on a
+  stateful request. Clients should initialize again before retrying stateful
+  calls.
 - `413 Payload Too Large`: request body exceeds configured limit.
 
 ### GET `/mcp`
@@ -184,6 +191,13 @@ npm run verify:rust-quality
 
 ### DELETE `/mcp`
 
-Terminates a Streamable HTTP session from the client perspective. Current implementation accepts the request after Origin validation and returns an empty `202 Accepted`; durable session cleanup is not yet implemented.
+Terminates a Streamable HTTP session. The request must include a known
+`Mcp-Session-Id` header. MCPace removes that session from the in-process store
+and returns an empty response.
 
 Status: `202 Accepted`
+
+Errors:
+
+- `400 Bad Request` for a missing or invalid `Mcp-Session-Id` header.
+- `404 Not Found` for an unknown, expired, or already-closed session id.

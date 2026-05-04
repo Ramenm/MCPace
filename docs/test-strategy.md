@@ -22,16 +22,18 @@ Run in this repo today:
 - machine-generated verification report contract checks for `scripts/proof-report.mjs`, including verbose-child-output buffer hardening
 - source/architecture audit for deterministic production-code hazards, unsafe/FFI boundary drift, and boundary violations (`npm run audit:source`)
 - optional built-in Node coverage lane for contract tests: `npm run test:node:coverage`
-- source/npm Node tests run with per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs` to keep child-process-heavy contract checks deterministic in constrained sandboxes
+- source/npm Node tests run with per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs`; the wrapper now uses bounded auto-parallel jobs by default and keeps mutation-sensitive files in a serial lane for deterministic child-process cleanup
+- Node syntax lint (`npm run lint:npm` / `npm run lint:node`) auto-discovers JS/MJS sources and now checks files with bounded auto-parallel `node --check` workers by default; set `MCPACE_NODE_SYNTAX_JOBS` or pass `--jobs 1` when deterministic serial diagnostics are needed
 
 ## 2. Build checks
 
 Need a host with a real Rust toolchain:
 
-- `npm run verify:rust-quality` for the ordered fmt → clippy → suite-isolated tests → release-build gate
+- `npm run verify:rust-quality` for the ordered fmt → check → clippy → full suite-isolated tests → release-build gate
 - `cargo test` when running ad hoc full Rust tests
 - `cargo build --release` when validating a single release build manually
 - later `cargo nextest run`
+- `npm run test:node:coverage` on the supported Node release line (Node >=22) for Node test coverage; older Node 18 hosts cannot run the repository coverage command because the test runner force-exit flag is not available there.
 
 ## 3. Runtime checks
 
@@ -92,7 +94,7 @@ Run in CI before publication:
 - Ubuntu also runs a constrained Docker full-work lane that builds the release
   binary inside a Rust+Node verify image and exercises the repo-root CLI path;
 - npm package dry-run is separated into its own job to reduce duplicate work;
-- Rust build proof remains a three-host matrix and now runs `npm run verify:rust-quality`, producing `reports/rust-quality-latest.json` for fmt, clippy, tests, and release-build evidence;
+- Rust build proof remains a three-host matrix and now runs `npm run verify:rust-quality`, producing `reports/rust-quality-latest.json` for fmt, check, clippy, full test, and release-build evidence;
 - Rust quality, lifecycle, launcher, dry-run, and release native jobs cache Cargo registry/git/target with deterministic keys from OS, Rust `1.95.0`, target or suite, `Cargo.lock`, and `rust-toolchain.toml`;
 - checkout steps use `persist-credentials: false` unless a job explicitly needs GitHub credentials.
 

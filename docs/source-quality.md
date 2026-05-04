@@ -20,6 +20,11 @@ into two classes:
 
 Warnings do not fail the command because they are refactor-planning signals, not always correctness defects. After the v0.5.5 modularization pass, the current source audit reports zero production large-module warnings; if warnings return, treat them as an architecture backlog, not as a release blocker unless a critical boundary is also violated.
 
+
+## Node syntax lint
+
+`npm run lint:npm` and `npm run lint:node` both dispatch to `scripts/check-node-syntax.mjs --json`. The harness discovers JS/MJS files from the maintained source roots, then runs `node --check` through bounded auto-parallel workers. Use `MCPACE_NODE_SYNTAX_JOBS=<n>` or `--jobs 1` when a host needs a lower process cap or serial failure diagnostics.
+
 ## Architecture boundaries covered now
 
 The audit currently checks two high-value boundaries:
@@ -74,9 +79,11 @@ npm run verify:rust-quality
 ```
 
 That script writes `reports/rust-quality-latest.json` and runs the lanes in a
-fixed order: `cargo fmt --all -- --check`, `cargo clippy --all-targets --locked -- -D warnings`,
-`node scripts/run-rust-tests.mjs --json --profile non-lifecycle`, and
-`cargo build --release --locked`. In constrained environments, use
+fixed order: `cargo fmt --all -- --check`, `cargo check --all-targets --locked`,
+`cargo clippy --all-targets --locked -- -D warnings`,
+`node scripts/run-rust-tests.mjs --json --profile full`, and
+`cargo build --release --locked`. Use `--test-profile non-lifecycle` only when you are
+intentionally isolating lifecycle-heavy tests from a separate full proof. In constrained environments, use
 `node scripts/verify-rust-quality.mjs --json --allow-missing-cargo` only to
 produce an honest partial report; do not treat that as build proof.
 

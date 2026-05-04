@@ -35,7 +35,7 @@ jobs:
           package-manager-cache: false
 
       - name: Verify exact npm version for trusted publishing
-        run: npm exec --yes --package=npm@11.12.1 -- npm --version
+        run: npm exec --yes --package=npm@11.13.0 -- npm --version
 
       - name: Download npm tarballs from the matching GitHub Release
         env:
@@ -57,7 +57,7 @@ jobs:
 
       - name: Publish prebuilt npm artifacts
         env:
-          MCPACE_NPM_EXEC_PACKAGE: npm@11.12.1
+          MCPACE_NPM_EXEC_PACKAGE: npm@11.13.0
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
             node scripts/publish-npm-artifacts.mjs --json --artifact-dir dist/npm --dry-run

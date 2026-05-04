@@ -1,0 +1,142 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-04T12:04:09.298Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "total": 38,
+  "selected": 7,
+  "batchSize": 4,
+  "batchCount": 2,
+  "shard": null,
+  "completedBatches": 2,
+  "completed": 7,
+  "passed": 7,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/local-quality-contract.test.js"
+      ],
+      "file": "tests/node/bug-sweep-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 269,
+      "timeoutMs": 60000,
+      "error": null,
+      "stdoutSummary": "✔ bug sweep automation is wired into package scripts, CI, docs, and PR hygiene (2.1329ms)\n✔ bug sweep report passes current source invariants (111.181ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 187.2419",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/local-quality-contract.test.js"
+      ],
+      "file": "tests/node/defect-gates-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 226,
+      "timeoutMs": 60000,
+      "error": null,
+      "stdoutSummary": "✔ defect gates encode bug intake, triage, and regression-proof requirements (75.0511ms)\n✔ package script exposes defect gates for CI and local maintainer runs (0.6742ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 150.832",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/local-quality-contract.test.js"
+      ],
+      "file": "tests/node/github-readiness-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 221,
+      "timeoutMs": 60000,
+      "error": null,
+      "stdoutSummary": "✔ GitHub readiness harness checks public repository health files and workflows (69.3603ms)\n✔ package scripts expose GitHub readiness verification (0.9242ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 145.2627",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/local-quality-contract.test.js"
+      ],
+      "file": "tests/node/local-quality-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 2125,
+      "timeoutMs": 60000,
+      "error": null,
+      "stdoutSummary": "✔ local-first quality scripts are wired for workstation or self-hosted verification (1.4304ms)\n✔ toolbox doctor emits a structured local tooling report (1788.517ms)\n✔ local quality suite can render all local profiles without executing them (195.4174ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2053.6385",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/publish-decision-contract.test.js",
+        "tests/node/security-contract.test.js",
+        "tests/node/source-quality-contract.test.js"
+      ],
+      "file": "tests/node/publish-decision-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 921,
+      "timeoutMs": 60000,
+      "error": null,
+      "stdoutSummary": "✔ publish decision separates public source snapshot from native runtime publication (0.9075ms)\n✔ local secret and supply-chain scripts expose JSON reports (792.8868ms)\n✔ package scripts expose local source, release, and final decision gates (0.4456ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 864.6543",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/publish-decision-contract.test.js",
+        "tests/node/security-contract.test.js",
+        "tests/node/source-quality-contract.test.js"
+      ],
+      "file": "tests/node/security-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 147,
+      "timeoutMs": 60000,
+      "error": null,
+      "stdoutSummary": "✔ upstream stderr diagnostics are bounded and redact likely secrets before surfacing errors (3.6384ms)\n✔ security posture documentation covers MCP stderr redaction and explicit env allowlisting (0.8088ms)\n✔ HTTP MCP route validates standard header/body agreement when clients send MCP headers (3.198ms)\n✔ child process test helpers do not pass registry credentials or sandbox secrets by default (1.3823ms)\n✔ source proof child-process runners use sanitized environment helpers (1.5387ms)\n✔ HTTP MCP session ids are visible-ASCII bounded, generated from OS randomness, and backed by a stateful store (1.8994ms)\nℹ tests 6\nℹ suites 0\nℹ pass 6\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 83.2341",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/publish-decision-contract.test.js",
+        "tests/node/security-contract.test.js",
+        "tests/node/source-quality-contract.test.js"
+      ],
+      "file": "tests/node/source-quality-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 679,
+      "timeoutMs": 60000,
+      "error": null,
+      "stdoutSummary": "✔ source audit reports architectural risk signals and fails only on critical production debt (126.149ms)\n✔ source audit checks explicit architecture boundaries (51.6486ms)\n✔ source audit can write a durable JSON report artifact (135.965ms)\n✔ unsafe and FFI process detach code stays centralized (113.0594ms)\n✔ local HTTP routes convert internal command failures into structured JSON errors (2.4187ms)\n✔ source audit script remains documented and wired into package scripts (0.7604ms)\n✔ node syntax lint uses discovery instead of a hardcoded package.json file list (0.4559ms)\n✔ dashboard HTTP boundary remains split into focused modules instead of a single oversized route file (1.5755ms)\n✔ adapter route projection and proxy helpers stay in focused child modules (1.9783ms)\n✔ runtime roots stay below the large-module audit threshold after modularization (110.5969ms)\n✔ client catalog built-in defaults stay isolated from registry loading behavior (0.7499ms)\n✔ server preset rendering stays outside the generic server list/capability renderer (0.8345ms)\n✔ client list rendering stays split from install and export mutation paths (0.4663ms)\n✔ client install backup and restore helpers stay outside the client action dispatcher (0.8052ms)\n✔ mcp stdio server argument parsing stays split from JSON-RPC serving loop (0.458ms)\nℹ tests 15\nℹ suites 0\nℹ pass 15\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 623.1689",
+      "stderrSummary": ""
+    }
+  ]
+}

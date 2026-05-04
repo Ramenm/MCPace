@@ -4,6 +4,23 @@ MCPace is not ready to claim runtime beta until one real client can call one rea
 
 Use this order:
 
+
+Local-first proof path, without relying on paid GitHub features:
+
+```bash
+npm run verify:tooling
+npm run verify:local-prepublish:quick
+npm run verify:local-prepublish
+```
+
+Interpretation:
+
+- `verify:tooling` checks whether the machine has the required local toolchain and recommended security/release tools.
+- `verify:local-prepublish:quick` is the fast offline hygiene lane for active development.
+- `verify:local-prepublish` is the full release-candidate gate. If it reports `blocked`, do not publish yet.
+
+Read `docs/offline-quality-and-publish-gates.md` and `docs/tooling-stack.md` for the exact policy.
+
 ```bash
 npm run lint:npm
 npm run verify:boot

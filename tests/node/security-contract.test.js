@@ -104,7 +104,7 @@ test('source proof child-process runners use sanitized environment helpers', () 
 
 
 
-test('HTTP MCP session ids are visible-ASCII bounded and generated from OS randomness when available', () => {
+test('HTTP MCP session ids are visible-ASCII bounded, generated from OS randomness, and backed by a stateful store', () => {
   const dashboard = [
     read('src/dashboard.rs'),
     read('src/dashboard/http_boundary.rs'),
@@ -123,4 +123,11 @@ test('HTTP MCP session ids are visible-ASCII bounded and generated from OS rando
   assert.match(dashboard, /fn os_random_hex\(/);
   assert.match(dashboard, /getrandom::getrandom/);
   assert.match(dashboard, /mcpace-fallback-/);
+  assert.match(dashboard, /struct McpHttpSessionStore/);
+  assert.match(dashboard, /create_or_replace\(/);
+  assert.match(dashboard, /touch_from_request\(/);
+  assert.match(dashboard, /close_from_request\(/);
+  assert.match(dashboard, /McpHttpSessionErrorKind::Unknown \| McpHttpSessionErrorKind::Expired => "404 Not Found"/);
+  assert.match(dashboard, /missing required Mcp-Session-Id header after initialize/);
+  assert.match(read('docs/mcp-http-api-spec.md'), /unknown, expired, or already-closed `Mcp-Session-Id`/);
 });

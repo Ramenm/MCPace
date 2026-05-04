@@ -1,0 +1,62 @@
+name: Runtime proof trace
+description: Share a real client/upstream trace or request a compatibility proof.
+title: "[runtime-proof] "
+labels:
+  - runtime
+  - needs-proof
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this when proving or requesting a real runtime path: client -> MCPace -> upstream MCP server.
+  - type: input
+    id: client
+    attributes:
+      label: Client
+      placeholder: Cursor / Claude Desktop / Codex / Windsurf / other
+    validations:
+      required: true
+  - type: input
+    id: upstream
+    attributes:
+      label: Upstream MCP server
+      placeholder: filesystem / git / custom stdio / custom Streamable HTTP
+    validations:
+      required: true
+  - type: input
+    id: endpoint
+    attributes:
+      label: MCPace endpoint
+      placeholder: http://127.0.0.1:39022/mcp
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps run
+      placeholder: |
+        mcpace serve --port 39022
+        mcpace server test ...
+        client action ...
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Result
+      description: What initialized, listed tools, or called tools successfully? What failed?
+    validations:
+      required: true
+  - type: textarea
+    id: artifacts
+    attributes:
+      label: Redacted artifacts
+      description: Attach or paste redacted JSON/log snippets. Do not include secrets.
+      render: json
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      placeholder: OS, architecture, MCPace version, client version, Node/npm/Rust if relevant.
+    validations:
+      required: true

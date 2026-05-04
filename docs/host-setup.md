@@ -6,7 +6,7 @@ Required for build proof:
 
 - Rust 1.95.0 (from `rust-toolchain.toml`, includes `cargo` and `rustc`)
 - Node.js 22 LTS or 24 LTS
-- npm 10+ (the repo pins `npm@11.12.1` as the default package manager hint)
+- npm 10+ (the repo pins `npm@11.13.0` as the default package manager hint)
 
 Preferred local bootstrap:
 

@@ -52,7 +52,20 @@ pub(super) fn handle_mcp_http_route(
             if reject_forbidden_origin(stream, request)? {
                 return Ok(());
             }
-            write_empty_response(stream, "202 Accepted")?;
+            let close_result = config
+                .http_session_store
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .close_from_request(request, now_ms());
+            match close_result {
+                Ok(_) => write_empty_response(stream, "202 Accepted")?,
+                Err(error) => write_json_error_response(
+                    stream,
+                    error.http_status(),
+                    "mcp_session_error",
+                    &error.message,
+                )?,
+            }
         }
         "POST" => {
             if reject_forbidden_origin(stream, request)? {
@@ -132,17 +145,23 @@ fn handle_mcp_http_request(
     let id = json_helpers::value_at_path(&message, &["id"]).cloned();
     let method = json_helpers::string_at_path(&message, &["method"]);
 
-    if id.is_none() {
-        if method.is_some() || json_helpers::value_at_path(&message, &["result"]).is_some() {
-            return Ok(McpHttpResponse::Accepted);
-        }
-        if json_helpers::value_at_path(&message, &["error"]).is_some() {
-            return Ok(McpHttpResponse::Accepted);
-        }
-    }
-
     let id = id.unwrap_or(JsonValue::Null);
-    let method = method.ok_or_else(|| "missing JSON-RPC method".to_string())?;
+    let method = match method {
+        Some(value) => value,
+        None => {
+            if json_helpers::value_at_path(&message, &["result"]).is_some()
+                || json_helpers::value_at_path(&message, &["error"]).is_some()
+            {
+                if let Some(response) =
+                    validate_mcp_session_for_request(request, config, id.clone())
+                {
+                    return Ok(response);
+                }
+                return Ok(McpHttpResponse::Accepted);
+            }
+            return Err("missing JSON-RPC method".to_string());
+        }
+    };
     if let Some(protocol_header) =
         http_boundary::request_header_string(Some(request), "mcp-protocol-version")
     {
@@ -168,17 +187,41 @@ fn handle_mcp_http_request(
         ));
     }
 
+    if method != "initialize" {
+        if let Some(response) = validate_mcp_session_for_request(request, config, id.clone()) {
+            return Ok(response);
+        }
+        if json_helpers::value_at_path(&message, &["id"]).is_none() {
+            return Ok(McpHttpResponse::Accepted);
+        }
+    } else if json_helpers::value_at_path(&message, &["id"]).is_none() {
+        return Ok(McpHttpResponse::Accepted);
+    }
+
     match method {
         "initialize" => {
             let requested = json_helpers::string_at_path(&message, &["params", "protocolVersion"])
                 .unwrap_or(mcp::CURRENT_PROTOCOL_VERSION);
             let negotiated = mcp::negotiate_protocol_version(requested);
 
-            let session_id = http_boundary::request_header_string(Some(request), "mcp-session-id")
-                .and_then(|value| http_session::normalize_mcp_http_session_id(&value))
-                .unwrap_or_else(|| {
-                    http_session::generated_mcp_http_session_id(request, &id, negotiated)
-                });
+            let session_id = http_session::generated_mcp_http_session_id(request, &id, negotiated);
+            let client_name =
+                json_helpers::string_at_path(&message, &["params", "clientInfo", "name"])
+                    .map(ToOwned::to_owned);
+            let client_version =
+                json_helpers::string_at_path(&message, &["params", "clientInfo", "version"])
+                    .map(ToOwned::to_owned);
+            config
+                .http_session_store
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner())
+                .create_or_replace(
+                    session_id.clone(),
+                    negotiated,
+                    client_name,
+                    client_version,
+                    now_ms(),
+                );
             Ok(McpHttpResponse::JsonWithHeaders(
                 JsonValue::object([
                     ("jsonrpc", JsonValue::string("2.0")),
@@ -420,6 +463,36 @@ fn handle_mcp_http_request(
                 ]),
             ),
         ]))),
+    }
+}
+
+fn validate_mcp_session_for_request(
+    request: &HttpRequest,
+    config: &DashboardConfig,
+    id: JsonValue,
+) -> Option<McpHttpResponse> {
+    let result = config
+        .http_session_store
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .touch_from_request(request, now_ms());
+    match result {
+        Ok(_) => None,
+        Err(error) => {
+            let code = match error.kind {
+                http_session::McpHttpSessionErrorKind::Missing
+                | http_session::McpHttpSessionErrorKind::Invalid
+                | http_session::McpHttpSessionErrorKind::ProtocolMismatch => {
+                    mcp::ERROR_INVALID_REQUEST
+                }
+                http_session::McpHttpSessionErrorKind::Unknown
+                | http_session::McpHttpSessionErrorKind::Expired => mcp::ERROR_NOT_INITIALIZED,
+            };
+            Some(McpHttpResponse::JsonStatus(
+                error.http_status(),
+                mcp_error_response(id, code, error.message),
+            ))
+        }
     }
 }
 

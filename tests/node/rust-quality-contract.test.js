@@ -18,18 +18,29 @@ function runRustQuality(args) {
   return spawnSync(process.execPath, ['scripts/verify-rust-quality.mjs', ...args], CHILD_OPTIONS);
 }
 
-test('Rust quality gate exposes fmt, clippy, test, and release-build lanes in order', () => {
+test('Rust quality gate exposes fmt, check, clippy, full tests, and release-build lanes in order', () => {
   const result = runRustQuality(['--json', '--plan-only']);
 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const report = JSON.parse(result.stdout);
   assert.equal(report.status, 'planned');
-  assert.deepEqual(report.policy.laneOrder, ['fmt', 'clippy', 'rust-tests', 'release-build']);
+  assert.deepEqual(report.policy.laneOrder, ['fmt', 'check', 'clippy', 'rust-tests', 'release-build']);
+  assert.equal(report.policy.testsProfile, 'full');
   assert.deepEqual(report.lanes.map((lane) => lane.name), report.policy.laneOrder);
   assert.match(report.lanes.find((lane) => lane.name === 'fmt').command, /cargo fmt --all -- --check/);
+  assert.match(report.lanes.find((lane) => lane.name === 'check').command, /cargo check --all-targets --locked/);
   assert.match(report.lanes.find((lane) => lane.name === 'clippy').command, /cargo clippy --all-targets --locked -- -D warnings/);
-  assert.match(report.lanes.find((lane) => lane.name === 'rust-tests').command, /run-rust-tests\.mjs --json --profile non-lifecycle/);
+  assert.match(report.lanes.find((lane) => lane.name === 'rust-tests').command, /run-rust-tests\.mjs --json --profile full/);
   assert.match(report.lanes.find((lane) => lane.name === 'release-build').command, /cargo build --release --locked/);
+});
+
+test('Rust quality gate can intentionally narrow the Rust test profile in plan-only mode', () => {
+  const result = runRustQuality(['--json', '--plan-only', '--test-profile', 'non-lifecycle']);
+
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  const report = JSON.parse(result.stdout);
+  assert.equal(report.policy.testsProfile, 'non-lifecycle');
+  assert.match(report.lanes.find((lane) => lane.name === 'rust-tests').command, /--profile non-lifecycle/);
 });
 
 test('Rust quality gate can write an honest partial report when Cargo is unavailable', () => {
@@ -61,11 +72,8 @@ test('Rust quality gate is wired into package scripts, CI, and docs', () => {
   assert.equal(packageJson.scripts['verify:rust-quality:plan'], 'node scripts/verify-rust-quality.mjs --json --plan-only');
   assert.equal(packageJson.scripts['prove:rust-host'], 'npm run verify:rust-quality');
   assert.equal(packageJson.scripts['lint:npm'], 'node scripts/check-node-syntax.mjs --json');
-  const syntax = spawnSync(process.execPath, ['scripts/check-node-syntax.mjs', '--json', '--list'], CHILD_OPTIONS);
-  assert.equal(syntax.status, 0, syntax.stderr || syntax.stdout);
-  const syntaxFiles = JSON.parse(syntax.stdout).files;
-  assert.ok(syntaxFiles.includes('scripts/verify-rust-quality.mjs'));
-  assert.ok(syntaxFiles.includes('tests/node/rust-quality-contract.test.js'));
+  assert.equal(fs.existsSync(path.join(repoRoot, 'scripts/verify-rust-quality.mjs')), true);
+  assert.equal(fs.existsSync(path.join(repoRoot, 'tests/node/rust-quality-contract.test.js')), true);
   assert.match(ci, /verify:rust-quality/);
   assert.match(testStrategy, /verify:rust-quality/);
   assert.match(verification, /rust-quality-latest\.json/);

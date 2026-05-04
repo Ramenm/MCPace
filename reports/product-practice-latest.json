@@ -1,16 +1,16 @@
 {
   "schema": "mcpace.productPractice.v1",
-  "generatedAt": "2026-05-02T17:31:05.673Z",
+  "generatedAt": "2026-05-04T13:22:38.659Z",
   "project": {
     "name": "mcpace",
     "version": "0.5.9"
   },
-  "status": "stage-binary-before-publish-claims",
+  "status": "ready-for-release-candidate-review",
   "canClaim": {
     "sourceTreeHealthy": true,
     "sourceThinLauncherInstall": true,
     "runtimeBeta": true,
-    "publishedBinaryInstall": false,
+    "publishedBinaryInstall": true,
     "universalRemoteMcpBroker": false
   },
   "gates": [
@@ -23,7 +23,7 @@
     {
       "id": "node-syntax",
       "status": "pass",
-      "evidence": "80/80 JS/MJS files checked",
+      "evidence": "99/99 JS/MJS files checked",
       "nextAction": "Run npm run lint:npm."
     },
     {
@@ -41,20 +41,96 @@
     {
       "id": "runtime-trace",
       "status": "pass",
-      "evidence": "pass",
+      "evidence": "usable",
       "nextAction": "Keep the runtime trace passing before runtime claims."
     },
     {
       "id": "published-binary-install",
-      "status": "blocked",
-      "evidence": "ready-with-warnings",
-      "nextAction": "Stage and verify at least one native binary/platform package before claiming published install readiness."
+      "status": "pass",
+      "evidence": "reports/vendored-binary-win32-x64-msvc.json: pass",
+      "nextAction": "Run npm run verify:vendored-binary after staging a native binary/platform package before claiming published install readiness."
     }
   ],
-  "wrongPracticeRisks": [
-    "Thin npm launcher install can be useful, but it is not the same as published native binary install."
-  ],
-  "nextMoves": [
-    "Stage and verify at least one native binary/platform package before claiming published install readiness."
-  ]
+  "freshness": {
+    "rustQuality": {
+      "path": "reports/rust-quality-latest.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T13:22:13.926Z",
+      "ageMs": 24733,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/rust-quality-latest.json fresh (0m old, max 6h old)"
+    },
+    "bootHarness": {
+      "path": "reports/boot-harness-latest.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T12:15:10.311Z",
+      "ageMs": 4048348,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/boot-harness-latest.json fresh (67m old, max 6h old)"
+    },
+    "runtimeTrace": {
+      "path": "reports/runtime-trace-latest.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T13:22:15.068Z",
+      "ageMs": 23591,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/runtime-trace-latest.json fresh (0m old, max 6h old)"
+    },
+    "installReadiness": {
+      "path": "reports/install-readiness-latest.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T13:22:28.493Z",
+      "ageMs": 10166,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/install-readiness-latest.json fresh (0m old, max 6h old)"
+    },
+    "vendoredBinary": {
+      "path": "reports/vendored-binary-win32-x64-msvc.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T12:53:15.312Z",
+      "ageMs": 1763347,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/vendored-binary-win32-x64-msvc.json fresh (29m old, max 6h old)"
+    }
+  },
+  "wrongPracticeRisks": [],
+  "proofValidity": {
+    "currentHost": {
+      "key": "win32-x64-msvc",
+      "detected": true,
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "maxProofAgeHours": 6,
+    "rustQuality": {
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
+    },
+    "runtimeTrace": {
+      "usable": true,
+      "reasons": []
+    },
+    "bootHarness": {
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
+    },
+    "installReadiness": {
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
+    },
+    "vendoredBinary": {
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
+    }
+  },
+  "nextMoves": []
 }

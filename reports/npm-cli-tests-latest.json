@@ -1,0 +1,70 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-04T12:50:52.996Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "total": 3,
+  "selected": 3,
+  "batchSize": 3,
+  "batchCount": 1,
+  "shard": null,
+  "completedBatches": 1,
+  "completed": 3,
+  "passed": 3,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "packages/npm/cli/test/platform.test.mjs",
+        "packages/npm/cli/test/resolve-binary.test.mjs",
+        "packages/npm/cli/test/runtime.test.mjs"
+      ],
+      "file": "packages/npm/cli/test/platform.test.mjs",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 133,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "✔ supported targets include linux and windows lanes (0.5339ms)\n✔ packageNamesForTarget maps to platform package names (0.9735ms)\n✔ currentTargetKey preserves libc information even when the target is unsupported (0.2178ms)\n✔ describeSupportedTargets is non-empty and current target detection is safe (0.1882ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 66.6941",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "packages/npm/cli/test/platform.test.mjs",
+        "packages/npm/cli/test/resolve-binary.test.mjs",
+        "packages/npm/cli/test/runtime.test.mjs"
+      ],
+      "file": "packages/npm/cli/test/resolve-binary.test.mjs",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 143,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "✔ resolveBinary prefers MCPACE_BINARY_PATH (2.2978ms)\n✔ resolveBinary prefers MCPACE_DEV_BINARY when explicit path is given (1.6935ms)\n✔ resolveBinary rejects a non-executable explicit binary path on unix (0.1682ms)\n✔ resolveBinary prefers a vendored binary from the workspace repo (4.7975ms)\n✔ resolveBinary prefers a vendored binary next to the installed package (4.3363ms)\n✔ resolveBinary throws a helpful error when no binary is available (1.4011ms)\nℹ tests 6\nℹ suites 0\nℹ pass 6\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 79.2754",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "packages/npm/cli/test/platform.test.mjs",
+        "packages/npm/cli/test/resolve-binary.test.mjs",
+        "packages/npm/cli/test/runtime.test.mjs"
+      ],
+      "file": "packages/npm/cli/test/runtime.test.mjs",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 122,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "✔ runtime launcher policy keeps Node 22+ as the supported floor (1.173ms)\n✔ runtime launcher rejects unsupported Node majors with a clear message (0.3603ms)\n✔ runtime launcher accepts maintained lanes (0.0796ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 63.9466",
+      "stderrSummary": ""
+    }
+  ]
+}

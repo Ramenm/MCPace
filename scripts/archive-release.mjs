@@ -135,6 +135,9 @@ function copyTree(sourcePath, destinationPath, relativePath = '') {
 
   fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
   fs.copyFileSync(sourcePath, destinationPath);
+  if (process.platform !== 'win32') {
+    fs.chmodSync(destinationPath, stat.mode & 0o777);
+  }
 }
 
 function stageArchive(rootName, includePaths) {

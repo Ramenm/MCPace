@@ -20,7 +20,7 @@ The current product gap is not only protocol plumbing. A user needs a native seq
 connect guide → import/add → sources → test → serve → client export/install preview
 ```
 
-This pass improves that sequence while leaving the still-blocked remote HTTP upstream connector and durable session store honest.
+This pass improves that sequence while leaving the still-blocked remote HTTP upstream connector honest; the HTTP session store is now implemented in-process, while cross-process/relay persistence remains future hardening.
 
 ## Verification
 

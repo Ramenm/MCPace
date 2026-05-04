@@ -254,6 +254,12 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
         }
     }
 
+    let http_session_snapshot = config
+        .http_session_store
+        .lock()
+        .map(|mut store| store.snapshot(now_ms()))
+        .ok();
+
     JsonValue::object([
         (
             "surface",
@@ -324,6 +330,91 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
                     "healthTtlMs",
                     JsonValue::number(config.health_cache_ttl.as_millis()),
                 ),
+            ]),
+        ),
+        (
+            "httpSessionStore",
+            JsonValue::object([
+                (
+                    "size",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.session_count)
+                            .unwrap_or_default(),
+                    ),
+                ),
+                (
+                    "maxSize",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.max_sessions)
+                            .unwrap_or_default(),
+                    ),
+                ),
+                (
+                    "ttlMs",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.ttl_ms)
+                            .unwrap_or_default(),
+                    ),
+                ),
+                (
+                    "prunedExpiredSessions",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.pruned_expired_sessions)
+                            .unwrap_or_default(),
+                    ),
+                ),
+                (
+                    "oldestCreatedAtMs",
+                    http_session_snapshot
+                        .as_ref()
+                        .and_then(|snapshot| snapshot.oldest_created_at_ms)
+                        .map(JsonValue::number)
+                        .unwrap_or(JsonValue::Null),
+                ),
+                (
+                    "newestLastSeenAtMs",
+                    http_session_snapshot
+                        .as_ref()
+                        .and_then(|snapshot| snapshot.newest_last_seen_at_ms)
+                        .map(JsonValue::number)
+                        .unwrap_or(JsonValue::Null),
+                ),
+                (
+                    "namedClientSessions",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.named_client_sessions)
+                            .unwrap_or_default(),
+                    ),
+                ),
+                (
+                    "versionedClientSessions",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.versioned_client_sessions)
+                            .unwrap_or_default(),
+                    ),
+                ),
+                (
+                    "mcpaceGeneratedSessions",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.mcpace_generated_sessions)
+                            .unwrap_or_default(),
+                    ),
+                ),
+                ("locked", JsonValue::bool(http_session_snapshot.is_some())),
             ]),
         ),
         (

@@ -181,7 +181,7 @@ jobs:
       - name: Stage and verify vendored binary
         run: |
           node scripts/stage-vendored-binary.mjs --json --target-key ${{ matrix.target_key }} --binary-path target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} --clear-target-dir
-          node scripts/verify-vendored-binary.mjs --json --target-key ${{ matrix.target_key }}
+          node scripts/verify-vendored-binary.mjs --json --target-key ${{ matrix.target_key }} --write reports/vendored-binary-${{ matrix.target_key }}.json
 
       - name: Stage, verify, and pack platform npm package
         run: |

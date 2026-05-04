@@ -1,0 +1,166 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-04T09:26:23.828Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "total": 38,
+  "selected": 8,
+  "batchSize": 4,
+  "batchCount": 2,
+  "shard": {
+    "index": 1,
+    "total": 5
+  },
+  "completedBatches": 2,
+  "completed": 8,
+  "passed": 8,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/archive-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1641,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: archive builder creates a clean zip with the required root naming contract\nok 1 - archive builder creates a clean zip with the required root naming contract\n  ---\n  duration_ms: 1123.296034\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1415.490102",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/configurable-mcp-connectivity-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 554,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: server test provides native live stdio smoke before wiring a client\nok 12 - server test provides native live stdio smoke before wiring a client\n  ---\n  duration_ms: 0.207534\n  ...\n# Subtest: client export guidance uses resolved endpoint URL instead of hardcoded local port messages\nok 13 - client export guidance uses resolved endpoint URL instead of hardcoded local port messages\n  ---\n  duration_ms: 0.173855\n  ...\n# Subtest: source audit treats extracted Rust test modules as tests instead of production code\nok 14 - source audit treats extracted Rust test modules as tests instead of production code\n  ---\n  duration_ms: 0.854004\n  ...\n# Subtest: connect command gives users one client-first wiring report\nok 15 - connect command gives users one client-first wiring report\n  ---\n  duration_ms: 0.359637\n  ...\n# Subtest: connect command stays read-only and does not mutate MCP settings or client configs\nok 16 - connect command stays read-only and does not mutate MCP settings or client configs\n  ---\n  duration_ms: 0.242953\n  ...\n# Subtest: useful MCP installs are data-driven presets instead of more Rust package hardcode\nok 17 - useful MCP installs are data-driven presets instead of more Rust package hardcode\n  ---\n  duration_ms: 5.33187\n  ...\n1..17\n# tests 17\n# suites 0\n# pass 17\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 337.865907",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/evidence-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 529,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: runtime capability evidence paths exist\nok 1 - runtime capability evidence paths exist\n  ---\n  duration_ms: 8.113064\n  ...\n# Subtest: seed prompt eval evidence paths exist and stay grounded\nok 2 - seed prompt eval evidence paths exist and stay grounded\n  ---\n  duration_ms: 12.669698\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 295.553792",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/inventory-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 925,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: project inventory maps source inventory to the legacy code inventory shape\nok 1 - project inventory maps source inventory to the legacy code inventory shape\n  ---\n  duration_ms: 408.713529\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 694.451983",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/product-truth-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/verify-npm-pack.test.js"
+      ],
+      "file": "tests/node/product-truth-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 582,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: machine-readable product truth stays versioned and structurally complete\nok 1 - machine-readable product truth stays versioned and structurally complete\n  ---\n  duration_ms: 35.696812\n  ...\n# Subtest: current promise and catalog-driven proof-tier selection stay aligned across user-facing docs\nok 2 - current promise and catalog-driven proof-tier selection stay aligned across user-facing docs\n  ---\n  duration_ms: 11.146678\n  ...\n# Subtest: docs index and verification snapshot expose the machine-readable product truth\nok 3 - docs index and verification snapshot expose the machine-readable product truth\n  ---\n  duration_ms: 4.049349\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 339.261014",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/product-truth-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/verify-npm-pack.test.js"
+      ],
+      "file": "tests/node/release-workflow-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 572,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: full docker proof script derives the expected binary version dynamically\nok 5 - full docker proof script derives the expected binary version dynamically\n  ---\n  duration_ms: 0.566184\n  ...\n# Subtest: docker proof scripts restore bind-mount permissions before host cleanup\nok 6 - docker proof scripts restore bind-mount permissions before host cleanup\n  ---\n  duration_ms: 1.919877\n  ...\n# Subtest: windows release archives avoid zip.exe backslash entries\nok 7 - windows release archives avoid zip.exe backslash entries\n  ---\n  duration_ms: 0.521163\n  ...\n# Subtest: full docker proof keeps the default no-upstream-server plan honest\nok 8 - full docker proof keeps the default no-upstream-server plan honest\n  ---\n  duration_ms: 0.49024\n  ...\n# Subtest: linux npm install docker proof validates local tarballs without publishing\nok 9 - linux npm install docker proof validates local tarballs without publishing\n  ---\n  duration_ms: 0.918748\n  ...\n# Subtest: macOS proof-lane verifier keeps no-local-mac coverage explicit\nok 10 - macOS proof-lane verifier keeps no-local-mac coverage explicit\n  ---\n  duration_ms: 1.286815\n  ...\n1..10\n# tests 10\n# suites 0\n# pass 10\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 316.7883",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/product-truth-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/verify-npm-pack.test.js"
+      ],
+      "file": "tests/node/schema-examples.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 544,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: hub schema and examples parse and satisfy the repo subset contract\nok 1 - hub schema and examples parse and satisfy the repo subset contract\n  ---\n  duration_ms: 3.420902\n  ...\n# Subtest: project config schema covers current serve and MCP settings registry fields\nok 2 - project config schema covers current serve and MCP settings registry fields\n  ---\n  duration_ms: 2.17913\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 297.059909",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/product-truth-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/verify-npm-pack.test.js"
+      ],
+      "file": "tests/node/verify-npm-pack.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 4795,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: verify-npm-pack passes on the default npm tarball mode\nok 1 - verify-npm-pack passes on the default npm tarball mode\n  ---\n  duration_ms: 1501.439014\n  ...\n# Subtest: verify-npm-pack requires staged vendored binaries to be included in the tarball\nok 2 - verify-npm-pack requires staged vendored binaries to be included in the tarball\n  ---\n  duration_ms: 1398.666804\n  ...\n# Subtest: verify-npm-pack rejects non-executable staged vendored binaries on POSIX\nok 3 - verify-npm-pack rejects non-executable staged vendored binaries on POSIX\n  ---\n  duration_ms: 1374.432476\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4558.337811",
+      "stderrSummary": ""
+    }
+  ]
+}

@@ -30,4 +30,4 @@ Make useful MCP setup simpler from a client/user perspective without turning MCP
 - `cargo check --all-targets --locked` is blocked by crates.io DNS/dependency access in this environment.
 - Full `cargo test` and release build are still not confirmed here.
 - Real-client runtime trace is still not confirmed.
-- Durable HTTP session store and remote Streamable HTTP upstream connector are still future work.
+- Remote Streamable HTTP upstream connector is still future work; the local HTTP session lifecycle is now implemented in-process, with cross-process/relay persistence still future hardening.

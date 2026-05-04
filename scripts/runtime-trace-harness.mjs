@@ -8,6 +8,7 @@ import { spawn } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { deriveProjectName, deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
 import { cleanChildEnv } from './lib/safe-child-env.mjs';
+import { binaryNameForPlatform, binaryNameForTarget, currentTargetKey, detectTarget } from '../packages/npm/cli/lib/platform.js';
 
 const DEFAULT_ENDPOINT_PATH = '/mcp';
 const DEFAULT_TIMEOUT_MS = 7_000;
@@ -40,12 +41,58 @@ function exists(relativePath) {
   return fs.existsSync(path.join(repoRoot, relativePath));
 }
 
+function uniquePaths(paths) {
+  const seen = new Set();
+  return paths.filter((candidate) => {
+    if (!candidate) return false;
+    const normalized = path.normalize(candidate);
+    if (seen.has(normalized)) return false;
+    seen.add(normalized);
+    return true;
+  });
+}
+
+function isExecutable(filePath) {
+  if (process.platform === 'win32') return true;
+  try {
+    fs.accessSync(filePath, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function currentHostTarget() {
+  const target = detectTarget();
+  return {
+    key: target?.key ?? currentTargetKey(),
+    detected: Boolean(target),
+    platform: process.platform,
+    arch: process.arch,
+    libc: target?.libcProbe ?? null,
+    rustTarget: target?.rustTarget ?? null,
+  };
+}
+
 function defaultBinaryCandidates() {
-  const exe = process.platform === 'win32' ? 'mcpace.exe' : 'mcpace';
-  return [
+  const exe = binaryNameForPlatform();
+  const target = detectTarget();
+  const targetKey = target?.key ?? currentTargetKey();
+  const targetBinary = binaryNameForTarget(target || { platform: process.platform });
+  return uniquePaths([
+    process.env.MCPACE_BINARY_PATH ? path.resolve(process.env.MCPACE_BINARY_PATH) : null,
+    process.env.MCPACE_DEV_BINARY ? path.resolve(process.env.MCPACE_DEV_BINARY) : null,
     path.join(repoRoot, 'target', 'release', exe),
+    path.join(repoRoot, 'target', 'debug', exe),
+    target?.rustTarget ? path.join(repoRoot, 'target', target.rustTarget, 'release', targetBinary) : null,
+    path.join(repoRoot, 'dist', exe),
+    path.join(repoRoot, 'packages', 'npm', 'cli', 'vendor', targetKey, targetBinary),
     path.join(repoRoot, 'packages', 'npm', 'cli', 'vendor', exe),
-  ];
+  ]);
+}
+
+function presentBinaryFromCandidates(candidates) {
+  return candidates.find((candidate) => fs.existsSync(candidate) && isExecutable(candidate)) || null;
 }
 
 function step(id, required, status, evidence) {
@@ -54,7 +101,8 @@ function step(id, required, status, evidence) {
 
 function makeBaseReport(options) {
   const candidates = options.binary ? [path.resolve(options.binary)] : defaultBinaryCandidates();
-  const presentBinary = candidates.find((candidate) => fs.existsSync(candidate)) || null;
+  const presentBinary = presentBinaryFromCandidates(candidates);
+  const host = currentHostTarget();
   const endpoint = options.endpoint || 'http://127.0.0.1:39022/mcp';
   const tinyFixturePath = [
     'tests/fixtures/tiny-mcp-stdio-server.mjs',
@@ -77,6 +125,8 @@ function makeBaseReport(options) {
     status: blockers.length === 0 ? 'running' : 'blocked',
     endpoint,
     binary: presentBinary ? path.relative(repoRoot, presentBinary).split(path.sep).join('/') : null,
+    host,
+    binaryCandidates: candidates.map((candidate) => path.relative(repoRoot, candidate).split(path.sep).join('/')),
     mode: options.endpoint ? 'external-endpoint' : 'spawned-local-serve',
     blockers,
     failures: [],

@@ -192,10 +192,10 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "  local HTTP defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms, health cache={}ms",
         resources::default_http_connection_limit(),
-        resources::DEFAULT_HTTP_IO_TIMEOUT_MS,
-        resources::DEFAULT_MAX_HTTP_BODY_BYTES,
-        resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS,
-        resources::DEFAULT_DASHBOARD_HEALTH_CACHE_MS
+        resources::default_http_io_timeout_ms(),
+        resources::default_max_http_body_bytes(),
+        resources::default_dashboard_overview_cache_ms(),
+        resources::default_dashboard_health_cache_ms()
     );
     let _ = writeln!(stdout, "  init [--json] [--root <path>]");
     let _ = writeln!(stdout, "  hub up [--json] [--root <path>] [--foreground]");

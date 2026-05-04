@@ -31,11 +31,11 @@ use self::response::{
 use self::tool_runtime::http_upstream_lease_context;
 use self::tool_runtime::run_http_tool;
 #[cfg(test)]
-use http_boundary::is_allowed_local_origin;
+use http_boundary::{is_allowed_local_host, is_allowed_local_origin};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
-use std::net::{Shutdown, TcpListener, TcpStream};
+use std::net::{IpAddr, Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -55,6 +55,7 @@ struct ParsedArgs {
     io_timeout: Duration,
     max_body_bytes: usize,
     overview_cache_ttl: Duration,
+    allow_nonlocal_bind: bool,
     error: Option<String>,
 }
 
@@ -68,8 +69,9 @@ impl Default for ParsedArgs {
             max_requests: None,
             max_connections: resources::default_http_connection_limit(),
             io_timeout: resources::default_http_io_timeout(),
-            max_body_bytes: resources::DEFAULT_MAX_HTTP_BODY_BYTES,
+            max_body_bytes: resources::default_max_http_body_bytes(),
             overview_cache_ttl: resources::default_dashboard_overview_cache_ttl(),
+            allow_nonlocal_bind: false,
             error: None,
         }
     }
@@ -179,6 +181,7 @@ struct DashboardConfig {
     health_cache_ttl: Duration,
     overview_cache: Mutex<Option<CachedOverview>>,
     health_cache: Mutex<Option<CachedHealth>>,
+    http_session_store: Mutex<http_session::McpHttpSessionStore>,
     metrics: HttpRuntimeMetrics,
     surface: ServeSurface,
     upstream_session_pools: Vec<Mutex<upstream::UpstreamSessionPool>>,
@@ -242,6 +245,14 @@ fn run_internal(
         runtimepaths::ServeEndpoint::default()
     };
     let host = parsed.host.clone().unwrap_or_else(|| endpoint.host.clone());
+    if !parsed.allow_nonlocal_bind && !is_loopback_bind_host(&host) {
+        let _ = writeln!(
+            stderr,
+            "refusing to bind non-loopback host '{}'; MCPace local HTTP mode is loopback-only unless --allow-nonlocal-bind is set intentionally",
+            host
+        );
+        return 2;
+    }
     let port = if parsed.port == 0 {
         if matches!(surface, ServeSurface::UnifiedServe) {
             endpoint.port
@@ -300,12 +311,28 @@ fn run_internal(
             health_cache_ttl: resources::default_dashboard_health_cache_ttl(),
             overview_cache: Mutex::new(None),
             health_cache: Mutex::new(None),
+            http_session_store: Mutex::new(http_session::McpHttpSessionStore::default()),
             metrics: HttpRuntimeMetrics::default(),
             surface,
             upstream_session_pools: new_upstream_session_pools(),
         },
         stderr,
     )
+}
+
+fn is_loopback_bind_host(host: &str) -> bool {
+    let trimmed = host.trim();
+    if trimmed.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    let normalized = trimmed
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(trimmed);
+    normalized
+        .parse::<IpAddr>()
+        .map(|address| address.is_loopback())
+        .unwrap_or(false)
 }
 
 fn parse_args(args: &[String]) -> ParsedArgs {
@@ -419,6 +446,10 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                 }
                 index += 2;
             }
+            "--allow-nonlocal-bind" => {
+                parsed.allow_nonlocal_bind = true;
+                index += 1;
+            }
             "-h" | "--help" | "-?" => {
                 parsed.help = true;
                 return parsed;
@@ -436,7 +467,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
+        "Usage: mcpace dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--allow-nonlocal-bind]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -449,12 +480,16 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(
         stdout,
+        "Non-loopback bind hosts are rejected by default; --allow-nonlocal-bind is an explicit operator escape hatch, not a public auth mode."
+    );
+    let _ = writeln!(
+        stdout,
         "Resource defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms, health cache={}ms.",
         resources::default_http_connection_limit(),
-        resources::DEFAULT_HTTP_IO_TIMEOUT_MS,
-        resources::DEFAULT_MAX_HTTP_BODY_BYTES,
-        resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS,
-        resources::DEFAULT_DASHBOARD_HEALTH_CACHE_MS
+        resources::default_http_io_timeout_ms(),
+        resources::default_max_http_body_bytes(),
+        resources::default_dashboard_overview_cache_ms(),
+        resources::default_dashboard_health_cache_ms()
     );
 }
 

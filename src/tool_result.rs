@@ -41,6 +41,20 @@ pub struct ToolResultOptions {
     pub nested_upstream_content: NestedUpstreamContentMode,
 }
 
+const SUPPORTED_TOKEN_REDUCER_PLUGINS: &[&str] = &[
+    "mcpace.native-content.v1",
+    "mcpace.summary-content.v1",
+    "mcpace.compat-content.v1",
+    "mcpace.compact-content.v1",
+    "mcpace.trim-upstream-diagnostics.v1",
+    "mcpace.drop-upstream-diagnostics.v1",
+    "mcpace.dedupe-nested-upstream-content.v1",
+];
+
+pub fn supported_token_reducer_plugins() -> &'static [&'static str] {
+    SUPPORTED_TOKEN_REDUCER_PLUGINS
+}
+
 impl Default for ToolResultOptions {
     fn default() -> Self {
         Self {
@@ -261,8 +275,9 @@ fn apply_builtin_token_reducer(
         other => {
             if strict {
                 return Err(format!(
-                    "unknown tokenReducerPlugins entry '{}'; supported built-ins are mcpace.native-content.v1, mcpace.summary-content.v1, mcpace.compat-content.v1, mcpace.compact-content.v1, mcpace.trim-upstream-diagnostics.v1, mcpace.drop-upstream-diagnostics.v1, and mcpace.dedupe-nested-upstream-content.v1",
-                    other
+                    "unknown tokenReducerPlugins entry '{}'; supported built-ins are {}",
+                    other,
+                    SUPPORTED_TOKEN_REDUCER_PLUGINS.join(", ")
                 ));
             }
         }
@@ -684,5 +699,42 @@ mod tests {
             .and_then(JsonValue::as_str)
             .unwrap()
             .contains("compacted"));
+    }
+
+    #[test]
+    fn supported_token_reducer_plugins_are_valid_in_strict_mode() {
+        for plugin in supported_token_reducer_plugins() {
+            let args = JsonValue::object([
+                (
+                    "tokenReducerPlugins",
+                    JsonValue::array([JsonValue::string(*plugin)]),
+                ),
+                ("pluginPolicy", JsonValue::string("strict")),
+            ]);
+            options_from_arguments(&args).unwrap_or_else(|error| {
+                panic!("advertised token reducer plugin {plugin} was rejected: {error}")
+            });
+        }
+    }
+
+    #[test]
+    fn unknown_token_reducer_plugin_is_rejected_only_in_strict_mode() {
+        let args = JsonValue::object([(
+            "tokenReducerPlugins",
+            JsonValue::array([JsonValue::string("mcpace.schema-compact.v1")]),
+        )]);
+        assert!(options_from_arguments(&args).is_ok());
+
+        let strict_args = JsonValue::object([
+            (
+                "tokenReducerPlugins",
+                JsonValue::array([JsonValue::string("mcpace.schema-compact.v1")]),
+            ),
+            ("pluginPolicy", JsonValue::string("strict")),
+        ]);
+        let error =
+            options_from_arguments(&strict_args).expect_err("strict rejects unknown plugin");
+        assert!(error.contains("unknown tokenReducerPlugins entry"));
+        assert!(error.contains("mcpace.native-content.v1"));
     }
 }

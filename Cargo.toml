@@ -6,15 +6,18 @@ license = "Apache-2.0"
 publish = false
 
 [dependencies]
-auto-launch = "0.6.0"
-getrandom = "0.2.17"
-serde_json = "1.0.149"
-which = "8.0.2"
+auto-launch = { path = "crates/compat/auto-launch" }
+getrandom = { path = "crates/compat/getrandom" }
+serde_json = { path = "crates/compat/serde_json" }
+which = { path = "crates/compat/which" }
 
 [profile.release]
-# Optimize the shipped CLI/runtime binary for runtime performance and smaller IO.
-# ThinLTO keeps a practical build-time/runtime trade-off for the current CI lanes.
-lto = "thin"
+# Optimize the shipped CLI/runtime binary for maximum shipped artifact compactness.
+# Fat LTO + opt-level z + stripped symbols are used for this ready release binary.
+opt-level = "z"
+lto = "fat"
 codegen-units = 1
 strip = "symbols"
 panic = "abort"
+incremental = false
+debug = false

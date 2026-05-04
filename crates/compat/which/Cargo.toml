@@ -1,0 +1,9 @@
+[package]
+name = "which"
+version = "8.0.2"
+edition = "2021"
+license = "MIT"
+
+[lib]
+name = "which"
+path = "src/lib.rs"

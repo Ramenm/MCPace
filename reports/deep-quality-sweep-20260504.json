@@ -1,0 +1,234 @@
+{
+  "schema": "mcpace.deepQualitySweep.v1",
+  "generatedAt": "2026-05-04T09:54:11Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "environment": {
+    "node": "v18.20.4",
+    "npm": "9.2.0",
+    "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)"
+  },
+  "changes": [
+    {
+      "area": "Rust source quality",
+      "change": "Formatted Rust source and expanded verify-rust-quality to fmt -> cargo check -> clippy -> full suite-isolated Rust tests -> release build with a longer cold-build timeout."
+    },
+    {
+      "area": "Product proof hygiene",
+      "change": "Added actionable nextMoves for stale proof reports in product-practice harness."
+    },
+    {
+      "area": "npm package proof",
+      "change": "Added --write support and schema/generatedAt/reportPath to verify-npm-pack and changed npm script to persist reports/verify-npm-pack-latest.json."
+    },
+    {
+      "area": "Tests",
+      "change": "Added/updated contract tests for full Rust-quality policy, product-practice ready vs risk states, and npm-pack persisted proof reports."
+    },
+    {
+      "area": "Docs",
+      "change": "Updated source quality, test strategy, verification matrix, and release engineering docs to match the stronger gates."
+    }
+  ],
+  "checks": {
+    "rustQuality": {
+      "path": "reports/rust-quality-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:24:40.427Z"
+    },
+    "nodeRepoTests": {
+      "path": "reports/node-tests-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:41:32.026Z"
+    },
+    "npmCliTests": {
+      "path": "reports/npm-cli-tests-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:42:07.416Z"
+    },
+    "npmPack": {
+      "path": "reports/verify-npm-pack-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:53:31.986Z"
+    },
+    "vendoredBinary": {
+      "path": "reports/vendored-binary-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:42:22.136Z"
+    },
+    "runtimeTrace": {
+      "path": "reports/runtime-trace-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:31:45.202Z"
+    },
+    "installReadiness": {
+      "path": "reports/install-readiness-latest.json",
+      "status": "ready-with-warnings",
+      "generatedAt": "2026-05-04T09:51:45.881Z"
+    },
+    "productPractice": {
+      "path": "reports/product-practice-latest.json",
+      "status": "ready-for-release-candidate-review",
+      "generatedAt": "2026-05-04T09:50:57.252Z"
+    },
+    "localSource": {
+      "path": "reports/local-quality-source-latest.json",
+      "status": "pass-with-warnings",
+      "generatedAt": "2026-05-04T09:35:57.251Z"
+    },
+    "localPrepublish": {
+      "path": "reports/local-prepublish-latest.json",
+      "status": "blocked",
+      "generatedAt": "2026-05-04T09:49:02.137Z"
+    },
+    "publishDecision": {
+      "path": "reports/publish-decision-latest.json",
+      "status": "source-ready-publish-blocked",
+      "generatedAt": "2026-05-04T09:50:57.470Z"
+    },
+    "defectGates": {
+      "path": "reports/defect-gates-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:51:25.797Z"
+    },
+    "bugSweep": {
+      "path": "reports/bug-sweep-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:51:26.076Z"
+    },
+    "githubHealth": {
+      "path": "reports/github-health-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:51:27.152Z"
+    },
+    "secretScan": {
+      "path": "reports/secret-scan-latest.json",
+      "status": "pass",
+      "generatedAt": "2026-05-04T09:51:26.487Z"
+    },
+    "supplyChain": {
+      "path": "reports/supply-chain-risk-latest.json",
+      "status": "pass-with-warnings",
+      "generatedAt": "2026-05-04T09:51:26.911Z"
+    },
+    "freeTier": {
+      "path": "reports/free-tier-readiness-latest.json",
+      "status": "ready",
+      "generatedAt": "2026-05-04T09:51:27.599Z"
+    },
+    "tooling": {
+      "path": "reports/tooling-readiness-latest.json",
+      "status": "blocked",
+      "generatedAt": "2026-05-04T09:48:53.947Z"
+    }
+  },
+  "facts": {
+    "nodeRepoTests": {
+      "status": "pass",
+      "selected": 38,
+      "passed": 38,
+      "completedBatches": 5
+    },
+    "npmCliTests": {
+      "status": "pass",
+      "selected": 3,
+      "passed": 3
+    },
+    "rustQuality": {
+      "status": "pass",
+      "laneOrder": [
+        "fmt",
+        "check",
+        "clippy",
+        "rust-tests",
+        "release-build"
+      ],
+      "testsProfile": "full"
+    },
+    "npmPack": {
+      "status": "pass",
+      "schema": "mcpace.npmPack.v1",
+      "packageMode": "vendored-binary-bundle",
+      "vendoredBinaryDetails": [
+        {
+          "path": "vendor/linux-x64-gnu/mcpace",
+          "mode": 493,
+          "size": 1786864
+        }
+      ],
+      "nonExecutableVendoredBinaryFiles": []
+    },
+    "vendoredBinary": {
+      "status": "pass",
+      "targetKey": "linux-x64-gnu",
+      "binaryVersion": "0.5.9"
+    },
+    "bootHarness": {
+      "generatedAt": "2026-05-04T09:50:32.079Z",
+      "nodeSupported": false,
+      "npmSupported": false,
+      "rustAvailable": true,
+      "npmPackStatus": "pass"
+    },
+    "installReadiness": {
+      "status": "ready-with-warnings",
+      "warnings": [
+        "current Node v18.20.4 is below project policy >=22.0.0",
+        "current npm 9.2.0 is below project policy >=10.0.0"
+      ]
+    },
+    "productPractice": {
+      "status": "ready-for-release-candidate-review",
+      "canClaim": {
+        "sourceTreeHealthy": true,
+        "sourceThinLauncherInstall": true,
+        "runtimeBeta": true,
+        "publishedBinaryInstall": true,
+        "universalRemoteMcpBroker": false
+      },
+      "nextMoves": []
+    },
+    "publishDecision": {
+      "status": "source-ready-publish-blocked",
+      "nextActions": [
+        "Run npm run verify:local-prepublish on the release host.",
+        "Review supply-chain warnings before a polished launch."
+      ]
+    },
+    "tooling": {
+      "status": "blocked",
+      "nextActions": [
+        "Install Node >= 22.0.0.",
+        "Install npm >= 10.0.0.",
+        "Install cargo-nextest for fast local Rust test loops.",
+        "Install cargo-audit before public release.",
+        "Install cargo-deny before public release.",
+        "Install cargo-auditable for stronger binary auditability."
+      ]
+    },
+    "supplyChain": {
+      "status": "pass-with-warnings",
+      "nextActions": [
+        "Install cargo-audit and run cargo audit before public release.",
+        "Install cargo-deny for license/source/advisory policy before public release.",
+        "Install gitleaks for an independent local secret scan.",
+        "Install osv-scanner for an independent vulnerability scan.",
+        "Install trivy if you want container/filesystem vulnerability scans."
+      ]
+    },
+    "coverageAttempt": {
+      "status": "not-counted",
+      "reason": "Node v18.20.4 does not support --test-force-exit; running coverage without it emitted a report but did not exit before the timeout in this container."
+    }
+  },
+  "remainingRisks": [
+    "Official tooling gate remains blocked in this container because Node is v18.20.4 and npm is 9.2.0 while project policy requires Node >=22 and npm >=10.",
+    "local-prepublish and publish-decision remain blocked for release publication because tooling/public-release proof is not complete on this host.",
+    "supply-chain audit is pass-with-warnings until independent tools such as cargo-audit, cargo-deny, gitleaks, osv-scanner, and trivy are installed.",
+    "Node coverage command was not counted as pass on this Node 18 host; rerun on Node >=22/npm >=10 release host."
+  ],
+  "bestNextMove": "Move the same archive to a Node >=22/npm >=10 release host, install cargo-audit/cargo-deny/gitleaks/osv-scanner, then rerun verify:tooling, test:node:coverage, verify:local-prepublish, and verify:publish-decision."
+}

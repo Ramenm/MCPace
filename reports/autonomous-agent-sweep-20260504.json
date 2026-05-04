@@ -1,0 +1,137 @@
+{
+  "schema": "mcpace.autonomousAgentSweep.v1",
+  "generatedAt": "2026-05-04T05:38:00.000Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "sourceArchive": "mcpace-v0.5.9-030526-191500-bugfix.zip",
+  "workingAssumptions": [
+    "Use the latest supplied bugfix archive as the source of truth.",
+    "Do not claim Rust source release readiness because this container has no cargo/rustc/rustfmt/clippy.",
+    "Prefer reversible proof-gate fixes and regression tests over broad runtime refactors without Rust host proof."
+  ],
+  "changes": [
+    {
+      "file": "scripts/product-practice-harness.mjs",
+      "summary": "Published-binary gate now keeps the vendored-binary report path in blocked evidence, including stale-proof cases."
+    },
+    {
+      "file": "scripts/verify-npm-pack.mjs",
+      "summary": "npm pack dry-run proof now records package entry mode/size details and fails when packed vendored binaries are non-executable on POSIX."
+    },
+    {
+      "file": "tests/node/verify-npm-pack.test.js",
+      "summary": "Added regression coverage for executable-mode metadata and non-executable vendored binary rejection."
+    },
+    {
+      "file": "scripts/archive-release.mjs",
+      "summary": "Archive staging explicitly preserves POSIX file modes after copy."
+    },
+    {
+      "file": "tests/node/archive-contract.test.js",
+      "summary": "Release archive contract now checks that the linux vendored binary is archived with executable mode when present."
+    },
+    {
+      "file": "packages/npm/cli/vendor/linux-x64-gnu/mcpace",
+      "summary": "Restored executable mode in the working tree after Python ZipFile extraction dropped it; final archive stores it as 0755."
+    }
+  ],
+  "verified": [
+    {
+      "id": "lint_npm",
+      "exitCode": 0
+    },
+    {
+      "id": "audit_source",
+      "exitCode": 0
+    },
+    {
+      "id": "test_repo",
+      "exitCode": 0
+    },
+    {
+      "id": "test_npm",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_npm_pack",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_vendored_binary",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_runtime_trace",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_product_practice",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_defect_gates",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_bug_sweep",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_github_health",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_secrets",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_supply_chain",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_free_tier",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_publish_decision",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_tooling",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_rust_quality",
+      "exitCode": 1
+    },
+    {
+      "id": "test_node_coverage",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_local_smoke",
+      "exitCode": 0
+    },
+    {
+      "id": "verify_local_source",
+      "exitCode": 0
+    }
+  ],
+  "confirmedBlockers": [
+    {
+      "id": "rust-toolchain",
+      "evidence": "npm run verify:rust-quality exits 1; reports/rust-quality-latest.json records spawnSync cargo ENOENT."
+    },
+    {
+      "id": "publish-decision",
+      "evidence": "reports/publish-decision-latest.json status is blocked because Rust/local-prepublish proof is not available."
+    }
+  ],
+  "newRegressionGuards": [
+    "tests/node/verify-npm-pack.test.js: non-executable vendored binary fails packaging proof",
+    "tests/node/archive-contract.test.js: archive preserves executable bit for vendored linux binary",
+    "tests/node/product-practice-contract.test.js: stale binary proof evidence still identifies vendored-binary context"
+  ]
+}

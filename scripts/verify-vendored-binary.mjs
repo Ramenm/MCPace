@@ -9,7 +9,7 @@ import {
   currentTargetKey,
   detectTarget
 } from '../packages/npm/cli/lib/platform.js';
-import { deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
+import { deriveProjectName, deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
 
 const DEFAULT_BINARY_CHECK_TIMEOUT_MS = 15000;
 const BINARY_CHECK_TIMEOUT_MS = parseTimeoutEnv(
@@ -137,7 +137,8 @@ export function parseArgs(argv) {
     json: false,
     binaryPath: null,
     targetKey: null,
-    expectedVersion: null
+    expectedVersion: null,
+    write: null
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -155,6 +156,12 @@ export function parseArgs(argv) {
       case '--expected-version':
         parsed.expectedVersion = argv[++index] || null;
         break;
+      case '--write':
+        parsed.write = argv[++index] || null;
+        if (!parsed.write) {
+          throw new Error('verify-vendored-binary requires a path after --write');
+        }
+        break;
       default:
         throw new Error(`unsupported verify-vendored-binary argument: ${token}`);
     }
@@ -167,6 +174,9 @@ export function verifyVendoredBinary(options = {}) {
   const resolved = resolveVendoredBinary(options);
   const expectedVersion = options.expectedVersion || deriveProjectVersion();
   const report = {
+    schema: 'mcpace.vendoredBinary.v1',
+    generatedAt: new Date().toISOString(),
+    project: { name: deriveProjectName(), version: expectedVersion },
     status: 'fail',
     targetKey: resolved.targetKey,
     binaryName: resolved.binaryName,
@@ -266,17 +276,20 @@ export function verifyVendoredBinary(options = {}) {
     return report;
   }
 
-  if (doctorJson.configFound !== true || doctorJson.rustSourceReady !== true || doctorJson.npmSurfaceReady !== true) {
-    report.reason = 'vendored binary verify doctor output does not confirm config/rust/npm readiness';
+  const doctorProject = doctorJson.project && typeof doctorJson.project === 'object' ? doctorJson.project : doctorJson;
+  if (doctorProject.configFound !== true || doctorProject.npmSurfaceReady !== true) {
+    report.reason = 'vendored binary verify doctor output does not confirm config/npm readiness';
     return report;
   }
 
   report.checks.push(doctorCheck.label);
   report.doctorCommand = doctorCheck.command;
   report.doctorSummary = {
-    configFound: doctorJson.configFound,
-    rustSourceReady: doctorJson.rustSourceReady,
-    npmSurfaceReady: doctorJson.npmSurfaceReady
+    configFound: doctorProject.configFound,
+    cargoManifestFound: doctorProject.cargoManifestFound ?? null,
+    rustSourceReady: doctorProject.rustSourceReady,
+    rustSourceReadyRequired: false,
+    npmSurfaceReady: doctorProject.npmSurfaceReady
   };
 
   const readinessCheck = runBinaryCheck(
@@ -319,6 +332,15 @@ export function verifyVendoredBinary(options = {}) {
   return report;
 }
 
+function writeReport(filePath, report) {
+  if (!filePath) {
+    return;
+  }
+  const target = path.resolve(repoRoot, filePath);
+  fs.mkdirSync(path.dirname(target), { recursive: true });
+  fs.writeFileSync(target, `${JSON.stringify(report, null, 2)}\n`, 'utf8');
+}
+
 function isCliInvocation() {
   const entry = process.argv[1];
   if (!entry) {
@@ -331,6 +353,7 @@ function main() {
   try {
     const parsed = parseArgs(process.argv.slice(2));
     const report = verifyVendoredBinary(parsed);
+    writeReport(parsed.write, report);
     if (parsed.json) {
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     } else if (report.status === 'pass') {

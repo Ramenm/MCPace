@@ -1,7 +1,7 @@
 {
   "schema": "mcpace.nodeSyntaxCheck.v1",
-  "generatedAt": "2026-05-02T12:40:43.691Z",
-  "root": "/mnt/data/mcpace_work/mcpace-v0.5.8-020526-114730",
+  "generatedAt": "2026-05-04T13:21:15.243Z",
+  "root": "C:\\Users\\rmatv\\Projects\\mcpace",
   "sourceRoots": [
     "packages/npm/cli",
     "scripts",
@@ -10,8 +10,9 @@
     "examples"
   ],
   "status": "pass",
-  "fileCount": 80,
-  "checkedCount": 80,
+  "fileCount": 99,
+  "checkedCount": 99,
   "failureCount": 0,
+  "jobs": 6,
   "failures": []
 }

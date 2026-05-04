@@ -1,0 +1,110 @@
+{
+  "schema": "mcpace.localQualitySuite.v1",
+  "generatedAt": "2026-05-04T05:36:20.757Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "profile": "smoke",
+  "status": "pass-with-warnings",
+  "localOnly": true,
+  "githubPaidPlanRequired": false,
+  "summary": {
+    "total": 5,
+    "passed": 4,
+    "warnings": 1,
+    "blockers": 0,
+    "planned": 0
+  },
+  "steps": [
+    {
+      "id": "node-syntax",
+      "group": "source",
+      "required": true,
+      "status": "pass",
+      "ok": true,
+      "command": "node scripts/check-node-syntax.mjs --json --write reports/node-syntax-latest.json",
+      "purpose": "JS/MJS files parse cleanly.",
+      "evidence": "99 checked",
+      "code": 0,
+      "signal": null,
+      "durationMs": 6061,
+      "timeoutMs": 180000,
+      "stdoutSummary": "{\n  \"schema\": \"mcpace.nodeSyntaxCheck.v1\",\n  \"generatedAt\": \"2026-05-04T05:36:19.940Z\",\n  \"root\": \"/mnt/data/mcpace_agent_work/mcpace-v0.5.9-030526-191500-bugfix\",\n  \"sourceRoots\": [\n    \"packages/npm/cli\",\n    \"scripts\",\n    \"tests/node\",\n    \"tests/fixtures\",\n    \"examples\"\n  ],\n  \"status\": \"pass\",\n  \"fileCount\": 99,\n  \"checkedCount\": 99,\n  \"failureCount\": 0,\n  \"jobs\": 6,\n  \"failures\": []\n}",
+      "stderrSummary": "",
+      "error": null
+    },
+    {
+      "id": "source-audit",
+      "group": "source",
+      "required": true,
+      "status": "pass",
+      "ok": true,
+      "command": "node scripts/audit-source.mjs --json --fail-on-critical --write reports/source-audit-latest.json",
+      "purpose": "Critical source-risk patterns are absent.",
+      "evidence": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 223,
+      "timeoutMs": 180000,
+      "stdoutSummary": "…\n      \"Rust modules over 1500 lines are tracked as refactor candidates.\",\n      \"Direct thread spawns outside reviewed runtime modules are tracked for future abstraction.\",\n      \"Production unwrap counts are tracked as hardening backlog, not as an immediate blocker.\",\n      \"Unsafe operations and foreign function blocks are counted and allowed only in reviewed process-detach modules.\"\n    ]\n  },\n  \"summary\": {\n    \"files\": 227,\n    \"rustFiles\": 128,\n    \"nodeFiles\": 99,\n    \"productionRustLines\": 36679,\n    \"testRustLines\": 11173,\n    \"nodeLines\": 14886,\n    \"largeModules\": 0,\n    \"directThreadSpawns\": 6,\n    \"commandSpawns\": 9,\n    \"productionUnwraps\": 0,\n    \"unsafeOperations\": 5,\n    \"foreignFunctionBlocks\": 2\n  },\n  \"architecture\": {\n    \"boundaries\": [\n      {\n        \"name\": \"protocol primitives stay transport and command agnostic\",\n        \"file\": \"src/mcp_protocol.rs\",\n        \"ok\": true,\n        \"violations\": []\n      },\n      {\n        \"name\": \"resource defaults stay side-effect free\",\n        \"file\": \"src/resources.rs\",\n        \"ok\": true,\n        \"violations\": []\n      }\n    ]\n  },\n  \"critical\": [],\n  \"warnings\": [],\n  \"warningCount\": 0\n}",
+      "stderrSummary": "",
+      "error": null
+    },
+    {
+      "id": "defect-gates",
+      "group": "quality",
+      "required": true,
+      "status": "pass",
+      "ok": true,
+      "command": "node scripts/defect-gates.mjs --json --write reports/defect-gates-latest.json --markdown reports/defect-gates-latest.md",
+      "purpose": "Bug intake/fix discipline stays enforceable.",
+      "evidence": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 111,
+      "timeoutMs": 180000,
+      "stdoutSummary": "…\n      \"severity\": \"required\",\n      \"file\": \"SECURITY.md\",\n      \"status\": \"pass\",\n      \"missing\": [],\n      \"recommendation\": null\n    },\n    {\n      \"id\": \"source-audit-script\",\n      \"title\": \"Source audit remains available for structural bug smells\",\n      \"severity\": \"required\",\n      \"file\": \"scripts/audit-source.mjs\",\n      \"status\": \"pass\",\n      \"missing\": [],\n      \"recommendation\": null\n    },\n    {\n      \"id\": \"runtime-trace-gate\",\n      \"title\": \"Runtime trace gate exists for behavioral bugs beyond static checks\",\n      \"severity\": \"required\",\n      \"file\": \"scripts/runtime-trace-harness.mjs\",\n      \"status\": \"pass\",\n      \"missing\": [],\n      \"recommendation\": null\n    },\n    {\n      \"id\": \"product-practice-freshness\",\n      \"title\": \"Product-practice gate rejects stale runtime proof\",\n      \"severity\": \"required\",\n      \"file\": \"scripts/product-practice-harness.mjs\",\n      \"status\": \"pass\",\n      \"missing\": [],\n      \"recommendation\": null\n    }\n  ],\n  \"operatingModel\": {\n    \"intake\": \"Every bug starts with a reproducible issue, severity, affected area, version/platform, and expected-vs-actual behavior.\",\n    \"repair\": \"Every fix gets a minimal failing test or runtime trace first, then root-cause notes, implementation, regression guard, and not-tested disclosure.\",\n    \"release\": \"Bugfix releases are accepted only after source gates, Rust gates, runtime trace, npm/install readiness, and security gates are fresh.\"\n  }\n}",
+      "stderrSummary": "",
+      "error": null
+    },
+    {
+      "id": "bug-sweep",
+      "group": "quality",
+      "required": true,
+      "status": "warn",
+      "ok": true,
+      "command": "node scripts/bug-sweep.mjs --json --write reports/bug-sweep-latest.json --markdown reports/bug-sweep-latest.md",
+      "purpose": "Fast sweep over known bug/security invariants.",
+      "evidence": "1 warnings",
+      "code": 0,
+      "signal": null,
+      "durationMs": 184,
+      "timeoutMs": 180000,
+      "stdoutSummary": "…\n    {\n      \"id\": \"runtime:http-origin-host-boundary\",\n      \"severity\": \"info\",\n      \"status\": \"pass\",\n      \"evidence\": \"Local HTTP boundary validates Host and Origin and explicitly rejects Origin: null by default.\",\n      \"nextAction\": \"Keep this invariant covered while changing nearby code.\"\n    },\n    {\n      \"id\": \"runtime:server-minted-session-id\",\n      \"severity\": \"info\",\n      \"status\": \"pass\",\n      \"evidence\": \"Initialize path uses a server-minted session id.\",\n      \"nextAction\": \"Keep this invariant covered while changing nearby code.\"\n    },\n    {\n      \"id\": \"runtime:session-id-bounds-randomness\",\n      \"severity\": \"info\",\n      \"status\": \"pass\",\n      \"evidence\": \"Session ids are bounded and generated from OS randomness with fallback diagnostics.\",\n      \"nextAction\": \"Keep this invariant covered while changing nearby code.\"\n    },\n    {\n      \"id\": \"reports:runtime-trace-present\",\n      \"severity\": \"info\",\n      \"status\": \"pass\",\n      \"evidence\": \"runtime trace report is present and passing.\",\n      \"nextAction\": \"Keep this invariant covered while changing nearby code.\"\n    },\n    {\n      \"id\": \"reports:rust-quality\",\n      \"severity\": \"warn\",\n      \"status\": \"warn\",\n      \"evidence\": \"rust quality report status is fail\",\n      \"nextAction\": \"Regenerate Rust quality proof on a host with Cargo dependencies before release claims.\"\n    }\n  ],\n  \"nextMoves\": [\n    \"Regenerate Rust quality proof on a host with Cargo dependencies before release claims.\"\n  ]\n}",
+      "stderrSummary": "",
+      "error": null
+    },
+    {
+      "id": "secret-scan",
+      "group": "security",
+      "required": true,
+      "status": "pass",
+      "ok": true,
+      "command": "node scripts/secret-scan.mjs --json --write reports/secret-scan-latest.json --markdown reports/secret-scan-latest.md",
+      "purpose": "Local high-confidence secret scan.",
+      "evidence": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 225,
+      "timeoutMs": 180000,
+      "stdoutSummary": "{\n  \"schema\": \"mcpace.secretScan.v1\",\n  \"generatedAt\": \"2026-05-04T05:36:20.737Z\",\n  \"project\": {\n    \"name\": \"mcpace\",\n    \"version\": \"0.5.9\"\n  },\n  \"status\": \"pass\",\n  \"scannedFiles\": 520,\n  \"summary\": {\n    \"findings\": 0,\n    \"critical\": 0,\n    \"warnings\": 0\n  },\n  \"findings\": [],\n  \"nextActions\": []\n}",
+      "stderrSummary": "",
+      "error": null
+    }
+  ],
+  "decision": "No required blockers, but warnings remain.",
+  "nextActions": [
+    "bug-sweep: 1 warnings"
+  ]
+}

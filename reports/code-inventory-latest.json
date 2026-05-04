@@ -1,59 +1,71 @@
 {
   "schema": "mcpace.sourceInventory.v1",
-  "generatedAt": "2026-05-02T12:40:55.650Z",
+  "generatedAt": "2026-05-04T12:15:22.716Z",
   "project": {
     "name": "mcpace",
     "version": "0.5.9"
   },
   "summary": {
-    "totalFiles": 454,
-    "textFiles": 432,
-    "totalTextLines": 102424,
-    "rustFiles": 128,
-    "nodeFiles": 80,
-    "markdownFiles": 119,
-    "jsonFiles": 91,
-    "testFiles": 49,
-    "docsFiles": 71,
-    "reportsFiles": 54,
+    "totalFiles": 658,
+    "textFiles": 624,
+    "totalTextLines": 126768,
+    "rustFiles": 132,
+    "nodeFiles": 99,
+    "markdownFiles": 187,
+    "jsonFiles": 169,
+    "testFiles": 54,
+    "docsFiles": 84,
+    "reportsFiles": 110,
     "schemaFiles": 2,
     "presetCatalogs": 1
   },
   "byExtension": {
-    ".toml": 4,
-    "[none]": 20,
+    ".toml": 9,
+    "[none]": 22,
     ".example": 1,
-    ".yml": 8,
-    ".md": 119,
+    ".yml": 22,
+    ".md": 187,
+    ".xml": 5,
+    ".iml": 1,
+    ".json": 169,
+    ".tmp": 2,
     ".lock": 1,
-    ".json": 91,
-    ".js": 39,
-    ".mjs": 41,
+    ".cff": 1,
+    ".py": 1,
+    ".rs": 132,
+    ".js": 44,
+    ".mjs": 55,
+    ".txt": 3,
+    ".sh": 1,
     ".dockerfile": 1,
-    ".rs": 128,
     ".html": 1
   },
   "byCategory": {
+    "root-or-other": 129,
     "config": 1,
-    "root-or-other": 26,
-    "github": 9,
-    "docs": 71,
+    "github": 20,
+    "docs": 84,
     "eval": 44,
     "examples": 2,
-    "memory-bank": 6,
+    "memory-bank": 7,
     "npm-platform-packages": 24,
     "npm-cli": 11,
     "presets": 2,
-    "reports": 54,
+    "reports": 110,
     "schemas": 2,
-    "scripts": 38,
+    "scripts": 53,
     "rust-source": 118,
-    "tests": 46
+    "tests": 51
   },
   "largestTextFiles": [
     {
       "path": "reports/mcp-real-smoke-20260427-165024.json",
       "lines": 20736,
+      "category": "reports"
+    },
+    {
+      "path": "reports/publish-decision-latest.json",
+      "lines": 2692,
       "category": "reports"
     },
     {
@@ -67,23 +79,33 @@
       "category": "tests"
     },
     {
+      "path": "src/dashboard/tests.rs",
+      "lines": 1409,
+      "category": "rust-source"
+    },
+    {
+      "path": "reports/local-prepublish-latest.json",
+      "lines": 1400,
+      "category": "reports"
+    },
+    {
       "path": "src/hub/leases.rs",
       "lines": 1310,
       "category": "rust-source"
     },
     {
-      "path": "src/adapter/discovery.rs",
-      "lines": 1279,
+      "path": "src/upstream/tests.rs",
+      "lines": 1280,
       "category": "rust-source"
     },
     {
-      "path": "src/upstream/tests.rs",
-      "lines": 1277,
+      "path": "src/adapter/discovery.rs",
+      "lines": 1276,
       "category": "rust-source"
     },
     {
       "path": "src/serve.rs",
-      "lines": 1229,
+      "lines": 1230,
       "category": "rust-source"
     },
     {
@@ -98,7 +120,7 @@
     },
     {
       "path": "src/adapter.rs",
-      "lines": 1148,
+      "lines": 1149,
       "category": "rust-source"
     },
     {
@@ -108,22 +130,22 @@
     },
     {
       "path": "src/client/actions.rs",
-      "lines": 1065,
+      "lines": 1056,
       "category": "rust-source"
     },
     {
-      "path": "src/dashboard/tests.rs",
-      "lines": 1027,
-      "category": "rust-source"
-    },
-    {
-      "path": "src/dashboard/http_tools.rs",
-      "lines": 996,
+      "path": "src/dashboard.rs",
+      "lines": 1005,
       "category": "rust-source"
     },
     {
       "path": "src/upstream/lease_runtime.rs",
-      "lines": 988,
+      "lines": 1003,
+      "category": "rust-source"
+    },
+    {
+      "path": "src/dashboard/http_tools.rs",
+      "lines": 995,
       "category": "rust-source"
     },
     {
@@ -132,42 +154,31 @@
       "category": "reports"
     },
     {
-      "path": "src/dashboard.rs",
-      "lines": 965,
-      "category": "rust-source"
-    },
-    {
       "path": "src/upstream.rs",
-      "lines": 934,
+      "lines": 948,
       "category": "rust-source"
-    },
-    {
-      "path": "src/client_catalog.rs",
-      "lines": 913,
-      "category": "rust-source"
-    },
-    {
-      "path": "reports/deep-runtime-sweep-20260427T154219Z.json",
-      "lines": 848,
-      "category": "reports"
     }
   ],
   "largestRustModules": [
+    {
+      "path": "src/dashboard/tests.rs",
+      "lines": 1409
+    },
     {
       "path": "src/hub/leases.rs",
       "lines": 1310
     },
     {
-      "path": "src/adapter/discovery.rs",
-      "lines": 1279
+      "path": "src/upstream/tests.rs",
+      "lines": 1280
     },
     {
-      "path": "src/upstream/tests.rs",
-      "lines": 1277
+      "path": "src/adapter/discovery.rs",
+      "lines": 1276
     },
     {
       "path": "src/serve.rs",
-      "lines": 1229
+      "lines": 1230
     },
     {
       "path": "src/mcp_server.rs",
@@ -179,35 +190,35 @@
     },
     {
       "path": "src/adapter.rs",
-      "lines": 1148
+      "lines": 1149
     },
     {
       "path": "src/client/actions.rs",
-      "lines": 1065
-    },
-    {
-      "path": "src/dashboard/tests.rs",
-      "lines": 1027
-    },
-    {
-      "path": "src/dashboard/http_tools.rs",
-      "lines": 996
-    },
-    {
-      "path": "src/upstream/lease_runtime.rs",
-      "lines": 988
+      "lines": 1056
     },
     {
       "path": "src/dashboard.rs",
-      "lines": 965
+      "lines": 1005
+    },
+    {
+      "path": "src/upstream/lease_runtime.rs",
+      "lines": 1003
+    },
+    {
+      "path": "src/dashboard/http_tools.rs",
+      "lines": 995
     },
     {
       "path": "src/upstream.rs",
-      "lines": 934
+      "lines": 948
     },
     {
       "path": "src/client_catalog.rs",
       "lines": 913
+    },
+    {
+      "path": "src/client/actions/config_update.rs",
+      "lines": 790
     },
     {
       "path": "src/service.rs",
@@ -215,7 +226,7 @@
     },
     {
       "path": "src/setup.rs",
-      "lines": 693
+      "lines": 715
     },
     {
       "path": "src/tool_result.rs",
@@ -227,11 +238,7 @@
     },
     {
       "path": "src/doctor.rs",
-      "lines": 640
-    },
-    {
-      "path": "src/lab/render.rs",
-      "lines": 640
+      "lines": 648
     }
   ],
   "versions": {
@@ -301,13 +308,13 @@
     "drift": []
   },
   "releaseManifest": {
-    "includePathCount": 39,
+    "includePathCount": 49,
     "optionalIncludePathCount": 1,
     "missing": [],
-    "optionalPresent": [],
-    "optionalMissing": [
+    "optionalPresent": [
       "packages/npm/cli/vendor"
-    ]
+    ],
+    "optionalMissing": []
   },
   "presets": {
     "status": "ok",

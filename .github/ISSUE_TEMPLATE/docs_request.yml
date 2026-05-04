@@ -1,0 +1,28 @@
+name: Documentation request
+description: Report confusing, missing, or stale docs.
+title: "[docs] "
+labels:
+  - docs
+body:
+  - type: textarea
+    id: page
+    attributes:
+      label: Page or section
+      placeholder: README.md, docs/mcp-http-api-spec.md, START-HERE.md
+    validations:
+      required: true
+  - type: textarea
+    id: confusion
+    attributes:
+      label: What is confusing or missing?
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should the docs explain instead?
+  - type: textarea
+    id: context
+    attributes:
+      label: User context
+      placeholder: New user, contributor, release maintainer, client integration author...

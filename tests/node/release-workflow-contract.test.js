@@ -84,8 +84,8 @@ test('npm publish workflow is manually gated for trusted publishing from prebuil
   assert.match(workflow, /environment: npm-publish/);
   assert.doesNotMatch(workflow, /npm install -g/);
   assert.match(workflow, /package-manager-cache: false/);
-  assert.match(workflow, /npm exec --yes --package=npm@11\.12\.1 -- npm --version/);
-  assert.match(workflow, /MCPACE_NPM_EXEC_PACKAGE: npm@11\.12\.1/);
+  assert.match(workflow, /npm exec --yes --package=npm@11\.13\.0 -- npm --version/);
+  assert.match(workflow, /MCPACE_NPM_EXEC_PACKAGE: npm@11\.13\.0/);
   assert.match(workflow, /gh release download/);
   assert.match(workflow, /node scripts\/verify-release-checksums\.mjs --json --artifact-dir dist\/npm/);
   assert.match(workflow, /node scripts\/sync-platform-packages\.mjs --json --repository-url/);

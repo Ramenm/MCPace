@@ -37,13 +37,13 @@ x-mcpace-workspace-root
 x-codex-project-root
 ```
 
-`initialize` responses now return `Mcp-Session-Id` and `MCP-Protocol-Version` headers so compliant Streamable HTTP clients have a stable session value to echo on later requests.
+`initialize` responses now return `Mcp-Session-Id` and `MCP-Protocol-Version` headers. MCPace stores the session in a bounded in-process store, requires the session header on later stateful requests, touches active sessions, rejects missing/invalid/unknown/expired/protocol-mismatched sessions, and closes known sessions on `DELETE /mcp`.
 
 ## What is still not real
 
 - Full remote HTTP upstream forwarding is not proven. Stdio upstreams remain the callable lane.
 - Hosted relay/auth/OAuth is not implemented.
-- Durable HTTP session storage and strict session termination are not complete.
+- Cross-process or relay-grade HTTP session persistence is not complete; the implemented store is in-process and local-runtime oriented.
 - Rust build/test/runtime proof has not been executed in the current sandbox.
 
 ## Target architecture
@@ -73,7 +73,7 @@ advertised MCPace URL resolver
 
 ## Next architectural steps
 
-1. Add a durable HTTP session store keyed by `Mcp-Session-Id`, client id, project root, protocol version, and auth context.
+1. Extend the in-process HTTP session store into cross-process/relay-grade persistence only after the local runtime proof is green.
 2. Implement remote HTTP upstream forwarding separately from stdio, including auth/header policy and DNS/SSRF controls.
 3. Add a real-host trace suite: client → `/mcp` → `initialize` → `tools/list` → `upstream_call` → upstream stdio server.
 4. Move the built-in client catalog to data files once the catalog extension path is stable.
@@ -91,7 +91,7 @@ Doctor/readiness now uses the same multi-source MCP settings registry as runtime
 - `server/loader.rs` server inventory;
 - `doctor.rs` runtime prerequisite discovery.
 
-HTTP session ids are still compatibility-oriented rather than durable stateful sessions: MCPace can mint/echo `Mcp-Session-Id`, but a full session store with expiry, strict missing-session rejection, and DELETE cleanup remains future work.
+HTTP session ids are now stateful inside the running MCPace process: MCPace creates, touches, expires, rejects, and closes `Mcp-Session-Id` records. Remaining hardening is cross-process persistence, auth-bound session identity for non-local modes, and broader real-client compatibility traces.
 
 
 ## v0.5.5 convenience pass

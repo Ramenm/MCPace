@@ -1,0 +1,195 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-03T19:11:36.288Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "total": 38,
+  "selected": 8,
+  "batchSize": 8,
+  "batchCount": 1,
+  "shard": null,
+  "completedBatches": 1,
+  "completed": 8,
+  "passed": 8,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/docs-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/fixtures-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/docs-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1458,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: active docs do not instruct removed shell entrypoints\nok 2 - active docs do not instruct removed shell entrypoints\n  ---\n  duration_ms: 9.012752\n  type: 'test'\n  ...\n# Subtest: spec alignment doc still names the checked MCP baseline, transport subset, and session-aware rules\nok 3 - spec alignment doc still names the checked MCP baseline, transport subset, and session-aware rules\n  ---\n  duration_ms: 0.783748\n  type: 'test'\n  ...\n# Subtest: routing and arbitration docs describe single-entry-point planning and server serialization\nok 4 - routing and arbitration docs describe single-entry-point planning and server serialization\n  ---\n  duration_ms: 2.693955\n  type: 'test'\n  ...\n# Subtest: client surface matrix keeps local/cloud/API connector divergence explicit\nok 5 - client surface matrix keeps local/cloud/API connector divergence explicit\n  ---\n  duration_ms: 1.25825\n  type: 'test'\n  ...\n# Subtest: runtime performance doc names the new resource controls and bounded parallelism contract\nok 6 - runtime performance doc names the new resource controls and bounded parallelism contract\n  ---\n  duration_ms: 3.397975\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1090.922336",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/docs-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/fixtures-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/eval-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1444,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: eval governance files expose scenario map, rubric, metrics, and regression loop\nok 1 - eval governance files expose scenario map, rubric, metrics, and regression loop\n  ---\n  duration_ms: 83.744518\n  type: 'test'\n  ...\n# Subtest: scenario matrix references real fixture ids and keeps held-out lanes separate\nok 2 - scenario matrix references real fixture ids and keeps held-out lanes separate\n  ---\n  duration_ms: 2.181949\n  type: 'test'\n  ...\n# Subtest: seed prompt fixtures stay normalized and split across typical, edge, adversarial, and held-out\nok 3 - seed prompt fixtures stay normalized and split across typical, edge, adversarial, and held-out\n  ---\n  duration_ms: 10.888119\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1005.997011",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/docs-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/fixtures-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/evidence-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1501,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: runtime capability evidence paths exist\nok 1 - runtime capability evidence paths exist\n  ---\n  duration_ms: 98.965964\n  type: 'test'\n  ...\n# Subtest: seed prompt eval evidence paths exist and stay grounded\nok 2 - seed prompt eval evidence paths exist and stay grounded\n  ---\n  duration_ms: 91.762618\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1008.141618",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/docs-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/fixtures-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/fixtures-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1601,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: runtime lab fixtures parse and separate typical, edge, adversarial, and held-out cases\nok 2 - runtime lab fixtures parse and separate typical, edge, adversarial, and held-out cases\n  ---\n  duration_ms: 92.664603\n  type: 'test'\n  ...\n# Subtest: runtime fixtures keep cloud and tools-only client surfaces explicit\nok 3 - runtime fixtures keep cloud and tools-only client surfaces explicit\n  ---\n  duration_ms: 5.532682\n  type: 'test'\n  ...\n# Subtest: windows desktop MCP is not bundled or enabled by default\nok 4 - windows desktop MCP is not bundled or enabled by default\n  ---\n  duration_ms: 2.28921\n  type: 'test'\n  ...\n# Subtest: stateful reference MCP policies are user-supplied rather than bundled\nok 5 - stateful reference MCP policies are user-supplied rather than bundled\n  ---\n  duration_ms: 0.761742\n  type: 'test'\n  ...\n# Subtest: default distribution does not enable or bundle upstream MCP servers\nok 6 - default distribution does not enable or bundle upstream MCP servers\n  ---\n  duration_ms: 1.865188\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1096.349583",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/docs-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/fixtures-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/generate-checksums.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1898,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: generate-checksums hashes nested files when recursive mode is enabled\nok 1 - generate-checksums hashes nested files when recursive mode is enabled\n  ---\n  duration_ms: 615.876821\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1405.204021",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/docs-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/fixtures-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/github-readiness-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1915,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: GitHub readiness harness checks public repository health files and workflows\nok 1 - GitHub readiness harness checks public repository health files and workflows\n  ---\n  duration_ms: 509.988906\n  type: 'test'\n  ...\n# Subtest: package scripts expose GitHub readiness verification\nok 2 - package scripts expose GitHub readiness verification\n  ---\n  duration_ms: 1.606727\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1388.192697",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/docs-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/fixtures-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/github-release-matrix-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1597,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: GitHub release matrix is generated from release-targets.json\nok 1 - GitHub release matrix is generated from release-targets.json\n  ---\n  duration_ms: 192.65189\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 995.390685",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/docs-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/evidence-contract.test.js",
+        "tests/node/fixtures-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/github-readiness-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/inventory-contract.test.js"
+      ],
+      "file": "tests/node/inventory-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 2038,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: project inventory maps source inventory to the legacy code inventory shape\nok 1 - project inventory maps source inventory to the legacy code inventory shape\n  ---\n  duration_ms: 699.024835\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1420.64939",
+      "stderrSummary": ""
+    }
+  ]
+}

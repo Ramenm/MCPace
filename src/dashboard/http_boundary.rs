@@ -1,6 +1,15 @@
 use super::HttpRequest;
 
 pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), String> {
+    if let Some((_, host)) = request.headers.iter().find(|(key, _)| key == "host") {
+        if !is_allowed_local_host(host.trim()) {
+            return Err(format!(
+                "host '{}' is not allowed for local MCPace serve mode",
+                host
+            ));
+        }
+    }
+
     if let Some((_, origin)) = request.headers.iter().find(|(key, _)| key == "origin") {
         if !is_allowed_local_origin(origin.trim()) {
             return Err(format!(
@@ -14,7 +23,7 @@ pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), String> {
 
 pub(crate) fn is_allowed_local_origin(origin: &str) -> bool {
     if origin == "null" {
-        return true;
+        return false;
     }
     let Some(authority) = origin
         .strip_prefix("http://")
@@ -22,6 +31,14 @@ pub(crate) fn is_allowed_local_origin(origin: &str) -> bool {
     else {
         return false;
     };
+    is_allowed_local_authority(authority)
+}
+
+pub(crate) fn is_allowed_local_host(host_header: &str) -> bool {
+    is_allowed_local_authority(host_header)
+}
+
+fn is_allowed_local_authority(authority: &str) -> bool {
     if authority.is_empty() || authority.contains('/') || authority.contains('@') {
         return false;
     }

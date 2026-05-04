@@ -5,11 +5,14 @@ import process from 'node:process';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { childEnvForCommand } from './lib/safe-child-env.mjs';
+import { deriveProjectName, deriveProjectVersion } from './lib/project-metadata.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_OUTPUT_PATH = path.join(repoRoot, 'reports', 'rust-quality-latest.json');
-const DEFAULT_TIMEOUT_MS = 300_000;
+const DEFAULT_TIMEOUT_MS = 600_000;
 const DEFAULT_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+const DEFAULT_TEST_PROFILE = 'full';
+const VALID_TEST_PROFILES = new Set(['full', 'non-lifecycle', 'lifecycle']);
 
 function parsePositiveIntegerEnv(name, fallback) {
   const parsed = Number.parseInt(process.env[name] || '', 10);
@@ -29,7 +32,9 @@ function parseArgs(argv) {
     allowMissingCargo: false,
     timeoutMs: DEFAULTS.timeoutMs,
     maxBufferBytes: DEFAULTS.maxBufferBytes,
+    testProfile: DEFAULT_TEST_PROFILE,
     skipFmt: false,
+    skipCheck: false,
     skipClippy: false,
     skipTests: false,
     skipBuild: false,
@@ -62,8 +67,14 @@ function parseArgs(argv) {
       case '--max-buffer-bytes':
         options.maxBufferBytes = parsePositiveInteger(argv[++index], '--max-buffer-bytes');
         break;
+      case '--test-profile':
+        options.testProfile = parseTestProfile(argv[++index]);
+        break;
       case '--skip-fmt':
         options.skipFmt = true;
+        break;
+      case '--skip-check':
+        options.skipCheck = true;
         break;
       case '--skip-clippy':
         options.skipClippy = true;
@@ -86,6 +97,14 @@ function parseArgs(argv) {
   return options;
 }
 
+function parseTestProfile(value) {
+  const profile = String(value || '').trim();
+  if (!VALID_TEST_PROFILES.has(profile)) {
+    throw new Error(`--test-profile must be one of: ${Array.from(VALID_TEST_PROFILES).join(', ')}`);
+  }
+  return profile;
+}
+
 function parsePositiveInteger(value, label) {
   if (!/^\d+$/.test(String(value || ''))) {
     throw new Error(`${label} must be a positive integer`);
@@ -98,14 +117,16 @@ function parsePositiveInteger(value, label) {
 }
 
 function printHelp() {
-  console.log(`Usage: node scripts/verify-rust-quality.mjs [--json] [--write <path>] [--plan-only] [--allow-missing-cargo]
+  console.log(`Usage: node scripts/verify-rust-quality.mjs [--json] [--write <path>] [--plan-only] [--allow-missing-cargo] [--test-profile full|non-lifecycle|lifecycle]
 
 Runs the Rust host quality gate in the same order CI should prove it:
   1. cargo fmt --all -- --check
-  2. cargo clippy --all-targets --locked -- -D warnings
-  3. node scripts/run-rust-tests.mjs --json --profile non-lifecycle
-  4. cargo build --release --locked
+  2. cargo check --all-targets --locked
+  3. cargo clippy --all-targets --locked -- -D warnings
+  4. node scripts/run-rust-tests.mjs --json --profile full
+  5. cargo build --release --locked
 
+Use --test-profile only when intentionally narrowing or isolating lifecycle suites.
 Use --plan-only for contract tests and --allow-missing-cargo only in constrained
 environments where the host proof should be reported as partial rather than
 silently implied.`);
@@ -143,11 +164,15 @@ function rustQualityPlan(options = {}) {
   if (!options.skipFmt) {
     lanes.push({ name: 'fmt', command: ['cargo', ['fmt', '--all', '--', '--check']] });
   }
+  const testProfile = parseTestProfile(options.testProfile || DEFAULT_TEST_PROFILE);
+  if (!options.skipCheck) {
+    lanes.push({ name: 'check', command: ['cargo', ['check', '--all-targets', '--locked']] });
+  }
   if (!options.skipClippy) {
     lanes.push({ name: 'clippy', command: ['cargo', ['clippy', '--all-targets', '--locked', '--', '-D', 'warnings']] });
   }
   if (!options.skipTests) {
-    lanes.push({ name: 'rust-tests', command: [process.execPath, ['scripts/run-rust-tests.mjs', '--json', '--profile', 'non-lifecycle']] });
+    lanes.push({ name: 'rust-tests', command: [process.execPath, ['scripts/run-rust-tests.mjs', '--json', '--profile', testProfile]] });
   }
   if (!options.skipBuild) {
     lanes.push({ name: 'release-build', command: ['cargo', ['build', '--release', '--locked']] });
@@ -256,6 +281,7 @@ function statusFromLanes(lanes, planOnly = false) {
 
 function verifyRustQuality(options = {}) {
   const normalized = { ...parseArgs([]), ...options };
+  normalized.testProfile = parseTestProfile(normalized.testProfile || DEFAULT_TEST_PROFILE);
   const plan = rustQualityPlan(normalized);
   const startedAt = Date.now();
   const cargoAvailable = commandExists('cargo');
@@ -282,6 +308,7 @@ function verifyRustQuality(options = {}) {
     ok: lanes.every((lane) => lane.ok),
     status: statusFromLanes(lanes, normalized.planOnly),
     generatedAt: new Date().toISOString(),
+    project: { name: deriveProjectName(), version: deriveProjectVersion() },
     durationMs: Date.now() - startedAt,
     toolchain: {
       cargoAvailable,
@@ -290,10 +317,12 @@ function verifyRustQuality(options = {}) {
       rustupToolchain: process.env.RUSTUP_TOOLCHAIN || null,
     },
     policy: {
-      laneOrder: ['fmt', 'clippy', 'rust-tests', 'release-build'],
+      laneOrder: plan.map((lane) => lane.name),
+      checkArgs: ['--all-targets', '--locked'],
       clippyArgs: ['--all-targets', '--locked', '--', '-D', 'warnings'],
       releaseBuildArgs: ['--release', '--locked'],
-      testsProfile: 'non-lifecycle',
+      testsProfile: normalized.testProfile,
+      defaultTimeoutMs: DEFAULT_TIMEOUT_MS,
     },
     lanes,
   };
