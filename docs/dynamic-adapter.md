@@ -6,10 +6,11 @@ The runtime does not depend on static client/server maps as authority. Static ca
 
 1. Read the current MCP `initialize` payload: protocol version, `clientInfo`, capabilities, and `_meta` hints.
 2. Shape `tools/list` for that protocol revision.
-3. Discover configured upstream servers through live MCP `tools/list` calls with short successful-result caching.
-4. Choose the top-level surface from the tool budget and live catalog size.
-5. Route projected tools, `upstream_call`, and `upstream_batch` through the same policy/lease/session layer.
-6. Apply upstream coordination through the existing runtime policy, lease, and pooled-session layer instead of a client/server brand map. Stateful same-server sequences should use `upstream_batch`; single independent calls should use `upstream_call`.
+3. Keep startup `tools/list` cheap by default: expose broker tools without probing every upstream.
+4. Discover configured upstream servers through live MCP `tools/list` calls only when a user/tool asks for live search/catalog data or when native projection is explicitly enabled.
+5. Choose the projected top-level surface from the tool budget and live catalog size when projection is enabled.
+6. Route projected tools, `upstream_call`, and `upstream_batch` through the same policy/lease/session layer.
+7. Apply upstream coordination through the existing runtime policy, lease, and pooled-session layer instead of a client/server brand map. Stateful same-server sequences should use `upstream_batch`; single independent calls should use `upstream_call`.
 
 ## BYO MCP configuration model
 
@@ -29,9 +30,9 @@ entries are inventoried honestly; stdio entries are the current callable bridge.
 
 `MCPACE_TOOL_EXPOSURE` controls how much of the upstream catalog is exposed directly to the client:
 
-- `auto` (default): project upstream tools as native top-level tools only when the projectable live catalog fits both the count and estimated-token budgets. Otherwise MCPace keeps a compact broker surface.
+- `broker` (default): never project upstream tools during startup `tools/list`; use `upstream_search`, `upstream_catalog`, `upstream_call`, and `upstream_batch`.
+- `auto`: project upstream tools as native top-level tools only when the projectable live catalog fits both the count and estimated-token budgets. This probes callable upstreams during `tools/list`, so use it only when the client needs native projected tools.
 - `hybrid`: project the highest-ranked prefix that fits the budgets and keep `upstream_search`/`upstream_call` for the rest.
-- `broker`: never project upstream tools; use `upstream_search`, `upstream_catalog`, `upstream_call`, and `upstream_batch`.
 - `native`: project upstream tools directly, truncated to the configured budgets if needed.
 - `minimal`: smallest surface for strict clients; keeps only the essential broker/adapter tools.
 

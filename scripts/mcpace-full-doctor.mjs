@@ -256,6 +256,18 @@ function isTempPath(value) {
   return s.includes('/tmp/') || s.includes('/temp/') || s.includes('/appdata/local/temp/') || s.endsWith('/tmp') || s.endsWith('/temp');
 }
 
+function flagValue(args, names) {
+  const set = new Set(names);
+  for (let i = 0; i < args.length - 1; i += 1) {
+    if (set.has(String(args[i]))) return args[i + 1];
+  }
+  return null;
+}
+
+function hasRuntimePlaceholder(value) {
+  return /\$\{[A-Z0-9_]+(?::-[^}]*)?\}/i.test(String(value || ''));
+}
+
 function auditConfigFile(file, state) {
   let data;
   try {
@@ -298,10 +310,11 @@ function auditConfigFile(file, state) {
         state.add(`server.serena-timeout:${name}`, 'warn', 'Serena should use a longer initialize timeout', `Current timeout: ${timeout ?? 'not configured'}. Recommended: >= 120000 ms.`, { file, name, timeout });
       }
       const projectArgs = Array.isArray(config.args) ? config.args.map(String) : [];
-      const projectIndex = projectArgs.findIndex((arg) => arg === '--project' || arg === '--project-root' || arg === '--context');
-      const projectRoot = projectIndex >= 0 ? projectArgs[projectIndex + 1] : config.projectRoot || config.cwd;
+      const projectRoot = flagValue(projectArgs, ['--project', '--project-root']) || config.projectRoot || config.cwd;
       if (!projectRoot) {
         state.add(`server.serena-project:${name}`, 'warn', 'Serena has no explicit project root/cwd', 'Use a real project path, not a temporary adapter-test path.', { file, name });
+      } else if (hasRuntimePlaceholder(projectRoot)) {
+        state.add(`server.serena-project:${name}`, 'pass', 'Serena project root uses a runtime placeholder', String(projectRoot), { file, name, projectRoot });
       } else if (isTempPath(projectRoot)) {
         state.add(`server.serena-project:${name}`, 'fail', 'Serena project root points at a temp directory', String(projectRoot), { file, name, projectRoot });
       } else if (!existsDir(path.resolve(String(projectRoot)))) {

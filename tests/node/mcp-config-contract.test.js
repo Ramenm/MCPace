@@ -1,6 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { read, readJson } = require('./helpers.js');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+const { read, readJson, repoRoot, cleanChildEnv } = require('./helpers.js');
 
 test('packaged MCP defaults do not ship upstream servers or candidate recommendations', () => {
   const sourceSettings = readJson('mcp_settings.json');
@@ -69,4 +73,48 @@ test('BYO MCP server model is documented and surfaced in the runtime manifest', 
   assert.match(upstream, /"mcp_settings\.json\.mcpServers"/);
   assert.match(upstream, /"requiresRecompileForNewServers"/);
   assert.match(upstream, /"installsUpstreamPackages"/);
+});
+
+test('full doctor treats Serena context separately from project root', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-doctor-serena-'));
+  try {
+    const config = path.join(root, 'mcp_settings.json');
+    fs.writeFileSync(
+      config,
+      JSON.stringify({
+        mcpServers: {
+          'serena-test': {
+            enabled: true,
+            type: 'stdio',
+            command: 'uvx',
+            initTimeout: 120000,
+            options: { timeout: 120000 },
+            args: [
+              'serena',
+              'start-mcp-server',
+              '--context',
+              'ide',
+              '--project',
+              '${MCPACE_PRIMARY_WORKSPACE}'
+            ],
+            env_vars: ['GITHUB_TOKEN', 'GITHUB_PERSONAL_ACCESS_TOKEN']
+          }
+        }
+      }, null, 2)
+    );
+
+    const result = spawnSync(
+      process.execPath,
+      ['scripts/mcpace-full-doctor.mjs', '--root', repoRoot, '--config', config, '--json'],
+      { cwd: repoRoot, encoding: 'utf8', env: cleanChildEnv() }
+    );
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    const serena = report.checks.find((check) => check.id === 'server.serena-project:serena-test');
+    assert.equal(serena.status, 'pass');
+    assert.equal(serena.meta.projectRoot, '${MCPACE_PRIMARY_WORKSPACE}');
+    assert.doesNotMatch(serena.detail, /^ide$/);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

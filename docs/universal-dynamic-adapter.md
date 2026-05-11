@@ -14,16 +14,16 @@ Static client/server catalogs may still exist for install/export helpers, but th
 
 `MCPACE_TOOL_EXPOSURE` controls how upstream tools are surfaced:
 
-- `auto` (default): MCPace probes the live upstream catalog and projects upstream tools as native top-level tools only when the whole projectable catalog fits both the count and estimated-token budgets. Otherwise MCPace keeps a compact broker/search surface.
+- `broker` (default): MCPace keeps startup `tools/list` cheap and token-small by exposing broker/search/call tools without probing every configured upstream.
+- `auto`: MCPace probes the live upstream catalog and projects upstream tools as native top-level tools only when the whole projectable catalog fits both the count and estimated-token budgets. Otherwise MCPace keeps a compact broker/search surface.
 - `hybrid`: project the highest-ranked prefix that fits the budgets and keep broker/search for the rest.
 - `native`: project upstream tools as top-level tools up to the configured budgets.
-- `broker`: never project upstream tools. Use `upstream_search`, `upstream_call`, and `upstream_batch`.
 - `minimal`: expose only the essential adapter tools for strict clients.
 
 Useful related settings:
 
 ```bash
-MCPACE_TOOL_EXPOSURE=auto
+MCPACE_TOOL_EXPOSURE=broker
 MCPACE_TOOL_BUDGET=64
 MCPACE_TOOL_TOKEN_BUDGET=24000
 MCPACE_TOOLS_LIST_TIMEOUT_MS=5000

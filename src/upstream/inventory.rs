@@ -151,12 +151,12 @@ pub fn surface_manifest(
                     "directTopLevelProjection",
                     JsonValue::object([
                         ("enabled", JsonValue::bool(true)),
-                        ("default", JsonValue::string("auto")),
-                        ("mode", JsonValue::string("budgeted-live-catalog")),
+                        ("default", JsonValue::string("broker")),
+                        ("mode", JsonValue::string("opt-in-budgeted-live-catalog")),
                         (
                             "reason",
                             JsonValue::string(
-                                "Projection is decided from the live tools/list catalog, protocol-compatible tool schemas, and the MCPACE_TOOL_BUDGET/MCPACE_TOOL_EXPOSURE settings. Direct projected calls still go through MCPace leases and declarative tool policies.",
+                                "Startup defaults avoid live upstream tools/list fan-out. Set MCPACE_TOOL_EXPOSURE=auto|hybrid|native when a client should opt into budgeted native projection from the live catalog; projected calls still go through MCPace leases and declarative tool policies.",
                             ),
                         ),
                     ]),

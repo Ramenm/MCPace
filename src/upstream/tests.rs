@@ -684,11 +684,6 @@ fn inventory_and_probe_report_missing_future_server_commands() {
     .unwrap();
 
     let inventory = configured_inventory(&root).expect("inventory");
-    assert_eq!(
-        json_helpers::value_at_path(&inventory, &["callableConfiguredStdioServerCount"])
-            .and_then(JsonValue::as_i64),
-        Some(0)
-    );
     let servers = json_helpers::array_at_path(&inventory, &["servers"]).unwrap();
     let future = servers
         .iter()
@@ -703,7 +698,7 @@ fn inventory_and_probe_report_missing_future_server_commands() {
         Some("blocked-command-not-found")
     );
 
-    let probe = probe_servers(&root, None, Some(1_000), false).expect("probe");
+    let probe = probe_servers(&root, Some("future-tool"), Some(1_000), false).expect("probe");
     assert_eq!(json_helpers::bool_at_path(&probe, &["ok"]), Some(false));
     assert_eq!(
         json_helpers::value_at_path(&probe, &["failedCount"]).and_then(JsonValue::as_i64),

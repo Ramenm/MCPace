@@ -1,6 +1,7 @@
 use super::{
     adapter_capabilities, management_surface_mode_from_env, management_surface_mode_name,
-    projected_tool_set, projection_safety_name, tool_exposure_mode_name, ToolExposureOptions,
+    projected_tool_set, projection_safety_name, tool_exposure_mode_name, ToolExposureMode,
+    ToolExposureOptions,
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
@@ -25,11 +26,18 @@ pub fn adapter_profile(
         refresh: refresh || env_options.refresh,
         ..env_options
     };
-    let reserved = management_tool_names
-        .iter()
-        .cloned()
-        .collect::<BTreeSet<_>>();
-    let projection = projected_tool_set(root_path, &reserved, &options).ok();
+    let projection = if matches!(
+        options.mode,
+        ToolExposureMode::Broker | ToolExposureMode::Minimal
+    ) {
+        None
+    } else {
+        let reserved = management_tool_names
+            .iter()
+            .cloned()
+            .collect::<BTreeSet<_>>();
+        projected_tool_set(root_path, &reserved, &options).ok()
+    };
     let inventory = upstream::configured_inventory(root_path)?;
     let live_catalog = if include_live_catalog {
         Some(upstream::catalog_tools(

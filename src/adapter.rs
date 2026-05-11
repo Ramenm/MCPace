@@ -174,7 +174,7 @@ pub fn adapter_capabilities() -> JsonValue {
 }
 
 pub fn adapter_instructions() -> String {
-    "MCPace is a dynamic MCP adapter for many clients and many upstream servers. It infers client capabilities from initialize, discovers configured upstream stdio servers through live MCP methods, projects upstream tools natively only when the catalog fits the token budget, and falls back to compact broker tools when it does not. Use adapter_profile for the current routing plan, upstream_search for concise discovery, projected u_<server>_<tool>_<hash> names when present, and upstream_call/upstream_batch when a client/tool budget requires brokered routing."
+    "MCPace is a dynamic MCP adapter for many clients and many upstream servers. It infers client capabilities from initialize, keeps startup tools/list small by default, discovers configured upstream stdio servers through live MCP methods when requested, and can opt into native projected upstream tools when the catalog fits the token budget. Use adapter_profile for the current routing plan, upstream_search for concise discovery, projected u_<server>_<tool>_<hash> names when projection is enabled, and upstream_call/upstream_batch when a client/tool budget requires brokered routing."
         .to_string()
 }
 
@@ -293,6 +293,14 @@ pub fn tool_list_result(
 
 pub fn augment_tool_definitions(root_path: &Path, base_tools: Vec<JsonValue>) -> Vec<JsonValue> {
     let options = ToolExposureOptions::from_env();
+    augment_tool_definitions_with_options(root_path, base_tools, &options)
+}
+
+fn augment_tool_definitions_with_options(
+    root_path: &Path,
+    base_tools: Vec<JsonValue>,
+    options: &ToolExposureOptions,
+) -> Vec<JsonValue> {
     if matches!(
         options.mode,
         ToolExposureMode::Broker | ToolExposureMode::Minimal
@@ -301,7 +309,7 @@ pub fn augment_tool_definitions(root_path: &Path, base_tools: Vec<JsonValue>) ->
     }
 
     let reserved = tool_names(&base_tools).into_iter().collect::<BTreeSet<_>>();
-    match projected_tool_set(root_path, &reserved, &options) {
+    match projected_tool_set(root_path, &reserved, options) {
         Ok(projected) if projected.projection_enabled => {
             let mut tools = base_tools;
             tools.extend(projected.tools);
@@ -1082,7 +1090,11 @@ fn tool_exposure_mode_from_env() -> ToolExposureMode {
         .or_else(|_| std::env::var("MCPACE_UPSTREAM_TOOL_EXPOSURE"))
         .ok()
         .map(|value| parse_tool_exposure_mode(&value))
-        .unwrap_or(ToolExposureMode::Auto)
+        .unwrap_or_else(default_tool_exposure_mode)
+}
+
+fn default_tool_exposure_mode() -> ToolExposureMode {
+    ToolExposureMode::Broker
 }
 
 fn parse_tool_exposure_mode(value: &str) -> ToolExposureMode {

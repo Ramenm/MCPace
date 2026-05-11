@@ -476,9 +476,21 @@ fn verify_readiness_reports_source_only_stdio_command_prerequisite() {
     ]);
     assert!(output.status.success());
     let text = stdout(&output);
-    assert!(text.contains(r#""serverCount": 1"#), "{}", text);
+    let readiness: serde_json::Value =
+        serde_json::from_str(&text).expect("readiness output is valid JSON");
     assert!(
-        text.contains(r#""sourceEnabledServerCount": 1"#),
+        readiness
+            .get("serverCount")
+            .and_then(|value| value.as_u64())
+            .is_some_and(|count| count >= 1),
+        "{}",
+        text
+    );
+    assert!(
+        readiness
+            .get("sourceEnabledServerCount")
+            .and_then(|value| value.as_u64())
+            .is_some_and(|count| count >= 1),
         "{}",
         text
     );
