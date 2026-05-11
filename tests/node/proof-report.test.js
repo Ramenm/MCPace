@@ -56,6 +56,13 @@ test('proof report cli emits a deterministic no-run report', async () => {
   assert.ok(['blocked', 'not-run'].includes(report.runtimeProof.status));
 });
 
+test('proof report command runner protects against verbose child output buffers', () => {
+  const source = fs.readFileSync(proofScript, 'utf8');
+  assert.match(source, /MCPACE_PROOF_COMMAND_MAX_BUFFER_BYTES/);
+  assert.match(source, /maxBuffer:\s*PROOF_COMMAND_MAX_BUFFER_BYTES/);
+  assert.match(source, /maxBufferBytes/);
+});
+
 test('proof report module can write a report file', async () => {
   const { collectReport, resolveCommandInvocation, writeReport } = await import(pathToFileUrl(proofScript));
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-proof-report-'));

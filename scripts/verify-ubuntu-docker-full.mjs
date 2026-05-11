@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 const DEFAULT_IMAGE_TAG = 'mcpace-verify:local';
 const DEFAULT_CPUS = '1.0';
 const DEFAULT_MEMORY = '768m';
@@ -24,11 +25,6 @@ function parseTimeoutEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function parseArgs(argv) {
   const parsed = {
@@ -124,6 +120,7 @@ function buildAndRun({ imageTag, cpus, memory, pidsLimit }) {
 
     const shellScript = `
 set -eu
+trap 'chmod -R a+rwX /work 2>/dev/null || true' EXIT
 export PATH="/usr/local/cargo/bin:$PATH"
 printf '== build release ==\\n'
 cargo build --release >/tmp/mcpace-build.log 2>&1
@@ -141,10 +138,10 @@ SMOKE_CLIENT_ID=$(node -e "const fs=require('fs'); const data=JSON.parse(fs.read
 test -n "$SMOKE_CLIENT_ID"
 printf '== client plan ==\\n'
 ./target/release/mcpace client plan --json --client-id "$SMOKE_CLIENT_ID" --session-id docker-e2e --project-root /work > /tmp/mcpace-client-plan.json
-grep -Eq '"requiresHubOwnedStdio": true' /tmp/mcpace-client-plan.json
+node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('/tmp/mcpace-client-plan.json','utf8')); if(data.requiresHubOwnedStdio!==false){console.error(JSON.stringify(data)); process.exit(1);}"
 printf '== server list ==\\n'
 ./target/release/mcpace server list --json > /tmp/mcpace-server-list.json
-grep -Eq '"name": "browser"' /tmp/mcpace-server-list.json
+node -e "const fs=require('fs'); const data=JSON.parse(fs.readFileSync('/tmp/mcpace-server-list.json','utf8')); const servers=Array.isArray(data)?data:Array.isArray(data.servers)?data.servers:null; if(!Array.isArray(servers)||servers.length!==0){console.error(JSON.stringify(data)); process.exit(1);}"
 printf '== verify doctor ==\\n'
 ./target/release/mcpace verify doctor --json > /tmp/mcpace-verify-doctor.json
 grep -Eq '"configFound": true' /tmp/mcpace-verify-doctor.json

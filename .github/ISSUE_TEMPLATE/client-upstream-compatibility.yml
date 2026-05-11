@@ -1,0 +1,49 @@
+name: Client or upstream compatibility
+description: Report a specific MCP client or upstream server compatibility problem.
+title: "[compat] "
+labels:
+  - compatibility
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Compatibility area
+      options:
+        - MCP client
+        - Upstream MCP server
+        - Both client and upstream
+    validations:
+      required: true
+  - type: input
+    id: component
+    attributes:
+      label: Client or upstream name and version
+      placeholder: Cursor version ..., @modelcontextprotocol/server-filesystem version ...
+    validations:
+      required: true
+  - type: textarea
+    id: commands
+    attributes:
+      label: Commands and config path
+      description: Include redacted commands and the relevant MCPace config source.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: trace
+    attributes:
+      label: Redacted trace
+      description: Include initialize/tools/list/tools/call output when possible.
+      render: text
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

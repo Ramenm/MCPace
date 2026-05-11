@@ -1,13 +1,16 @@
 use crate::dashboard;
 use crate::json::{parse_str, JsonValue};
+use crate::resources;
 use crate::runtimepaths;
 use std::collections::BTreeMap;
 use std::fs::{self, File};
-use std::io::Write;
-use std::net::{TcpStream, ToSocketAddrs};
+use std::io::{Read, Write};
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
+const HEALTH_PROBE_IO_TIMEOUT: Duration = Duration::from_secs(5);
 
 #[derive(Debug, Default)]
 struct ParsedArgs {
@@ -17,6 +20,10 @@ struct ParsedArgs {
     root_override: Option<PathBuf>,
     host: Option<String>,
     port: Option<u16>,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
     passthrough: Vec<String>,
     error: Option<String>,
 }
@@ -27,6 +34,10 @@ struct ServeState {
     state_root: String,
     host: String,
     port: u16,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
     url: String,
     pid: u32,
     started_at_ms: u128,
@@ -114,6 +125,73 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                 parsed.passthrough.push(value.clone());
                 index += 2;
             }
+            "--max-connections" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("serve requires a value after --max-connections".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "serve --max-connections") {
+                    Ok(limit) => parsed.max_connections = Some(limit),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                parsed.passthrough.push(args[index].clone());
+                parsed.passthrough.push(value.clone());
+                index += 2;
+            }
+            "--io-timeout-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some("serve requires a value after --io-timeout-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_u64(value, "serve --io-timeout-ms") {
+                    Ok(timeout_ms) => parsed.io_timeout_ms = Some(timeout_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                parsed.passthrough.push(args[index].clone());
+                parsed.passthrough.push(value.clone());
+                index += 2;
+            }
+            "--max-body-bytes" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("serve requires a value after --max-body-bytes".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "serve --max-body-bytes") {
+                    Ok(limit) => parsed.max_body_bytes = Some(limit),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                parsed.passthrough.push(args[index].clone());
+                parsed.passthrough.push(value.clone());
+                index += 2;
+            }
+            "--overview-cache-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("serve requires a value after --overview-cache-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_nonnegative_u64(value, "serve --overview-cache-ms") {
+                    Ok(ttl_ms) => parsed.overview_cache_ms = Some(ttl_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                parsed.passthrough.push(args[index].clone());
+                parsed.passthrough.push(value.clone());
+                index += 2;
+            }
             "-h" | "--help" | "-?" => {
                 parsed.help = true;
                 return parsed;
@@ -128,28 +206,58 @@ fn parse_args(args: &[String]) -> ParsedArgs {
     parsed
 }
 
+fn serve_resource_args(parsed: &ParsedArgs) -> Vec<String> {
+    let mut args = Vec::new();
+    if let Some(value) = parsed.max_connections {
+        args.push("--max-connections".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = parsed.io_timeout_ms {
+        args.push("--io-timeout-ms".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = parsed.max_body_bytes {
+        args.push("--max-body-bytes".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = parsed.overview_cache_ms {
+        args.push("--overview-cache-ms".to_string());
+        args.push(value.to_string());
+    }
+    args
+}
+
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace serve [start|stop|status] [--json] [--root <path>] [--host <addr>] [--port <n>]"
+        "Usage: mcpace serve [start|stop|status] [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Public serve surface:");
     let _ = writeln!(
         stdout,
-        "  mcpace serve [--root <path>] [--host <addr>] [--port <n>]"
+        "  mcpace serve [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
     );
     let _ = writeln!(
         stdout,
-        "  mcpace serve start [--json] [--root <path>] [--host <addr>] [--port <n>]"
+        "  mcpace serve start [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
     );
     let _ = writeln!(stdout, "  mcpace serve stop [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace serve status [--json] [--root <path>]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "serve is the public one-port MCPace surface. The default local MCP endpoint is {}.",
+        "serve is the public one-port MCPace surface. The default local MCP endpoint is {}; override with mcpace.config.json serve.* or MCPACE_SERVE_*/MCPACE_PUBLIC_MCP_URL when needed.",
         runtimepaths::default_local_mcp_url()
+    );
+    let _ = writeln!(
+        stdout,
+        "Resource defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms, health cache={}ms.",
+        resources::default_http_connection_limit(),
+        resources::default_http_io_timeout_ms(),
+        resources::default_max_http_body_bytes(),
+        resources::default_dashboard_overview_cache_ms(),
+        resources::default_dashboard_health_cache_ms()
     );
 }
 
@@ -159,17 +267,22 @@ fn run_start(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
+    let json_output = parsed.json_output;
+    let resource_args = serve_resource_args(&parsed);
+    let max_connections = parsed.max_connections;
+    let io_timeout_ms = parsed.io_timeout_ms;
+    let max_body_bytes = parsed.max_body_bytes;
+    let overview_cache_ms = parsed.overview_cache_ms;
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
         return 1;
     };
 
-    let host = parsed
-        .host
-        .unwrap_or_else(|| runtimepaths::DEFAULT_LOCAL_HOST.to_string());
-    let port = parsed.port.unwrap_or(runtimepaths::DEFAULT_LOCAL_MCP_PORT);
     let canonical_root = canonicalize_or_original(&root_path);
+    let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
+    let host = parsed.host.unwrap_or_else(|| endpoint.host.clone());
+    let port = parsed.port.unwrap_or(endpoint.port);
     let state_root = runtimepaths::resolve_state_root(&canonical_root);
     if let Err(error) = runtimepaths::ensure_runtime_dir(&state_root) {
         let _ = writeln!(stderr, "{}", error);
@@ -186,7 +299,7 @@ fn run_start(
 
     if let Ok(status) = collect_status(&canonical_root, Some(host.clone()), Some(port)) {
         if status.status == "running" {
-            return write_status_response(&status, parsed.json_output, stdout);
+            return write_status_response(&status, json_output, stdout);
         }
     }
 
@@ -240,6 +353,7 @@ fn run_start(
         &canonical_root,
         &host,
         port,
+        &resource_args,
         stdout_file,
         stderr_file,
     ) {
@@ -255,7 +369,11 @@ fn run_start(
         state_root: sanitize_display(&state_root),
         host: host.clone(),
         port,
-        url: http_url(&host, port, "/mcp"),
+        max_connections,
+        io_timeout_ms,
+        max_body_bytes,
+        overview_cache_ms,
+        url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
         pid,
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runner_path),
@@ -267,7 +385,13 @@ fn run_start(
         return 1;
     }
 
-    if let Err(error) = wait_for_health(&host, port, 60, Duration::from_millis(100)) {
+    if let Err(error) = wait_for_health(
+        &host,
+        port,
+        &endpoint.health_path,
+        60,
+        Duration::from_millis(100),
+    ) {
         let _ = kill_process(state.pid);
         let _ = fs::remove_file(runtimepaths::serve_state_path(&state_root));
         let _ = writeln!(stderr, "{}", error);
@@ -281,7 +405,7 @@ fn run_start(
             return 1;
         }
     };
-    write_status_response(&status, parsed.json_output, stdout)
+    write_status_response(&status, json_output, stdout)
 }
 
 fn run_stop(
@@ -290,6 +414,7 @@ fn run_stop(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
+    let json_output = parsed.json_output;
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
@@ -302,7 +427,8 @@ fn run_stop(
     if let Some(state) = &existing {
         let _ = kill_process(state.pid);
         for _ in 0..40 {
-            if !health_check(&state.host, state.port).unwrap_or(false) {
+            let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
+            if !health_check(&state.host, state.port, &endpoint.health_path).unwrap_or(false) {
                 break;
             }
             thread::sleep(Duration::from_millis(100));
@@ -317,7 +443,7 @@ fn run_stop(
             return 1;
         }
     };
-    write_status_response(&status, parsed.json_output, stdout)
+    write_status_response(&status, json_output, stdout)
 }
 
 fn run_status(
@@ -326,6 +452,7 @@ fn run_status(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
+    let json_output = parsed.json_output;
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
@@ -339,7 +466,7 @@ fn run_status(
             return 1;
         }
     };
-    write_status_response(&status, parsed.json_output, stdout)
+    write_status_response(&status, json_output, stdout)
 }
 
 #[derive(Debug)]
@@ -348,6 +475,10 @@ struct ServeStatus {
     state_root: String,
     host: String,
     port: u16,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
     url: String,
     status: String,
     pid: Option<u32>,
@@ -362,17 +493,18 @@ fn collect_status(
     host_override: Option<String>,
     port_override: Option<u16>,
 ) -> Result<ServeStatus, String> {
+    let endpoint = runtimepaths::resolve_serve_endpoint(Some(root_path));
     let state_root = runtimepaths::resolve_state_root(root_path);
     let state_path = runtimepaths::serve_state_path(&state_root);
     let state = read_state(&state_path).ok();
     let should_probe = state.is_some() || host_override.is_some() || port_override.is_some();
     let host = host_override
         .or_else(|| state.as_ref().map(|value| value.host.clone()))
-        .unwrap_or_else(|| runtimepaths::DEFAULT_LOCAL_HOST.to_string());
+        .unwrap_or_else(|| endpoint.host.clone());
     let port = port_override
         .or_else(|| state.as_ref().map(|value| value.port))
-        .unwrap_or(runtimepaths::DEFAULT_LOCAL_MCP_PORT);
-    let running = should_probe && health_check(&host, port).unwrap_or(false);
+        .unwrap_or(endpoint.port);
+    let running = should_probe && health_check(&host, port, &endpoint.health_path).unwrap_or(false);
     let mut warnings = Vec::new();
     let status = if running {
         "running".to_string()
@@ -391,7 +523,11 @@ fn collect_status(
         state_root: sanitize_display(&state_root),
         host: host.clone(),
         port,
-        url: http_url(&host, port, "/mcp"),
+        max_connections: state.as_ref().and_then(|value| value.max_connections),
+        io_timeout_ms: state.as_ref().and_then(|value| value.io_timeout_ms),
+        max_body_bytes: state.as_ref().and_then(|value| value.max_body_bytes),
+        overview_cache_ms: state.as_ref().and_then(|value| value.overview_cache_ms),
+        url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
         status,
         pid: state.as_ref().map(|value| value.pid).filter(|_| running),
         started_at_ms: state
@@ -410,6 +546,14 @@ fn collect_status(
     })
 }
 
+fn option_usize_json(value: Option<usize>) -> JsonValue {
+    value.map(JsonValue::number).unwrap_or(JsonValue::Null)
+}
+
+fn option_u64_json(value: Option<u64>) -> JsonValue {
+    value.map(JsonValue::number).unwrap_or(JsonValue::Null)
+}
+
 fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut dyn Write) -> i32 {
     if json_output {
         let mut map = BTreeMap::new();
@@ -423,6 +567,22 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
         );
         map.insert("host".to_string(), JsonValue::string(status.host.clone()));
         map.insert("port".to_string(), JsonValue::number(status.port));
+        map.insert(
+            "maxConnections".to_string(),
+            option_usize_json(status.max_connections),
+        );
+        map.insert(
+            "ioTimeoutMs".to_string(),
+            option_u64_json(status.io_timeout_ms),
+        );
+        map.insert(
+            "maxBodyBytes".to_string(),
+            option_usize_json(status.max_body_bytes),
+        );
+        map.insert(
+            "overviewCacheMs".to_string(),
+            option_u64_json(status.overview_cache_ms),
+        );
         map.insert("url".to_string(), JsonValue::string(status.url.clone()));
         map.insert(
             "status".to_string(),
@@ -462,6 +622,18 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
     let _ = writeln!(stdout, "URL: {}", status.url);
     let _ = writeln!(stdout, "Host: {}", status.host);
     let _ = writeln!(stdout, "Port: {}", status.port);
+    if let Some(value) = status.max_connections {
+        let _ = writeln!(stdout, "Max connections: {}", value);
+    }
+    if let Some(value) = status.io_timeout_ms {
+        let _ = writeln!(stdout, "IO timeout ms: {}", value);
+    }
+    if let Some(value) = status.max_body_bytes {
+        let _ = writeln!(stdout, "Max body bytes: {}", value);
+    }
+    if let Some(value) = status.overview_cache_ms {
+        let _ = writeln!(stdout, "Overview cache ms: {}", value);
+    }
     let _ = writeln!(stdout, "Root path: {}", status.root_path);
     let _ = writeln!(stdout, "State root: {}", status.state_root);
     let _ = writeln!(stdout, "Stdout log: {}", status.stdout_log_path);
@@ -484,6 +656,10 @@ fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
         ("stateRoot", JsonValue::string(state.state_root.clone())),
         ("host", JsonValue::string(state.host.clone())),
         ("port", JsonValue::number(state.port)),
+        ("maxConnections", option_usize_json(state.max_connections)),
+        ("ioTimeoutMs", option_u64_json(state.io_timeout_ms)),
+        ("maxBodyBytes", option_usize_json(state.max_body_bytes)),
+        ("overviewCacheMs", option_u64_json(state.overview_cache_ms)),
         ("url", JsonValue::string(state.url.clone())),
         ("pid", JsonValue::number(state.pid)),
         ("startedAtMs", JsonValue::number(state.started_at_ms)),
@@ -545,11 +721,29 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
             .to_string(),
         host: host.clone(),
         port,
+        max_connections: json
+            .get("maxConnections")
+            .and_then(JsonValue::as_i64)
+            .and_then(|value| usize::try_from(value).ok()),
+        io_timeout_ms: json
+            .get("ioTimeoutMs")
+            .and_then(JsonValue::as_i64)
+            .and_then(|value| u64::try_from(value).ok()),
+        max_body_bytes: json
+            .get("maxBodyBytes")
+            .and_then(JsonValue::as_i64)
+            .and_then(|value| usize::try_from(value).ok()),
+        overview_cache_ms: json
+            .get("overviewCacheMs")
+            .and_then(JsonValue::as_i64)
+            .and_then(|value| u64::try_from(value).ok()),
         url: json
             .get("url")
             .and_then(JsonValue::as_str)
             .map(|value| value.to_string())
-            .unwrap_or_else(|| http_url(&host, port, "/mcp")),
+            .unwrap_or_else(|| {
+                runtimepaths::http_url(&host, port, runtimepaths::DEFAULT_LOCAL_MCP_PATH)
+            }),
         pid,
         started_at_ms,
         runner_path: json
@@ -570,7 +764,7 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
     })
 }
 
-fn health_check(host: &str, port: u16) -> Result<bool, String> {
+fn health_check(host: &str, port: u16, path: &str) -> Result<bool, String> {
     let probe_host = probe_host(host);
     let mut addrs = (probe_host.as_str(), port)
         .to_socket_addrs()
@@ -583,29 +777,66 @@ fn health_check(host: &str, port: u16) -> Result<bool, String> {
     let Some(addr) = addrs.next() else {
         return Ok(false);
     };
-    match TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
+    let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
+        Ok(stream) => stream,
+        Err(_) => return Ok(false),
+    };
+    let timeout = Some(HEALTH_PROBE_IO_TIMEOUT);
+    let _ = stream.set_read_timeout(timeout);
+    let _ = stream.set_write_timeout(timeout);
+    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
+    let request = format!(
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        path, probe_host
+    );
+    if stream.write_all(request.as_bytes()).is_err() {
+        return Ok(false);
     }
+    let _ = stream.shutdown(Shutdown::Write);
+    let mut response = String::new();
+    if stream.read_to_string(&mut response).is_err() {
+        return Ok(false);
+    }
+    let Some((headers, body)) = response.split_once("\r\n\r\n") else {
+        return Ok(false);
+    };
+    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
+        return Ok(false);
+    }
+    let Ok(payload) = parse_str(body.trim()) else {
+        return Ok(false);
+    };
+    Ok(matches!(
+        payload.get("readiness"),
+        Some(JsonValue::Object(_))
+    ))
 }
 
-fn wait_for_health(host: &str, port: u16, attempts: usize, delay: Duration) -> Result<(), String> {
+fn wait_for_health(
+    host: &str,
+    port: u16,
+    path: &str,
+    attempts: usize,
+    delay: Duration,
+) -> Result<(), String> {
+    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
     for _ in 0..attempts {
-        if health_check(host, port).unwrap_or(false) {
+        if health_check(host, port, &path).unwrap_or(false) {
             return Ok(());
         }
         thread::sleep(delay);
     }
     Err(format!(
         "serve did not become healthy on {} in time",
-        http_url(host, port, "/healthz")
+        http_url(host, port, &path)
     ))
 }
 
 fn http_url(host: &str, port: u16, path: &str) -> String {
-    format!("http://{}:{}{}", host_for_url(host), port, path)
+    runtimepaths::http_url(host, port, path)
 }
 
+#[allow(dead_code)]
 fn host_for_url(host: &str) -> String {
     let trimmed = host.trim();
     let unbracketed = trimmed.trim_start_matches('[').trim_end_matches(']');
@@ -726,6 +957,7 @@ fn spawn_background(
     root_path: &Path,
     host: &str,
     port: u16,
+    extra_args: &[String],
     stdout_file: File,
     stderr_file: File,
 ) -> Result<u32, String> {
@@ -733,17 +965,12 @@ fn spawn_background(
     {
         drop(stdout_file);
         drop(stderr_file);
-        return spawn_background_windows(runner_path, root_path, host, port);
+        return spawn_background_windows(runner_path, root_path, host, port, extra_args);
     }
 
     #[cfg(unix)]
     {
-        use std::os::unix::process::CommandExt;
         use std::process::{Command, Stdio};
-
-        extern "C" {
-            fn setsid() -> i32;
-        }
 
         let mut command = Command::new(runner_path);
         command
@@ -753,19 +980,14 @@ fn spawn_background(
             .arg("--host")
             .arg(host)
             .arg("--port")
-            .arg(port.to_string())
+            .arg(port.to_string());
+        command.args(extra_args);
+        command
             .stdin(Stdio::null())
             .stdout(Stdio::from(stdout_file))
             .stderr(Stdio::from(stderr_file));
 
-        unsafe {
-            command.pre_exec(|| {
-                if setsid() < 0 {
-                    return Err(std::io::Error::last_os_error());
-                }
-                Ok(())
-            });
-        }
+        crate::process_detach::configure_unix_new_session(&mut command);
 
         return command
             .spawn()
@@ -783,10 +1005,11 @@ fn spawn_background_windows(
     root_path: &Path,
     host: &str,
     port: u16,
+    extra_args: &[String],
 ) -> Result<u32, String> {
     use std::ffi::OsString;
 
-    let args = vec![
+    let mut args = vec![
         OsString::from("serve"),
         OsString::from("--root"),
         root_path.as_os_str().to_os_string(),
@@ -795,6 +1018,11 @@ fn spawn_background_windows(
         OsString::from("--port"),
         OsString::from(port.to_string()),
     ];
+    args.extend(
+        extra_args
+            .iter()
+            .map(|value| OsString::from(value.as_str())),
+    );
     crate::windows_process::spawn_detached_no_window(runner_path, &args, Some(root_path))
         .map_err(|error| format!("failed to start MCPace serve runtime: {}", error))
 }
@@ -906,6 +1134,9 @@ mod tests {
 
     #[test]
     fn serve_start_status_stop_round_trip() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let root = temp_root();
         if resolve_runner_source().is_err() {
             let _ = fs::remove_dir_all(root);
@@ -936,7 +1167,10 @@ mod tests {
             "stdout: {}",
             start_text
         );
-        assert!(health_check("127.0.0.1", port).unwrap_or(false));
+        assert!(
+            health_check("127.0.0.1", port, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH)
+                .unwrap_or(false)
+        );
 
         let mut status_stdout = Vec::new();
         let mut status_stderr = Vec::new();

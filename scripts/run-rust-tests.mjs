@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { childEnvForCommand } from './lib/safe-child-env.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
@@ -68,7 +69,8 @@ function parseArgs(argv) {
       : DEFAULT_TIMEOUT_MS,
     suites: [],
     profile: 'full',
-    list: false
+    list: false,
+    help: false
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -91,12 +93,15 @@ function parseArgs(argv) {
         break;
       case '--help':
       case '-h':
-        writeHelp(process.stdout);
-        process.exit(0);
+        parsed.help = true;
         break;
       default:
         throw new Error(`unsupported run-rust-tests argument: ${token}`);
     }
+  }
+
+  if (parsed.help) {
+    return parsed;
   }
 
   if (parsed.suites.some((suite) => !suite.trim())) {
@@ -167,7 +172,7 @@ function runCommand(suite, options) {
     const startedAt = Date.now();
     const child = spawn(bin, args, {
       cwd: repoRoot,
-      env: process.env,
+      env: childEnvForCommand(bin),
       detached: process.platform !== 'win32',
       windowsHide: true,
       stdio: ['ignore', 'pipe', 'pipe']
@@ -297,6 +302,10 @@ export async function runRustTests(options) {
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.help) {
+    writeHelp(process.stdout);
+    return;
+  }
   const suites = defaultSuites();
 
   if (options.list) {

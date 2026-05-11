@@ -1,0 +1,254 @@
+{
+  "schema": "mcpace.bugfixSweep.v1",
+  "generatedAt": "2026-05-03T19:12:52Z",
+  "baseArchive": "mcpace-v0.5.9-030526-162800.zip",
+  "bugsFixed": [
+    {
+      "id": "vendored-binary-rust-toolchain-false-negative",
+      "severity": "high",
+      "symptom": "verify:vendored-binary failed on a valid staged binary when Cargo/Rust was not installed on the host.",
+      "rootCause": "Binary-install verification required doctor.rustSourceReady, conflating consumer/runtime binary verification with source-build verification.",
+      "fix": "verify-vendored-binary now requires config/npm readiness for the binary smoke, records rustSourceReady as informational, and adds schema/generatedAt/project metadata.",
+      "regressionProof": [
+        "tests/node/verify-vendored-binary.test.js: runtime host without Rust toolchain",
+        "npm run verify:vendored-binary"
+      ]
+    },
+    {
+      "id": "vendored-binary-report-freshness-gap",
+      "severity": "medium",
+      "symptom": "publish-decision/product-practice could not rely on a fresh vendored-binary report after the verifier ran.",
+      "rootCause": "verify-vendored-binary printed JSON but did not persist reports/vendored-binary-latest.json; release workflows also did not persist per-target proof reports.",
+      "fix": "Added --write support; package script writes reports/vendored-binary-latest.json; release workflows write reports/vendored-binary-<target>.json.",
+      "regressionProof": [
+        "tests/node/verify-vendored-binary.test.js: write report test",
+        "release workflow contract tests"
+      ]
+    },
+    {
+      "id": "product-practice-published-binary-overclaim",
+      "severity": "high",
+      "symptom": "product-practice could mark published-binary-install as pass based on install-readiness/binary presence rather than direct binary verification proof.",
+      "rootCause": "The claim gate used boot/install readiness instead of a fresh, target-matching vendored-binary proof report.",
+      "fix": "product-practice now requires reports/vendored-binary-latest.json or reports/vendored-binary-<target>.json to be fresh, status pass, and match the current host target.",
+      "regressionProof": [
+        "tests/node/product-practice-contract.test.js",
+        "npm run verify:product-practice"
+      ]
+    },
+    {
+      "id": "product-practice-runtime-beta-overclaim",
+      "severity": "high",
+      "symptom": "product-practice could expose canClaim.runtimeBeta=true while rust-build was blocked/failing.",
+      "rootCause": "runtimeBeta was tied only to runtime trace usability, despite the harness status requiring Rust proof before runtime claims.",
+      "fix": "runtimeBeta now requires both fresh passing Rust quality proof and fresh passing runtime trace proof.",
+      "regressionProof": [
+        "tests/node/product-practice-contract.test.js: runtimeBeta equals rust-build pass AND runtime-trace pass"
+      ]
+    }
+  ],
+  "nodeRepoTestGroups": [
+    {
+      "path": "reports/node-tests-group1.json",
+      "status": "pass",
+      "selected": 8,
+      "passed": 8,
+      "generatedAt": "2026-05-03T19:04:14.783Z"
+    },
+    {
+      "path": "reports/node-tests-group2.json",
+      "status": "pass",
+      "selected": 8,
+      "passed": 8,
+      "generatedAt": "2026-05-03T19:11:36.288Z"
+    },
+    {
+      "path": "reports/node-tests-group3.json",
+      "status": "pass",
+      "selected": 8,
+      "passed": 8,
+      "generatedAt": "2026-05-03T19:11:10.783Z"
+    },
+    {
+      "path": "reports/node-tests-group4.json",
+      "status": "pass",
+      "selected": 8,
+      "passed": 8,
+      "generatedAt": "2026-05-03T19:03:42.880Z"
+    },
+    {
+      "path": "reports/node-tests-group5.json",
+      "status": "pass",
+      "selected": 6,
+      "passed": 6,
+      "generatedAt": "2026-05-03T19:03:53.754Z"
+    }
+  ],
+  "checks": [
+    {
+      "name": "node syntax",
+      "path": "reports/node-syntax-latest.json",
+      "status": "pass",
+      "evidence": "99/99 checked, failures=0",
+      "generatedAt": "2026-05-03T19:06:21.573Z"
+    },
+    {
+      "name": "npm CLI tests",
+      "path": "reports/npm-cli-tests-latest.json",
+      "status": "pass",
+      "evidence": "3/3 passed",
+      "generatedAt": "2026-05-03T19:06:41.683Z"
+    },
+    {
+      "name": "npm pack",
+      "path": "reports/install-readiness-latest.json",
+      "status": "ready-with-warnings",
+      "evidence": "vendored-binary-bundle",
+      "generatedAt": "2026-05-03T19:07:51.162Z"
+    },
+    {
+      "name": "vendored binary",
+      "path": "reports/vendored-binary-latest.json",
+      "status": "pass",
+      "evidence": "linux-x64-gnu version=0.5.9 runtimeOps=True",
+      "generatedAt": "2026-05-03T19:04:44.816Z"
+    },
+    {
+      "name": "runtime trace",
+      "path": "reports/runtime-trace-latest.json",
+      "status": "pass",
+      "evidence": "spawned-local-serve linux-x64-gnu packages/npm/cli/vendor/linux-x64-gnu/mcpace",
+      "generatedAt": "2026-05-03T19:08:48.396Z"
+    },
+    {
+      "name": "rust quality",
+      "path": "reports/rust-quality-latest.json",
+      "status": "fail",
+      "evidence": "cargoAvailable=False firstLane=fmt error=spawnSync cargo ENOENT",
+      "generatedAt": "2026-05-03T19:08:18.413Z"
+    },
+    {
+      "name": "product practice",
+      "path": "reports/product-practice-latest.json",
+      "status": "prove-rust-before-runtime-claims",
+      "evidence": "runtimeBeta=False publishedBinaryInstall=True",
+      "generatedAt": "2026-05-03T19:11:23.135Z"
+    },
+    {
+      "name": "publish decision",
+      "path": "reports/publish-decision-latest.json",
+      "status": "blocked",
+      "evidence": "source=False native=False blockers={'totalGates': 10, 'passed': 6, 'warnings': 1, 'sourceBlockers': 1, 'releaseBlockers': 3}",
+      "generatedAt": "2026-05-03T19:11:23.617Z"
+    },
+    {
+      "name": "bug sweep",
+      "path": "reports/bug-sweep-latest.json",
+      "status": "pass-with-warnings",
+      "evidence": "warnings=1 blocked=0",
+      "generatedAt": "2026-05-03T19:11:58.566Z"
+    },
+    {
+      "name": "defect gates",
+      "path": "reports/defect-gates-latest.json",
+      "status": "pass",
+      "evidence": "blocked=0 warnings=0",
+      "generatedAt": "2026-05-03T19:11:59.554Z"
+    },
+    {
+      "name": "secret scan",
+      "path": "reports/secret-scan-latest.json",
+      "status": "pass",
+      "evidence": "critical=0 warnings=0",
+      "generatedAt": "2026-05-03T19:12:12.372Z"
+    },
+    {
+      "name": "supply-chain risk",
+      "path": "reports/supply-chain-risk-latest.json",
+      "status": "pass-with-warnings",
+      "evidence": "blockers=0 warnings=5",
+      "generatedAt": "2026-05-03T19:06:22.734Z"
+    },
+    {
+      "name": "free-tier readiness",
+      "path": "reports/free-tier-readiness-latest.json",
+      "status": "ready",
+      "evidence": "blockers=0 warnings=0",
+      "generatedAt": "2026-05-03T19:06:23.060Z"
+    },
+    {
+      "name": "github health",
+      "path": "reports/github-health-latest.json",
+      "status": "pass",
+      "evidence": "blocked=0 total=30",
+      "generatedAt": "2026-05-03T19:06:22.838Z"
+    },
+    {
+      "name": "github readiness",
+      "path": "reports/github-readiness-latest.json",
+      "status": "ready-with-warnings",
+      "evidence": "warnings=1 required=24/24",
+      "generatedAt": "2026-05-03T19:06:22.940Z"
+    },
+    {
+      "name": "tooling readiness",
+      "path": "reports/tooling-readiness-latest.json",
+      "status": "blocked",
+      "evidence": "blocked=4 warnings=4",
+      "generatedAt": "2026-05-03T19:05:09.525Z"
+    }
+  ],
+  "environmentLimitations": [
+    "cargo, rustc, rustfmt, and clippy are not installed in this container; Rust source quality commands fail with command not found / spawnSync cargo ENOENT.",
+    "Rust source compile/test/fmt/clippy results must be rerun on a Rust host before native publication.",
+    "Full Node coverage command was attempted but the container timed it out; grouped Node contract tests completed 38/38 pass and coverage-contract itself passed.",
+    "Supply-chain audit is pass-with-warnings because optional external scanners are not installed in this container."
+  ],
+  "changedTrackedPaths": [
+    ".github/workflows/release-dry-run.yml",
+    ".github/workflows/release.yml",
+    "docs/offline-quality-and-publish-gates.md",
+    "docs/product-practice.md",
+    "package.json",
+    "reports/bug-sweep-latest.json",
+    "reports/bug-sweep-latest.md",
+    "reports/defect-gates-latest.json",
+    "reports/defect-gates-latest.md",
+    "reports/free-tier-readiness-latest.json",
+    "reports/github-health-latest.json",
+    "reports/github-readiness-latest.json",
+    "reports/install-readiness-latest.json",
+    "reports/local-quality-source-latest.json",
+    "reports/local-quality-source-latest.md",
+    "reports/node-syntax-latest.json",
+    "reports/node-tests-smoke-latest.json",
+    "reports/npm-cli-tests-latest.json",
+    "reports/product-practice-latest.json",
+    "reports/product-practice-latest.md",
+    "reports/publish-decision-latest.json",
+    "reports/publish-decision-latest.md",
+    "reports/runtime-trace-latest.json",
+    "reports/runtime-trace-latest.md",
+    "reports/rust-quality-latest.json",
+    "reports/secret-scan-latest.json",
+    "reports/secret-scan-latest.md",
+    "reports/source-audit-latest.json",
+    "reports/supply-chain-risk-latest.json",
+    "reports/toolbox-doctor-latest.json",
+    "reports/toolbox-doctor-latest.md",
+    "reports/tooling-readiness-latest.json",
+    "reports/tooling-readiness-latest.md",
+    "reports/vendored-binary-latest.json",
+    "scripts/product-practice-harness.mjs",
+    "scripts/verify-vendored-binary.mjs",
+    "tests/node/product-practice-contract.test.js",
+    "tests/node/verify-vendored-binary.test.js"
+  ],
+  "newUntrackedPaths": [
+    "reports/node-tests-group1.json",
+    "reports/node-tests-group2.json",
+    "reports/node-tests-group3.json",
+    "reports/node-tests-group4.json",
+    "reports/node-tests-group5.json"
+  ]
+}

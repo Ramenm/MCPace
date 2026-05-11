@@ -1,0 +1,311 @@
+{
+  "schema": "mcpace.linuxAutoCheck.v1",
+  "status": "warn",
+  "profile": "host",
+  "strict": false,
+  "dryRun": false,
+  "generatedAt": "2026-05-11T11:37:56.743Z",
+  "root": "/mnt/data/mcpace_ideal_final_source",
+  "bin": null,
+  "checks": [
+    {
+      "name": "linux-platform",
+      "status": "pass",
+      "message": "platform=linux",
+      "details": {
+        "platform": "linux",
+        "arch": "x64",
+        "release": "4.4.0",
+        "distro": {
+          "id": "debian",
+          "versionId": "13",
+          "name": "Debian GNU/Linux 13 (trixie)"
+        }
+      }
+    },
+    {
+      "name": "linux-architecture",
+      "status": "pass",
+      "message": "arch=x64",
+      "details": {
+        "supported": [
+          "x64",
+          "arm64"
+        ]
+      }
+    },
+    {
+      "name": "linux-libc",
+      "status": "pass",
+      "message": "libc=gnu",
+      "details": {
+        "libc": "gnu"
+      }
+    },
+    {
+      "name": "node-runtime",
+      "status": "pass",
+      "message": "node=22.16.0",
+      "details": {
+        "required": ">=22"
+      }
+    },
+    {
+      "name": "command-npm",
+      "status": "pass",
+      "message": "/opt/nvm/versions/node/v22.16.0/bin/npm",
+      "details": {
+        "path": "/opt/nvm/versions/node/v22.16.0/bin/npm"
+      }
+    },
+    {
+      "name": "command-npx",
+      "status": "pass",
+      "message": "/opt/nvm/versions/node/v22.16.0/bin/npx",
+      "details": {
+        "path": "/opt/nvm/versions/node/v22.16.0/bin/npx"
+      }
+    },
+    {
+      "name": "command-sh",
+      "status": "pass",
+      "message": "/usr/bin/sh",
+      "details": {
+        "path": "/usr/bin/sh"
+      }
+    },
+    {
+      "name": "optional-command-cargo",
+      "status": "warn",
+      "message": "cargo not found",
+      "details": {
+        "path": null
+      }
+    },
+    {
+      "name": "optional-command-rustc",
+      "status": "warn",
+      "message": "rustc not found",
+      "details": {
+        "path": null
+      }
+    },
+    {
+      "name": "optional-command-docker",
+      "status": "warn",
+      "message": "docker not found",
+      "details": {
+        "path": null
+      }
+    },
+    {
+      "name": "optional-command-systemctl",
+      "status": "pass",
+      "message": "/usr/bin/systemctl",
+      "details": {
+        "path": "/usr/bin/systemctl"
+      }
+    },
+    {
+      "name": "package-json",
+      "status": "pass",
+      "message": "package.json present and parseable",
+      "details": {}
+    },
+    {
+      "name": "cargo-manifest",
+      "status": "pass",
+      "message": "Cargo.toml present",
+      "details": {}
+    },
+    {
+      "name": "release-targets",
+      "status": "pass",
+      "message": "release-targets.json present",
+      "details": {}
+    },
+    {
+      "name": "npm-lint",
+      "status": "pass",
+      "message": "npm run lint:npm -- --json passed",
+      "details": {
+        "status": 0,
+        "timedOut": false,
+        "stdout": "> mcpace-workspace@0.5.9 lint:npm\n> node scripts/check-node-syntax.mjs --json --json\n\n{\n  \"schema\": \"mcpace.nodeSyntaxCheck.v1\",\n  \"generatedAt\": \"2026-05-11T11:37:53.600Z\",\n  \"root\": \"/mnt/data/mcpace_ideal_final_source\",\n  \"sourceRoots\": [\n    \"packages/npm/cli\",\n    \"scripts\",\n    \"tests/node\",\n    \"tests/fixtures\",\n    \"examples\"\n  ],\n  \"status\": \"pass\",\n  \"fileCount\": 104,\n  \"checkedCount\": 104,\n  \"failureCount\": 0,\n  \"jobs\": 6,\n  \"failures\": []\n}",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "npm-cli-tests",
+      "status": "pass",
+      "message": "npm run test:npm passed",
+      "details": {
+        "status": 0,
+        "timedOut": false,
+        "stdout": "> mcpace-workspace@0.5.9 test:npm\n> node scripts/run-node-test-files.mjs --dir packages/npm/cli/test --ext .test.mjs --json --progress --batch-size 8 --timeout-ms 45000 --heartbeat-ms 10000 --write reports/npm-cli-tests-latest.json\n\n{\n  \"schema\": \"mcpace.nodeTestFiles.v1\",\n  \"generatedAt\": \"2026-05-11T11:37:54.316Z\",\n  \"project\": {\n    \"name\": \"mcpace\",\n    \"version\": \"0.5.9\"\n  },\n  \"status\": \"pass\",\n  \"total\": 3,\n  \"selected\": 3,\n  \"batchSize\": 3,\n  \"batchCount\": 1,\n  \"shard\": null,\n  \"completedBatches\": 1,\n  \"completed\": 3,\n  \"passed\": 3,\n  \"results\": [\n    {\n      \"batch\": 1,\n      \"files\": [\n        \"packages/npm/cli/test/platform.test.mjs\",\n        \"packages/npm/cli/test/resolve-binary.test.mjs\",\n        \"packages/npm/cli/test/runtime.test.mjs\"\n      ],\n      \"file\": \"packages/npm/cli/test/platform.test.mjs\",\n      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"durationMs\": 233,\n      \"timeoutMs\": 45000,\n      \"error\": null,\n      \"stdoutSummary\": \"TAP version 13\\n# Subtest: supported targets include linux and windows lanes\\nok 1 - supported targets include linux and windows lanes\\n  ---\\n  duration_ms: 0.785708\\n  type: 'test'\\n  ...\\n# Subtest: packageNamesForTarget maps to platform package names\\nok 2 - packageNamesForTarget maps to platform package names\\n  ---\\n  duration_ms: 1.250537\\n  type: 'test'\\n  ...\\n# Subtest: currentTargetKey preserves libc information even when the target is unsupported\\nok 3 - currentTargetKey preserves libc information even when the target is unsupported\\n  ---\\n  duration_ms: 0.37371\\n  type: 'test'\\n  ...\\n# Subtest: describeSupportedTargets is non-empty and current target detection is safe\\nok 4 - describeSupportedTargets is non-empty and current target detection is safe\\n  ---\\n  duration_ms: 18.071292\\n  type: 'test'\\n  ...\\n1..4\\n# tests 4\\n# suites 0\\n# pass 4\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 136.621818\",\n      \"stderrSummary\": \"\"\n    },\n    {\n      \"batch\": 1,\n      \"files\": [\n        \"packages/npm/cli/test/platform.test.mjs\",\n        \"packages/npm/cli/test/resolve-binary.test.mjs\",\n        \"packages/npm/cli/test/runtime.test.mjs\"\n      ],\n      \"file\": \"packages/npm/cli/test/resolve-binary.test.mjs\",\n      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"durationMs\": 302,\n      \"timeoutMs\": 45000,\n      \"error\": null,\n      \"stdoutSummary\": \"…\\n  ...\\n# Subtest: resolveBinary prefers MCPACE_DEV_BINARY when explicit path is given\\nok 2 - resolveBinary prefers MCPACE_DEV_BINARY when explicit path is given\\n  ---\\n  duration_ms: 1.038652\\n  type: 'test'\\n  ...\\n# Subtest: resolveBinary rejects a non-executable explicit binary path on unix\\nok 3 - resolveBinary rejects a non-executable explicit binary path on unix\\n  ---\\n  duration_ms: 1.799487\\n  type: 'test'\\n  ...\\n# Subtest: resolveBinary prefers a vendored binary from the workspace repo\\nok 4 - resolveBinary prefers a vendored binary from the workspace repo\\n  ---\\n  duration_ms: 33.74137\\n  type: 'test'\\n  ...\\n# Subtest: resolveBinary prefers a vendored binary next to the installed package\\nok 5 - resolveBinary prefers a vendored binary next to the installed package\\n  ---\\n  duration_ms: 20.783736\\n  type: 'test'\\n  ...\\n# Subtest: resolveBinary throws a helpful error when no binary is available\\nok 6 - resolveBinary throws a helpful error when no binary is available\\n  ---\\n  duration_ms: 16.057193\\n  type: 'test'\\n  ...\\n1..6\\n# tests 6\\n# suites 0\\n# pass 6\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 204.19283\",\n      \"stderrSummary\": \"\"\n    },\n    {\n      \"batch\": 1,\n      \"files\": [\n        \"packages/npm/cli/test/platform.test.mjs\",\n        \"packages/npm/cli/test/resolve-binary.test.mjs\",\n        \"packages/npm/cli/test/runtime.test.mjs\"\n      ],\n      \"file\": \"packages/npm/cli/test/runtime.test.mjs\",\n      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"durationMs\": 201,\n      \"timeoutMs\": 45000,\n      \"error\": null,\n      \"stdoutSummary\": \"TAP version 13\\n# Subtest: runtime launcher policy keeps Node 22+ as the supported floor\\nok 1 - runtime launcher policy keeps Node 22+ as the supported floor\\n  ---\\n  duration_ms: 1.553226\\n  type: 'test'\\n  ...\\n# Subtest: runtime launcher rejects unsupported Node majors with a clear message\\nok 2 - runtime launcher rejects unsupported Node majors with a clear message\\n  ---\\n  duration_ms: 1.077012\\n  type: 'test'\\n  ...\\n# Subtest: runtime launcher accepts maintained lanes\\nok 3 - runtime launcher accepts maintained lanes\\n  ---\\n  duration_ms: 0.301455\\n  type: 'test'\\n  ...\\n1..3\\n# tests 3\\n# suites 0\\n# pass 3\\n# fail 0\\n# cancelled 0\\n# skipped 0\\n# todo 0\\n# duration_ms 117.131811\",\n      \"stderrSummary\": \"\"\n    }\n  ]\n}",
+        "stderr": "[mcpace node-test] selected 3/3 files, batchSize=3\n[mcpace node-test] start batch 1/1 (3 files)\n[mcpace node-test] batch 1/1: pass (319ms)"
+      }
+    },
+    {
+      "name": "release-targets-gate",
+      "status": "pass",
+      "message": "npm run verify:release-targets passed",
+      "details": {
+        "status": 0,
+        "timedOut": false,
+        "stdout": "> mcpace-workspace@0.5.9 verify:release-targets\n> node scripts/verify-release-targets.mjs --json\n\n{\n  \"status\": \"pass\",\n  \"manifestPath\": \"release-targets.json\",\n  \"targetCount\": 6,\n  \"plannedTargetCount\": 2,\n  \"targets\": [\n    {\n      \"key\": \"linux-x64-gnu\",\n      \"rustTarget\": \"x86_64-unknown-linux-gnu\",\n      \"runner\": \"ubuntu-24.04\",\n      \"npmPackage\": \"@mcpace/cli-linux-x64-gnu\",\n      \"binaryName\": \"mcpace\"\n    },\n    {\n      \"key\": \"linux-arm64-gnu\",\n      \"rustTarget\": \"aarch64-unknown-linux-gnu\",\n      \"runner\": \"ubuntu-24.04-arm\",\n      \"npmPackage\": \"@mcpace/cli-linux-arm64-gnu\",\n      \"binaryName\": \"mcpace\"\n    },\n    {\n      \"key\": \"darwin-x64\",\n      \"rustTarget\": \"x86_64-apple-darwin\",\n      \"runner\": \"macos-15-intel\",\n      \"npmPackage\": \"@mcpace/cli-darwin-x64\",\n      \"binaryName\": \"mcpace\"\n    },\n    {\n      \"key\": \"darwin-arm64\",\n      \"rustTarget\": \"aarch64-apple-darwin\",\n      \"runner\": \"macos-15\",\n      \"npmPackage\": \"@mcpace/cli-darwin-arm64\",\n      \"binaryName\": \"mcpace\"\n    },\n    {\n      \"key\": \"win32-x64-msvc\",\n      \"rustTarget\": \"x86_64-pc-windows-msvc\",\n      \"runner\": \"windows-2025\",\n      \"npmPackage\": \"@mcpace/cli-win32-x64-msvc\",\n      \"binaryName\": \"mcpace.exe\"\n    },\n    {\n      \"key\": \"win32-arm64-msvc\",\n      \"rustTarget\": \"aarch64-pc-windows-msvc\",\n      \"runner\": \"windows-11-arm\",\n      \"npmPackage\": \"@mcpace/cli-win32-arm64-msvc\",\n      \"binaryName\": \"mcpace.exe\"\n    }\n  ],\n  \"nativeMatrix\": [\n    {\n      \"targetKey\": \"linux-x64-gnu\",\n      \"rustTarget\": \"x86_64-unknown-linux-gnu\",\n      \"runner\": \"ubuntu-24.04\",\n      \"npmPackage\": \"@mcpace/cli-linux-x64-gnu\",\n      \"binaryName\": \"mcpace\"\n    },\n    {\n      \"targetKey\": \"linux-arm64-gnu\",\n      \"rustTarget\": \"aarch64-unknown-linux-gnu\",\n      \"runner\": \"ubuntu-24.04-arm\",\n      \"npmPackage\": \"@mcpace/cli-linux-arm64-gnu\",\n      \"binaryName\": \"mcpace\"\n    },\n    {\n      \"targetKey\": \"darwin-x64\",\n      \"rustTarget\": \"x86_64-apple-darwin\",\n      \"runner\": \"macos-15-intel\",\n      \"npmPackage\": \"@mcpace/cli-darwin-x64\",\n      \"binaryName\": \"mcpace\"\n    },\n    {\n      \"targetKey\": \"darwin-arm64\",\n      \"rustTarget\": \"aarch64-apple-darwin\",\n      \"runner\": \"macos-15\",\n      \"npmPackage\": \"@mcpace/cli-darwin-arm64\",\n      \"binaryName\": \"mcpace\"\n    },\n    {\n      \"targetKey\": \"win32-x64-msvc\",\n      \"rustTarget\": \"x86_64-pc-windows-msvc\",\n      \"runner\": \"windows-2025\",\n      \"npmPackage\": \"@mcpace/cli-win32-x64-msvc\",\n      \"binaryName\": \"mcpace.exe\"\n    },\n    {\n      \"targetKey\": \"win32-arm64-msvc\",\n      \"rustTarget\": \"aarch64-pc-windows-msvc\",\n      \"runner\": \"windows-11-arm\",\n      \"npmPackage\": \"@mcpace/cli-win32-arm64-msvc\",\n      \"binaryName\": \"mcpace.exe\"\n    }\n  ],\n  \"workflows\": [\n    {\n      \"path\": \".github/workflows/release.yml\",\n      \"status\": \"pass\",\n      \"mode\": \"generated-native-matrix\",\n      \"issues\": []\n    },\n    {\n      \"path\": \".github/workflows/release-dry-run.yml\",\n      \"status\": \"pass\",\n      \"mode\": \"generated-native-matrix\",\n      \"issues\": []\n    }\n  ],\n  \"workflow\": {\n    \"path\": \".github/workflows/release.yml\",\n    \"status\": \"pass\",\n    \"mode\": \"generated-native-matrix\",\n    \"issues\": []\n  },\n  \"issues\": []\n}",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "platform-packages-gate",
+      "status": "pass",
+      "message": "npm run verify:platform-packages passed",
+      "details": {
+        "status": 0,
+        "timedOut": false,
+        "stdout": "> mcpace-workspace@0.5.9 verify:platform-packages\n> node scripts/verify-platform-packages.mjs --json\n\n{\n  \"version\": \"0.5.9\",\n  \"status\": \"pass\",\n  \"requireBinaries\": false,\n  \"checkedTargets\": [\n    \"linux-x64-gnu\",\n    \"linux-arm64-gnu\",\n    \"darwin-x64\",\n    \"darwin-arm64\",\n    \"win32-x64-msvc\",\n    \"win32-arm64-msvc\"\n  ],\n  \"issues\": [],\n  \"packages\": [\n    {\n      \"targetKey\": \"linux-x64-gnu\",\n      \"packageName\": \"@mcpace/cli-linux-x64-gnu\",\n      \"packageDir\": \"packages/npm/cli-linux-x64-gnu\",\n      \"binaryPresent\": false,\n      \"binaryPath\": \"packages/npm/cli-linux-x64-gnu/bin/mcpace\",\n      \"pack\": null,\n      \"status\": \"pass\",\n      \"issues\": []\n    },\n    {\n      \"targetKey\": \"linux-arm64-gnu\",\n      \"packageName\": \"@mcpace/cli-linux-arm64-gnu\",\n      \"packageDir\": \"packages/npm/cli-linux-arm64-gnu\",\n      \"binaryPresent\": false,\n      \"binaryPath\": \"packages/npm/cli-linux-arm64-gnu/bin/mcpace\",\n      \"pack\": null,\n      \"status\": \"pass\",\n      \"issues\": []\n    },\n    {\n      \"targetKey\": \"darwin-x64\",\n      \"packageName\": \"@mcpace/cli-darwin-x64\",\n      \"packageDir\": \"packages/npm/cli-darwin-x64\",\n      \"binaryPresent\": false,\n      \"binaryPath\": \"packages/npm/cli-darwin-x64/bin/mcpace\",\n      \"pack\": null,\n      \"status\": \"pass\",\n      \"issues\": []\n    },\n    {\n      \"targetKey\": \"darwin-arm64\",\n      \"packageName\": \"@mcpace/cli-darwin-arm64\",\n      \"packageDir\": \"packages/npm/cli-darwin-arm64\",\n      \"binaryPresent\": false,\n      \"binaryPath\": \"packages/npm/cli-darwin-arm64/bin/mcpace\",\n      \"pack\": null,\n      \"status\": \"pass\",\n      \"issues\": []\n    },\n    {\n      \"targetKey\": \"win32-x64-msvc\",\n      \"packageName\": \"@mcpace/cli-win32-x64-msvc\",\n      \"packageDir\": \"packages/npm/cli-win32-x64-msvc\",\n      \"binaryPresent\": false,\n      \"binaryPath\": \"packages/npm/cli-win32-x64-msvc/bin/mcpace.exe\",\n      \"pack\": null,\n      \"status\": \"pass\",\n      \"issues\": []\n    },\n    {\n      \"targetKey\": \"win32-arm64-msvc\",\n      \"packageName\": \"@mcpace/cli-win32-arm64-msvc\",\n      \"packageDir\": \"packages/npm/cli-win32-arm64-msvc\",\n      \"binaryPresent\": false,\n      \"binaryPath\": \"packages/npm/cli-win32-arm64-msvc/bin/mcpace.exe\",\n      \"pack\": null,\n      \"status\": \"pass\",\n      \"issues\": []\n    }\n  ]\n}",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "npm-pack-gate",
+      "status": "pass",
+      "message": "npm run verify:npm-pack passed",
+      "details": {
+        "status": 0,
+        "timedOut": false,
+        "stdout": "> mcpace-workspace@0.5.9 verify:npm-pack\n> node scripts/verify-npm-pack.mjs --json --write reports/verify-npm-pack-latest.json\n\n{\n  \"schema\": \"mcpace.npmPack.v1\",\n  \"generatedAt\": \"2026-05-11T11:37:56.581Z\",\n  \"status\": \"pass\",\n  \"workspace\": \"@mcpace/cli\",\n  \"command\": \"npm pack --workspace @mcpace/cli --json --dry-run\",\n  \"packageMode\": \"vendored-binary-bundle\",\n  \"requiredFiles\": [\n    \"README.md\",\n    \"LICENSE\",\n    \"package.json\",\n    \"bin/mcpace.js\",\n    \"lib/platform.js\",\n    \"lib/resolve-binary.js\",\n    \"lib/runtime.js\"\n  ],\n  \"repoVendoredBinaryFiles\": [\n    \"vendor/linux-x64-gnu/mcpace\",\n    \"vendor/win32-x64-msvc/mcpace.exe\"\n  ],\n  \"packageName\": \"@mcpace/cli\",\n  \"packageVersion\": \"0.5.9\",\n  \"expectedVersion\": \"0.5.9\",\n  \"packFilename\": \"mcpace-cli-0.5.9.tgz\",\n  \"entryCount\": 10,\n  \"unpackedSize\": 3303694,\n  \"files\": [\n    \"bin/mcpace.js\",\n    \"lib/platform.js\",\n    \"lib/resolve-binary.js\",\n    \"lib/runtime.js\",\n    \"lib/targets.js\",\n    \"LICENSE\",\n    \"package.json\",\n    \"README.md\",\n    \"vendor/linux-x64-gnu/mcpace\",\n    \"vendor/win32-x64-msvc/mcpace.exe\"\n  ],\n  \"fileDetails\": [\n    {\n      \"path\": \"bin/mcpace.js\",\n      \"mode\": 420,\n      \"size\": 734\n    },\n    {\n      \"path\": \"lib/platform.js\",\n      \"mode\": 420,\n      \"size\": 2972\n    },\n    {\n      \"path\": \"lib/resolve-binary.js\",\n      \"mode\": 420,\n      \"size\": 4688\n    },\n    {\n      \"path\": \"lib/runtime.js\",\n      \"mode\": 420,\n      \"size\": 905\n    },\n    {\n      \"path\": \"lib/targets.js\",\n      \"mode\": 420,\n      \"size\": 4543\n    },\n    {\n      \"path\": \"LICENSE\",\n      \"mode\": 420,\n      \"size\": 5532\n    },\n    {\n      \"path\": \"package.json\",\n      \"mode\": 420,\n      \"size\": 1046\n    },\n    {\n      \"path\": \"README.md\",\n      \"mode\": 420,\n      \"size\": 1370\n    },\n    {\n      \"path\": \"vendor/linux-x64-gnu/mcpace\",\n      \"mode\": 493,\n      \"size\": 1786864\n    },\n    {\n      \"path\": \"vendor/win32-x64-msvc/mcpace.exe\",\n      \"mode\": 493,\n      \"size\": 1495040\n    }\n  ],\n  \"missingFiles\": [],\n  \"packedVendoredBinaryFiles\": [\n    \"vendor/linux-x64-gnu/mcpace\",\n    \"vendor/win32-x64-msvc/mcpace.exe\"\n  ],\n  \"packedVendoredBinaryFileDetails\": [\n    {\n      \"path\": \"vendor/linux-x64-gnu/mcpace\",\n      \"mode\": 493,\n      \"size\": 1786864\n    },\n    {\n      \"path\": \"vendor/win32-x64-msvc/mcpace.exe\",\n      \"mode\": 493,\n      \"size\": 1495040\n    }\n  ],\n  \"missingVendoredBinaryFiles\": [],\n  \"nonExecutableVendoredBinaryFiles\": [],\n  \"reportPath\": \"reports/verify-npm-pack-latest.json\"\n}",
+        "stderr": ""
+      }
+    },
+    {
+      "name": "xdg-config-root-parent-writable",
+      "status": "pass",
+      "message": "writable: /mnt/data",
+      "details": {
+        "root": "/mnt/data/mcpace_ideal_final_source",
+        "status": "pass",
+        "message": "writable: /mnt/data",
+        "path": "/mnt/data"
+      }
+    },
+    {
+      "name": "xdg-state-root-parent-writable",
+      "status": "pass",
+      "message": "writable: /home/oai/.local/state",
+      "details": {
+        "stateRoot": "/home/oai/.local/state/mcpace",
+        "status": "pass",
+        "message": "writable: /home/oai/.local/state",
+        "path": "/home/oai/.local/state"
+      }
+    },
+    {
+      "name": "serve-host-local-only",
+      "status": "pass",
+      "message": "serve host=127.0.0.1",
+      "details": {
+        "allowedLocalHosts": [
+          "127.0.0.1",
+          "localhost",
+          "::1"
+        ]
+      }
+    },
+    {
+      "name": "systemd-user",
+      "status": "warn",
+      "message": "Failed to connect to user scope bus via local transport: Is a directory",
+      "details": {
+        "available": false,
+        "reason": "Failed to connect to user scope bus via local transport: Is a directory"
+      }
+    },
+    {
+      "name": "npx-upstream-env-vars",
+      "status": "pass",
+      "message": "npx upstream env_vars look configured or no npx upstreams enabled",
+      "details": {
+        "status": "pass",
+        "message": "npx upstream env_vars look configured or no npx upstreams enabled",
+        "findings": [],
+        "baselineEnvVars": [
+          "NPM_CONFIG_REGISTRY",
+          "NPM_CONFIG_USERCONFIG",
+          "NPM_CONFIG_GLOBALCONFIG",
+          "NPM_CONFIG_CACHE",
+          "NODE_EXTRA_CA_CERTS",
+          "SSL_CERT_FILE",
+          "REQUESTS_CA_BUNDLE",
+          "HTTP_PROXY",
+          "HTTPS_PROXY",
+          "NO_PROXY",
+          "http_proxy",
+          "https_proxy",
+          "no_proxy",
+          "CI"
+        ]
+      }
+    },
+    {
+      "name": "inline-server-env-secrets",
+      "status": "pass",
+      "message": "no inline env blocks detected in enabled npx upstreams",
+      "details": {
+        "servers": []
+      }
+    },
+    {
+      "name": "mcpace-binary",
+      "status": "warn",
+      "message": "mcpace binary not found in --bin/PATH/target",
+      "details": {
+        "bin": null
+      }
+    },
+    {
+      "name": "release-manifest-hygiene",
+      "status": "pass",
+      "message": "release manifest excludes local/private machine-state paths",
+      "details": {
+        "dangerous": [],
+        "missing": [],
+        "rootScreenshots": []
+      }
+    },
+    {
+      "name": "archive-release-exclusions",
+      "status": "pass",
+      "message": "archive-release excludes known local machine-state directories",
+      "details": {
+        "missing": []
+      }
+    },
+    {
+      "name": "vendored-executable-bits",
+      "status": "pass",
+      "message": "vendored Unix binaries are executable",
+      "details": {
+        "findings": []
+      }
+    },
+    {
+      "name": "linux-npm-install-docker-script",
+      "status": "pass",
+      "message": "test:linux-npm-install:docker => node scripts/verify-linux-npm-install-docker.mjs --json",
+      "details": {
+        "script": "node scripts/verify-linux-npm-install-docker.mjs --json"
+      }
+    },
+    {
+      "name": "linux-npm-install-docker-proof",
+      "status": "skip",
+      "message": "Docker proof not executed for this profile",
+      "details": {
+        "profile": "host",
+        "noDocker": true
+      }
+    }
+  ]
+}

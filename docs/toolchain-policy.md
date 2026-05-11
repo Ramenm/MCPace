@@ -19,7 +19,7 @@ CI workflow, and the docs together.
 - supported contributor and CI lanes are **Node 22 LTS** and **Node 24 LTS**;
 - the default local-development line is **Node 24**, recorded in **`.nvmrc`** and
   **`.node-version`**;
-- the repo engine floor is **`>=22.0.0`** and the workspace expects **npm 10+** while pinning **`npm@11.12.1`** as the default `packageManager`;
+- the repo engine floor is **`>=22.0.0`** and the workspace expects **npm 10+** while pinning **`npm@11.13.0`** as the default `packageManager`;
 - `package.json` keeps a pinned `packageManager` plus `devEngines` ranges so
   unsupported stacks fail fast instead of drifting silently;
 - future platform-specific binary packages should declare `os`, `cpu`, and
@@ -39,12 +39,24 @@ CI workflow, and the docs together.
 ## CI policy
 
 - GitHub Actions use **`actions/checkout@v6`** and **`actions/setup-node@v6`**;
-- Node source validation runs a slim matrix: **Ubuntu** carries both maintained
-  Node majors, while **Windows** and **macOS** run the default local line;
+- default pull-request/push CI is intentionally budget-first: **Ubuntu** carries
+  both maintained Node majors, **Ubuntu** runs the full Rust quality/lifecycle
+  gates, and **Windows** keeps a single targeted launcher smoke for host-specific
+  process behavior;
 - npm package dry-run proof is a separate Ubuntu job that resolves Node from
   **`.nvmrc`**;
-- Rust build proof runs on **Ubuntu, Windows, and macOS** with the pinned
-  toolchain;
+- `actions/setup-node` has `package-manager-cache: false` because the repo has no
+  npm lockfile and CI should not fail before tests while trying to auto-enable a
+  dependency cache;
+- artifact upload/download actions should stay on Node 24-compatible major
+  versions so the workflows do not break when GitHub removes Node 20 action
+  support;
+- expensive hosted platform lanes (**Windows** full source/Rust validation,
+  **macOS** hosted validation, and Docker proofs) are opt-in through
+  `workflow_dispatch` with `full_ci: true` or a pull-request label named
+  **`full-ci`**;
+- release dry-runs are manual-only; run `release-dry-run` before cutting a tag
+  when native package proof is needed across Linux, Windows, and macOS;
 - the workflow uses read-only permissions and cancels superseded runs so the CI
   surface stays cheaper to maintain.
 

@@ -56,3 +56,5 @@ npm run build:release-artifacts
 Under the hood the bundle builder still uses `scripts/archive-release.mjs` to
 create `<project-name>-v<version>-<ddmmyy-hhmmss>.zip`, but it also avoids stale
 `dist/` entries from polluting the release checksums.
+
+`npm run verify:npm-pack` writes `reports/verify-npm-pack-latest.json`; this report must include packed vendored binary mode details so release gates can catch non-executable POSIX binaries before publication.

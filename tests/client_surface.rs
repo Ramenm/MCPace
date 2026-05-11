@@ -14,7 +14,7 @@ fn client_plan_json_uses_metadata_and_arbitrates_unsafe_servers() {
         r#"{
   "version": "0.3.5",
   "servers": {
-    "browser": {
+    "interactive-demo": {
       "kind": "host-bridge",
       "required": true,
       "transportPreference": "http",
@@ -71,7 +71,7 @@ fn client_plan_json_uses_metadata_and_arbitrates_unsafe_servers() {
         root.join("mcp_settings.json"),
         r#"{
   "mcpServers": {
-    "browser": { "enabled": true, "type": "http", "url": "http://127.0.0.1:39022/mcp" },
+    "interactive-demo": { "enabled": true, "type": "http", "url": "http://127.0.0.1:39022/mcp" },
     "filesystem": { "enabled": true, "type": "stdio", "command": "node" },
     "memory": { "enabled": true, "type": "stdio", "command": "node" }
   }
@@ -95,11 +95,11 @@ fn client_plan_json_uses_metadata_and_arbitrates_unsafe_servers() {
     assert!(text.contains(r#""clientExportImplemented": true"#));
     assert!(text.contains(r#""requiresHubOwnedStdio": true"#));
     assert!(text.contains(r#""requestStrategy": "serialize-per-project-instance""#));
-    assert!(text.contains(r#""requestStrategy": "serialize-per-browser-profile""#));
+    assert!(text.contains(r#""requestStrategy": "serialize-per-state-profile""#));
     assert!(text.contains(r#""requestStrategy": "parallel-safe""#));
-    assert!(text.contains(r#""browserProfileKey": "browser-profile:browser"#));
+    assert!(text.contains(r#""stateProfileKey": "state-profile:interactive-demo"#));
     assert!(text.contains(r#""projectBindingKey": "project:/work/project-a""#));
-    assert!(text.contains(r#""schedulerLane": "browser-profile-queue""#));
+    assert!(text.contains(r#""schedulerLane": "state-profile-queue""#));
     assert!(text.contains(r#""sessionLeaseId": "external:sess-42""#));
     assert!(text.contains(r#""clientTargetId": "codex""#));
     assert!(text.contains(
@@ -381,7 +381,7 @@ fn client_install_codex_json_replaces_unmanaged_user_table_and_is_idempotent() {
     fs::write(
         codex_dir.join("config.toml"),
         r#"[mcp_servers.other]
-command = "other"
+command = "definitely-missing-mcpace-command-xyz"
 args = ["serve"]
 enabled = true
 
@@ -409,11 +409,15 @@ enabled = false
     assert!(first_text.contains(r#""mode": "installed""#));
     assert!(first_text.contains(r#""clientTargetId": "codex""#));
     assert!(first_text.contains(r#""writesConfig": true"#));
+    assert!(first_text.contains(r#""backupCreated": true"#));
+    assert!(first_text.contains(r#""restoreCommand": "mcpace client restore codex --backup "#));
     assert!(first_text.contains(r#""configScope": "user""#));
     assert!(first_text.contains(r#""changed": true"#));
     assert!(first_text.contains(r#""replacedExistingBlock": true"#));
     assert!(first_text.contains(r#""transport": "streamable-http""#));
     assert!(first_text.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+    assert!(first_text.contains("definitely-missing-mcpace-command-xyz"));
+    assert!(first_text.contains("MCP clients can fail startup before reaching MCPace"));
 
     let config_path = codex_dir.join("config.toml");
     let installed = fs::read_to_string(&config_path).unwrap();
@@ -438,10 +442,399 @@ enabled = false
     assert!(second.status.success(), "stderr: {}", stderr(&second));
     let second_text = stdout(&second);
     assert!(second_text.contains(r#""changed": false"#));
+    assert!(second_text.contains(r#""backupCreated": false"#));
     assert!(second_text.contains(r#""replacedExistingBlock": true"#));
 
     let reinstalled = fs::read_to_string(&config_path).unwrap();
     assert_eq!(installed, reinstalled);
+}
+
+#[test]
+fn client_install_restore_latest_restores_previous_config() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let codex_dir = home.path().join(".codex");
+    fs::create_dir_all(&codex_dir).unwrap();
+    let config_path = codex_dir.join("config.toml");
+    let original = r#"[mcp_servers.other]
+command = "other"
+args = ["serve"]
+enabled = true
+
+[mcp_servers.MCPace]
+command = "old-mcpace"
+args = ["stdio-shim"]
+enabled = false
+"#;
+    fs::write(&config_path, original).unwrap();
+
+    let install = run_with_envs(
+        &[
+            "client",
+            "install",
+            "codex",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(install.status.success(), "stderr: {}", stderr(&install));
+    let install_text = stdout(&install);
+    assert!(install_text.contains(r#""backupCreated": true"#));
+    assert!(install_text.contains(r#""backupId": ""#));
+    assert_ne!(fs::read_to_string(&config_path).unwrap(), original);
+
+    fs::write(&config_path, "broken = true\n").unwrap();
+    let restore = run_with_envs(
+        &[
+            "client",
+            "restore",
+            "codex",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(restore.status.success(), "stderr: {}", stderr(&restore));
+    let restore_text = stdout(&restore);
+    assert!(restore_text.contains(r#""mode": "restored""#));
+    assert!(restore_text.contains(r#""clientTargetId": "codex""#));
+    assert!(restore_text.contains(r#""restoredExistingConfig": true"#));
+    assert!(restore_text.contains(r#""wroteConfigFile": true"#));
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+}
+
+#[test]
+fn client_install_restore_latest_removes_config_created_by_install() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let config_path = home.path().join(".codex").join("config.toml");
+    assert!(!config_path.exists());
+    let install = run_with_envs(
+        &[
+            "client",
+            "install",
+            "codex",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(install.status.success(), "stderr: {}", stderr(&install));
+    assert!(config_path.is_file());
+
+    let restore = run_with_envs(
+        &[
+            "client",
+            "restore",
+            "codex",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(restore.status.success(), "stderr: {}", stderr(&restore));
+    let restore_text = stdout(&restore);
+    assert!(restore_text.contains(r#""restoredExistingConfig": false"#));
+    assert!(restore_text.contains(r#""removedConfigFile": true"#));
+    assert!(!config_path.exists());
+}
+
+#[test]
+fn client_restore_all_restores_latest_install_backups() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run_with_envs(
+        &[
+            "client",
+            "install",
+            "all",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let codex_config = home.path().join(".codex").join("config.toml");
+    let claude_config = home.path().join(".claude.json");
+    let cursor_config = home.path().join(".cursor").join("mcp.json");
+    assert!(codex_config.is_file());
+    assert!(claude_config.is_file());
+    assert!(cursor_config.is_file());
+
+    let restore = run_with_envs(
+        &[
+            "client",
+            "restore",
+            "all",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(restore.status.success(), "stderr: {}", stderr(&restore));
+    let restore_text = stdout(&restore);
+    assert!(restore_text.contains(r#""mode": "restored-all""#));
+    assert!(restore_text.contains(r#""clientTargetId": "codex""#));
+    assert!(restore_text.contains(r#""clientTargetId": "claude-code""#));
+    assert!(restore_text.contains(r#""clientTargetId": "cursor-local""#));
+    assert!(!codex_config.exists());
+    assert!(!claude_config.exists());
+    assert!(!cursor_config.exists());
+}
+
+#[test]
+fn client_install_codex_dry_run_does_not_write_and_can_emit_diff() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let codex_dir = home.path().join(".codex");
+    fs::create_dir_all(&codex_dir).unwrap();
+    let config_path = codex_dir.join("config.toml");
+    let original = r#"[mcp_servers.other]
+command = "other"
+args = ["serve"]
+enabled = true
+api_key = "super-secret"
+env = { api_secret = "nested-secret" }
+args = ["serve", "--api-token=array-secret"]
+private_key = """
+-----BEGIN MCPACE TEST REDACTION BLOCK-----
+multi-line-secret
+-----END MCPACE TEST REDACTION BLOCK-----
+"""
+[mcp_servers.other.extra]
+enabled = true
+"#;
+    fs::write(&config_path, original).unwrap();
+
+    let output = run_with_envs(
+        &[
+            "client",
+            "install",
+            "codex",
+            "--dry-run",
+            "--diff",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""mode": "install-preview""#));
+    assert!(text.contains(r#""dryRun": true"#));
+    assert!(text.contains(r#""writesConfig": false"#));
+    assert!(text.contains(r#""persisted": false"#));
+    assert!(text.contains(r#""backupCreated": false"#));
+    assert!(text.contains(r#""changed": false"#));
+    assert!(text.contains(r#""wouldChange": true"#));
+    assert!(text.contains(r#""diff": "--- "#));
+    assert!(!text.contains("super-secret"));
+    assert!(!text.contains("nested-secret"));
+    assert!(!text.contains("array-secret"));
+    assert!(!text.contains("multi-line-secret"));
+    assert!(!text.contains("BEGIN MCPACE TEST REDACTION BLOCK"));
+    assert!(text.contains(r#"-api_key = \"[redacted]\""#));
+    assert!(text.contains("-[REDACTED]"));
+    assert!(text.contains("[mcp_servers.other.extra]"));
+    assert!(text.contains("+# BEGIN MCPACE MANAGED BLOCK: MCPace"));
+    assert!(text.contains(r#"+url = \"http://127.0.0.1:39022/mcp\""#));
+
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+}
+
+#[test]
+fn client_install_dry_run_on_current_config_reports_no_candidate_change() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let install = run_with_envs(
+        &[
+            "client",
+            "install",
+            "codex",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(install.status.success(), "stderr: {}", stderr(&install));
+
+    let preview = run_with_envs(
+        &[
+            "client",
+            "install",
+            "codex",
+            "--dry-run",
+            "--diff",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(preview.status.success(), "stderr: {}", stderr(&preview));
+    let text = stdout(&preview);
+    assert!(text.contains(r#""mode": "install-preview""#));
+    assert!(text.contains(r#""dryRun": true"#));
+    assert!(text.contains(r#""backupCreated": false"#));
+    assert!(text.contains(r#""changed": false"#));
+    assert!(text.contains(r#""wouldChange": false"#));
+    assert!(text.contains(r#""diff": """#));
+}
+
+#[test]
+fn client_install_all_dry_run_previews_without_creating_config_files() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let output = run_with_envs(
+        &[
+            "client",
+            "install",
+            "all",
+            "--dry-run",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+    let text = stdout(&output);
+    assert!(text.contains(r#""mode": "install-preview-all""#));
+    assert!(text.contains(r#""dryRun": true"#));
+    assert!(text.contains(r#""clientTargetId": "codex""#));
+    assert!(text.contains(r#""clientTargetId": "cursor-local""#));
+    assert!(text.contains(r#""wouldChange": true"#));
+    assert!(!home.path().join(".codex").join("config.toml").exists());
+    assert!(!home.path().join(".cursor").join("mcp.json").exists());
+    assert!(!home.path().join(".claude.json").exists());
+    assert!(!home.path().join(".hermes").join("config.yaml").exists());
+}
+
+#[test]
+fn client_rejects_dry_run_and_diff_outside_install() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+
+    let export = run(&[
+        "client",
+        "export",
+        "codex",
+        "--dry-run",
+        "--diff",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(!export.status.success());
+    assert!(stderr(&export).contains("supported only for 'mcpace client install'"));
+
+    let install = run(&[
+        "client",
+        "install",
+        "codex",
+        "--backup",
+        "latest",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(!install.status.success());
+    assert!(stderr(&install).contains("supported only for 'mcpace client restore'"));
 }
 
 #[test]
@@ -632,6 +1025,89 @@ fn client_install_claude_code_writes_user_json_config() {
     assert!(installed.contains(r#""MCPace""#));
     assert!(installed.contains(r#""type": "http""#));
     assert!(installed.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+}
+
+#[test]
+fn client_install_claude_code_preserves_realistic_user_config_and_restore_round_trip() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    let config_path = home.path().join(".claude.json");
+    let original = r#"{
+  "theme": "dark",
+  "permissions": {
+    "allow": ["Bash(git status:*)", "Read(**/*.rs)"],
+    "deny": ["Bash(rm -rf:*)"]
+  },
+  "hooks": {
+    "Stop": [
+      { "matcher": "*", "hooks": [{ "type": "command", "command": "echo done" }] }
+    ]
+  },
+  "mcpServers": {
+    "existing-local": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["server.js"]
+    },
+    "MCPace": {
+      "type": "http",
+      "url": "http://127.0.0.1:1/old"
+    }
+  }
+}"#;
+    fs::write(&config_path, original).unwrap();
+
+    let install = run_with_envs(
+        &[
+            "client",
+            "install",
+            "claude-code",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(install.status.success(), "stderr: {}", stderr(&install));
+    let install_text = stdout(&install);
+    assert!(install_text.contains(r#""backupCreated": true"#));
+    assert!(install_text.contains(r#""replacedExistingBlock": true"#));
+
+    let installed = fs::read_to_string(&config_path).unwrap();
+    assert!(installed.contains(r#""theme": "dark""#));
+    assert!(installed.contains(r#""permissions""#));
+    assert!(installed.contains(r#""hooks""#));
+    assert!(installed.contains(r#""existing-local""#));
+    assert!(installed.contains(r#""command": "node""#));
+    assert!(installed.contains(r#""url": "http://127.0.0.1:39022/mcp""#));
+    assert!(!installed.contains("http://127.0.0.1:1/old"));
+
+    let restore = run_with_envs(
+        &[
+            "client",
+            "restore",
+            "claude-code",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(restore.status.success(), "stderr: {}", stderr(&restore));
+    assert!(stdout(&restore).contains(r#""mode": "restored""#));
+    assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
 }
 
 #[test]
@@ -830,6 +1306,64 @@ mcp_servers:
 
     let reinstalled = fs::read_to_string(&config_path).unwrap();
     assert_eq!(installed, reinstalled);
+}
+
+#[test]
+fn client_install_hermes_agent_preserves_comments_and_later_yaml_sections() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    let home = TempDir::new();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    fs::create_dir_all(home.path().join(".hermes")).unwrap();
+    fs::write(
+        home.path().join(".hermes").join("config.yaml"),
+        r#"# user-owned Hermes config
+model: nous/hermes-3
+mcp_servers:
+  # keep this user server
+  research:
+    url: "https://mcp.example.com/research"
+tools:
+  enabled: true
+"#,
+    )
+    .unwrap();
+
+    let output = run_with_envs(
+        &[
+            "client",
+            "install",
+            "hermes-agent",
+            "--json",
+            "--root",
+            root.to_str().unwrap(),
+        ],
+        &[("HOME", home.path()), ("USERPROFILE", home.path())],
+    );
+    assert!(output.status.success(), "stderr: {}", stderr(&output));
+
+    let installed = fs::read_to_string(home.path().join(".hermes").join("config.yaml")).unwrap();
+    assert!(installed.contains("# user-owned Hermes config"));
+    assert!(installed.contains("  # keep this user server"));
+    assert!(installed.contains("  research:"));
+    assert!(installed.contains("  MCPace:"));
+    assert!(installed.contains("tools:"));
+    assert!(installed.contains("  enabled: true"));
+    assert!(
+        installed.find("  MCPace:").unwrap() < installed.find("tools:").unwrap(),
+        "MCPace entry should stay inside mcp_servers section:\n{}",
+        installed
+    );
 }
 
 #[test]

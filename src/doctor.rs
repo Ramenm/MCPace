@@ -1,5 +1,7 @@
+use crate::codex_config;
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::mcp_sources;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -26,6 +28,9 @@ pub struct ProjectStatus {
     pub npm_surface_ready: bool,
     pub runtime_prerequisites_ready: bool,
     pub container_tooling_ready: bool,
+    pub runtime_prerequisites: Vec<RuntimePrerequisiteStatus>,
+    pub missing_runtime_prerequisites: Vec<String>,
+    pub client_config_warnings: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -34,6 +39,13 @@ pub struct ToolStatus {
     pub required: bool,
     pub found: bool,
     pub version: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct RuntimePrerequisiteStatus {
+    pub name: String,
+    pub found: bool,
+    pub reasons: Vec<String>,
 }
 
 struct ToolProbeSpec {
@@ -140,6 +152,32 @@ impl ProjectStatus {
             "containerToolingReady".to_string(),
             JsonValue::bool(self.container_tooling_ready),
         );
+        map.insert(
+            "runtimePrerequisites".to_string(),
+            JsonValue::array(
+                self.runtime_prerequisites
+                    .iter()
+                    .map(RuntimePrerequisiteStatus::to_json_value),
+            ),
+        );
+        map.insert(
+            "missingRuntimePrerequisites".to_string(),
+            JsonValue::array(
+                self.missing_runtime_prerequisites
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
+        );
+        map.insert(
+            "clientConfigWarnings".to_string(),
+            JsonValue::array(
+                self.client_config_warnings
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
+        );
         JsonValue::Object(map)
     }
 }
@@ -162,10 +200,31 @@ impl ToolStatus {
     }
 }
 
+impl RuntimePrerequisiteStatus {
+    fn to_json_value(&self) -> JsonValue {
+        JsonValue::object([
+            ("name", JsonValue::string(self.name.clone())),
+            ("found", JsonValue::bool(self.found)),
+            (
+                "reasons",
+                JsonValue::array(self.reasons.iter().cloned().map(JsonValue::string)),
+            ),
+        ])
+    }
+}
+
 pub fn run(root_path: Option<PathBuf>) -> Report {
+    run_with_version_probe_policy(root_path, true)
+}
+
+pub fn run_without_version_probes(root_path: Option<PathBuf>) -> Report {
+    run_with_version_probe_policy(root_path, false)
+}
+
+fn run_with_version_probe_policy(root_path: Option<PathBuf>, probe_versions: bool) -> Report {
     let tools = TOOL_PROBE_SPECS
         .iter()
-        .map(|spec| tool_status(spec.name, spec.required, spec.version_args))
+        .map(|spec| tool_status(spec.name, spec.required, spec.version_args, probe_versions))
         .collect::<Vec<_>>();
     let project = load_project_status(root_path.as_deref(), &tools);
     Report { project, tools }
@@ -206,6 +265,16 @@ pub fn write_text_report(report: &Report, stdout: &mut dyn std::io::Write) {
         "Optional container tooling readiness: {}",
         yes_no(report.project.container_tooling_ready)
     );
+    let _ = writeln!(
+        stdout,
+        "Missing runtime prerequisites: {}",
+        join_or_none(&report.project.missing_runtime_prerequisites)
+    );
+    let _ = writeln!(
+        stdout,
+        "Client config warnings: {}",
+        join_or_none(&report.project.client_config_warnings)
+    );
     let _ = writeln!(stdout, "Tools:");
     for tool in &report.tools {
         let state = if tool.found { "found" } else { "missing" };
@@ -223,6 +292,14 @@ pub fn write_text_report(report: &Report, stdout: &mut dyn std::io::Write) {
             "- {}: {} ({}, {})",
             tool.name, state, required, version
         );
+    }
+}
+
+fn join_or_none(values: &[String]) -> String {
+    if values.is_empty() {
+        "none".to_string()
+    } else {
+        values.join(", ")
     }
 }
 
@@ -265,7 +342,13 @@ fn load_project_status(root_path: Option<&Path>, tools: &[ToolStatus]) -> Projec
     let node_ready = tool_found(tools, "node");
     let npm_ready = tool_found(tools, "npm");
     let docker_ready = tool_found(tools, "docker");
-    let container_tooling_required = runtime_requires_container_tooling(root_path);
+    let runtime_prerequisites = collect_runtime_prerequisites(root_path);
+    let missing_runtime_prerequisites = runtime_prerequisites
+        .iter()
+        .filter(|prerequisite| !prerequisite.found)
+        .map(|prerequisite| prerequisite.name.clone())
+        .collect::<Vec<_>>();
+    let client_config_warnings = collect_client_config_warnings();
 
     ProjectStatus {
         root_path: root_path_string,
@@ -276,42 +359,196 @@ fn load_project_status(root_path: Option<&Path>, tools: &[ToolStatus]) -> Projec
         config_version,
         rust_source_ready: cargo_manifest_found && cargo_ready && rustc_ready,
         npm_surface_ready: npm_workspace_found && node_ready && npm_ready,
-        runtime_prerequisites_ready: config_found && (!container_tooling_required || docker_ready),
+        runtime_prerequisites_ready: config_found && missing_runtime_prerequisites.is_empty(),
         container_tooling_ready: docker_ready,
+        runtime_prerequisites,
+        missing_runtime_prerequisites,
+        client_config_warnings,
     }
 }
 
-fn runtime_requires_container_tooling(root_path: Option<&Path>) -> bool {
+fn collect_client_config_warnings() -> Vec<String> {
+    let Some(home) = user_home_dir() else {
+        return Vec::new();
+    };
+    let mut warnings = Vec::new();
+    warnings.extend(collect_codex_toml_command_warnings(
+        &home.join(".codex").join("config.toml"),
+    ));
+    warnings.sort();
+    warnings.dedup();
+    warnings
+}
+
+fn collect_codex_toml_command_warnings(config_path: &Path) -> Vec<String> {
+    let Ok(contents) = std::fs::read_to_string(config_path) else {
+        return Vec::new();
+    };
+    codex_config::missing_mcp_server_commands(&contents, None)
+        .into_iter()
+        .map(|entry| {
+            format!(
+                "Codex MCP server '{}' in '{}' uses command '{}', but that program was not found on PATH; this can fail MCP startup before MCPace runs.",
+                entry.server_name,
+                config_path.display(),
+                entry.command
+            )
+        })
+        .collect()
+}
+
+fn user_home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
+fn collect_runtime_prerequisites(root_path: Option<&Path>) -> Vec<RuntimePrerequisiteStatus> {
     let Some(root_path) = root_path else {
-        return false;
+        return Vec::new();
     };
     let config_path = root_path.join("mcpace.config.json");
-    let Ok(config) = json_helpers::read_json_file(&config_path) else {
-        return false;
-    };
-    let Some(servers) = json_helpers::object_at_path(&config, &["servers"]) else {
-        return false;
+    let config = json_helpers::read_json_file(&config_path).ok();
+    let servers = config
+        .as_ref()
+        .and_then(|value| json_helpers::object_at_path(value, &["servers"]));
+    let source_settings = load_source_runtime_commands(root_path);
+
+    let mut required_commands: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for (server_name, command) in &source_settings {
+        add_runtime_prerequisite(
+            &mut required_commands,
+            command,
+            format!("enabled stdio source command for server '{}'", server_name),
+        );
+    }
+
+    if let Some(servers) = servers {
+        for (server_name, server) in servers {
+            let Some(server) = server.as_object() else {
+                continue;
+            };
+            let kind = server
+                .get("kind")
+                .and_then(JsonValue::as_str)
+                .map(|value| value.trim().to_ascii_lowercase())
+                .unwrap_or_default();
+            let runtime_enabled = ["required", "defaultEnabled", "autoStart"]
+                .iter()
+                .any(|key| {
+                    server
+                        .get(*key)
+                        .and_then(JsonValue::as_bool)
+                        .unwrap_or(false)
+                });
+            if !runtime_enabled {
+                continue;
+            }
+
+            if kind.starts_with("container-") {
+                add_runtime_prerequisite(
+                    &mut required_commands,
+                    "docker",
+                    format!("container runtime required by server '{}'", server_name),
+                );
+            }
+
+            for command in json_helpers::strings_from_array(
+                server.get("requiredCommands").and_then(JsonValue::as_array),
+            ) {
+                add_runtime_prerequisite(
+                    &mut required_commands,
+                    &command,
+                    format!("requiredCommands entry for server '{}'", server_name),
+                );
+            }
+        }
+    }
+
+    required_commands
+        .into_iter()
+        .map(|(name, reasons)| RuntimePrerequisiteStatus {
+            found: command_available(&name),
+            name,
+            reasons,
+        })
+        .collect()
+}
+
+fn load_source_runtime_commands(root_path: &Path) -> BTreeMap<String, String> {
+    let Ok(registry) = mcp_sources::load_mcp_server_registry(root_path) else {
+        return BTreeMap::new();
     };
 
-    servers.values().any(|server| {
-        let Some(server) = server.as_object() else {
-            return false;
+    let mut commands = BTreeMap::new();
+    for entry in registry.servers.values() {
+        let Some(server) = entry.value.as_object() else {
+            continue;
         };
-        let kind = server
-            .get("kind")
+        let enabled = server
+            .get("enabled")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(true);
+        let command = server
+            .get("command")
             .and_then(JsonValue::as_str)
-            .map(|value| value.trim().to_ascii_lowercase())
-            .unwrap_or_default();
-        let runtime_enabled = ["required", "defaultEnabled", "autoStart"]
-            .iter()
-            .any(|key| {
-                server
-                    .get(*key)
-                    .and_then(JsonValue::as_bool)
-                    .unwrap_or(false)
-            });
-        kind.starts_with("container-") && runtime_enabled
-    })
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("");
+        let url = server
+            .get("url")
+            .and_then(JsonValue::as_str)
+            .map(str::trim)
+            .unwrap_or("");
+        let source_type = infer_runtime_source_type(
+            server.get("type").and_then(JsonValue::as_str).unwrap_or(""),
+            command,
+            url,
+        );
+        if enabled && source_type == "stdio" && !command.is_empty() {
+            commands.insert(entry.normalized_name.clone(), command.to_string());
+        }
+    }
+    commands
+}
+
+fn infer_runtime_source_type(raw_source_type: &str, command: &str, url: &str) -> String {
+    let normalized = normalize_runtime_source_type(raw_source_type);
+    if !normalized.is_empty() {
+        return normalized;
+    }
+    if !command.trim().is_empty() {
+        "stdio".to_string()
+    } else if !url.trim().is_empty() {
+        "http".to_string()
+    } else {
+        "stdio".to_string()
+    }
+}
+
+fn normalize_runtime_source_type(value: &str) -> String {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "" => String::new(),
+        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote-sse"
+        | "remote" | "http" | "sse" => "http".to_string(),
+        "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
+        other => other.to_string(),
+    }
+}
+
+fn add_runtime_prerequisite(
+    required_commands: &mut BTreeMap<String, Vec<String>>,
+    command: &str,
+    reason: String,
+) {
+    let normalized = command.trim();
+    if normalized.is_empty() {
+        return;
+    }
+    required_commands
+        .entry(normalized.to_string())
+        .or_default()
+        .push(reason);
 }
 
 fn tool_found(tools: &[ToolStatus], name: &str) -> bool {
@@ -322,9 +559,9 @@ fn tool_found(tools: &[ToolStatus], name: &str) -> bool {
         .unwrap_or(false)
 }
 
-fn tool_status(name: &str, required: bool, args: &[&str]) -> ToolStatus {
+fn tool_status(name: &str, required: bool, args: &[&str], probe_versions: bool) -> ToolStatus {
     let found = command_available(name);
-    let version = if found {
+    let version = if found && probe_versions {
         command_version(name, args)
     } else {
         None
@@ -340,13 +577,7 @@ fn tool_status(name: &str, required: bool, args: &[&str]) -> ToolStatus {
 
 fn command_version(name: &str, args: &[&str]) -> Option<String> {
     let path = find_command_path(name)?;
-    let mut command = if cfg!(windows) && should_run_through_cmd(&path) {
-        let mut command = Command::new("cmd.exe");
-        command.arg("/d").arg("/s").arg("/c").arg(name);
-        command
-    } else {
-        Command::new(path)
-    };
+    let mut command = Command::new(path);
     #[cfg(windows)]
     crate::windows_process::configure_no_window(&mut command);
     command.args(args);
@@ -382,20 +613,6 @@ fn command_output_with_timeout(command: &mut Command, timeout: Duration) -> Opti
             }
         }
     }
-}
-
-fn is_windows_shell_script(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| {
-            let normalized = extension.trim().to_ascii_lowercase();
-            normalized == "cmd" || normalized == "bat"
-        })
-        .unwrap_or(false)
-}
-
-fn should_run_through_cmd(path: &Path) -> bool {
-    is_windows_shell_script(path) || path.extension().is_none()
 }
 
 fn find_command_path(name: &str) -> Option<PathBuf> {

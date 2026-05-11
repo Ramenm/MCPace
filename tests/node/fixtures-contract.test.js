@@ -25,6 +25,7 @@ test('runtime capability inventory parses and separates implementation status fr
 
   const statuses = new Set();
   const claimStatuses = new Set();
+  const featuresById = new Map();
   for (const feature of value.features) {
     assert.match(feature.id, /^[a-z0-9][a-z0-9-]*$/);
     assert.equal(typeof feature.area, 'string');
@@ -41,6 +42,7 @@ test('runtime capability inventory parses and separates implementation status fr
     ].includes(feature.claimStatus));
     assert.ok(['p0', 'p1', 'p2'].includes(feature.priority));
     assert.ok(Array.isArray(feature.evidence));
+    featuresById.set(feature.id, feature);
     statuses.add(feature.status);
     claimStatuses.add(feature.claimStatus);
   }
@@ -50,6 +52,11 @@ test('runtime capability inventory parses and separates implementation status fr
   assert.ok(claimStatuses.has('control-plane-only'));
   assert.ok(claimStatuses.has('bootstrap-only'));
   assert.ok(claimStatuses.has('connectable-preview'));
+  assert.equal(featuresById.get('adapter-config-merge-safety')?.status, 'implemented');
+  assert.match(
+    featuresById.get('adapter-config-merge-safety')?.summary ?? '',
+    /real-looking JSON\/YAML merge regressions/
+  );
 });
 
 test('runtime lab fixtures parse and separate typical, edge, adversarial, and held-out cases', () => {
@@ -101,4 +108,36 @@ test('runtime fixtures keep cloud and tools-only client surfaces explicit', () =
   assert.ok(clientArchetypes.has('github-copilot-cloud-agent'));
   assert.ok(clientArchetypes.has('cursor-cloud-agents'));
   assert.ok(clientArchetypes.has('windsurf'));
+});
+
+test('windows desktop MCP is not bundled or enabled by default', () => {
+  const settings = readJson('mcp_settings.json').mcpServers;
+  const config = readJson('mcpace.config.json');
+  const profiles = config.profiles.runtime.profiles;
+  const manager = readJson('manager.settings.json');
+
+  assert.equal(settings['windows-mcp'], undefined);
+  assert.equal(config.servers['windows-mcp'], undefined);
+  assert.equal(profiles.desktop, undefined);
+  assert.equal(manager.runtimeProfile.active, 'manual');
+});
+
+test('stateful reference MCP policies are user-supplied rather than bundled', () => {
+  const config = readJson('mcpace.config.json');
+
+  for (const name of ['filesystem', 'memory', 'sequential-thinking', 'lean-ctx', 'serena']) {
+    assert.equal(config.servers[name], undefined, `${name} should not be bundled in the default distribution`);
+  }
+});
+
+test('default distribution does not enable or bundle upstream MCP servers', () => {
+  const config = readJson('mcpace.config.json');
+  const settings = readJson('mcp_settings.json').mcpServers;
+  const profiles = config.profiles.runtime.profiles;
+
+  assert.equal(config.profiles.runtime.default, 'manual');
+  assert.deepEqual(settings, {});
+  assert.deepEqual(config.servers, {});
+  assert.deepEqual(profiles.manual.serverOverrides, {});
+  assert.deepEqual(profiles.labs.serverOverrides, {});
 });

@@ -22,7 +22,7 @@ Launcher-first local runtime is the current shipped baseline.
 ### Best fit
 
 - local files and local repositories;
-- browser automation and other host bridges;
+- stateful interaction automation and other host bridges;
 - desktop automation;
 - mixed stacks where the runtime must coordinate host and container behavior.
 
@@ -97,10 +97,21 @@ Distribution mode should follow server behavior.
 
 ### Local-first candidates
 
-- `browser`
+- `demo-server`
 - `windows-mcp`
 - `filesystem`
 - other machine-touching tools
+
+For `windows-mcp`, local-first currently means an explicit stdio bridge
+(`uvx windows-mcp`) guarded by the desktop-session host lock. It should be
+enabled only through a deliberate desktop-control profile and should not rely on
+a guessed `host.docker.internal` HTTP endpoint until MCPace has generic HTTP
+upstream fan-out and a desktop permission story. Even in that profile, MCPace
+keeps `windows-mcp` behind `upstream_call` / `upstream_batch` and enforces
+declarative `toolPolicies` from `mcpace.config.json`. The same policy mechanism
+can protect other local-first servers, so a package install or profile switch
+does not silently authorize screenshot, keyboard, PowerShell, registry,
+clipboard, process, or other machine-touching operations.
 
 ### Bundle-friendly candidates
 

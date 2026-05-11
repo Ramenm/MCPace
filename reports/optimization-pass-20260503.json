@@ -1,0 +1,167 @@
+{
+  "schema": "mcpace.optimizationPass.v1",
+  "generatedAt": "2026-05-03T08:17:10Z",
+  "baseline": {
+    "source": "/mnt/data/mcpace_clean_20260503_102933(1).zip",
+    "archiveBytes": 919906,
+    "extractedProjectBytes": 4200347,
+    "fileCount": 459,
+    "reportsBytes": 1500820,
+    "reportsFileCount": 54,
+    "largestReport": {
+      "path": "reports/mcp-real-smoke-20260427-165024.json",
+      "bytes": 1089053
+    }
+  },
+  "final": {
+    "projectBytes": 2814839,
+    "projectHuman": "2.7 MB",
+    "fileCount": 428,
+    "reportsBytes": 96319,
+    "reportsHuman": "94.1 KB",
+    "reportsFileCount": 23,
+    "topLevelBytes": {
+      "src": {
+        "bytes": 1465970,
+        "files": 118
+      },
+      "tests": {
+        "bytes": 300109,
+        "files": 46
+      },
+      "docs": {
+        "bytes": 298060,
+        "files": 71
+      },
+      "scripts": {
+        "bytes": 277372,
+        "files": 38
+      },
+      "root": {
+        "bytes": 145566,
+        "files": 28
+      },
+      "reports": {
+        "bytes": 96319,
+        "files": 23
+      },
+      "eval": {
+        "bytes": 93129,
+        "files": 44
+      },
+      "packages": {
+        "bytes": 65486,
+        "files": 35
+      },
+      ".github": {
+        "bytes": 30559,
+        "files": 9
+      },
+      "memory-bank": {
+        "bytes": 25015,
+        "files": 7
+      },
+      "schemas": {
+        "bytes": 9947,
+        "files": 2
+      },
+      "presets": {
+        "bytes": 4634,
+        "files": 2
+      },
+      "examples": {
+        "bytes": 1812,
+        "files": 2
+      },
+      "mcp_settings.d": {
+        "bytes": 412,
+        "files": 1
+      },
+      ".codex": {
+        "bytes": 226,
+        "files": 1
+      },
+      ".config": {
+        "bytes": 223,
+        "files": 1
+      }
+    },
+    "releaseArchive": {
+      "path": "/mnt/data/mcpace_optimized_dist/mcpace-v0.5.9-030526-081300.zip",
+      "bytes": 842876,
+      "human": "823.1 KB",
+      "sha256Note": "Final archive SHA-256 is intentionally reported outside this in-archive file to avoid self-referential hash drift."
+    }
+  },
+  "reductions": {
+    "projectBytesSaved": 1385508,
+    "projectPercentSaved": 32.99,
+    "reportsBytesSaved": 1404501,
+    "reportsPercentSaved": 93.58,
+    "archiveBytesSavedVsUploadedZip": 77030,
+    "archivePercentSavedVsUploadedZip": 8.37
+  },
+  "changes": [
+    {
+      "area": "Node test runner",
+      "change": "scripts/run-node-test-files.mjs now supports --jobs <n|auto>, defaults to bounded auto-parallel jobs, and preserves a serial lane for mutation-sensitive proof/npm-pack contract files."
+    },
+    {
+      "area": "Node syntax lint",
+      "change": "scripts/check-node-syntax.mjs now auto-discovers JS/MJS files and checks them with bounded auto-parallel workers; MCPACE_NODE_SYNTAX_JOBS or --jobs 1 can cap/serialize it."
+    },
+    {
+      "area": "Runtime resources",
+      "change": "src/resources.rs now exposes bounded environment override knobs for HTTP connection limits, body/time budgets, dashboard cache windows, upstream workers, and session-pool sizing."
+    },
+    {
+      "area": "Stack metadata",
+      "change": "packageManager and supporting docs/workflows moved to npm@11.13.0; Node 22/24 and Rust 1.95.0 remain the project policy."
+    },
+    {
+      "area": "Release weight",
+      "change": "release-manifest.json now includes a curated report set instead of the entire historical reports directory; obsolete bulky smoke/sweep reports were pruned from the optimized tree."
+    },
+    {
+      "area": "Docs/contracts",
+      "change": "README/docs/source-quality/test-strategy/verification docs now describe the new resource knobs and bounded auto-parallel lanes."
+    }
+  ],
+  "validation": [
+    {
+      "command": "npm run lint:node",
+      "status": "pass",
+      "evidence": "80/80 JS/MJS files checked; jobs=6"
+    },
+    {
+      "command": "npm run test:npm -- --json",
+      "status": "pass",
+      "evidence": "3/3 npm CLI test files passed; parallel jobs=3"
+    },
+    {
+      "command": "node --test selected/chunked tests/node contract files",
+      "status": "pass",
+      "evidence": "79 subtests passed across archive, boot, product-practice, runtime-performance, source-quality, release, evidence, packaging, proof, and npm-pack contract files"
+    },
+    {
+      "command": "cargo fmt --all -- --check",
+      "status": "pass",
+      "evidence": "rustfmt check completed with exit code 0"
+    },
+    {
+      "command": "cargo check --all-targets --locked",
+      "status": "blocked",
+      "evidence": "sandbox DNS could not resolve index.crates.io while fetching auto-launch dependency"
+    },
+    {
+      "command": "cargo check --all-targets --locked --offline",
+      "status": "blocked",
+      "evidence": "offline cache lacks getrandom, so dependency resolution cannot complete here"
+    },
+    {
+      "command": "npm run test:repo -- --json",
+      "status": "not-completed-in-sandbox",
+      "evidence": "full monolithic repo runner exceeded the container execution window; the same test files were run in smaller chunks/selected lanes successfully"
+    }
+  ]
+}

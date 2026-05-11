@@ -1,0 +1,166 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-04T09:27:01.283Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "total": 38,
+  "selected": 8,
+  "batchSize": 4,
+  "batchCount": 2,
+  "shard": {
+    "index": 3,
+    "total": 5
+  },
+  "completedBatches": 2,
+  "completed": 8,
+  "passed": 8,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/mcp-config-contract.test.js"
+      ],
+      "file": "tests/node/bug-sweep-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 903,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: bug sweep automation is wired into package scripts, CI, docs, and PR hygiene\nok 1 - bug sweep automation is wired into package scripts, CI, docs, and PR hygiene\n  ---\n  duration_ms: 5.009569\n  ...\n# Subtest: bug sweep report passes current source invariants\nok 2 - bug sweep report passes current source invariants\n  ---\n  duration_ms: 348.287024\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 656.041483",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/mcp-config-contract.test.js"
+      ],
+      "file": "tests/node/defect-gates-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 793,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: defect gates encode bug intake, triage, and regression-proof requirements\nok 1 - defect gates encode bug intake, triage, and regression-proof requirements\n  ---\n  duration_ms: 257.035398\n  ...\n# Subtest: package script exposes defect gates for CI and local maintainer runs\nok 2 - package script exposes defect gates for CI and local maintainer runs\n  ---\n  duration_ms: 0.930081\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 556.388532",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/mcp-config-contract.test.js"
+      ],
+      "file": "tests/node/generate-checksums.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 793,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: generate-checksums hashes nested files when recursive mode is enabled\nok 1 - generate-checksums hashes nested files when recursive mode is enabled\n  ---\n  duration_ms: 275.452655\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 560.200239",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/generate-checksums.test.js",
+        "tests/node/mcp-config-contract.test.js"
+      ],
+      "file": "tests/node/mcp-config-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 564,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: packaged MCP defaults do not ship upstream servers or candidate recommendations\nok 1 - packaged MCP defaults do not ship upstream servers or candidate recommendations\n  ---\n  duration_ms: 5.71194\n  ...\n# Subtest: stdio upstream launch keeps parent environment opt-in and supports Codex-shaped env_vars\nok 2 - stdio upstream launch keeps parent environment opt-in and supports Codex-shaped env_vars\n  ---\n  duration_ms: 9.041104\n  ...\n# Subtest: BYO MCP server model is documented and surfaced in the runtime manifest\nok 3 - BYO MCP server model is documented and surfaced in the runtime manifest\n  ---\n  duration_ms: 3.586329\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 312.733386",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/publish-decision-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/source-quality-contract.test.js",
+        "tests/node/verify-vendored-binary.test.js"
+      ],
+      "file": "tests/node/publish-decision-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1793,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: publish decision separates public source snapshot from native runtime publication\nok 1 - publish decision separates public source snapshot from native runtime publication\n  ---\n  duration_ms: 3.293991\n  ...\n# Subtest: local secret and supply-chain scripts expose JSON reports\nok 2 - local secret and supply-chain scripts expose JSON reports\n  ---\n  duration_ms: 1251.361524\n  ...\n# Subtest: package scripts expose local source, release, and final decision gates\nok 3 - package scripts expose local source, release, and final decision gates\n  ---\n  duration_ms: 0.770234\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1560.098347",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/publish-decision-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/source-quality-contract.test.js",
+        "tests/node/verify-vendored-binary.test.js"
+      ],
+      "file": "tests/node/runtime-performance-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 543,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: local HTTP serving uses a fixed rendezvous-backed worker pool with runtime telemetry\nok 1 - local HTTP serving uses a fixed rendezvous-backed worker pool with runtime telemetry\n  ---\n  duration_ms: 4.311424\n  ...\n# Subtest: HTTP upstream session pooling is sharded and capacity remains bounded\nok 2 - HTTP upstream session pooling is sharded and capacity remains bounded\n  ---\n  duration_ms: 7.30412\n  ...\n# Subtest: runtime benchmark helper is wired into package scripts and documents operator usage\nok 3 - runtime benchmark helper is wired into package scripts and documents operator usage\n  ---\n  duration_ms: 3.312539\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 319.311635",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/publish-decision-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/source-quality-contract.test.js",
+        "tests/node/verify-vendored-binary.test.js"
+      ],
+      "file": "tests/node/source-quality-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 2305,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: runtime roots stay below the large-module audit threshold after modularization\nok 10 - runtime roots stay below the large-module audit threshold after modularization\n  ---\n  duration_ms: 327.851352\n  ...\n# Subtest: client catalog built-in defaults stay isolated from registry loading behavior\nok 11 - client catalog built-in defaults stay isolated from registry loading behavior\n  ---\n  duration_ms: 1.531772\n  ...\n# Subtest: server preset rendering stays outside the generic server list/capability renderer\nok 12 - server preset rendering stays outside the generic server list/capability renderer\n  ---\n  duration_ms: 2.22094\n  ...\n# Subtest: client list rendering stays split from install and export mutation paths\nok 13 - client list rendering stays split from install and export mutation paths\n  ---\n  duration_ms: 1.77037\n  ...\n# Subtest: client install backup and restore helpers stay outside the client action dispatcher\nok 14 - client install backup and restore helpers stay outside the client action dispatcher\n  ---\n  duration_ms: 2.482491\n  ...\n# Subtest: mcp stdio server argument parsing stays split from JSON-RPC serving loop\nok 15 - mcp stdio server argument parsing stays split from JSON-RPC serving loop\n  ---\n  duration_ms: 3.258579\n  ...\n1..15\n# tests 15\n# suites 0\n# pass 15\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 2085.000195",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/publish-decision-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/source-quality-contract.test.js",
+        "tests/node/verify-vendored-binary.test.js"
+      ],
+      "file": "tests/node/verify-vendored-binary.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 2112,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: verify-vendored-binary smoke-checks an explicit binary path\nok 1 - verify-vendored-binary smoke-checks an explicit binary path\n  ---\n  duration_ms: 408.5427\n  ...\n# Subtest: verify-vendored-binary can write a fresh report for publish-decision gates\nok 2 - verify-vendored-binary can write a fresh report for publish-decision gates\n  ---\n  duration_ms: 368.528421\n  ...\n# Subtest: verify-vendored-binary does not require a Rust toolchain on binary install hosts\nok 3 - verify-vendored-binary does not require a Rust toolchain on binary install hosts\n  ---\n  duration_ms: 356.5011\n  ...\n# Subtest: verify-vendored-binary fails clearly when the binary is missing\nok 4 - verify-vendored-binary fails clearly when the binary is missing\n  ---\n  duration_ms: 231.706886\n  ...\n# Subtest: verify-vendored-binary fails clearly when the binary version drifts from the package version\nok 5 - verify-vendored-binary fails clearly when the binary version drifts from the package version\n  ---\n  duration_ms: 243.637585\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1902.872871",
+      "stderrSummary": ""
+    }
+  ]
+}

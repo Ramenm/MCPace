@@ -12,17 +12,23 @@ import {
 import { readClientCatalog, resolveInstallSupportTargets, resolveProofFocusTargets } from './lib/client-catalog.mjs';
 import { verifyNpmPack } from './verify-npm-pack.mjs';
 import { verifyVendoredBinary } from './verify-vendored-binary.mjs';
+import { childEnvForCommand } from './lib/safe-child-env.mjs';
 const DEFAULT_OUTPUT_PATH = path.join(repoRoot, 'reports', 'verification-latest.json');
 const DEFAULT_ARCHIVE_OUTPUT_DIR = path.join(repoRoot, 'dist');
 const DEFAULT_VERSION_PROBE_TIMEOUT_MS = 3000;
 const DEFAULT_PROOF_COMMAND_TIMEOUT_MS = 300000;
-const VERSION_PROBE_TIMEOUT_MS = parseTimeoutEnv(
+const DEFAULT_PROOF_COMMAND_MAX_BUFFER_BYTES = 16 * 1024 * 1024;
+const VERSION_PROBE_TIMEOUT_MS = parsePositiveIntegerEnv(
   'MCPACE_VERSION_PROBE_TIMEOUT_MS',
   DEFAULT_VERSION_PROBE_TIMEOUT_MS
 );
-const PROOF_COMMAND_TIMEOUT_MS = parseTimeoutEnv(
+const PROOF_COMMAND_TIMEOUT_MS = parsePositiveIntegerEnv(
   'MCPACE_PROOF_COMMAND_TIMEOUT_MS',
   DEFAULT_PROOF_COMMAND_TIMEOUT_MS
+);
+const PROOF_COMMAND_MAX_BUFFER_BYTES = parsePositiveIntegerEnv(
+  'MCPACE_PROOF_COMMAND_MAX_BUFFER_BYTES',
+  DEFAULT_PROOF_COMMAND_MAX_BUFFER_BYTES
 );
 const IMPLEMENTATION_STATUS_ORDER = ['implemented', 'planned', 'missing'];
 const CLAIM_STATUS_ORDER = [
@@ -35,21 +41,11 @@ const CLAIM_STATUS_ORDER = [
   'planned'
 ];
 
-function parseTimeoutEnv(name, fallback) {
+function parsePositiveIntegerEnv(name, fallback) {
   const parsed = Number.parseInt(process.env[name] || '', 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function childEnvForCommand(command) {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-
-  if ((command === 'cargo' || command === 'rustc') && !env.RUSTUP_TOOLCHAIN) {
-    env.RUSTUP_TOOLCHAIN = 'stable';
-  }
-
-  return env;
-}
 
 export function resolveCommandInvocation(command, args = [], platform = process.platform) {
   if (platform === 'win32' && command === 'npm') {
@@ -235,6 +231,7 @@ function runCheckedCommand(command, args, label, cwd = repoRoot, timeoutMs = PRO
     encoding: 'utf8',
     env: childEnvForCommand(command),
     timeout: timeoutMs,
+    maxBuffer: PROOF_COMMAND_MAX_BUFFER_BYTES,
     windowsHide: true
   });
   return {
@@ -245,6 +242,7 @@ function runCheckedCommand(command, args, label, cwd = repoRoot, timeoutMs = PRO
     signal: result.signal ?? null,
     durationMs: Date.now() - startedAt,
     timeoutMs,
+    maxBufferBytes: PROOF_COMMAND_MAX_BUFFER_BYTES,
     timedOut: result.error?.code === 'ETIMEDOUT',
     stdout: result.stdout || '',
     stderr: result.stderr || '',

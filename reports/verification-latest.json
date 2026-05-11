@@ -1,209 +1,79 @@
 {
-  "version": "0.3.6",
-  "checkedAt": "2026-04-27T16:30:04.689Z",
-  "productTruth": {
-    "version": "0.3.6",
-    "currentPromise": "One local MCPace endpoint, simpler install on selected local clients, and honest diagnostics for what is configured versus actually usable.",
-    "firstICP": "advanced integrator / solo power user with 2-3 local MCP clients and hand-maintained config drift",
-    "productShape": "local-first control plane plus onboarding layer with a connectable local MCP endpoint and preview runtime lanes",
-    "entrypointContract": {
-      "product": "serve",
-      "internalLifecycle": "hub",
-      "optionalView": "dashboard"
-    },
-    "proofFocusSelector": {
-      "catalogSource": "src/client_catalog.rs",
-      "field": "proofTier",
-      "equals": "tier-1"
-    },
-    "installSupportSelector": {
-      "catalogSource": "src/client_catalog.rs",
-      "field": "installSupported",
-      "equals": true
-    },
-    "activation": {
-      "provenToday": [
-        "mcpace client install <surface> or mcpace client export <surface> succeeds",
-        "mcpace serve exposes http://127.0.0.1:39022/mcp",
-        "a real client completes initialize -> tools/list against that localhost endpoint"
-      ],
-      "betaTruthRequires": [
-        "a real client reaches MCPace",
-        "MCPace resolves session and project ownership correctly",
-        "at least one upstream tool call succeeds without stale-result or ownership confusion"
-      ]
-    },
-    "outOfScopeNextTwoQuarters": [
-      "public cloud relay as a supported product lane",
-      "broad universal runtime positioning",
-      "enterprise or team policy as the main story",
-      "long-tail client-surface breadth beyond the catalog-driven proof-tier plan",
-      "remote/local SKU splitting before the local runtime slice is proven"
-    ],
-    "proofFocusSurfaces": [
-      "codex",
-      "claude-code",
-      "cursor-local"
-    ],
-    "proofFocusSurfaceCount": 3,
-    "installSupportedSurfaces": [
-      "codex",
-      "claude-code",
-      "cursor-local",
-      "kiro-ide",
-      "kiro-cli",
-      "windsurf",
-      "gemini-cli",
-      "github-copilot-cli",
-      "hermes-agent"
-    ]
-  },
-  "clientCatalog": {
-    "totalTargets": 15,
-    "proofTierCounts": {
-      "tier-1": 3,
-      "catalog-only": 4,
-      "tier-2": 6,
-      "generic": 2
-    },
-    "installSupportedCount": 9,
-    "installSupportedSurfaces": [
-      "codex",
-      "claude-code",
-      "cursor-local",
-      "kiro-ide",
-      "kiro-cli",
-      "windsurf",
-      "gemini-cli",
-      "github-copilot-cli",
-      "hermes-agent"
-    ],
-    "proofFocusSurfaces": [
-      "codex",
-      "claude-code",
-      "cursor-local"
-    ]
-  },
-  "capabilityInventory": {
-    "totalCapabilities": 24,
-    "implementationStatusCounts": {
-      "implemented": 13,
-      "planned": 11,
-      "missing": 0
-    },
-    "claimStatusCounts": {
-      "supported": 12,
-      "supported-local-only": 2,
-      "control-plane-only": 4,
-      "bootstrap-only": 1,
-      "connectable-preview": 1,
-      "requires-host-proof": 0,
-      "planned": 4
-    },
-    "claimStatusLegend": {
-      "supported": "Safe to describe as working now inside the current repo proof boundary.",
-      "supported-local-only": "Working for documented local lanes, but not a broad cross-surface guarantee.",
-      "control-plane-only": "Read/lifecycle/control behavior exists, but not the live runtime semantics implied by the larger capability name.",
-      "bootstrap-only": "Bootstrap or attach proof exists, but not live forwarding.",
-      "connectable-preview": "Users can reach a visible MCPace endpoint or contract, but runtime/session/host proof is still incomplete.",
-      "requires-host-proof": "Source-level behavior exists, but the support claim waits on real supported hosts.",
-      "planned": "Not yet strong enough to expose as working behavior."
-    }
-  },
-  "environment": {
-    "container": false,
-    "node": "v24.15.0",
-    "npm": "11.4.2",
-    "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
-    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
-    "toolchainPolicy": {
-      "requiredNodeMajor": 22,
-      "requiredNpmMajor": 10,
-      "currentNodeMajor": 24,
-      "currentNpmMajor": 11,
-      "supportedNode": true,
-      "supportedNpm": true,
-      "supportedContributorToolchain": true
-    }
-  },
-  "distribution": {
-    "currentTarget": "win32-x64-msvc",
-    "currentTargetPackagingMode": "source-build-required",
-    "vendoredBinaryTargets": [],
-    "currentTargetVendoredBinary": null
-  },
+  "version": "0.5.9",
+  "generatedAt": "2026-05-02T17:30:06Z",
   "sourceProof": {
-    "status": "pass",
+    "status": "partial",
     "checks": [
-      "npm test"
+      "cargo fmt --all -- --check",
+      "npm run lint:npm (80/80 JS/MJS files)",
+      "repo Node tests covered in split runs; single uninterrupted npm run test:repo timed out in this sandbox",
+      "npm run test:npm (3/3 files)",
+      "node scripts/audit-source.mjs --json --write reports/source-audit-latest.json",
+      "node scripts/verify-npm-pack.mjs --json",
+      "node scripts/boot-harness.mjs --json --write reports/boot-harness-latest.json --markdown reports/boot-harness-latest.md",
+      "node scripts/install-readiness-harness.mjs --json --write reports/install-readiness-latest.json",
+      "node scripts/product-practice-harness.mjs --json --write reports/product-practice-latest.json --markdown reports/product-practice-latest.md",
+      "node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md"
     ],
-    "durationMs": 26861
+    "reason": "Source, Node syntax, targeted/split Node contract coverage, npm pack, inventory, boot, install-readiness, product-practice, and runtime-trace harness lanes were verified. It remains partial because this sandbox did not complete one uninterrupted test:repo run and cannot fetch Cargo dependencies for Rust check/test/build."
   },
   "buildProof": {
-    "status": "not-run",
-    "checks": [],
-    "reason": "Rust host proof was not executed by this report script"
+    "status": "blocked",
+    "checks": [
+      "cargo fmt --all -- --check",
+      "cargo check --all-targets --locked"
+    ],
+    "reason": "cargo fmt passed; cargo check/clippy/test/build are blocked by crates.io DNS/dependency access in this environment."
   },
   "runtimeProof": {
-    "status": "not-run",
-    "checks": [],
-    "reason": "runtime proof was not executed by this report script"
+    "status": "pass",
+    "checks": [
+      "node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md",
+      "spawned local target/release/mcpace.exe serve endpoint",
+      "HTTP MCP initialize -> tools/list -> tools/call/upstream_call -> tiny/tiny_echo"
+    ],
+    "reason": "Local runtime trace passed: MCPace minted an MCP session, advertised upstream_call, called the deterministic tiny stdio MCP fixture, returned tiny_echo:trace-ok, and released the runtime lease."
+  },
+  "installReadiness": {
+    "status": "ready-with-warnings",
+    "reason": "Source tree, npm thin-launcher package, inventory, boot harness, product-practice harness, and local runtime trace are verified; published binary install readiness still needs staged native binaries/platform packages and Node/npm policy host."
   },
   "releaseProof": {
     "status": "partial",
-    "checks": [
-      "npm test",
-      "npm pack contract (@mcpace/cli)",
-      "node scripts/archive-release.mjs --json"
+    "reason": "npm thin-launcher pack verification passed; published release readiness still needs staged native binaries/platform packages, GitHub Release publication, and npm provenance proof."
+  },
+  "productTruth": {
+    "currentPromise": "One local MCPace endpoint and generic MCP brokering/diagnostics with no bundled upstream MCP servers enabled or recommended by default.",
+    "proofFocusSurfaces": [
+      "codex",
+      "claude-code",
+      "cursor-local"
     ],
-    "archive": {
-      "name": "mcpace-v0.3.6-270426-193034.zip",
-      "path": "dist/mcpace-v0.3.6-270426-193034.zip",
-      "stamp": "270426-193034"
-    },
-    "npmPackage": {
-      "status": "pass",
-      "workspace": "@mcpace/cli",
-      "command": "npm pack --workspace @mcpace/cli --json --dry-run",
-      "packageMode": "thin-launcher",
-      "requiredFiles": [
-        "README.md",
-        "LICENSE",
-        "package.json",
-        "bin/mcpace.js",
-        "lib/platform.js",
-        "lib/resolve-binary.js",
-        "lib/runtime.js"
-      ],
-      "repoVendoredBinaryFiles": [],
-      "packageName": "@mcpace/cli",
-      "packageVersion": "0.3.6",
-      "expectedVersion": "0.3.6",
-      "packFilename": "mcpace-cli-0.3.6.tgz",
-      "entryCount": 8,
-      "unpackedSize": 21790,
-      "files": [
-        "LICENSE",
-        "README.md",
-        "bin/mcpace.js",
-        "lib/platform.js",
-        "lib/resolve-binary.js",
-        "lib/runtime.js",
-        "lib/targets.js",
-        "package.json"
-      ],
-      "missingFiles": [],
-      "packedVendoredBinaryFiles": [],
-      "missingVendoredBinaryFiles": []
-    },
-    "vendoredBinaryTargets": [],
-    "currentTargetPackagingMode": "source-build-required",
-    "currentTargetVendoredBinary": null,
-    "missing": [
-      "GitHub Release artifact publication",
-      "published npm provenance proof",
-      "real-host runtime validation before public release claims",
-      "vendored binary bundle for at least one supported target"
+    "installSupportedSurfaces": [
+      "codex",
+      "claude-code",
+      "cursor-local",
+      "kiro-ide",
+      "kiro-cli",
+      "windsurf",
+      "gemini-cli",
+      "github-copilot-cli",
+      "hermes-agent"
     ]
+  },
+  "capabilityInventory": {
+    "claimStatusCounts": {
+      "supported": 12,
+      "control-plane-only": 4,
+      "bootstrap-only": 1,
+      "connectable-preview": 1,
+      "supported-local-only": 3,
+      "planned": 3
+    }
+  },
+  "archive": {
+    "name": "mcpace-v0.5.9-020526-124131.zip",
+    "path": "/mnt/data/mcpace-v0.5.9-020526-124131.zip",
+    "root": "mcpace-v0.5.9-020526-124131"
   }
 }

@@ -1,0 +1,22 @@
+{
+  "schema": "mcpace.pluginProfileSmoke.v1",
+  "generatedAt": "2026-05-04T13:23:49.311Z",
+  "endpoint": "http://127.0.0.1:39022/mcp",
+  "status": "pass",
+  "healthOk": true,
+  "readyForRuntimeOps": true,
+  "reducers": [
+    "mcpace.native-content.v1",
+    "mcpace.summary-content.v1",
+    "mcpace.compat-content.v1",
+    "mcpace.compact-content.v1",
+    "mcpace.trim-upstream-diagnostics.v1",
+    "mcpace.drop-upstream-diagnostics.v1",
+    "mcpace.dedupe-nested-upstream-content.v1"
+  ],
+  "staleUnsupportedReducers": [],
+  "missingReducers": [],
+  "callableConfiguredStdioServerCount": 16,
+  "toolExposureMode": "broker",
+  "adapterOk": true
+}

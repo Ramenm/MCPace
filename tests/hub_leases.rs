@@ -145,6 +145,113 @@ fn hub_lease_blocks_conflicting_host_lock_until_release() {
 }
 
 #[test]
+fn hub_lease_takeover_replaces_conflict_only_for_same_session() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    write_config(
+        root,
+        r#"{
+    "windows": {
+      "kind": "host-stdio",
+      "required": true,
+      "policy": {
+        "scopeClass": "shared-exclusive",
+        "concurrencyPolicy": "single-session",
+        "stateBinding": "host-desktop",
+        "credentialBinding": "none",
+        "parallelismLimit": 1,
+        "conflictDomain": "windows-desktop",
+        "hostLock": "desktop-session"
+      },
+      "installer": { "installTarget": "none", "installMethod": "none", "installPackage": "", "verifyCommand": "" }
+    }
+  }"#,
+        r#"{"mcpServers":{"windows":{"enabled":true,"type":"stdio","command":"node"}}}"#,
+    );
+
+    let first = run(&[
+        "hub",
+        "lease",
+        "acquire",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+        "--server",
+        "windows",
+        "--client-id",
+        "codex",
+        "--session-id",
+        "same-session",
+    ]);
+    assert!(first.status.success(), "stderr: {}", stderr(&first));
+    let first_text = stdout(&first);
+    let first_lease_id = json_string_field(&first_text, "leaseId");
+
+    let other_session_takeover = run(&[
+        "hub",
+        "lease",
+        "acquire",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+        "--server",
+        "windows",
+        "--client-id",
+        "codex",
+        "--session-id",
+        "other-session",
+        "--takeover",
+    ]);
+    assert!(
+        !other_session_takeover.status.success(),
+        "takeover must stay scoped to the same sessionLeaseId"
+    );
+    assert!(stdout(&other_session_takeover).contains(r#""status": "blocked""#));
+
+    let same_session_takeover = run(&[
+        "hub",
+        "lease",
+        "acquire",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+        "--server",
+        "windows",
+        "--client-id",
+        "codex",
+        "--session-id",
+        "same-session",
+        "--takeover",
+    ]);
+    assert!(
+        same_session_takeover.status.success(),
+        "stderr: {}",
+        stderr(&same_session_takeover)
+    );
+    let takeover_text = stdout(&same_session_takeover);
+    assert!(takeover_text.contains(r#""status": "acquired""#));
+    assert!(takeover_text.contains(r#""takeover": true"#));
+    assert!(takeover_text.contains(r#""takenOverLease""#));
+    assert!(takeover_text.contains(&first_lease_id));
+    let replacement_lease_id = json_string_field(&takeover_text, "leaseId");
+    assert_ne!(first_lease_id, replacement_lease_id);
+
+    let leases = run(&[
+        "hub",
+        "lease",
+        "list",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(leases.status.success(), "stderr: {}", stderr(&leases));
+    let leases_text = stdout(&leases);
+    assert!(leases_text.contains(r#""activeLeaseCount": 1"#));
+    assert!(leases_text.contains(&replacement_lease_id));
+    assert!(!leases_text.contains(&first_lease_id));
+}
+
+#[test]
 fn hub_lease_requires_project_root_but_allows_distinct_project_partitions() {
     let temp = TempDir::new();
     let root = temp.path();
@@ -422,4 +529,152 @@ fn hub_lease_enforces_bounded_parallel_capacity() {
         "stdout: {}",
         third_text
     );
+}
+
+#[test]
+fn hub_lease_list_tracks_active_session_registry() {
+    let temp = TempDir::new();
+    let root = temp.path();
+    write_config(
+        root,
+        r#"{
+    "search": {
+      "kind": "host-stdio",
+      "required": true,
+      "policy": {
+        "scopeClass": "shared-global",
+        "concurrencyPolicy": "multi-reader",
+        "stateBinding": "none",
+        "credentialBinding": "none",
+        "parallelismLimit": 2,
+        "conflictDomain": "search-shared"
+      },
+      "installer": { "installTarget": "none", "installMethod": "none", "installPackage": "", "verifyCommand": "" }
+    }
+  }"#,
+        r#"{"mcpServers":{"search":{"enabled":true,"type":"stdio","command":"node"}}}"#,
+    );
+
+    let first = run(&[
+        "hub",
+        "lease",
+        "acquire",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+        "--server",
+        "search",
+        "--client-id",
+        "codex",
+        "--session-id",
+        "shared",
+    ]);
+    assert!(first.status.success(), "stderr: {}", stderr(&first));
+    let first_text = stdout(&first);
+    let first_lease_id = json_string_field(&first_text, "leaseId");
+
+    let second = run(&[
+        "hub",
+        "lease",
+        "acquire",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+        "--server",
+        "search",
+        "--client-id",
+        "codex",
+        "--session-id",
+        "shared",
+    ]);
+    assert!(second.status.success(), "stderr: {}", stderr(&second));
+    let second_text = stdout(&second);
+    let second_lease_id = json_string_field(&second_text, "leaseId");
+
+    let listed = run(&[
+        "hub",
+        "lease",
+        "list",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(listed.status.success(), "stderr: {}", stderr(&listed));
+    let listed_text = stdout(&listed);
+    assert!(listed_text.contains(r#""activeLeaseCount": 2"#));
+    assert!(listed_text.contains(r#""activeSessionCount": 1"#));
+    assert!(listed_text.contains(r#""sessionLeaseId": "external:shared""#));
+    assert!(listed_text.contains(r#""activeLeaseIds": ["#));
+    assert!(listed_text.contains(&first_lease_id));
+    assert!(listed_text.contains(&second_lease_id));
+
+    let hub_status = run(&["hub", "status", "--json", "--root", root.to_str().unwrap()]);
+    assert!(
+        hub_status.status.success(),
+        "stderr: {}",
+        stderr(&hub_status)
+    );
+    let hub_status_text = stdout(&hub_status);
+    assert!(hub_status_text.contains(r#""activeLeaseCount": 2"#));
+    assert!(hub_status_text.contains(r#""activeSessionCount": 1"#));
+
+    let release_first = run(&[
+        "hub",
+        "lease",
+        "release",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+        "--lease-id",
+        &first_lease_id,
+    ]);
+    assert!(
+        release_first.status.success(),
+        "stderr: {}",
+        stderr(&release_first)
+    );
+
+    let listed_after_one_release = run(&[
+        "hub",
+        "lease",
+        "list",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(listed_after_one_release.status.success());
+    let listed_after_one_release_text = stdout(&listed_after_one_release);
+    assert!(listed_after_one_release_text.contains(r#""activeLeaseCount": 1"#));
+    assert!(listed_after_one_release_text.contains(r#""activeSessionCount": 1"#));
+    assert!(!listed_after_one_release_text.contains(&first_lease_id));
+    assert!(listed_after_one_release_text.contains(&second_lease_id));
+
+    let release_second = run(&[
+        "hub",
+        "lease",
+        "release",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+        "--lease-id",
+        &second_lease_id,
+    ]);
+    assert!(
+        release_second.status.success(),
+        "stderr: {}",
+        stderr(&release_second)
+    );
+
+    let empty = run(&[
+        "hub",
+        "lease",
+        "list",
+        "--json",
+        "--root",
+        root.to_str().unwrap(),
+    ]);
+    assert!(empty.status.success(), "stderr: {}", stderr(&empty));
+    let empty_text = stdout(&empty);
+    assert!(empty_text.contains(r#""activeLeaseCount": 0"#));
+    assert!(empty_text.contains(r#""activeSessionCount": 0"#));
 }

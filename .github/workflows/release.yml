@@ -36,11 +36,13 @@ jobs:
       native_matrix: ${{ steps.release-matrices.outputs.native_matrix }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - name: Generate release matrices from release-targets.json
         id: release-matrices
         run: node scripts/github-release-matrix.mjs --github-output "$GITHUB_OUTPUT"
@@ -77,7 +79,7 @@ jobs:
           subject-path: 'dist/npm/*.tgz'
 
       - name: Upload source and main package artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: source-release
           path: |
@@ -104,14 +106,28 @@ jobs:
             suite: test:hub_runtime
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
+
+      - name: Cache Cargo registry and build outputs
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-rust-1.95.0-lifecycle-${{ matrix.suite }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-rust-1.95.0-lifecycle-
+            ${{ runner.os }}-cargo-rust-1.95.0-
 
       - name: Run isolated Rust lifecycle suite
         run: node scripts/run-rust-tests.mjs --json --suite ${{ matrix.suite }}
@@ -129,15 +145,29 @@ jobs:
       matrix: ${{ fromJson(needs.source-release.outputs.native_matrix) }}
     steps:
       - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
 
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-
+          package-manager-cache: false
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: 1.95.0
           targets: ${{ matrix.rust_target }}
+
+      - name: Cache Cargo registry and build outputs
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-rust-1.95.0-${{ matrix.rust_target }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-rust-1.95.0-${{ matrix.rust_target }}-
+            ${{ runner.os }}-cargo-rust-1.95.0-
 
       - name: Inject GitHub repository metadata for packed npm artifacts
         run: node scripts/sync-platform-packages.mjs --json --repository-url "${{ github.server_url }}/${{ github.repository }}"
@@ -151,7 +181,7 @@ jobs:
       - name: Stage and verify vendored binary
         run: |
           node scripts/stage-vendored-binary.mjs --json --target-key ${{ matrix.target_key }} --binary-path target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} --clear-target-dir
-          node scripts/verify-vendored-binary.mjs --json --target-key ${{ matrix.target_key }}
+          node scripts/verify-vendored-binary.mjs --json --target-key ${{ matrix.target_key }} --write reports/vendored-binary-${{ matrix.target_key }}.json
 
       - name: Stage, verify, and pack platform npm package
         run: |
@@ -172,7 +202,7 @@ jobs:
             dist/npm/*.tgz
 
       - name: Upload native release artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: native-${{ matrix.target_key }}
           path: |
@@ -193,7 +223,7 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@v8
         with:
           path: dist/release-assets
 

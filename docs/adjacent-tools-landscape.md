@@ -14,7 +14,7 @@ This document captures what publicly visible neighboring tools do well, and what
 | Tool | Public surfaces | Public stack signals | Patterns worth borrowing | What not to copy blindly |
 |---|---|---|---|---|
 | **OpenAI Codex** | terminal CLI, IDE, desktop app, web/cloud tasks | open-source repo is Rust-heavy, with `codex-cli`, `codex-rs`, `sdk`, `package.json`, `pnpm-workspace.yaml`; distributes via npm, Homebrew, and platform binaries | one engine across many surfaces; explicit local vs cloud split; worktree/background-task model; MCP support and skills as reusable capability layer | do not make cloud/background execution phase 1; do not treat app/web breadth as a prerequisite for a good local hub |
-| **Claude Code** | terminal, IDE, desktop, browser/web | public docs show one engine across surfaces; public Agent SDK is Python + TypeScript; internal CLI/runtime implementation stack is **NOT CONFIRMED** publicly | same engine across multiple surfaces; remote session handoff; managed cloud lane as a separate concern; permission model matters | do not guess Anthropic’s internal stack; do not copy closed-product breadth before core proof |
+| **Claude Code** | terminal, IDE, desktop, web | public docs show one engine across surfaces; public Agent SDK is Python + TypeScript; internal CLI/runtime implementation stack is **NOT CONFIRMED** publicly | same engine across multiple surfaces; remote session handoff; managed cloud lane as a separate concern; permission model matters | do not guess Anthropic’s internal stack; do not copy closed-product breadth before core proof |
 | **OpenCode (current)** | terminal/TUI, desktop beta, remote-driving client/server model | current open-source repo is TypeScript-heavy with `package.json`, `turbo.json`, bun/Nix tooling; public docs explicitly say it has a client/server architecture | treat TUI as one client, not the product core; keep provider-agnostic design; make install/distribution easy | do not make TUI-first architecture the main priority before core runtime exists |
 | **OpenCode (archived historical repo)** | terminal/TUI | archived older repo was Go-based and used Bubble Tea + SQLite | proof that lightweight local state and terminal-first UX can stay simple | history is useful, but it is no longer the active OpenCode direction |
 | **Goose** | CLI, server, desktop app, API, MCP/ACP extensions | public repo is a Rust workspace with `goose-cli`, `goose-server`, `goose-mcp`, Electron UI, and evals; maintainers explicitly discuss converging multiple binaries toward one protocol | workspace split by responsibility; MCP extension layer; evals close to the product; one-protocol direction is aligned with MCPace’s simplification goal | do not add a desktop shell or extra binaries too early |
@@ -30,7 +30,7 @@ They usually have one engine/core and then expose it through CLI, desktop, IDE, 
 
 ### 2. Control plane != presentation layer
 
-Terminal UI, desktop UI, browser UI, and chat surfaces are clients.
+Terminal UI, desktop UI, web UI, and chat surfaces are clients.
 The control plane owns config, state, routing, sessions, health, logs, and policy.
 
 ### 3. Local state matters

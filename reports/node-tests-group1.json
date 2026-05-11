@@ -1,0 +1,195 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-03T19:04:14.783Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "total": 38,
+  "selected": 8,
+  "batchSize": 8,
+  "batchCount": 1,
+  "shard": null,
+  "completedBatches": 1,
+  "completed": 8,
+  "passed": 8,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/boot-harness-contract.test.js",
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/coverage-contract.test.js",
+        "tests/node/defect-gates-contract.test.js"
+      ],
+      "file": "tests/node/archive-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 4683,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: archive builder creates a clean zip with the required root naming contract\nok 1 - archive builder creates a clean zip with the required root naming contract\n  ---\n  duration_ms: 3705.916705\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 4425.859351",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/boot-harness-contract.test.js",
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/coverage-contract.test.js",
+        "tests/node/defect-gates-contract.test.js"
+      ],
+      "file": "tests/node/boot-harness-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 16103,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: source inventory produces a deterministic first-use and release manifest report\nok 1 - source inventory produces a deterministic first-use and release manifest report\n  ---\n  duration_ms: 1326.936522\n  type: 'test'\n  ...\n# Subtest: boot harness summarizes install readiness without mutating the tree\nok 2 - boot harness summarizes install readiness without mutating the tree\n  ---\n  duration_ms: 13766.374227\n  type: 'test'\n  ...\n# Subtest: package scripts expose inventory and boot harness commands\nok 3 - package scripts expose inventory and boot harness commands\n  ---\n  duration_ms: 0.755163\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 15819.638559",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/boot-harness-contract.test.js",
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/coverage-contract.test.js",
+        "tests/node/defect-gates-contract.test.js"
+      ],
+      "file": "tests/node/bug-sweep-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 2172,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: bug sweep automation is wired into package scripts, CI, docs, and PR hygiene\nok 1 - bug sweep automation is wired into package scripts, CI, docs, and PR hygiene\n  ---\n  duration_ms: 4.270252\n  type: 'test'\n  ...\n# Subtest: bug sweep report passes current source invariants\nok 2 - bug sweep report passes current source invariants\n  ---\n  duration_ms: 1002.794746\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1808.826229",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/boot-harness-contract.test.js",
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/coverage-contract.test.js",
+        "tests/node/defect-gates-contract.test.js"
+      ],
+      "file": "tests/node/build-release-artifacts.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1651,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: build-release-artifacts bundles an archive, verification report, checksums, and manifest\nok 1 - build-release-artifacts bundles an archive, verification report, checksums, and manifest\n  ---\n  duration_ms: 393.018484\n  type: 'test'\n  ...\n# Subtest: build-release-artifacts rejects existing inputs when report/archive names drift\nok 2 - build-release-artifacts rejects existing inputs when report/archive names drift\n  ---\n  duration_ms: 90.284977\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1201.924041",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/boot-harness-contract.test.js",
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/coverage-contract.test.js",
+        "tests/node/defect-gates-contract.test.js"
+      ],
+      "file": "tests/node/command-coverage-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1331,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: rust command coverage reflects the currently implemented launch and install surfaces\nok 1 - rust command coverage reflects the currently implemented launch and install surfaces\n  ---\n  duration_ms: 2.339168\n  type: 'test'\n  ...\n# Subtest: project-control docs no longer underclaim client install as undone work\nok 2 - project-control docs no longer underclaim client install as undone work\n  ---\n  duration_ms: 83.897234\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 797.959422",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/boot-harness-contract.test.js",
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/coverage-contract.test.js",
+        "tests/node/defect-gates-contract.test.js"
+      ],
+      "file": "tests/node/configurable-mcp-connectivity-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1594,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: client export guidance uses resolved endpoint URL instead of hardcoded local port messages\nok 13 - client export guidance uses resolved endpoint URL instead of hardcoded local port messages\n  ---\n  duration_ms: 0.116862\n  type: 'test'\n  ...\n# Subtest: source audit treats extracted Rust test modules as tests instead of production code\nok 14 - source audit treats extracted Rust test modules as tests instead of production code\n  ---\n  duration_ms: 0.428501\n  type: 'test'\n  ...\n# Subtest: connect command gives users one client-first wiring report\nok 15 - connect command gives users one client-first wiring report\n  ---\n  duration_ms: 0.290964\n  type: 'test'\n  ...\n# Subtest: connect command stays read-only and does not mutate MCP settings or client configs\nok 16 - connect command stays read-only and does not mutate MCP settings or client configs\n  ---\n  duration_ms: 0.177071\n  type: 'test'\n  ...\n# Subtest: useful MCP installs are data-driven presets instead of more Rust package hardcode\nok 17 - useful MCP installs are data-driven presets instead of more Rust package hardcode\n  ---\n  duration_ms: 2.048965\n  type: 'test'\n  ...\n1..17\n# tests 17\n# suites 0\n# pass 17\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1001.52117",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/boot-harness-contract.test.js",
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/coverage-contract.test.js",
+        "tests/node/defect-gates-contract.test.js"
+      ],
+      "file": "tests/node/coverage-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1489,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: Node coverage lane is available without adding a third-party test dependency\nok 1 - Node coverage lane is available without adding a third-party test dependency\n  ---\n  duration_ms: 2.456019\n  type: 'test'\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 803.786937",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/archive-contract.test.js",
+        "tests/node/boot-harness-contract.test.js",
+        "tests/node/bug-sweep-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/configurable-mcp-connectivity-contract.test.js",
+        "tests/node/coverage-contract.test.js",
+        "tests/node/defect-gates-contract.test.js"
+      ],
+      "file": "tests/node/defect-gates-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 2007,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: defect gates encode bug intake, triage, and regression-proof requirements\nok 1 - defect gates encode bug intake, triage, and regression-proof requirements\n  ---\n  duration_ms: 601.657774\n  type: 'test'\n  ...\n# Subtest: package script exposes defect gates for CI and local maintainer runs\nok 2 - package script exposes defect gates for CI and local maintainer runs\n  ---\n  duration_ms: 1.30563\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1396.203173",
+      "stderrSummary": ""
+    }
+  ]
+}

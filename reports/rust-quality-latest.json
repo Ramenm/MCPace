@@ -1,0 +1,114 @@
+{
+  "ok": true,
+  "status": "pass",
+  "generatedAt": "2026-05-04T13:22:13.926Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "durationMs": 56530,
+  "toolchain": {
+    "cargoAvailable": true,
+    "cargoVersion": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
+    "rustcVersion": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "rustupToolchain": null
+  },
+  "policy": {
+    "laneOrder": [
+      "fmt",
+      "check",
+      "clippy",
+      "rust-tests",
+      "release-build"
+    ],
+    "checkArgs": [
+      "--all-targets",
+      "--locked"
+    ],
+    "clippyArgs": [
+      "--all-targets",
+      "--locked",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "releaseBuildArgs": [
+      "--release",
+      "--locked"
+    ],
+    "testsProfile": "full",
+    "defaultTimeoutMs": 600000
+  },
+  "lanes": [
+    {
+      "name": "fmt",
+      "command": "cargo fmt --all -- --check",
+      "status": "pass",
+      "ok": true,
+      "code": 0,
+      "signal": null,
+      "durationMs": 932,
+      "timeoutMs": 300000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "",
+      "stderrSummary": "",
+      "error": null
+    },
+    {
+      "name": "check",
+      "command": "cargo check --all-targets --locked",
+      "status": "pass",
+      "ok": true,
+      "code": 0,
+      "signal": null,
+      "durationMs": 218,
+      "timeoutMs": 300000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "",
+      "stderrSummary": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s",
+      "error": null
+    },
+    {
+      "name": "clippy",
+      "command": "cargo clippy --all-targets --locked -- -D warnings",
+      "status": "pass",
+      "ok": true,
+      "code": 0,
+      "signal": null,
+      "durationMs": 311,
+      "timeoutMs": 300000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "",
+      "stderrSummary": "    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.14s",
+      "error": null
+    },
+    {
+      "name": "rust-tests",
+      "command": "C:\\Program Files\\nodejs\\node.exe scripts/run-rust-tests.mjs --json --profile full",
+      "status": "pass",
+      "ok": true,
+      "code": 0,
+      "signal": null,
+      "durationMs": 54497,
+      "timeoutMs": 300000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"timedOut\": false,\n      \"durationMs\": 9035,\n      \"stdoutBytes\": 7993,\n      \"stderrBytes\": 155\n    },\n    {\n      \"name\": \"doc\",\n      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"timedOut\": false,\n      \"durationMs\": 524,\n      \"stdoutBytes\": 113,\n      \"stderrBytes\": 93\n    }\n  ]\n}",
+      "stderrSummary": "test upstream::tests::policy_suggestions_keep_interaction_control_as_stable_cross_server_risk_class ... ok\ntest upstream::tests::probe_reuses_successful_tool_list_cache_for_callable_stdio_servers ... ok\ntest upstream::tests::relative_stdio_command_paths_resolve_against_configured_cwd ... ok\ntest upstream::tests::server_fingerprint_does_not_embed_secret_env_values ... ok\ntest upstream::tests::server_runtime_callable_blocks_missing_cwd_before_spawn ... ok\ntest upstream::tests::stderr_suffix_bounds_diagnostic_line_count_and_length ... ok\ntest upstream::tests::stderr_suffix_redacts_sensitive_diagnostics_without_removing_context ... ok\ntest upstream::tests::surface_manifest_is_explicit_about_wrapper_projection ... ok\ntest upstream::tests::tool_list_cache_key_tracks_settings_metadata ... ok\ntest upstream::tests::tool_list_cache_prunes_oldest_entries_to_bound_memory ... ok\ntest upstream::tests::tool_list_cache_returns_fresh_entries_and_drops_stale_entries ... ok\ntest upstream::tests::tool_policy_audit_flags_unprotected_mutating_tools_without_enforcing_heuristics ... ok\ntest upstream::tests::tool_policy_audit_reports_declarative_policy_coverage ... ok\ntest upstream::tests::tool_summary_uses_upstream_name_title_and_description ... ok\ntest result: ok. 91 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.88s\n[mcpace rust-test] doc: cargo test --doc --locked -- --test-threads=1\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.08s\n   Doc-tests mcpace\nrunning 0 tests\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "error": null
+    },
+    {
+      "name": "release-build",
+      "command": "cargo build --release --locked",
+      "status": "pass",
+      "ok": true,
+      "code": 0,
+      "signal": null,
+      "durationMs": 153,
+      "timeoutMs": 300000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "",
+      "stderrSummary": "    Finished `release` profile [optimized] target(s) in 0.08s",
+      "error": null
+    }
+  ]
+}

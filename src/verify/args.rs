@@ -59,7 +59,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace verify <doctor|readiness> [--json] [--root <path>]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  mcpace verify doctor [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace verify readiness [--json] [--root <path>]");

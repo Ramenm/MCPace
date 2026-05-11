@@ -4,9 +4,13 @@ use common::*;
 use mcpace::{json, json_helpers};
 use std::net::TcpListener;
 use std::path::Path;
+use std::sync::{Mutex, MutexGuard};
+
+static SETUP_LOCAL_SERVER_LOCK: Mutex<()> = Mutex::new(());
 
 #[test]
 fn setup_json_starts_server_installs_clients_and_smokes_mcp() {
+    let _guard = setup_local_server_guard();
     let state = TempDir::new();
     let home = TempDir::new();
     let repo = env!("CARGO_MANIFEST_DIR");
@@ -77,6 +81,7 @@ fn setup_json_starts_server_installs_clients_and_smokes_mcp() {
 
 #[test]
 fn setup_skip_client_install_does_not_write_home_configs() {
+    let _guard = setup_local_server_guard();
     let state = TempDir::new();
     let home = TempDir::new();
     let repo = env!("CARGO_MANIFEST_DIR");
@@ -125,6 +130,7 @@ fn setup_skip_client_install_does_not_write_home_configs() {
 
 #[test]
 fn setup_can_install_user_autostart_when_explicitly_requested() {
+    let _guard = setup_local_server_guard();
     let state = TempDir::new();
     let home = TempDir::new();
     let repo = env!("CARGO_MANIFEST_DIR");
@@ -171,6 +177,12 @@ fn setup_can_install_user_autostart_when_explicitly_requested() {
 fn free_local_port() -> u16 {
     let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind free local port");
     listener.local_addr().expect("local addr").port()
+}
+
+fn setup_local_server_guard() -> MutexGuard<'static, ()> {
+    SETUP_LOCAL_SERVER_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 fn isolated_envs<'a>(state: &'a Path, home: &'a Path) -> [(&'a str, &'a Path); 5] {

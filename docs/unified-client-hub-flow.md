@@ -124,7 +124,7 @@ Design a single user experience for MCPace where one local hub can serve many su
 
 ### Concept C — Local admin panel
 
-**Idea:** local hub exposes a browser UI or TUI for status and configuration.
+**Idea:** local hub exposes a web UI or TUI for status and configuration.
 
 **Layout:** overview, clients, servers, projects, logs, verification.
 

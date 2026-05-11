@@ -1,0 +1,65 @@
+name: Flaky test or CI failure
+description: Report a nondeterministic test, timeout, or CI-only failure.
+title: "[flake] "
+labels:
+  - type:flaky-test
+  - status:needs-repro
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for nondeterministic failures. For deterministic product behavior, use the bug report form.
+  - type: input
+    id: workflow
+    attributes:
+      label: Workflow, job, or local command
+      placeholder: npm run test:repo, rust-build-validation, verify:runtime-trace
+    validations:
+      required: true
+  - type: input
+    id: first_seen
+    attributes:
+      label: First seen version or commit
+      placeholder: commit SHA, PR number, or release tag
+    validations:
+      required: true
+  - type: textarea
+    id: failure_output
+    attributes:
+      label: Failure output
+      description: Paste the redacted failing output, timeout line, or artifact summary.
+      render: shell
+    validations:
+      required: true
+  - type: textarea
+    id: reruns
+    attributes:
+      label: Rerun behavior
+      description: How many reruns passed/failed? Does the same test fail locally?
+      placeholder: |
+        - Run 1: failed after 120s
+        - Run 2: passed
+        - Local: not reproduced
+    validations:
+      required: true
+  - type: dropdown
+    id: suspected_area
+    attributes:
+      label: Suspected area
+      options:
+        - Node contract tests
+        - Rust tests
+        - runtime trace
+        - npm packaging
+        - GitHub Actions host/toolchain
+        - Docker proof lane
+        - unknown
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Ports, temp dirs, process cleanup, report freshness, platform, or anything else that may matter.
+    validations:
+      required: false

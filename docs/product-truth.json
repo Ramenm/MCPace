@@ -1,8 +1,8 @@
 {
-  "version": "0.3.6",
-  "currentPromise": "One local MCPace endpoint, simpler install on selected local clients, and honest diagnostics for what is configured versus actually usable.",
+  "version": "0.5.9",
+  "currentPromise": "One local MCPace endpoint and generic MCP brokering/diagnostics with no bundled upstream MCP servers enabled or recommended by default.",
   "firstICP": "advanced integrator / solo power user with 2-3 local MCP clients and hand-maintained config drift",
-  "productShape": "local-first control plane plus onboarding layer with a connectable local MCP endpoint and preview runtime lanes",
+  "productShape": "local-first control plane plus onboarding layer with a configurable connectable local MCP endpoint and preview runtime lanes",
   "entrypointContract": {
     "product": "serve",
     "internalLifecycle": "hub",
@@ -21,7 +21,7 @@
   "activation": {
     "provenToday": [
       "mcpace client install <surface> or mcpace client export <surface> succeeds",
-      "mcpace serve exposes http://127.0.0.1:39022/mcp",
+      "mcpace serve exposes a configurable local Streamable HTTP endpoint with default http://127.0.0.1:39022/mcp",
       "a real client completes initialize -> tools/list against that localhost endpoint"
     ],
     "betaTruthRequires": [

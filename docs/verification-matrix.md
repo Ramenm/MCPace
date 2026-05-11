@@ -15,11 +15,18 @@
 - prompt/agent eval scenario map, rubric, and dataset plan parse and stay aligned with fixture ids
 - thin module roots for large command families stay split instead of collapsing back into giant files
 - `scripts/proof-report.mjs` can regenerate `reports/verification-latest.json` from executed source/release checks without overclaiming blocked proof layers
+- proof-report child commands use a configurable output buffer (`MCPACE_PROOF_COMMAND_MAX_BUFFER_BYTES`) so verbose source checks do not create false proof failures
+- `scripts/audit-source.mjs` reports zero critical production hazards, verifies explicit protocol/resource architecture boundaries, and keeps unsafe/FFI centralized in reviewed process-detach modules
+- Node coverage can be run with `npm run test:node:coverage` using the built-in `node:test` coverage lane
+- Node source/npm test scripts run serially with per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs` for deterministic child-process cleanup
+- source/release proof child commands use `scripts/lib/safe-child-env.mjs` instead of inheriting the full parent environment
+- `/mcp` rejects conflicting `Mcp-Method` / `Mcp-Name` headers when clients send them
 
 ## Build proof
 
 Requires a Rust-capable host:
 
+- `npm run verify:rust-quality` writes `reports/rust-quality-latest.json` and passes fmt, `cargo check --all-targets --locked`, Clippy with `-D warnings`, full suite-isolated Rust tests, and release build
 - Rust binary builds successfully
 - Rust tests run successfully
 - npm launcher dry-run package succeeds
@@ -36,6 +43,7 @@ Requires a Rust-capable host:
 - `mcpace server list` and `mcpace server capabilities` read real config/state honestly
 - `mcpace verify doctor` and `mcpace verify readiness` work on real supported hosts
 - later lifecycle commands work on Ubuntu, Windows, and macOS
+- strict `Mcp-Method` / `Mcp-Name` enforcement remains gated on a future protocol/session decision
 
 ## Release proof
 
@@ -45,3 +53,5 @@ Requires a Rust-capable host:
 - CI includes Rust and Node validation before publication
 - held-out runtime fixtures stay reserved for release gates
 - held-out seed prompt/agent cases stay out of the day-to-day tuning loop
+
+- `npm run verify:npm-pack` persists `reports/verify-npm-pack-latest.json` and checks npm dry-run contents, version, required files, vendored binary inclusion, and POSIX executable mode.

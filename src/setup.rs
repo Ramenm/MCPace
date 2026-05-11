@@ -1,5 +1,5 @@
 use crate::json::{parse_str, JsonValue};
-use crate::{app, doctor, json_helpers, runtimepaths};
+use crate::{app, doctor, json_helpers, resources, runtimepaths};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream};
@@ -8,33 +8,36 @@ use std::time::Duration;
 
 const HTTP_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
+struct HttpJsonResponse {
+    headers: Vec<(String, String)>,
+    json: JsonValue,
+}
+
+impl HttpJsonResponse {
+    fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
+            .map(|(_, value)| value.as_str())
+    }
+}
+
+#[derive(Debug, Default)]
 struct ParsedArgs {
     help: bool,
     json_output: bool,
     root_override: Option<PathBuf>,
-    host: String,
+    host: Option<String>,
     port: u16,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
     skip_client_install: bool,
     install_service: bool,
     no_enable_service: bool,
     error: Option<String>,
-}
-
-impl Default for ParsedArgs {
-    fn default() -> Self {
-        Self {
-            help: false,
-            json_output: false,
-            root_override: None,
-            host: runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
-            port: runtimepaths::DEFAULT_LOCAL_MCP_PORT,
-            skip_client_install: false,
-            install_service: false,
-            no_enable_service: false,
-            error: None,
-        }
-    }
 }
 
 struct CommandResult {
@@ -106,7 +109,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                     parsed.error = Some("setup requires a value after --host".to_string());
                     return parsed;
                 };
-                parsed.host = value.to_string();
+                parsed.host = Some(value.to_string());
                 index += 2;
             }
             "--port" => {
@@ -118,6 +121,65 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                     Ok(port) => parsed.port = port,
                     Err(_) => {
                         parsed.error = Some("setup --port must be a valid u16".to_string());
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--max-connections" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("setup requires a value after --max-connections".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "setup --max-connections") {
+                    Ok(limit) => parsed.max_connections = Some(limit),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--io-timeout-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some("setup requires a value after --io-timeout-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_u64(value, "setup --io-timeout-ms") {
+                    Ok(timeout_ms) => parsed.io_timeout_ms = Some(timeout_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--max-body-bytes" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("setup requires a value after --max-body-bytes".to_string());
+                    return parsed;
+                };
+                match resources::parse_positive_usize(value, "setup --max-body-bytes") {
+                    Ok(limit) => parsed.max_body_bytes = Some(limit),
+                    Err(error) => {
+                        parsed.error = Some(error);
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--overview-cache-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("setup requires a value after --overview-cache-ms".to_string());
+                    return parsed;
+                };
+                match resources::parse_nonnegative_u64(value, "setup --overview-cache-ms") {
+                    Ok(ttl_ms) => parsed.overview_cache_ms = Some(ttl_ms),
+                    Err(error) => {
+                        parsed.error = Some(error);
                         return parsed;
                     }
                 }
@@ -152,18 +214,63 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--skip-client-install] [--install-service] [--no-enable]"
+        "Usage: mcpace setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--skip-client-install] [--install-service] [--no-enable]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "Starts the local MCPace endpoint, installs supported local client config entries, and verifies /healthz plus /mcp."
+        "Starts the configured local MCPace endpoint, installs supported local client config entries, and verifies health plus MCP routes."
+    );
+    let _ = writeln!(
+        stdout,
+        "Serve resource defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms.",
+        resources::default_http_connection_limit(),
+        resources::default_http_io_timeout_ms(),
+        resources::default_max_http_body_bytes(),
+        resources::default_dashboard_overview_cache_ms()
     );
 }
 
+fn append_serve_resource_args(
+    args: &mut Vec<String>,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
+) {
+    if let Some(value) = max_connections {
+        args.push("--max-connections".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = io_timeout_ms {
+        args.push("--io-timeout-ms".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = max_body_bytes {
+        args.push("--max-body-bytes".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = overview_cache_ms {
+        args.push("--overview-cache-ms".to_string());
+        args.push(value.to_string());
+    }
+}
+
 fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
+    let resolved_endpoint = runtimepaths::resolve_serve_endpoint(Some(&root_path));
+    let host = parsed
+        .host
+        .clone()
+        .unwrap_or_else(|| resolved_endpoint.host.clone());
+    let port = if parsed.port == 0 {
+        resolved_endpoint.port
+    } else {
+        parsed.port
+    };
+    let mcp_path = resolved_endpoint.mcp_path.clone();
+    let health_path = resolved_endpoint.health_path.clone();
     let root_text = root_path.display().to_string();
-    let endpoint = http_url(&parsed.host, parsed.port, "/mcp");
+    let endpoint = runtimepaths::http_url(&host, port, &mcp_path);
     let mut warnings = Vec::new();
     let current_executable = std::env::current_exe()
         .ok()
@@ -177,17 +284,25 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         );
     }
 
-    let serve = run_json_command(vec![
+    let mut serve_args = vec![
         "serve".to_string(),
         "start".to_string(),
         "--json".to_string(),
         "--host".to_string(),
-        parsed.host.clone(),
+        host.clone(),
         "--port".to_string(),
-        parsed.port.to_string(),
+        port.to_string(),
         "--root".to_string(),
         root_text.clone(),
-    ]);
+    ];
+    append_serve_resource_args(
+        &mut serve_args,
+        parsed.max_connections,
+        parsed.io_timeout_ms,
+        parsed.max_body_bytes,
+        parsed.overview_cache_ms,
+    );
+    let serve = run_json_command(serve_args);
 
     let client_install = if parsed.skip_client_install {
         warnings.push(
@@ -219,12 +334,19 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
             "install".to_string(),
             "--json".to_string(),
             "--host".to_string(),
-            parsed.host.clone(),
+            host.clone(),
             "--port".to_string(),
-            parsed.port.to_string(),
+            port.to_string(),
             "--root".to_string(),
             root_text.clone(),
         ];
+        append_serve_resource_args(
+            &mut args,
+            parsed.max_connections,
+            parsed.io_timeout_ms,
+            parsed.max_body_bytes,
+            parsed.overview_cache_ms,
+        );
         if parsed.no_enable_service {
             args.push("--no-enable".to_string());
         }
@@ -233,11 +355,12 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         None
     };
 
-    let probe_host = probe_host(&parsed.host);
-    let health = http_json_get(&probe_host, parsed.port, "/healthz");
-    let initialize = http_mcp_request(
+    let probe_host = probe_host(&host);
+    let health = http_json_get(&probe_host, port, &health_path);
+    let initialize_response = http_mcp_request(
         &probe_host,
-        parsed.port,
+        port,
+        &mcp_path,
         JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("id", JsonValue::number(1)),
@@ -257,17 +380,27 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
                 ]),
             ),
         ]),
+        None,
     );
+    let setup_session_id = initialize_response
+        .as_ref()
+        .ok()
+        .and_then(|response| response.header("Mcp-Session-Id"))
+        .map(ToOwned::to_owned);
+    let initialize = initialize_response.map(|response| response.json);
     let tools_list = http_mcp_request(
         &probe_host,
-        parsed.port,
+        port,
+        &mcp_path,
         JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("id", JsonValue::number(2)),
             ("method", JsonValue::string("tools/list")),
             ("params", empty_object()),
         ]),
-    );
+        setup_session_id.as_deref(),
+    )
+    .map(|response| response.json);
 
     warnings.push(
         "Cloud/public connector surfaces still require a public relay and are not made ready by local setup."
@@ -330,8 +463,37 @@ fn run_setup(parsed: ParsedArgs, root_path: PathBuf) -> JsonValue {
         ("jsonOutput", JsonValue::bool(parsed.json_output)),
         ("rootPath", JsonValue::string(root_text)),
         ("endpoint", JsonValue::string(endpoint.clone())),
-        ("host", JsonValue::string(parsed.host)),
-        ("port", JsonValue::number(parsed.port)),
+        ("host", JsonValue::string(host.clone())),
+        ("port", JsonValue::number(port)),
+        (
+            "serveResources",
+            JsonValue::object([
+                (
+                    "maxConnections",
+                    JsonValue::number(
+                        parsed
+                            .max_connections
+                            .unwrap_or_else(resources::default_http_connection_limit),
+                    ),
+                ),
+                (
+                    "ioTimeoutMs",
+                    JsonValue::number(
+                        parsed
+                            .io_timeout_ms
+                            .unwrap_or_else(resources::default_http_io_timeout_ms),
+                    ),
+                ),
+                (
+                    "maxBodyBytes",
+                    JsonValue::number(
+                        parsed
+                            .max_body_bytes
+                            .unwrap_or_else(resources::default_max_http_body_bytes),
+                    ),
+                ),
+            ]),
+        ),
         ("serve", command_result_json(&serve)),
         (
             "launcher",
@@ -408,10 +570,7 @@ fn command_result_json(result: &CommandResult) -> JsonValue {
     JsonValue::object([
         ("ok", JsonValue::bool(result.ok)),
         ("exitCode", JsonValue::number(result.exit_code)),
-        (
-            "json",
-            result.json.clone().unwrap_or_else(|| JsonValue::Null),
-        ),
+        ("json", result.json.clone().unwrap_or(JsonValue::Null)),
         ("stdout", JsonValue::string(result.stdout.clone())),
         ("stderr", JsonValue::string(result.stderr.clone())),
     ])
@@ -455,18 +614,34 @@ fn http_json_get(host: &str, port: u16, path: &str) -> Result<JsonValue, String>
     http_json_request(host, port, &request)
 }
 
-fn http_mcp_request(host: &str, port: u16, body: JsonValue) -> Result<JsonValue, String> {
+fn http_mcp_request(
+    host: &str,
+    port: u16,
+    path: &str,
+    body: JsonValue,
+    session_id: Option<&str>,
+) -> Result<HttpJsonResponse, String> {
     let body = body.to_compact_string();
+    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_MCP_PATH);
+    let session_header = session_id
+        .map(|value| format!("Mcp-Session-Id: {}\r\n", value))
+        .unwrap_or_default();
     let request = format!(
-        "POST /mcp HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+        path,
         host,
+        session_header,
         body.len(),
         body
     );
-    http_json_request(host, port, &request)
+    http_json_response(host, port, &request)
 }
 
 fn http_json_request(host: &str, port: u16, request: &str) -> Result<JsonValue, String> {
+    http_json_response(host, port, request).map(|response| response.json)
+}
+
+fn http_json_response(host: &str, port: u16, request: &str) -> Result<HttpJsonResponse, String> {
     let mut stream = TcpStream::connect((host, port))
         .map_err(|error| format!("connect {}:{}: {}", host, port, error))?;
     stream
@@ -484,18 +659,23 @@ fn http_json_request(host: &str, port: u16, request: &str) -> Result<JsonValue, 
     stream
         .read_to_string(&mut response)
         .map_err(|error| format!("read response: {}", error))?;
-    let (headers, body) = response
+    let (headers_text, body) = response
         .split_once("\r\n\r\n")
         .ok_or_else(|| "HTTP response missing header/body separator".to_string())?;
-    let status = headers.lines().next().unwrap_or_default();
+    let mut lines = headers_text.lines();
+    let status = lines.next().unwrap_or_default();
     if !status.contains(" 200 ") {
         return Err(format!("HTTP request failed: {}", status));
     }
-    parse_str(body.trim()).map_err(|error| format!("parse HTTP JSON response: {}", error))
-}
-
-fn http_url(host: &str, port: u16, path: &str) -> String {
-    format!("http://{}:{}{}", host, port, path)
+    let headers = lines
+        .filter_map(|line| {
+            let (name, value) = line.split_once(':')?;
+            Some((name.trim().to_string(), value.trim().to_string()))
+        })
+        .collect::<Vec<_>>();
+    let json =
+        parse_str(body.trim()).map_err(|error| format!("parse HTTP JSON response: {}", error))?;
+    Ok(HttpJsonResponse { headers, json })
 }
 
 fn probe_host(host: &str) -> String {

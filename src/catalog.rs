@@ -16,7 +16,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         name: "version",
         description: "Print the MCPace version from mcpace.config.json.",
-        aliases: &[],
+        aliases: &["--version", "-v"],
         implemented: true,
     },
     CommandSpec {
@@ -76,8 +76,8 @@ pub const COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "server",
-        description: "Grouped server inspection command.",
-        aliases: &["servers", "capabilities", "server-capabilities"],
+        description: "Grouped server inspection and useful MCP preset install command.",
+        aliases: &["servers", "capabilities", "server-capabilities", "mcp"],
         implemented: true,
     },
     CommandSpec {
@@ -125,6 +125,12 @@ pub const COMMANDS: &[CommandSpec] = &[
         implemented: true,
     },
     CommandSpec {
+        name: "connect",
+        description: "Show client-first wiring guidance, endpoint details, and next commands.",
+        aliases: &["guide", "next", "onboard"],
+        implemented: true,
+    },
+    CommandSpec {
         name: "repair",
         description: "Grouped repair/maintenance command.",
         aliases: &["backup", "rotate-logs", "windows-mcp-lease", "auth"],
@@ -138,9 +144,9 @@ pub const COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "release",
-        description: "Planned grouped release/build command.",
+        description: "Build local source release artifacts without publishing.",
         aliases: &["build-release"],
-        implemented: false,
+        implemented: true,
     },
 ];
 

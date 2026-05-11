@@ -1,0 +1,71 @@
+{
+  "schema": "mcpace.freeTierReadiness.v1",
+  "generatedAt": "2026-05-04T09:51:27.599Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "ready",
+  "summary": {
+    "total": 7,
+    "passed": 7,
+    "warnings": 0,
+    "blockers": 0
+  },
+  "gates": [
+    {
+      "id": "local-first-package-scripts",
+      "status": "pass",
+      "evidence": "9 local/free-tier scripts present.",
+      "nextAction": "Keep this in place.",
+      "severity": "required"
+    },
+    {
+      "id": "local-first-docs",
+      "status": "pass",
+      "evidence": "Local-first, no-paid-GitHub, and release decision docs are present.",
+      "nextAction": "Keep this in place.",
+      "severity": "required"
+    },
+    {
+      "id": "readme-local-first",
+      "status": "pass",
+      "evidence": "README explains local source proof and paid GitHub is not required.",
+      "nextAction": "Keep this in place.",
+      "severity": "required"
+    },
+    {
+      "id": "github-workflows-optional",
+      "status": "pass",
+      "evidence": "6 workflows present; local scripts remain source of truth.",
+      "nextAction": "Keep workflows optional mirrors of local scripts.",
+      "severity": "required"
+    },
+    {
+      "id": "no-long-lived-npm-token-required",
+      "status": "pass",
+      "evidence": "No required NPM_TOKEN workflow dependency detected.",
+      "nextAction": "Keep this in place.",
+      "severity": "required"
+    },
+    {
+      "id": "trusted-publishing-shape",
+      "status": "pass",
+      "evidence": "OIDC/trusted-publishing shape is present or documented.",
+      "nextAction": "Keep this in place.",
+      "severity": "required"
+    },
+    {
+      "id": "local-proof-reports-present",
+      "status": "pass",
+      "evidence": "4 local/free-tier reports present.",
+      "nextAction": "Keep this in place.",
+      "severity": "required"
+    }
+  ],
+  "policy": {
+    "paidGithubRequired": false,
+    "localSourceOfTruth": "Local scripts and generated reports prove source/package/runtime readiness before GitHub mirrors it.",
+    "publicRepoNote": "A public repository can use free hosted GitHub Actions/security features, but release decisions should not require a paid plan."
+  }
+}

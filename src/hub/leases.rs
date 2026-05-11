@@ -31,7 +31,7 @@ struct PlannedRoute {
     worktree_binding_key: Option<String>,
     conflict_domain: String,
     host_lock_key: Option<String>,
-    browser_profile_key: Option<String>,
+    state_profile_key: Option<String>,
     scheduler_lane: String,
     startup_strategy: String,
     upstream_transport: String,
@@ -47,6 +47,135 @@ struct PlannedRoute {
 struct LeaseCommandResult {
     json: JsonValue,
     exit_code: i32,
+}
+
+#[derive(Debug, Clone)]
+struct SessionAccumulator {
+    session_lease_id: String,
+    client_id: String,
+    session_id: Option<String>,
+    project_root: Option<String>,
+    started_at_ms: u128,
+    last_lease_seen_at_ms: u128,
+    active_lease_ids: Vec<String>,
+    servers: Vec<String>,
+}
+
+impl SessionAccumulator {
+    fn from_lease(lease: &JsonValue, refreshed_at_ms: u128) -> Option<Self> {
+        let lease_id = required_string(lease, &["leaseId"]);
+        if lease_id.is_empty() {
+            return None;
+        }
+        let client_id = optional_string(lease, &["clientId"]).unwrap_or_else(|| "unknown".into());
+        let session_id = optional_string(lease, &["sessionId"]);
+        let session_lease_id = optional_string(lease, &["sessionLeaseId"]).unwrap_or_else(|| {
+            let session_token = session_id
+                .as_deref()
+                .map(|value| non_empty_token(value, "adhoc"))
+                .unwrap_or_else(|| non_empty_token(&lease_id, "adhoc"));
+            format!(
+                "session:{}:{}",
+                non_empty_token(&client_id, "unknown"),
+                session_token
+            )
+        });
+        let started_at_ms = number_u128_at(lease, &["acquiredAtMs"]).unwrap_or(refreshed_at_ms);
+        let last_lease_seen_at_ms = number_u128_at(lease, &["renewedAtMs"])
+            .or_else(|| number_u128_at(lease, &["acquiredAtMs"]))
+            .unwrap_or(refreshed_at_ms);
+        let server = optional_string(lease, &["server"]);
+
+        let mut accumulator = Self {
+            session_lease_id,
+            client_id,
+            session_id,
+            project_root: optional_string(lease, &["projectRoot"]),
+            started_at_ms,
+            last_lease_seen_at_ms,
+            active_lease_ids: vec![lease_id],
+            servers: Vec::new(),
+        };
+        if let Some(server) = server {
+            accumulator.servers.push(server);
+        }
+        Some(accumulator)
+    }
+
+    fn add_lease(&mut self, lease: &JsonValue, refreshed_at_ms: u128) {
+        let lease_id = required_string(lease, &["leaseId"]);
+        if lease_id.is_empty() {
+            return;
+        }
+        self.active_lease_ids.push(lease_id);
+        if let Some(server) = optional_string(lease, &["server"]) {
+            self.servers.push(server);
+        }
+        if self.project_root.is_none() {
+            self.project_root = optional_string(lease, &["projectRoot"]);
+        }
+        let started_at_ms = number_u128_at(lease, &["acquiredAtMs"]).unwrap_or(refreshed_at_ms);
+        self.started_at_ms = self.started_at_ms.min(started_at_ms);
+        let last_lease_seen_at_ms = number_u128_at(lease, &["renewedAtMs"])
+            .or_else(|| number_u128_at(lease, &["acquiredAtMs"]))
+            .unwrap_or(refreshed_at_ms);
+        self.last_lease_seen_at_ms = self.last_lease_seen_at_ms.max(last_lease_seen_at_ms);
+    }
+
+    fn into_json(mut self, refreshed_at_ms: u128) -> JsonValue {
+        self.active_lease_ids.sort();
+        self.active_lease_ids.dedup();
+        self.servers.sort();
+        self.servers.dedup();
+        JsonValue::object([
+            (
+                "sessionLeaseId",
+                JsonValue::string(self.session_lease_id.clone()),
+            ),
+            ("clientId", JsonValue::string(self.client_id.clone())),
+            ("sessionId", optional_json_string(self.session_id.clone())),
+            (
+                "projectRoot",
+                optional_json_string(self.project_root.clone()),
+            ),
+            ("startedAtMs", JsonValue::number(self.started_at_ms)),
+            (
+                "lastLeaseSeenAtMs",
+                JsonValue::number(self.last_lease_seen_at_ms),
+            ),
+            ("refreshedAtMs", JsonValue::number(refreshed_at_ms)),
+            (
+                "activeLeaseCount",
+                JsonValue::number(self.active_lease_ids.len()),
+            ),
+            (
+                "activeLeaseIds",
+                JsonValue::array(self.active_lease_ids.into_iter().map(JsonValue::string)),
+            ),
+            (
+                "servers",
+                JsonValue::array(self.servers.into_iter().map(JsonValue::string)),
+            ),
+        ])
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RuntimeLeaseRequest {
+    pub(crate) server_name: String,
+    pub(crate) client_id: Option<String>,
+    pub(crate) session_id: Option<String>,
+    pub(crate) project_root: Option<String>,
+    pub(crate) transport: Option<String>,
+    pub(crate) metadata_json: Option<String>,
+    pub(crate) ttl_ms: Option<u128>,
+    pub(crate) takeover: bool,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum RuntimeLeaseAcquireResult {
+    Acquired { lease_id: String, json: JsonValue },
+    Blocked { json: JsonValue },
 }
 
 struct LeaseStoreGuard {
@@ -92,17 +221,20 @@ pub(super) fn run(
 fn run_list(root_path: &Path) -> Result<LeaseCommandResult, String> {
     mutate_store(root_path, |store, now_ms, expired_purged_count| {
         let leases = sorted_leases(store);
+        let sessions = sorted_sessions(store);
         Ok(LeaseCommandResult {
             json: JsonValue::object([
                 ("status", JsonValue::string("listed")),
                 ("version", JsonValue::number(LEASE_STORE_VERSION)),
                 ("nowMs", JsonValue::number(now_ms)),
                 ("activeLeaseCount", JsonValue::number(leases.len())),
+                ("activeSessionCount", JsonValue::number(sessions.len())),
                 (
                     "expiredPurgedCount",
                     JsonValue::number(expired_purged_count),
                 ),
                 ("leases", JsonValue::array(leases)),
+                ("sessions", JsonValue::array(sessions)),
             ]),
             exit_code: 0,
         })
@@ -117,19 +249,152 @@ fn run_acquire(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResu
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "hub lease acquire requires --server <name>".to_string())?
         .to_string();
-    let ttl_ms = normalize_ttl(parsed.ttl_ms);
-    let plan_json = client::runtime_plan_json(
+    acquire_runtime_lease_command(
         root_path,
-        RuntimePlanRequest {
+        RuntimeLeaseRequest {
+            server_name,
             client_id: parsed.client_id.clone(),
             session_id: parsed.session_id.clone(),
             project_root: parsed.project_root.clone(),
             transport: parsed.transport.clone(),
             metadata_json: parsed.metadata_json.clone(),
+            ttl_ms: parsed.ttl_ms,
+            takeover: parsed.takeover,
+        },
+    )
+}
+
+pub(crate) fn acquire_runtime_lease(
+    root_path: &Path,
+    request: RuntimeLeaseRequest,
+) -> Result<RuntimeLeaseAcquireResult, String> {
+    let server_name = clean_required_server_name(&request.server_name)?;
+    let route = route_for_request(root_path, &request, &server_name)?
+        .unwrap_or_else(|| conservative_settings_only_route(&request, &server_name));
+    let result = acquire_lease_for_route(
+        root_path,
+        route,
+        normalize_ttl(request.ttl_ms),
+        request.takeover,
+    )?;
+    if result.exit_code == 0 {
+        let lease_id = json_helpers::string_at_path(&result.json, &["leaseId"])
+            .unwrap_or("")
+            .to_string();
+        Ok(RuntimeLeaseAcquireResult::Acquired {
+            lease_id,
+            json: result.json,
+        })
+    } else {
+        Ok(RuntimeLeaseAcquireResult::Blocked { json: result.json })
+    }
+}
+
+fn conservative_settings_only_route(
+    request: &RuntimeLeaseRequest,
+    server_name: &str,
+) -> PlannedRoute {
+    let server_token = non_empty_token(server_name, "server");
+    let client_id = request_text(request.client_id.as_ref())
+        .unwrap_or_else(|| "mcpace-upstream-bridge".to_string());
+    let session_id = request_text(request.session_id.as_ref());
+    let project_root = request_text(request.project_root.as_ref());
+    let project_token = project_root
+        .as_deref()
+        .map(|value| non_empty_token(value, "global"))
+        .unwrap_or_else(|| "global".to_string());
+    let session_token = session_id
+        .as_deref()
+        .map(|value| non_empty_token(value, "adhoc"))
+        .unwrap_or_else(|| format!("settings-only-{}", server_token));
+    let upstream_transport =
+        request_text(request.transport.as_ref()).unwrap_or_else(|| "stdio".to_string());
+
+    PlannedRoute {
+        server_name: server_name.to_string(),
+        admission_state: "configured-source".to_string(),
+        request_strategy: "single-writer".to_string(),
+        request_mutex_key: Some(format!(
+            "settings-only:{}:{}",
+            server_token, project_token
+        )),
+        session_affinity_key: session_id
+            .as_ref()
+            .map(|_| format!("settings-only:{}:{}", server_token, session_token)),
+        process_scope_key: format!("settings-only:{}:{}", server_token, project_token),
+        process_partition: project_token,
+        project_binding_key: project_root
+            .as_ref()
+            .map(|_| format!("project:settings-only:{}", server_token)),
+        worktree_binding_key: None,
+        conflict_domain: format!("settings-only:{}", server_token),
+        host_lock_key: None,
+        state_profile_key: None,
+        scheduler_lane: "settings-only-conservative".to_string(),
+        startup_strategy: "per-request".to_string(),
+        upstream_transport,
+        parallelism_limit: 1,
+        warnings: vec![format!(
+            "server '{}' exists in the merged MCP settings registry but is not declared in mcpace.config.json; MCPace assigned a conservative single-writer request lease instead of bypassing scheduling",
+            server_name
+        )],
+        client_id: client_id.clone(),
+        session_lease_id: format!(
+            "session:{}:{}",
+            non_empty_token(&client_id, "client"),
+            session_token
+        ),
+        session_id,
+        project_root,
+    }
+}
+
+fn acquire_runtime_lease_command(
+    root_path: &Path,
+    request: RuntimeLeaseRequest,
+) -> Result<LeaseCommandResult, String> {
+    let server_name = clean_required_server_name(&request.server_name)?;
+    let route = route_for_request(root_path, &request, &server_name)?.ok_or_else(|| {
+        format!(
+            "server '{}' was not found in the client routing plan",
+            server_name
+        )
+    })?;
+    acquire_lease_for_route(
+        root_path,
+        route,
+        normalize_ttl(request.ttl_ms),
+        request.takeover,
+    )
+}
+
+fn route_for_request(
+    root_path: &Path,
+    request: &RuntimeLeaseRequest,
+    server_name: &str,
+) -> Result<Option<PlannedRoute>, String> {
+    let plan_json = client::runtime_plan_json(
+        root_path,
+        RuntimePlanRequest {
+            client_id: request.client_id.clone(),
+            session_id: request.session_id.clone(),
+            project_root: request.project_root.clone(),
+            transport: request.transport.clone(),
+            metadata_json: request.metadata_json.clone(),
         },
     )?;
-    let route = planned_route_from_plan(&plan_json, &server_name)?;
+    if find_server_plan(&plan_json, server_name).is_none() {
+        return Ok(None);
+    }
+    planned_route_from_plan(&plan_json, server_name).map(Some)
+}
 
+fn acquire_lease_for_route(
+    root_path: &Path,
+    route: PlannedRoute,
+    ttl_ms: u128,
+    takeover: bool,
+) -> Result<LeaseCommandResult, String> {
     mutate_store(root_path, |store, now_ms, expired_purged_count| {
         let blockers = route_blockers(&route);
         if !blockers.is_empty() {
@@ -146,19 +411,44 @@ fn run_acquire(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResu
             });
         }
 
-        if let Some(conflict) = find_conflict(store, &route) {
-            return Ok(LeaseCommandResult {
-                json: acquire_blocked_json(
-                    &route,
-                    now_ms,
-                    expired_purged_count,
-                    conflict.reason,
-                    Some(conflict.lease),
-                    active_lease_count(store),
-                ),
-                exit_code: 1,
-            });
-        }
+        let taken_over_lease = if let Some(conflict) = find_conflict(store, &route) {
+            if takeover_allowed(takeover, &conflict.lease, &route) {
+                let lease_id = required_string(&conflict.lease, &["leaseId"]);
+                let removed = leases_map_mut(store).remove(&lease_id);
+                if let Some(removed_lease) = &removed {
+                    let _ = runtime::append_log(
+                        root_path,
+                        "warn",
+                        "lease_taken_over",
+                        &[
+                            ("leaseId", JsonValue::string(lease_id)),
+                            ("server", JsonValue::string(route.server_name.clone())),
+                            (
+                                "sessionLeaseId",
+                                JsonValue::string(route.session_lease_id.clone()),
+                            ),
+                        ],
+                    );
+                    Some(removed_lease.clone())
+                } else {
+                    Some(conflict.lease)
+                }
+            } else {
+                return Ok(LeaseCommandResult {
+                    json: acquire_blocked_json(
+                        &route,
+                        now_ms,
+                        expired_purged_count,
+                        conflict.reason,
+                        Some(conflict.lease),
+                        active_lease_count(store),
+                    ),
+                    exit_code: 1,
+                });
+            }
+        } else {
+            None
+        };
 
         let lease_id = generate_lease_id(&route, now_ms);
         let acquired_at_ms = now_ms;
@@ -166,7 +456,9 @@ fn run_acquire(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResu
         let lease_json =
             lease_record_json(&lease_id, &route, acquired_at_ms, expires_at_ms, ttl_ms);
         leases_map_mut(store).insert(lease_id.clone(), lease_json.clone());
+        rebuild_sessions(store, now_ms);
         let active_count = active_lease_count(store);
+        let active_session_count = active_session_count(store);
         let _ = runtime::append_log(
             root_path,
             "info",
@@ -197,11 +489,20 @@ fn run_acquire(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResu
                 ("expiresAtMs", JsonValue::number(expires_at_ms)),
                 ("activeLeaseCount", JsonValue::number(active_count)),
                 (
+                    "activeSessionCount",
+                    JsonValue::number(active_session_count),
+                ),
+                (
                     "expiredPurgedCount",
                     JsonValue::number(expired_purged_count),
                 ),
                 ("route", route_json(&route)),
                 ("lease", lease_json),
+                ("takeover", JsonValue::bool(taken_over_lease.is_some())),
+                (
+                    "takenOverLease",
+                    taken_over_lease.unwrap_or(JsonValue::Null),
+                ),
                 (
                     "warnings",
                     JsonValue::array(route.warnings.iter().cloned().map(JsonValue::string)),
@@ -220,7 +521,33 @@ fn run_renew(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResult
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "hub lease renew requires --lease-id <id>".to_string())?
         .to_string();
-    let ttl_ms = normalize_ttl(parsed.ttl_ms);
+
+    renew_runtime_lease_command(root_path, &lease_id, parsed.ttl_ms)
+}
+
+pub(crate) fn renew_runtime_lease(
+    root_path: &Path,
+    lease_id: &str,
+    ttl_ms: Option<u128>,
+) -> Result<JsonValue, String> {
+    let result = renew_runtime_lease_command(root_path, lease_id, ttl_ms)?;
+    if result.exit_code == 0 {
+        Ok(result.json)
+    } else {
+        Err(result.json.to_compact_string())
+    }
+}
+
+fn renew_runtime_lease_command(
+    root_path: &Path,
+    lease_id: &str,
+    ttl_ms: Option<u128>,
+) -> Result<LeaseCommandResult, String> {
+    let lease_id = lease_id.trim().to_string();
+    if lease_id.is_empty() {
+        return Err("hub lease renew requires --lease-id <id>".to_string());
+    }
+    let ttl_ms = normalize_ttl(ttl_ms);
 
     mutate_store(root_path, |store, now_ms, expired_purged_count| {
         let expires_at_ms = now_ms.saturating_add(ttl_ms);
@@ -237,7 +564,9 @@ fn run_renew(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResult
                 None
             }
         };
+        rebuild_sessions(store, now_ms);
         let active_count = active_lease_count(store);
+        let active_session_count = active_session_count(store);
         let renewed_status = renewed.is_some();
         if renewed_status {
             let _ = runtime::append_log(
@@ -267,6 +596,10 @@ fn run_renew(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResult
                 ("expiresAtMs", JsonValue::number(expires_at_ms)),
                 ("activeLeaseCount", JsonValue::number(active_count)),
                 (
+                    "activeSessionCount",
+                    JsonValue::number(active_session_count),
+                ),
+                (
                     "expiredPurgedCount",
                     JsonValue::number(expired_purged_count),
                 ),
@@ -286,9 +619,27 @@ fn run_release(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResu
         .ok_or_else(|| "hub lease release requires --lease-id <id>".to_string())?
         .to_string();
 
+    release_runtime_lease_command(root_path, &lease_id)
+}
+
+pub(crate) fn release_runtime_lease(root_path: &Path, lease_id: &str) -> Result<JsonValue, String> {
+    Ok(release_runtime_lease_command(root_path, lease_id)?.json)
+}
+
+fn release_runtime_lease_command(
+    root_path: &Path,
+    lease_id: &str,
+) -> Result<LeaseCommandResult, String> {
+    let lease_id = lease_id.trim().to_string();
+    if lease_id.is_empty() {
+        return Err("hub lease release requires --lease-id <id>".to_string());
+    }
+
     mutate_store(root_path, |store, now_ms, expired_purged_count| {
         let removed = leases_map_mut(store).remove(&lease_id);
+        rebuild_sessions(store, now_ms);
         let active_count = active_lease_count(store);
+        let active_session_count = active_session_count(store);
         let released = removed.is_some();
         if released {
             let _ = runtime::append_log(
@@ -307,6 +658,10 @@ fn run_release(root_path: &Path, parsed: &ParsedArgs) -> Result<LeaseCommandResu
                 ("leaseId", JsonValue::string(lease_id.clone())),
                 ("nowMs", JsonValue::number(now_ms)),
                 ("activeLeaseCount", JsonValue::number(active_count)),
+                (
+                    "activeSessionCount",
+                    JsonValue::number(active_session_count),
+                ),
                 (
                     "expiredPurgedCount",
                     JsonValue::number(expired_purged_count),
@@ -330,7 +685,9 @@ where
     normalize_store_shape(&mut store);
     let now_ms = runtime::now_ms();
     let expired_purged_count = purge_expired(&mut store, now_ms);
+    rebuild_sessions(&mut store, now_ms);
     let result = mutator(&mut store, now_ms, expired_purged_count)?;
+    rebuild_sessions(&mut store, runtime::now_ms());
     store.insert(
         "version".to_string(),
         JsonValue::number(LEASE_STORE_VERSION),
@@ -497,6 +854,52 @@ fn sorted_leases(store: &BTreeMap<String, JsonValue>) -> Vec<JsonValue> {
         .unwrap_or_default()
 }
 
+fn sessions_map(store: &BTreeMap<String, JsonValue>) -> Option<&BTreeMap<String, JsonValue>> {
+    match store.get("sessions") {
+        Some(JsonValue::Object(map)) => Some(map),
+        _ => None,
+    }
+}
+
+fn active_session_count(store: &BTreeMap<String, JsonValue>) -> usize {
+    sessions_map(store)
+        .map(|sessions| sessions.len())
+        .unwrap_or(0)
+}
+
+fn sorted_sessions(store: &BTreeMap<String, JsonValue>) -> Vec<JsonValue> {
+    sessions_map(store)
+        .map(|sessions| sessions.values().cloned().collect::<Vec<_>>())
+        .unwrap_or_default()
+}
+
+fn rebuild_sessions(store: &mut BTreeMap<String, JsonValue>, refreshed_at_ms: u128) {
+    let active_leases = leases_map(store)
+        .map(|leases| leases.values().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    let mut sessions: BTreeMap<String, SessionAccumulator> = BTreeMap::new();
+    for lease in active_leases {
+        let Some(accumulator) = SessionAccumulator::from_lease(&lease, refreshed_at_ms) else {
+            continue;
+        };
+        sessions
+            .entry(accumulator.session_lease_id.clone())
+            .and_modify(|existing| existing.add_lease(&lease, refreshed_at_ms))
+            .or_insert(accumulator);
+    }
+    store.insert(
+        "sessions".to_string(),
+        JsonValue::Object(
+            sessions
+                .into_iter()
+                .map(|(session_lease_id, session)| {
+                    (session_lease_id, session.into_json(refreshed_at_ms))
+                })
+                .collect(),
+        ),
+    );
+}
+
 fn planned_route_from_plan(plan: &JsonValue, server_name: &str) -> Result<PlannedRoute, String> {
     let server = find_server_plan(plan, server_name).ok_or_else(|| {
         format!(
@@ -519,7 +922,7 @@ fn planned_route_from_plan(plan: &JsonValue, server_name: &str) -> Result<Planne
         worktree_binding_key: optional_string(&server, &["worktreeBindingKey"]),
         conflict_domain: required_string(&server, &["conflictDomain"]),
         host_lock_key: optional_string(&server, &["hostLockKey"]),
-        browser_profile_key: optional_string(&server, &["browserProfileKey"]),
+        state_profile_key: optional_string(&server, &["stateProfileKey"]),
         scheduler_lane: required_string(&server, &["schedulerLane"]),
         startup_strategy: required_string(&server, &["startupStrategy"]),
         upstream_transport: required_string(&server, &["upstreamTransport"]),
@@ -627,6 +1030,13 @@ fn find_conflict(
     None
 }
 
+fn takeover_allowed(takeover: bool, conflicting_lease: &JsonValue, route: &PlannedRoute) -> bool {
+    takeover
+        && json_helpers::string_at_path(conflicting_lease, &["sessionLeaseId"])
+            .map(|value| value == route.session_lease_id)
+            .unwrap_or(false)
+}
+
 fn lease_record_json(
     lease_id: &str,
     route: &PlannedRoute,
@@ -699,8 +1109,8 @@ fn route_json(route: &PlannedRoute) -> JsonValue {
             optional_json_string(route.host_lock_key.clone()),
         ),
         (
-            "browserProfileKey",
-            optional_json_string(route.browser_profile_key.clone()),
+            "stateProfileKey",
+            optional_json_string(route.state_profile_key.clone()),
         ),
         (
             "schedulerLane",
@@ -816,6 +1226,30 @@ fn normalize_ttl(ttl_ms: Option<u128>) -> u128 {
         .filter(|value| *value > 0)
         .map(|value| value.min(MAX_LEASE_TTL_MS))
         .unwrap_or(DEFAULT_LEASE_TTL_MS)
+}
+
+fn clean_required_server_name(server_name: &str) -> Result<String, String> {
+    let server_name = server_name.trim();
+    if server_name.is_empty() {
+        return Err("hub lease acquire requires --server <name>".to_string());
+    }
+    Ok(server_name.to_string())
+}
+
+fn request_text(value: Option<&String>) -> Option<String> {
+    value
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn non_empty_token(value: &str, fallback: &str) -> String {
+    let token = sanitize_token(value);
+    if token.is_empty() {
+        fallback.to_string()
+    } else {
+        token
+    }
 }
 
 fn generate_lease_id(route: &PlannedRoute, now_ms: u128) -> String {

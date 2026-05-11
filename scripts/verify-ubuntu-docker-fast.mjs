@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const DEFAULT_IMAGE = 'rust:1.95-bookworm';
@@ -19,11 +20,6 @@ function parseTimeoutEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function parseArgs(argv) {
   const parsed = {
@@ -96,7 +92,11 @@ function runDockerCheck({ image, testName, cpus, memory, pidsLimit }) {
         image,
         'sh',
         '-lc',
-        `export PATH="/usr/local/cargo/bin:$PATH"; cargo test --test hub_runtime ${testName} -- --exact`
+        [
+          "trap 'chmod -R a+rwX /work 2>/dev/null || true' EXIT",
+          'export PATH="/usr/local/cargo/bin:$PATH"',
+          `cargo test --test hub_runtime ${testName} -- --exact`
+        ].join('; ')
       ],
       {
         encoding: 'utf8',

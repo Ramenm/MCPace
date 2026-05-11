@@ -1,90 +1,147 @@
-# Summary
+# MCPace v0.5.9 summary
 
-## Package
+## Current state
 
-- project: **mcpace**
-- packaged version: **0.3.6**
-- archive root pattern: **`<project-name>-v<version>-<ddmmyy-hhmmss>`**
-- canonical archive builder: **`scripts/archive-release.mjs`**
+MCPace is now healthier as a source/thin-launcher/native-BYO-MCP project, but it is still not fully runtime/beta ready. This pass focused on the higher-level practice problem: the project was getting many features, reports, and commands, but still needed a stricter gate that prevents claiming runtime or published-install readiness before the real broker loop is proven.
 
-## Current public promise
+## What changed in v0.5.9
 
-**One local MCPace endpoint, simpler install on selected local clients, and honest diagnostics for what is configured versus actually usable.**
+### Product-practice and runtime-proof guardrails
 
-For this cycle, treat `serve` as the product, `hub` as lifecycle machinery, and `dashboard` as an optional state view. Proof-focus surfaces and install-capable local surfaces are both resolved from `src/client_catalog.rs` metadata so new clients can be promoted without rewriting the summary contract.
-
-## Latest update in this package
-
-- client metadata fallback now merges `_meta` context hints across root / `params` / `payload` / `payload.params` instead of stopping at the first hint object
-- Rust source now includes depth-4 combinatorial precedence coverage for `resolve_string` and depth-4 permutation coverage for `best_matching_root`
-- Rust source now includes depth-4 metadata hint precedence/aggregation coverage for client metadata loading
-- npm packaging now has a machine-checked tarball contract via `scripts/verify-npm-pack.mjs`, including `LICENSE`, launcher files, and staged vendored-binary inclusion when present
-- vendored current-target bundles are now smoke-verified for version parity plus `verify doctor` / `verify readiness` JSON contracts, not just `version` / `help`
-- release engineering now includes `scripts/generate-checksums.mjs`, `scripts/build-release-artifacts.mjs`, a hosted `release-artifacts` workflow scaffold, and a dynamic-version Ubuntu full-work proof script that no longer hardcodes `0.3.0`
-- canonical source bundles now emit one cleaned `dist/` set with the ZIP, verification snapshot, `SHA256SUMS.txt`, and `release-artifacts.json`, while keeping `reports/verification-latest.json` aligned during fresh proof runs
-- release/platform delivery now has a single target manifest, generated npm platform package scaffolds, generated GitHub Actions native matrices, checksum-gated npm publish, dry-run release rehearsal, draft GitHub Release workflow, and safe `update check` guidance with no silent self-update
-
-## What is included
-
-- Rust CLI source under `src/`
-- npm launcher under `packages/npm/cli`
-- clean release/archive tooling under `scripts/`
-- configs and schemas needed for local validation
-- examples and runtime evaluation fixtures
-- integration and contract tests under `tests/`
-- focused docs for setup, verification, architecture, recovery, and release
-- root project-control docs (`TODO.md`, `STATE.md`, `DECISIONS.md`)
-- prompt/agent eval governance files under `eval/`
-- session persistence/context files under `memory-bank/`
-
-## What is intentionally excluded
-
-- `.git`
-- `node_modules`
-- `target`
-- caches and temporary files
-- OS/system junk
-- old patch artifacts and extra packaging byproducts
-
-## Quick check
+New proof lanes:
 
 ```bash
-npm test
-npm run verify:npm-pack
-npm run verify:release-targets
-npm run verify:platform-packages
-npm run verify:platform-packages:packed
-npm run verify:publish-readiness
-npm run prove:report
-npm run pack:npm:dry-run
-npm run archive:release
-npm run build:release-artifacts
-node scripts/stage-vendored-binary.mjs --json
-npm run verify:vendored-binary
-npm run generate:checksums -- --output-dir dist
-cargo test
-cargo build --release
+npm run verify:product-practice
+npm run verify:runtime-trace
 ```
 
-## Current public claim view
+They produce:
 
-- `supported`: 12 capabilities
-- `supported-local-only`: 2 capabilities
-- `control-plane-only`: 4 capabilities
-- `bootstrap-only`: 1 capability
-- `connectable-preview`: 1 capability
-- `planned`: 4 capabilities
+```text
+reports/product-practice-latest.json
+reports/product-practice-latest.md
+reports/runtime-trace-latest.json
+reports/runtime-trace-latest.md
+```
 
-Those claim tiers come from `eval/runtime-capabilities.json` and intentionally stay narrower than the north-star runtime story.
+The product-practice harness separates these claims:
 
-## Current implemented native commands
+```text
+source tree healthy
+thin npm launcher usable
+runtime beta ready
+published binary install ready
+universal remote MCP broker ready
+```
 
-`version`, `doctor`, `dashboard`, `serve`, `serve start/stop/status`, `init`, `hub up/down/repair/status/logs`, `profile show`, `projects list`, `candidates`, `client list`, `client plan`, `client install`, `client export`, `mcp-server`, `stdio-shim`, `lab list/matrix/coverage/gaps/report/show`, `server list/capabilities/candidates`, `verify doctor`, `verify readiness`, `repair`, `update check`.
+The first three are currently allowed when the latest reports pass: source tree
+health, thin npm launcher usability, and a local runtime trace through a stdio
+upstream fixture. Published binary install and universal remote MCP brokering
+remain blocked until the corresponding proof exists.
 
-## Current project-control artifacts
+### Security posture guardrails
 
-- `TODO.md` — prioritized backlog with points, dependencies, DoD, risks, and ETA ranges
-- `STATE.md` — verified current state, progress range, blockers, and assumptions
-- `DECISIONS.md` — project decisions, alternatives, consequences, and review triggers
-- `reports/verification-latest.json` — latest machine-generated verification snapshot for the current environment
-- `eval/scenario-matrix.json` / `eval/scoring-rubric.json` / `eval/dataset-plan.json` — machine-readable eval governance
+Upstream process stderr is treated as diagnostic evidence, not as trusted output:
+MCPace keeps stderr snippets bounded and redacts likely secrets before surfacing
+them in user-facing errors. Child-process proof lanes also use explicit env
+allowlisting through `scripts/lib/safe-child-env.mjs` so registry credentials,
+sandbox tokens, and unrelated host environment variables are not forwarded by
+default.
+
+### Node source checking is no longer a hardcoded package.json list
+
+`lint:npm` now runs one auto-discovery harness:
+
+```bash
+node scripts/check-node-syntax.mjs --json
+```
+
+The previous practice of maintaining a long `node --check file && node --check file ...` command in `package.json` was brittle. New JS/MJS files under `packages/npm/cli`, `scripts`, `tests/node`, `tests/fixtures`, and `examples` are discovered automatically.
+
+### Runtime trace fixture groundwork
+
+Added:
+
+```text
+tests/fixtures/tiny-mcp-stdio-server.mjs
+```
+
+It implements a tiny deterministic stdio MCP server with:
+
+```text
+initialize
+tools/list
+tools/call -> tiny_echo
+```
+
+The runtime-trace harness now starts a temporary local `mcpace serve`, sends
+HTTP MCP `initialize`, `tools/list`, and `tools/call/upstream_call`, and proves
+the tiny stdio fixture returns `tiny_echo:trace-ok` while the runtime lease is
+released.
+
+### Start-here path
+
+Added/updated:
+
+```text
+START-HERE.md
+docs/product-practice.md
+```
+
+`START-HERE.md` is now included in `release-manifest.json`, so clean archives keep the top-level operating order.
+
+## Current inventory
+
+From `reports/code-inventory-latest.json` / `reports/code-inventory-20260502.json`:
+
+```text
+total files:       454
+Rust files:        128
+Node JS/MJS files: 80
+Markdown files:    119
+JSON files:        91
+test files:        49
+docs files:        71
+reports files:     54
+schema files:      2
+```
+
+Source audit remains clean:
+
+```text
+critical: 0
+warnings: 0
+largeModules: 0
+productionUnwraps: 0
+```
+
+## Verified in this environment
+
+- `cargo fmt --all -- --check` — PASS.
+- `npm run lint:npm` — PASS, `80/80` JS/MJS files checked.
+- Repo Node tests were covered in split runs: the first sequential `npm run test:repo` run passed files through `platform-packages-contract.test.js`, and the remaining repo test files were rerun in one grouped `node --test` command with `68/68` tests passing. A single uninterrupted `npm run test:repo` run still timed out in this sandbox, so do not call it a single-run full-suite proof here.
+- `npm run test:npm` — PASS, `3/3` npm CLI test files.
+- `node scripts/audit-source.mjs --json --write reports/source-audit-latest.json` — PASS.
+- `node scripts/verify-npm-pack.mjs --json` — PASS for `@mcpace/cli@0.5.9` thin launcher.
+- `node scripts/boot-harness.mjs --json --write reports/boot-harness-latest.json --markdown reports/boot-harness-latest.md` — PASS with install readiness `partial` in this environment.
+- `node scripts/install-readiness-harness.mjs --json --write reports/install-readiness-latest.json` — PASS with public status `ready-with-warnings`.
+- `node scripts/product-practice-harness.mjs --json --write reports/product-practice-latest.json --markdown reports/product-practice-latest.md` — PASS with status `stage-binary-before-publish-claims`.
+- `node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md` — PASS with local HTTP MCP trace: `initialize -> tools/list -> upstream_call tiny/tiny_echo`.
+
+## Blocked / not verified
+
+- `cargo check --all-targets --locked` is blocked by crates.io DNS/dependency access in this environment.
+- Full Rust `cargo test` and `cargo build --release` are not confirmed in this sandbox.
+- A packaged/external real-client trace remains separate from the local harness trace; current proof is a spawned local `/mcp` endpoint plus deterministic stdio upstream fixture.
+- Durable HTTP session store is still not implemented.
+- Remote Streamable HTTP upstream forwarding is still not implemented as a callable path; remote entries are registry/inventory entries only.
+- Published npm install readiness still needs staged native binaries or platform binary packages; current npm package mode is a thin launcher.
+
+## Current technical-debt priority
+
+1. Run full Cargo check/test/build with dependency access.
+2. Stage at least one native binary/platform package before claiming published npm install readiness.
+3. Stage at least one native binary/platform package before claiming published npm install readiness.
+4. Add durable HTTP session storage and strict session lifecycle semantics.
+5. Implement remote Streamable HTTP upstream connector with auth/token isolation and SSRF controls.
+6. Add registry-backed discovery/import as a separate data source, not a hardcoded Rust catalog.

@@ -1,0 +1,145 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-04T09:29:28.585Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "total": 38,
+  "selected": 7,
+  "batchSize": 4,
+  "batchCount": 2,
+  "shard": {
+    "index": 5,
+    "total": 5
+  },
+  "completedBatches": 2,
+  "completed": 7,
+  "passed": 7,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/product-practice-contract.test.js"
+      ],
+      "file": "tests/node/command-coverage-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 535,
+      "timeoutMs": 120000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: rust command coverage reflects the currently implemented launch and install surfaces\nok 1 - rust command coverage reflects the currently implemented launch and install surfaces\n  ---\n  duration_ms: 3.880105\n  ...\n# Subtest: project-control docs no longer underclaim client install as undone work\nok 2 - project-control docs no longer underclaim client install as undone work\n  ---\n  duration_ms: 2.109969\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 292.239787",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/product-practice-contract.test.js"
+      ],
+      "file": "tests/node/eval-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 524,
+      "timeoutMs": 120000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: eval governance files expose scenario map, rubric, metrics, and regression loop\nok 1 - eval governance files expose scenario map, rubric, metrics, and regression loop\n  ---\n  duration_ms: 4.359366\n  ...\n# Subtest: scenario matrix references real fixture ids and keeps held-out lanes separate\nok 2 - scenario matrix references real fixture ids and keeps held-out lanes separate\n  ---\n  duration_ms: 2.452999\n  ...\n# Subtest: seed prompt fixtures stay normalized and split across typical, edge, adversarial, and held-out\nok 3 - seed prompt fixtures stay normalized and split across typical, edge, adversarial, and held-out\n  ---\n  duration_ms: 9.035463\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 296.453114",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/product-practice-contract.test.js"
+      ],
+      "file": "tests/node/github-release-matrix-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 535,
+      "timeoutMs": 120000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: GitHub release matrix is generated from release-targets.json\nok 1 - GitHub release matrix is generated from release-targets.json\n  ---\n  duration_ms: 33.077422\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 312.586587",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/command-coverage-contract.test.js",
+        "tests/node/eval-contract.test.js",
+        "tests/node/github-release-matrix-contract.test.js",
+        "tests/node/product-practice-contract.test.js"
+      ],
+      "file": "tests/node/product-practice-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 17834,
+      "timeoutMs": 120000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: product-practice proof lanes separate source health, runtime proof, and scripts\nok 1 - product-practice proof lanes separate source health, runtime proof, and scripts\n  ---\n  duration_ms: 17313.810212\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 17605.558381",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/stage-vendored-binary.test.js"
+      ],
+      "file": "tests/node/release-targets-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 523,
+      "timeoutMs": 120000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: release target manifest is the package topology source of truth\nok 1 - release target manifest is the package topology source of truth\n  ---\n  duration_ms: 31.193811\n  ...\n# Subtest: planned targets are explicit and not advertised as supported by the npm launcher\nok 2 - planned targets are explicit and not advertised as supported by the npm launcher\n  ---\n  duration_ms: 1.85177\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 315.07631",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/stage-vendored-binary.test.js"
+      ],
+      "file": "tests/node/rust-test-runner-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 495,
+      "timeoutMs": 120000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: Rust CI test runner executes suites one at a time with timeout cleanup\nok 1 - Rust CI test runner executes suites one at a time with timeout cleanup\n  ---\n  duration_ms: 2.898215\n  ...\n# Subtest: npm scripts expose the suite-isolated Rust runner for CI\nok 2 - npm scripts expose the suite-isolated Rust runner for CI\n  ---\n  duration_ms: 1.38531\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 284.419055",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/stage-vendored-binary.test.js"
+      ],
+      "file": "tests/node/stage-vendored-binary.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 715,
+      "timeoutMs": 120000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: stage-vendored-binary copies a target binary into the vendor layout\nok 1 - stage-vendored-binary copies a target binary into the vendor layout\n  ---\n  duration_ms: 240.729841\n  ...\n1..1\n# tests 1\n# suites 0\n# pass 1\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 514.055609",
+      "stderrSummary": ""
+    }
+  ]
+}

@@ -1,0 +1,48 @@
+{
+  "ok": true,
+  "version": "0.4.1",
+  "generatedAt": "2026-04-30T21:46:03Z",
+  "rootName": "mcpace-v0.4.1-010526-000000",
+  "archiveName": "mcpace-v0.4.1-010526-000000.zip",
+  "baseArchive": "mcpace_more_useful_quality_full_20260430.zip",
+  "mergedArchive": "mcpace_dynamic_router_20260430.zip",
+  "mergeSummary": [
+    "Kept the quality/performance source tree as base.",
+    "Added dynamic adapter/router modules and docs from dynamic-router archive.",
+    "Merged HTTP /mcp dynamic tools/list, prompts/resources, projected upstream calls, upstream_call, and tool result shaping into the quality dashboard runtime.",
+    "Kept resource limits, health/overview cache, worker pool, telemetry, and sharded upstream session pools from the quality archive.",
+    "Bumped project manifests from 0.3.6 to 0.4.1."
+  ],
+  "checks": [
+    {
+      "name": "rustfmt key merged files",
+      "status": "pass",
+      "command": "rustfmt --edition 2021 src/dashboard.rs src/upstream.rs src/mcp_server.rs src/mcp_protocol.rs src/lib.rs"
+    },
+    {
+      "name": "cargo metadata manifest parse",
+      "status": "pass",
+      "command": "cargo metadata --format-version 1 --no-deps --offline"
+    },
+    {
+      "name": "source audit",
+      "status": "pass",
+      "command": "node scripts/audit-source.mjs --json"
+    },
+    {
+      "name": "rust quality plan",
+      "status": "pass",
+      "command": "node scripts/verify-rust-quality.mjs --json --plan-only"
+    },
+    {
+      "name": "JSON parse",
+      "status": "pass",
+      "command": "Python json.loads over project JSON files"
+    },
+    {
+      "name": "cargo check --locked",
+      "status": "blocked",
+      "reason": "container cannot resolve index.crates.io and has no cached serde_json crate for offline resolution"
+    }
+  ]
+}

@@ -1,0 +1,151 @@
+{
+  "schema": "mcpace.localPrepublishGate.v1",
+  "generatedAt": "2026-05-03T11:49:53.338Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "planned",
+  "mode": "full",
+  "localOnly": true,
+  "githubPaidPlanRequired": false,
+  "summary": {
+    "total": 16,
+    "pass": 0,
+    "warn": 0,
+    "blocked": 0,
+    "planned": 16
+  },
+  "steps": [
+    {
+      "id": "tooling-readiness",
+      "group": "toolchain",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/tooling-readiness.mjs --json --write reports/tooling-readiness-latest.json --markdown reports/tooling-readiness-latest.md",
+      "purpose": "Required local tool versions and recommended release/security tooling."
+    },
+    {
+      "id": "node-syntax",
+      "group": "source",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/check-node-syntax.mjs --json --write reports/node-syntax-latest.json",
+      "purpose": "All JS/MJS sources parse."
+    },
+    {
+      "id": "source-audit",
+      "group": "source",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/audit-source.mjs --fail-on-critical",
+      "purpose": "Static source hardening audit."
+    },
+    {
+      "id": "defect-gates",
+      "group": "quality",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/defect-gates.mjs --json --write reports/defect-gates-latest.json --markdown reports/defect-gates-latest.md",
+      "purpose": "Bug lifecycle, triage, and regression-proof gates."
+    },
+    {
+      "id": "bug-sweep",
+      "group": "quality",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/bug-sweep.mjs --json --write reports/bug-sweep-latest.json --markdown reports/bug-sweep-latest.md",
+      "purpose": "Fast bug/security invariant sweep."
+    },
+    {
+      "id": "public-repo-health",
+      "group": "public-surface",
+      "required": false,
+      "status": "planned",
+      "command": "node scripts/github-health-audit.mjs --json --write reports/github-health-latest.json --markdown reports/github-health-latest.md",
+      "purpose": "Repository/community profile health; useful but not dependent on paid GitHub."
+    },
+    {
+      "id": "public-readiness",
+      "group": "public-surface",
+      "required": false,
+      "status": "planned",
+      "command": "node scripts/verify-github-readiness.mjs --json --write reports/github-readiness-latest.json --markdown reports/github-readiness-latest.md",
+      "purpose": "README/security/contributor/release docs readiness."
+    },
+    {
+      "id": "npm-thin-pack",
+      "group": "package",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/verify-npm-pack.mjs --json",
+      "purpose": "Thin npm launcher pack verification."
+    },
+    {
+      "id": "platform-package-manifests",
+      "group": "package",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/verify-platform-packages.mjs --json",
+      "purpose": "Platform package manifest matrix sanity."
+    },
+    {
+      "id": "cargo-metadata",
+      "group": "rust",
+      "required": true,
+      "status": "planned",
+      "command": "cargo metadata --no-deps --format-version 1",
+      "purpose": "Cargo manifests parse without downloading dependencies."
+    },
+    {
+      "id": "cargo-fmt",
+      "group": "rust",
+      "required": true,
+      "status": "planned",
+      "command": "cargo fmt --all -- --check",
+      "purpose": "Rust formatting gate."
+    },
+    {
+      "id": "rust-quality-full",
+      "group": "rust",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/verify-rust-quality.mjs --json --write reports/rust-quality-latest.json --timeout-ms 300000 --max-buffer-bytes 16777216",
+      "purpose": "Full Rust proof: fmt, clippy, Rust tests, release build."
+    },
+    {
+      "id": "vendored-binary",
+      "group": "package",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/verify-vendored-binary.mjs --json",
+      "purpose": "Host-native binary exists in npm vendor layout."
+    },
+    {
+      "id": "runtime-trace",
+      "group": "runtime",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/runtime-trace-harness.mjs --json --write reports/runtime-trace-latest.json --markdown reports/runtime-trace-latest.md",
+      "purpose": "client -> /mcp -> initialize -> tools/list -> upstream_call proof."
+    },
+    {
+      "id": "install-readiness",
+      "group": "package",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/install-readiness-harness.mjs --json --write reports/install-readiness-latest.json",
+      "purpose": "Install readiness after binary staging and boot proof."
+    },
+    {
+      "id": "product-practice",
+      "group": "release-claim",
+      "required": true,
+      "status": "planned",
+      "command": "node scripts/product-practice-harness.mjs --json --write reports/product-practice-latest.json --markdown reports/product-practice-latest.md",
+      "purpose": "Final claim gate; prevents overclaiming runtime/published install readiness."
+    }
+  ],
+  "decision": "Plan only: no commands were run.",
+  "nextActions": []
+}

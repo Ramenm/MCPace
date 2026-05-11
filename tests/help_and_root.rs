@@ -8,8 +8,9 @@ fn help_mentions_grouped_native_read_paths() {
     let output = run(&["help"]);
     assert!(output.status.success());
     let text = stdout(&output);
-    assert!(text.contains("doctor/profile/projects/candidates/client-plan/lab/server/verify have native Rust read paths"));
+    assert!(text.contains("doctor/profile/projects/candidates/connect/client-plan/lab/server/verify have native Rust read paths"));
     assert!(text.contains("repair [--json] [--root <path>]"));
+    assert!(text.contains("release [build] [--json] [--root <path>]"));
     assert!(text.contains("setup [--json]"));
     assert!(text.contains("setup starts the one-port MCPace endpoint"));
     assert!(text.contains("service install|status|uninstall|print"));
@@ -25,6 +26,7 @@ fn help_mentions_grouped_native_read_paths() {
     assert!(text.contains("stdio-shim"));
     assert!(text.contains("mcp-server"));
     assert!(text.contains("lab report"));
+    assert!(text.contains("release build now wraps the local artifact/proof bundle"));
 }
 
 #[test]
@@ -43,6 +45,15 @@ fn version_uses_mcpace_root_env_override_before_repo_scan() {
     let output = run_with_envs(&["version"], &[("MCPACE_ROOT", root)]);
     assert!(output.status.success());
     assert_eq!(stdout(&output).trim(), "9.9.9-test");
+}
+
+#[test]
+fn version_flag_aliases_version_command() {
+    for flag in ["--version", "-V"] {
+        let output = run(&[flag]);
+        assert!(output.status.success(), "stderr: {}", stderr(&output));
+        assert_eq!(stdout(&output).trim(), env!("CARGO_PKG_VERSION"));
+    }
 }
 
 #[test]
@@ -108,4 +119,31 @@ fn repair_command_routes_to_grouped_hub_repair() {
             .any(|name| name.starts_with("state.json.corrupt-")),
         "hub dir entries were not repaired"
     );
+}
+
+#[test]
+fn release_help_is_honest_about_local_artifacts_only() {
+    let output = run(&["release", "--help"]);
+    assert!(output.status.success());
+    let text = stdout(&output);
+    assert!(text.contains("Usage: mcpace release [build] [--json] [--root <path>]"));
+    assert!(text.contains("Build local release artifacts"));
+    assert!(text.contains("does not publish to npm or GitHub"));
+}
+
+#[test]
+fn release_build_json_fails_before_node_when_script_is_missing() {
+    let temp = TempDir::new();
+    let output = run(&[
+        "release",
+        "build",
+        "--json",
+        "--root",
+        temp.path().to_str().unwrap(),
+    ]);
+    assert!(!output.status.success());
+    let text = stdout(&output);
+    assert!(text.contains(r#""status": "failed""#));
+    assert!(text.contains("release artifact script"));
+    assert!(text.contains("scripts/build-release-artifacts.mjs"));
 }

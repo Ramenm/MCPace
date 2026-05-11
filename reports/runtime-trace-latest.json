@@ -1,0 +1,96 @@
+{
+  "schema": "mcpace.runtimeTraceHarness.v1",
+  "generatedAt": "2026-05-04T13:22:15.068Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "endpoint": "http://127.0.0.1:63382/mcp",
+  "binary": "target/release/mcpace.exe",
+  "host": {
+    "key": "win32-x64-msvc",
+    "detected": true,
+    "platform": "win32",
+    "arch": "x64",
+    "libc": null,
+    "rustTarget": "x86_64-pc-windows-msvc"
+  },
+  "binaryCandidates": [
+    "target/release/mcpace.exe",
+    "target/debug/mcpace.exe",
+    "target/x86_64-pc-windows-msvc/release/mcpace.exe",
+    "dist/mcpace.exe",
+    "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe",
+    "packages/npm/cli/vendor/mcpace.exe"
+  ],
+  "mode": "spawned-local-serve",
+  "blockers": [],
+  "failures": [],
+  "trace": {
+    "endpoint": "http://127.0.0.1:63382/mcp",
+    "sessionId": "mcpace-5ed2115957f3d8d5beb35eacef408cbd",
+    "protocolVersion": "2025-11-25",
+    "topLevelToolCount": 9,
+    "upstreamCallAdvertised": true,
+    "projectedTinyToolAdvertised": true,
+    "upstream": {
+      "server": "tiny",
+      "tool": "tiny_echo",
+      "text": "tiny_echo:trace-ok",
+      "upstreamOk": true,
+      "leaseAttached": true,
+      "leaseReleased": true,
+      "sessionPoolEnabled": true,
+      "sessionPoolReused": false
+    },
+    "childProcess": {
+      "stdoutTail": "Server running at http://127.0.0.1:63382 (UI: /, MCP: /mcp, health: /healthz)\n",
+      "stderrTail": ""
+    },
+    "cleanup": "temporary trace root removed after run"
+  },
+  "steps": [
+    {
+      "id": "binary",
+      "required": true,
+      "status": "pass",
+      "evidence": "C:\\Users\\rmatv\\Projects\\mcpace\\target\\release\\mcpace.exe"
+    },
+    {
+      "id": "tiny-upstream-fixture",
+      "required": true,
+      "status": "pass",
+      "evidence": "tests/fixtures/tiny-mcp-stdio-server.mjs"
+    },
+    {
+      "id": "serve-endpoint",
+      "required": true,
+      "status": "pass",
+      "evidence": "http://127.0.0.1:63382/mcp (spawned from target/release/mcpace.exe)"
+    },
+    {
+      "id": "initialize",
+      "required": true,
+      "status": "pass",
+      "evidence": "protocol=2025-11-25; session=mcpace-5ed2115957f3d8d5beb35eacef408cbd"
+    },
+    {
+      "id": "tools-list",
+      "required": true,
+      "status": "pass",
+      "evidence": "9 tools; upstream_call advertised"
+    },
+    {
+      "id": "upstream-call",
+      "required": true,
+      "status": "pass",
+      "evidence": "tiny_echo returned \"tiny_echo:trace-ok\"; leaseReleased=true"
+    }
+  ],
+  "nextCommands": [
+    "npm run verify:product-practice",
+    "Stage and verify at least one native binary/platform package before claiming published install readiness.",
+    "Keep durable HTTP session storage and remote HTTP upstream forwarding as separate future runtime hardening work."
+  ]
+}

@@ -430,7 +430,7 @@ mod tests {
     fn semver_compare_handles_current_and_outdated_cases() {
         assert_eq!(compare_semver("0.3.5", "0.3.5"), Some(Ordering::Equal));
         assert_eq!(compare_semver("0.3.5", "0.3.6"), Some(Ordering::Less));
-        assert_eq!(compare_semver("0.4.0", "0.3.6"), Some(Ordering::Greater));
+        assert_eq!(compare_semver("0.4.1", "0.3.6"), Some(Ordering::Greater));
     }
 
     #[test]

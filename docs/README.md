@@ -1,43 +1,88 @@
-# Documentation Index
+# MCPace docs
 
-This packaged copy tracks repo version `0.3.6`. Generated release archives use a
-root folder named `<project-name>-v<version>-<ddmmyy-hhmmss>`.
+This packaged copy tracks repo version `0.5.9`.
 
-Start here:
+MCPace is a Rust-first local MCP hub. It ships with no upstream MCP servers enabled by default and no Rust-hardcoded recommended upstream catalog; useful presets live in editable data files. Use `mcpace connect` as the read-only top-down guide. Configure user-supplied stdio MCP servers with `mcpace server presets`, `mcpace server starter`, `mcpace server install`, `mcpace server import`, `mcpace server add`, `mcpace server test`, `mcpace server enable` / `mcpace server disable`, and `mcpace server remove`, root `mcp_settings.json`, `mcp_settings.d/*.json`, `mcpSettings.includePaths` / `mcpSettings.includeDirs`, or `MCPACE_MCP_SETTINGS` / `MCPACE_MCP_SETTINGS_DIRS`; extend useful presets with `mcpPresets.includePaths` or `MCPACE_MCP_PRESETS`; add `mcpace.config.json` server policy only when you need extra routing, platform, or tool-risk metadata.
 
-- `../README.md` — product overview and quick command surface
-- `host-setup.md` — local prerequisites
-- `toolchain-policy.md` — supported Node/npm/Rust lanes
-- `test-strategy.md` — what to run for source and host proof
-- `eval-plan.md` — prompt/agent eval goals, rubric, dataset, and regression loop
-- `verification-matrix.md` — practical verification checklist
-- `codex-mcpace-guide.md` — Codex local MCP install, handshake, and
-  troubleshooting guide
-- `mcp-spec-alignment.md` — checked MCP baseline and transport scope
-- `client-metadata-routing.md` — client/session routing inputs
-- `client-surface-matrix.md` — local/cloud/API connector client differences
-- `server-segmentation-and-auto-discovery.md` — server policy and serialization model
-- `universal-runtime-policy.md` — dynamic client catalogs, project/browser/desktop routing, and scheduler policy
-- `technology-decision.md` — Rust core + npm launcher rationale
-- `technology-evaluation.md` — compared implementation paths and why incremental Rust-first completion still wins
-- `rust-rewrite-architecture.md` — current module layout
-- `architecture-boundaries.md` — active Rust module boundaries and extension rules
-- `release-automation.md` — release target, platform package, update-check, and publish automation policy
-- `rewrite-cutover-plan.md` — next implementation phases
-- `runtime-lab.md` — runtime fixture lab and gaps
-- `product-truth-and-beta-gate.md` — current promise, support tiers, truth taxonomy, and beta gate
-- `product-truth.json` — machine-readable copy of the current promise, activation, entrypoint contract, plus catalog-driven proof-tier and install-support selectors
-- `recovery-runbook.md` — stale/corrupt runtime recovery
+Start with:
 
-Project-control docs at the repo root:
+- `../ROADMAP.md` for the public-facing roadmap and what to star/watch/fork for.
+- `github-launch-playbook.md` for GitHub launch, repository settings, maintainer loops, and growth without overclaiming.
+- `ideal-product-backlog.md` for the maximum-quality backlog ordered by product impact.
+- `maintainer-playbook.md` for triage, release, issue, and contribution routines.
+- `bug-lifecycle.md` for reproduce-first bug fixing, root-cause notes, regression guards, and runtime traces.
+- `bug-hunting-and-fix-playbook.md`, `defect-taxonomy-and-labels.md`, and `maintainer-debugging-guide.md` for the maintainer bug-sweep operating model.
+- `product-truth.json` for the machine-readable product promise.
+- `mcp-spec-alignment.md` for the checked MCP baseline.
+- `client-surface-matrix.md` and `client-metadata-routing.md` for client routing.
+- `server-segmentation-and-auto-discovery.md` for server discovery and serialization.
+- `test-strategy.md` and `verification-matrix.md` for checks.
+- `adr/0004-source-only-mcp-env-isolation.md` for the source-only MCP env isolation decision.
+- `adr/0005-ci-cache-and-upstream-diagnostic-redaction.md` for Cargo CI caching and stderr diagnostic redaction.
+- `mcp-http-api-spec.md`, `universal-mcp-connectivity.md`, `security-review-20260501.md`, and `adr/0006`/`0008`/`0009`/`0015`/`0017`/`0018` for the current `/mcp` hardening, configurable ingress, source-registry contract, client-first connect guide, preset-first useful MCP install flow, and `adr/0019-install-readiness-and-boot-harness.md` for the install/readiness harness decision.
 
-- `../TODO.md` — prioritized backlog and ETA ranges
-- `../STATE.md` — current verified status and progress view
-- `../DECISIONS.md` — active decisions and review triggers
+Run this first when wiring a client:
 
-Included machine-readable reports:
+```bash
+mcpace connect --json
+mcpace connect cursor-local --server filesystem
+```
 
-- `../reports/summary.md` — concise packaged summary
-- `../reports/verification-latest.json` — latest machine-generated source/release verification snapshot
-- `../reports/rust-command-coverage.json` — implemented vs planned command surface
-- `../reports/toolchain-support.json` — stack policy used by CI and tests
+
+`product-practice.md` describes what not to claim before Rust/runtime proof.
+
+Install/readiness artifacts now include `reports/boot-harness-latest.json`, `reports/boot-harness-latest.md`, `reports/install-readiness-latest.json`, and `reports/code-inventory-latest.*`. Use these before claiming an install path is ready.
+
+Run from the repository root:
+
+```bash
+npm test
+npm run inventory:source
+npm run inventory:project
+npm run verify:boot
+npm run verify:install-readiness
+npm run verify:product-practice
+npm run verify:defect-gates
+npm run verify:bug-sweep
+npm run verify:runtime-trace
+npm run verify:rust-quality
+cargo fmt --all -- --check
+cargo check --all-targets --locked
+cargo test --all-targets --locked
+```
+
+Client-first source-only upstream example. Start with the read-only guide, then import or add, smoke-test, and only then export/install a client config:
+
+```bash
+mcpace connect
+mcpace server presets
+mcpace server starter --path . --dry-run
+mcpace server starter --path .
+mcpace server sources --json
+mcpace server test filesystem --refresh --json
+mcpace client export cursor-local --json
+mcpace client install cursor-local --dry-run
+mcpace server disable my-server --dry-run
+mcpace server enable my-server --dry-run
+mcpace server remove my-server --dry-run
+```
+
+Manual JSON example:
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "node",
+      "args": ["path/to/server.js"],
+      "env": { "EXPLICIT_VAR": "value" },
+      "env_vars": ["TOKEN_FROM_PARENT_ENV", { "name": "LOCAL_TOKEN", "source": "local" }],
+      "cwd": "/absolute/or/project-specific/path"
+    }
+  }
+}
+```
+
+Stdio upstream children get a cleared environment plus a small process-launch baseline, MCPace runtime variables, and explicit `env` / local `env_vars` values only. This preserves generic MCP server support without forwarding every parent process secret by default.
+Cache/session fingerprints hash explicit env values so plaintext tokens are not embedded in cache keys.
+Upstream stderr included in errors is bounded and sanitized before display so diagnostics remain useful without intentionally echoing obvious credentials.

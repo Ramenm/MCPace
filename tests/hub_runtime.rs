@@ -74,6 +74,8 @@ fn hub_status_json_reports_stopped_state_before_start() {
     let text = stdout(&output);
     assert!(text.contains(r#""status": "stopped""#));
     assert!(text.contains(r#""health": "stopped-ready""#));
+    assert!(text.contains(r#""activeLeaseCount": 0"#));
+    assert!(text.contains(r#""activeSessionCount": 0"#));
     assert!(text.contains(r#""repairRecommended": false"#));
 }
 

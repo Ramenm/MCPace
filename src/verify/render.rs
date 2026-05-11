@@ -101,6 +101,16 @@ pub(super) fn run_readiness(
     );
     let _ = writeln!(
         stdout,
+        "Missing runtime prerequisites: {}",
+        join_or_none(&readiness.missing_runtime_prerequisites)
+    );
+    let _ = writeln!(
+        stdout,
+        "Client config warnings: {}",
+        join_or_none(&readiness.client_config_warnings)
+    );
+    let _ = writeln!(
+        stdout,
         "Missing required commands: {}",
         join_or_none(&readiness.missing_required_commands)
     );

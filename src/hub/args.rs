@@ -18,6 +18,7 @@ pub(super) struct ParsedArgs {
     pub(super) transport: Option<String>,
     pub(super) metadata_json: Option<String>,
     pub(super) ttl_ms: Option<u128>,
+    pub(super) takeover: bool,
     pub(super) error: Option<String>,
 }
 
@@ -98,6 +99,10 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--foreground" | "-foreground" => {
                 parsed.foreground = true;
+                index += 1;
+            }
+            "--takeover" | "-takeover" | "--replace-existing" | "-replace-existing" => {
+                parsed.takeover = true;
                 index += 1;
             }
             "--server" | "-server" | "--name" | "-name" => {
@@ -199,7 +204,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace hub <up|down|repair|status|logs|lease> [--json] [--root <path>] [options]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(
         stdout,
@@ -216,6 +221,10 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
         "  mcpace hub lease acquire --server <name> [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--ttl-ms <n>] [--metadata-json <json>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "    add --takeover to replace an existing conflicting lease owned by the same sessionLeaseId"
     );
     let _ = writeln!(
         stdout,

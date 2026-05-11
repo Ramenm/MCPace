@@ -56,7 +56,9 @@ Explicit env overrides remain supported:
 1. explicit `--session-id`;
 2. explicit `MCPACE_SESSION_ID`;
 3. metadata `session.id` / `sessionId`;
-4. unresolved.
+4. HTTP MCP bridge headers `Mcp-Session-Id`, `X-MCPace-Session-Id`, or
+   `X-Codex-Session-Id` for `/mcp` upstream wrapper calls;
+5. unresolved.
 
 ### Project selection
 
@@ -114,3 +116,10 @@ The client plan command should therefore answer two different questions:
 - `params.clientInfo.name` as a fallback client identity;
 - `roots` entries using MCP-style `{ "uri": "file:///..." }` objects;
 - `_meta["com.mcpace/context"]` for optional `cwd`, `conversationId`, `clientInstanceId`, `transportSessionId`, and `credentialProfileId` hints.
+
+The local HTTP MCP endpoint also applies the same intent for runtime
+`upstream_call` / `upstream_batch` routing: explicit tool arguments win, then
+tool `metadata` hints, then stable bridge headers. This lets MCP clients keep
+the wrapper surface small while still giving stateful upstreams (interactive servers,
+containers, host bridges) a real session-affinity key instead of one anonymous
+shared context.

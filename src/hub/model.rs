@@ -59,6 +59,8 @@ pub(super) struct HubStatus {
     pub(super) profile_enabled_server_count: usize,
     pub(super) source_enabled_server_count: usize,
     pub(super) effective_enabled_server_count: usize,
+    pub(super) active_lease_count: usize,
+    pub(super) active_session_count: usize,
     pub(super) missing_required_source_enablement: Vec<String>,
     pub(super) missing_profile_source_enablement: Vec<String>,
     pub(super) missing_required_commands: Vec<String>,
@@ -155,6 +157,14 @@ impl HubStatus {
         map.insert(
             "effectiveEnabledServerCount".to_string(),
             JsonValue::number(self.effective_enabled_server_count),
+        );
+        map.insert(
+            "activeLeaseCount".to_string(),
+            JsonValue::number(self.active_lease_count),
+        );
+        map.insert(
+            "activeSessionCount".to_string(),
+            JsonValue::number(self.active_session_count),
         );
         map.insert(
             "missingRequiredSourceEnablement".to_string(),

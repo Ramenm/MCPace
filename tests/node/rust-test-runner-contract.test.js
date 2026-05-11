@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const path = require('node:path');
-const { read, readJson } = require('./helpers');
+const { read, readJson, repoRoot } = require('./helpers');
 
 test('Rust CI test runner executes suites one at a time with timeout cleanup', () => {
   const script = read(path.join('scripts', 'run-rust-tests.mjs'));
@@ -29,8 +30,15 @@ test('npm scripts expose the suite-isolated Rust runner for CI', () => {
   assert.equal(pkg.scripts['test:rust:full'], 'node scripts/run-rust-tests.mjs --json --profile full');
   assert.equal(pkg.scripts['test:linux-npm-install:docker'], 'node scripts/verify-linux-npm-install-docker.mjs --json');
   assert.equal(pkg.scripts['verify:macos-proof-lanes'], 'node scripts/verify-macos-proof-lanes.mjs --json');
-  assert.match(pkg.scripts['prove:rust-host'], /npm run test:rust:ci/);
-  assert.match(pkg.scripts['lint:npm'], /node --check scripts\/run-rust-tests\.mjs/);
-  assert.match(pkg.scripts['lint:npm'], /node --check scripts\/verify-linux-npm-install-docker\.mjs/);
-  assert.match(pkg.scripts['lint:npm'], /node --check scripts\/verify-macos-proof-lanes\.mjs/);
+  assert.equal(pkg.scripts['prove:rust-host'], 'npm run verify:rust-quality');
+  assert.equal(pkg.scripts['verify:rust-quality'], 'node scripts/verify-rust-quality.mjs --json --write reports/rust-quality-latest.json');
+  assert.equal(pkg.scripts['lint:npm'], 'node scripts/check-node-syntax.mjs --json');
+  for (const script of [
+    'scripts/run-rust-tests.mjs',
+    'scripts/verify-rust-quality.mjs',
+    'scripts/verify-linux-npm-install-docker.mjs',
+    'scripts/verify-macos-proof-lanes.mjs',
+  ]) {
+    assert.equal(fs.existsSync(path.join(repoRoot, script)), true, `${script} should exist`);
+  }
 });

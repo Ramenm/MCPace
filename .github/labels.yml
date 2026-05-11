@@ -1,0 +1,79 @@
+# Apply with a label-sync action after the public repository exists.
+- name: type:bug
+  color: d73a4a
+  description: Incorrect behavior or broken workflow.
+- name: type:regression
+  color: b60205
+  description: Worked before and is now broken.
+- name: type:security
+  color: ee0701
+  description: Security-sensitive issue; prefer private reporting first.
+- name: type:compatibility
+  color: c5def5
+  description: Client/upstream/platform compatibility problem.
+- name: type:flaky-test
+  color: f9d0c4
+  description: Nondeterministic test, timeout, fixture, or CI-only failure.
+- name: type:docs-drift
+  color: cfd3d7
+  description: Documentation, report, or roadmap claim no longer matches source behavior.
+- name: type:enhancement
+  color: a2eeef
+  description: New or improved capability.
+- name: severity:p0
+  color: b60205
+  description: Security, data loss, or core runtime dead.
+- name: severity:p1
+  color: d93f0b
+  description: Core workflow broken for a meaningful user group.
+- name: severity:p2
+  color: fbca04
+  description: Degraded, confusing, or blocked edge workflow.
+- name: severity:p3
+  color: 0e8a16
+  description: Polish, docs, or minor edge case.
+- name: area:mcp-http
+  color: 1d76db
+  description: Local /mcp endpoint, Streamable HTTP, sessions, headers.
+- name: area:upstream-stdio
+  color: 1d76db
+  description: Local stdio upstream runtime and tool forwarding.
+- name: area:upstream-http
+  color: 1d76db
+  description: HTTP upstream inventory or future HTTP fan-out.
+- name: area:client-config
+  color: 1d76db
+  description: Client install/export/backup/restore flows.
+- name: area:npm
+  color: 5319e7
+  description: npm CLI launcher, platform package, or install behavior.
+- name: area:release
+  color: 5319e7
+  description: Release artifacts, checksums, provenance, publishing.
+- name: area:docs
+  color: 0075ca
+  description: Docs, examples, roadmap, or product truth.
+- name: status:needs-repro
+  color: fef2c0
+  description: Needs exact reproduction or reduced test case.
+- name: status:needs-root-cause
+  color: fef2c0
+  description: Reproduced but root cause not isolated.
+- name: status:needs-runtime-trace
+  color: fef2c0
+  description: Needs client -> MCPace -> upstream behavioral proof.
+- name: status:needs-rust-proof
+  color: fef2c0
+  description: Needs cargo/clippy/test proof in a Rust host.
+- name: status:ready-for-review
+  color: 0e8a16
+  description: Fix and regression proof are ready for maintainer review.
+- name: good first issue
+  color: 7057ff
+  description: Good for first-time contributors.
+- name: help wanted
+  color: 008672
+  description: Maintainers welcome external help.
+- name: full-ci
+  color: c2e0c6
+  description: Request expensive platform/Docker CI lanes.

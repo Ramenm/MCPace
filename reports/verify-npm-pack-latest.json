@@ -1,0 +1,111 @@
+{
+  "schema": "mcpace.npmPack.v1",
+  "generatedAt": "2026-05-11T12:02:53.980Z",
+  "status": "pass",
+  "workspace": "@mcpace/cli",
+  "command": "npm pack --workspace @mcpace/cli --json --dry-run",
+  "packageMode": "vendored-binary-bundle",
+  "requiredFiles": [
+    "README.md",
+    "LICENSE",
+    "package.json",
+    "bin/mcpace.js",
+    "lib/platform.js",
+    "lib/resolve-binary.js",
+    "lib/runtime.js"
+  ],
+  "repoVendoredBinaryFiles": [
+    "vendor/linux-x64-gnu/mcpace",
+    "vendor/win32-x64-msvc/mcpace.exe"
+  ],
+  "packageName": "@mcpace/cli",
+  "packageVersion": "0.5.9",
+  "expectedVersion": "0.5.9",
+  "packFilename": "mcpace-cli-0.5.9.tgz",
+  "entryCount": 10,
+  "unpackedSize": 3303694,
+  "files": [
+    "bin/mcpace.js",
+    "lib/platform.js",
+    "lib/resolve-binary.js",
+    "lib/runtime.js",
+    "lib/targets.js",
+    "LICENSE",
+    "package.json",
+    "README.md",
+    "vendor/linux-x64-gnu/mcpace",
+    "vendor/win32-x64-msvc/mcpace.exe"
+  ],
+  "fileDetails": [
+    {
+      "path": "bin/mcpace.js",
+      "mode": 420,
+      "size": 734
+    },
+    {
+      "path": "lib/platform.js",
+      "mode": 420,
+      "size": 2972
+    },
+    {
+      "path": "lib/resolve-binary.js",
+      "mode": 420,
+      "size": 4688
+    },
+    {
+      "path": "lib/runtime.js",
+      "mode": 420,
+      "size": 905
+    },
+    {
+      "path": "lib/targets.js",
+      "mode": 420,
+      "size": 4543
+    },
+    {
+      "path": "LICENSE",
+      "mode": 420,
+      "size": 5532
+    },
+    {
+      "path": "package.json",
+      "mode": 420,
+      "size": 1046
+    },
+    {
+      "path": "README.md",
+      "mode": 420,
+      "size": 1370
+    },
+    {
+      "path": "vendor/linux-x64-gnu/mcpace",
+      "mode": 420,
+      "size": 1786864
+    },
+    {
+      "path": "vendor/win32-x64-msvc/mcpace.exe",
+      "mode": 420,
+      "size": 1495040
+    }
+  ],
+  "missingFiles": [],
+  "packedVendoredBinaryFiles": [
+    "vendor/linux-x64-gnu/mcpace",
+    "vendor/win32-x64-msvc/mcpace.exe"
+  ],
+  "packedVendoredBinaryFileDetails": [
+    {
+      "path": "vendor/linux-x64-gnu/mcpace",
+      "mode": 420,
+      "size": 1786864
+    },
+    {
+      "path": "vendor/win32-x64-msvc/mcpace.exe",
+      "mode": 420,
+      "size": 1495040
+    }
+  ],
+  "missingVendoredBinaryFiles": [],
+  "nonExecutableVendoredBinaryFiles": [],
+  "reportPath": "reports/verify-npm-pack-latest.json"
+}

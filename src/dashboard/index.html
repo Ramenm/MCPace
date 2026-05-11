@@ -1,0 +1,783 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MCPace dashboard</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #09111d;
+        --panel: rgba(18, 27, 43, 0.88);
+        --panel-strong: rgba(10, 18, 31, 0.96);
+        --line: rgba(148, 163, 184, 0.14);
+        --text: #ebf2ff;
+        --muted: #97a6bf;
+        --accent: #6ee7f9;
+        --accent-2: #7c3aed;
+        --good: #34d399;
+        --warn: #fbbf24;
+        --bad: #fb7185;
+        --shadow: 0 22px 60px rgba(0, 0, 0, 0.34);
+        --radius: 22px;
+        --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+          "Segoe UI", sans-serif;
+      }
+
+      * { box-sizing: border-box; }
+      html, body { margin: 0; padding: 0; background:
+        radial-gradient(circle at top left, rgba(124, 58, 237, 0.18), transparent 34%),
+        radial-gradient(circle at top right, rgba(110, 231, 249, 0.16), transparent 28%),
+        var(--bg); color: var(--text); font-family: var(--sans); }
+
+      body { min-height: 100vh; }
+      .shell {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 36px 24px 80px;
+      }
+
+      .hero {
+        position: relative;
+        overflow: hidden;
+        background: linear-gradient(135deg, rgba(14, 24, 38, 0.98), rgba(20, 29, 46, 0.92));
+        border: 1px solid var(--line);
+        border-radius: 28px;
+        box-shadow: var(--shadow);
+        padding: 28px 28px 24px;
+        margin-bottom: 22px;
+      }
+
+      .hero::after {
+        content: "";
+        position: absolute;
+        inset: auto -10% -60% auto;
+        width: 420px;
+        height: 420px;
+        background: radial-gradient(circle, rgba(110, 231, 249, 0.18), transparent 62%);
+        pointer-events: none;
+      }
+
+      .eyebrow {
+        color: var(--accent);
+        text-transform: uppercase;
+        letter-spacing: 0.24em;
+        font-size: 12px;
+        margin-bottom: 12px;
+      }
+
+      h1 {
+        margin: 0;
+        font-size: clamp(32px, 5vw, 52px);
+        line-height: 0.95;
+        letter-spacing: -0.04em;
+      }
+
+      .subhead {
+        margin: 14px 0 0;
+        max-width: 780px;
+        color: var(--muted);
+        font-size: 15px;
+        line-height: 1.65;
+      }
+
+      .hero-meta,
+      .action-row,
+      .metric-grid,
+      .layout {
+        display: grid;
+        gap: 16px;
+      }
+
+      .hero-meta {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        margin-top: 22px;
+      }
+
+      .meta-card,
+      .card {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+      }
+
+      .meta-card {
+        padding: 16px 18px;
+      }
+
+      .meta-label {
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        margin-bottom: 10px;
+      }
+
+      .meta-value {
+        font-size: 20px;
+        font-weight: 650;
+        letter-spacing: -0.03em;
+      }
+
+      .meta-value code {
+        font-family: var(--mono);
+        font-size: 14px;
+        color: var(--accent);
+      }
+
+      .action-row {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        margin: 18px 0 22px;
+      }
+
+      button,
+      input {
+        font: inherit;
+      }
+
+      button {
+        appearance: none;
+        border: 1px solid rgba(110, 231, 249, 0.28);
+        background: linear-gradient(135deg, rgba(33, 48, 72, 0.96), rgba(20, 29, 46, 0.96));
+        color: var(--text);
+        border-radius: 16px;
+        padding: 14px 16px;
+        cursor: pointer;
+        transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+      }
+
+      button:hover {
+        transform: translateY(-1px);
+        border-color: rgba(110, 231, 249, 0.56);
+      }
+
+      button:active { transform: translateY(0); }
+      button.accent {
+        background: linear-gradient(135deg, rgba(14, 165, 233, 0.28), rgba(124, 58, 237, 0.34));
+      }
+
+      .metric-grid {
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        margin-bottom: 22px;
+      }
+
+      .metric {
+        padding: 18px;
+      }
+
+      .metric h2 {
+        margin: 0 0 10px;
+        color: var(--muted);
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.16em;
+      }
+
+      .metric-value {
+        font-size: 34px;
+        font-weight: 700;
+        letter-spacing: -0.05em;
+      }
+
+      .metric-note {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .layout {
+        grid-template-columns: 1.25fr 0.95fr;
+        align-items: start;
+      }
+
+      .stack {
+        display: grid;
+        gap: 16px;
+      }
+
+      .card {
+        padding: 22px;
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 22px;
+        letter-spacing: -0.03em;
+      }
+
+      .card p.section-note {
+        margin: 10px 0 0;
+        color: var(--muted);
+        font-size: 14px;
+        line-height: 1.6;
+      }
+
+      .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin: 18px 0 16px;
+      }
+
+      .toolbar input {
+        flex: 1 1 220px;
+        min-width: 200px;
+        border-radius: 14px;
+        border: 1px solid var(--line);
+        background: rgba(10, 18, 31, 0.88);
+        color: var(--text);
+        padding: 12px 14px;
+      }
+
+      .chip-row {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+      }
+
+      .chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border-radius: 999px;
+        background: rgba(12, 19, 31, 0.9);
+        border: 1px solid var(--line);
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
+
+      .dot.good { background: var(--good); }
+      .dot.warn { background: var(--warn); }
+      .dot.bad { background: var(--bad); }
+
+      .server-list,
+      .warning-list,
+      .client-list,
+      .log-list {
+        display: grid;
+        gap: 12px;
+      }
+
+      .server-item,
+      .warning-item,
+      .client-item,
+      .log-item {
+        border-radius: 18px;
+        border: 1px solid var(--line);
+        background: rgba(10, 18, 31, 0.88);
+        padding: 16px;
+      }
+
+      .server-top,
+      .client-top,
+      .log-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      .server-name,
+      .client-name,
+      .log-name {
+        font-size: 16px;
+        font-weight: 650;
+        letter-spacing: -0.02em;
+      }
+
+      .server-meta,
+      .client-meta,
+      .log-meta,
+      .warning-item {
+        color: var(--muted);
+        font-size: 13px;
+        line-height: 1.55;
+      }
+
+      .server-tags,
+      .client-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        margin-top: 12px;
+      }
+
+      .tag {
+        border-radius: 999px;
+        padding: 6px 10px;
+        font-size: 12px;
+        color: var(--text);
+        background: rgba(110, 231, 249, 0.09);
+        border: 1px solid rgba(110, 231, 249, 0.16);
+      }
+
+      details {
+        margin-top: 14px;
+        border-top: 1px solid rgba(148, 163, 184, 0.12);
+        padding-top: 12px;
+      }
+
+      summary {
+        cursor: pointer;
+        color: var(--muted);
+      }
+
+      pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        margin: 12px 0 0;
+        font-family: var(--mono);
+        font-size: 12px;
+        line-height: 1.65;
+        color: #d7e6ff;
+      }
+
+      .empty {
+        color: var(--muted);
+        padding: 14px 0;
+      }
+
+      .footer-note {
+        margin-top: 18px;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      @media (max-width: 1040px) {
+        .layout { grid-template-columns: 1fr; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="eyebrow">MCPace local control surface</div>
+        <h1>Operational visibility without<br>leaving the terminal-era stack.</h1>
+        <p class="subhead">
+          This dashboard stays local-only. It reuses MCPace's native JSON read
+          paths and a few safe lifecycle actions, so you can inspect runtime
+          health, server coverage, and client surfaces from one polished panel.
+        </p>
+        <div class="hero-meta">
+          <div class="meta-card">
+            <div class="meta-label">Workspace root</div>
+            <div class="meta-value"><code id="root-path">—</code></div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Last refresh</div>
+            <div class="meta-value" id="last-refresh">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Hub state</div>
+            <div class="meta-value" id="hero-hub-state">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Warnings</div>
+            <div class="meta-value" id="warning-count">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Overview cache</div>
+            <div class="meta-value" id="overview-cache">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">HTTP workers</div>
+            <div class="meta-value" id="runtime-workers">—</div>
+          </div>
+          <div class="meta-card">
+            <div class="meta-label">Upstream pool</div>
+            <div class="meta-value" id="upstream-pool">—</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="action-row">
+        <button class="accent" id="refresh-button">Refresh dashboard</button>
+        <button id="hub-up-button">Hub up</button>
+        <button id="hub-down-button">Hub down</button>
+        <button id="repair-button">Repair runtime</button>
+      </section>
+
+      <section class="metric-grid">
+        <article class="card metric">
+          <h2>Runtime readiness</h2>
+          <div class="metric-value" id="runtime-ready">—</div>
+          <div class="metric-note" id="runtime-ready-note">—</div>
+        </article>
+        <article class="card metric">
+          <h2>Enabled servers</h2>
+          <div class="metric-value" id="enabled-servers">—</div>
+          <div class="metric-note" id="enabled-servers-note">—</div>
+        </article>
+        <article class="card metric">
+          <h2>Required servers</h2>
+          <div class="metric-value" id="required-servers">—</div>
+          <div class="metric-note" id="required-servers-note">—</div>
+        </article>
+        <article class="card metric">
+          <h2>Client surfaces</h2>
+          <div class="metric-value" id="client-surfaces">—</div>
+          <div class="metric-note" id="client-surfaces-note">—</div>
+        </article>
+      </section>
+
+      <section class="layout">
+        <div class="stack">
+          <article class="card">
+            <h2>Servers</h2>
+            <p class="section-note">
+              Filter by name and focus on the currently effective set. Each
+              entry keeps the transport, policy, and scope data visible.
+            </p>
+            <div class="toolbar">
+              <input id="server-search" type="search" placeholder="Search servers by name, kind, or scope">
+              <button id="toggle-enabled-filter">Show enabled only</button>
+            </div>
+            <div class="chip-row" id="server-summary-chips"></div>
+            <div class="server-list" id="server-list"></div>
+          </article>
+
+          <article class="card">
+            <h2>Hub logs</h2>
+            <p class="section-note">
+              Recent lifecycle events from the local runtime log.
+            </p>
+            <div class="log-list" id="log-list"></div>
+          </article>
+        </div>
+
+        <div class="stack">
+          <article class="card">
+            <h2>Runtime posture</h2>
+            <p class="section-note">
+              A compact operational read across doctor, readiness, and hub
+              status.
+            </p>
+            <div class="chip-row" id="runtime-chip-row"></div>
+            <div class="footer-note" id="runtime-summary">—</div>
+          </article>
+
+          <article class="card">
+            <h2>Warnings</h2>
+            <p class="section-note">
+              Lifecycle or readiness warnings that deserve attention before a
+              client session starts routing through the hub.
+            </p>
+            <div class="warning-list" id="warning-list"></div>
+          </article>
+
+          <article class="card">
+            <h2>Client surfaces</h2>
+            <p class="section-note">
+              The documented client catalog, grouped by family and surface
+              class. This helps you see where MCPace already has a believable
+              connection story.
+            </p>
+            <div class="chip-row" id="client-summary-chips"></div>
+            <div class="client-list" id="client-list"></div>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const state = {
+        overview: null,
+        logs: [],
+        enabledOnly: true,
+        serverQuery: ""
+      };
+
+      const els = {
+        rootPath: document.getElementById("root-path"),
+        lastRefresh: document.getElementById("last-refresh"),
+        heroHubState: document.getElementById("hero-hub-state"),
+        warningCount: document.getElementById("warning-count"),
+        overviewCache: document.getElementById("overview-cache"),
+        runtimeWorkers: document.getElementById("runtime-workers"),
+        upstreamPool: document.getElementById("upstream-pool"),
+        runtimeReady: document.getElementById("runtime-ready"),
+        runtimeReadyNote: document.getElementById("runtime-ready-note"),
+        enabledServers: document.getElementById("enabled-servers"),
+        enabledServersNote: document.getElementById("enabled-servers-note"),
+        requiredServers: document.getElementById("required-servers"),
+        requiredServersNote: document.getElementById("required-servers-note"),
+        clientSurfaces: document.getElementById("client-surfaces"),
+        clientSurfacesNote: document.getElementById("client-surfaces-note"),
+        serverList: document.getElementById("server-list"),
+        warningList: document.getElementById("warning-list"),
+        clientList: document.getElementById("client-list"),
+        logList: document.getElementById("log-list"),
+        serverSearch: document.getElementById("server-search"),
+        toggleEnabledFilter: document.getElementById("toggle-enabled-filter"),
+        runtimeChipRow: document.getElementById("runtime-chip-row"),
+        runtimeSummary: document.getElementById("runtime-summary"),
+        serverSummaryChips: document.getElementById("server-summary-chips"),
+        clientSummaryChips: document.getElementById("client-summary-chips")
+      };
+
+      async function fetchJson(url, options) {
+        const response = await fetch(url, options);
+        if (!response.ok) {
+          throw new Error(`${response.status} ${response.statusText}`);
+        }
+        return response.json();
+      }
+
+      async function refreshDashboard(options = {}) {
+        try {
+          const overviewUrl = options.force ? "/api/overview?refresh=1" : "/api/overview";
+          const [overview, logs] = await Promise.all([
+            fetchJson(overviewUrl),
+            fetchJson("/api/logs?tail=18")
+          ]);
+          state.overview = overview;
+          state.logs = Array.isArray(logs) ? logs : [];
+          render();
+        } catch (error) {
+          console.error(error);
+          els.runtimeSummary.textContent = `Dashboard refresh failed: ${error.message}`;
+        }
+      }
+
+      async function runAction(path) {
+        try {
+          await fetchJson(path, { method: "POST" });
+          await refreshDashboard({ force: true });
+        } catch (error) {
+          console.error(error);
+          els.runtimeSummary.textContent = `Action failed: ${error.message}`;
+        }
+      }
+
+      function chip(label, tone) {
+        const dotClass = tone || "warn";
+        return `<span class="chip"><span class="dot ${dotClass}"></span>${escapeHtml(label)}</span>`;
+      }
+
+      function toneForBoolean(value) {
+        return value ? "good" : "bad";
+      }
+
+      function toneForHub(status) {
+        if (status === "running" || status === "healthy") return "good";
+        if (status === "stopped" || status === "stopped-ready") return "warn";
+        return "bad";
+      }
+
+      function escapeHtml(value) {
+        return String(value ?? "")
+          .replaceAll("&", "&amp;")
+          .replaceAll("<", "&lt;")
+          .replaceAll(">", "&gt;")
+          .replaceAll('"', "&quot;");
+      }
+
+      function formatDate(value) {
+        if (value === null || value === undefined || value === "") return "—";
+        if (typeof value === "number") return new Date(value).toLocaleString();
+        return new Date(Number(value)).toLocaleString();
+      }
+
+      function render() {
+        const overview = state.overview;
+        if (!overview) return;
+
+        const doctor = overview.doctor || {};
+        const project = doctor.project || {};
+        const hub = overview.hub || {};
+        const readiness = overview.readiness || {};
+        const servers = Array.isArray(overview.servers) ? overview.servers : [];
+        const clientCatalog = overview.clients || {};
+        const clients = Array.isArray(clientCatalog.targets) ? clientCatalog.targets : [];
+        const warnings = [
+          ...(Array.isArray(hub.warnings) ? hub.warnings : []),
+          ...(Array.isArray(readiness.missingRequiredSourceEnablement)
+            ? readiness.missingRequiredSourceEnablement.map(value => `Missing required source enablement: ${value}`)
+            : []),
+          ...(Array.isArray(readiness.missingRequiredCommands)
+            ? readiness.missingRequiredCommands.map(value => `Missing required command: ${value}`)
+            : [])
+        ];
+
+        els.rootPath.textContent = overview.rootPath || "—";
+        els.lastRefresh.textContent = formatDate(overview.generatedAtMs);
+        els.heroHubState.textContent = hub.status || hub.health || "unknown";
+        els.warningCount.textContent = String(warnings.length);
+        const cache = overview.cache || {};
+        const runtime = overview.runtime || {};
+        const http = runtime.http || {};
+        const upstreamPool = runtime.upstreamSessionPool || {};
+        els.overviewCache.textContent = cache.hit ? `hit · ${cache.ttlMs ?? "?"}ms` : cache.bypassed ? "fresh bypass" : "fresh";
+        els.runtimeWorkers.textContent = `${http.activeConnections ?? 0}/${http.maxConnections ?? "?"} active`;
+        els.upstreamPool.textContent = `${upstreamPool.size ?? 0}/${upstreamPool.maxSize ?? "?"} · ${upstreamPool.shardCount ?? 1} shard${(upstreamPool.shardCount ?? 1) === 1 ? "" : "s"}`;
+
+        els.runtimeReady.textContent = readiness.runtimePrerequisitesReady ? "Ready" : "Blocked";
+        els.runtimeReadyNote.textContent =
+          `Rust ${project.rustSourceReady ? "ok" : "missing"} · npm ${project.npmSurfaceReady ? "ok" : "missing"} · Docker ${project.containerToolingReady ? "ok" : "missing"}`;
+        els.enabledServers.textContent = String(readiness.effectiveEnabledServerCount ?? hub.effectiveEnabledServerCount ?? 0);
+        els.enabledServersNote.textContent =
+          `${readiness.sourceEnabledServerCount ?? 0} source-enabled · ${readiness.profileEnabledServerCount ?? 0} profile-enabled`;
+        els.requiredServers.textContent = String(readiness.requiredServerCount ?? hub.requiredServerCount ?? 0);
+        els.requiredServersNote.textContent =
+          `${readiness.requiredSourceEnabledCount ?? 0} required source-enabled`;
+        els.clientSurfaces.textContent = String(clients.length);
+        els.clientSurfacesNote.textContent =
+          `${Object.keys(clientCatalog.familyCounts || {}).length} client families`;
+
+        els.runtimeChipRow.innerHTML = [
+          chip(`Hub ${hub.status || "unknown"}`, toneForHub(hub.status || hub.health)),
+          chip(`Read-only ops ${hub.readyForReadOnlyOps ? "ready" : "blocked"}`, toneForBoolean(Boolean(hub.readyForReadOnlyOps))),
+          chip(`Runtime ops ${hub.readyForRuntimeOps ? "ready" : "blocked"}`, toneForBoolean(Boolean(hub.readyForRuntimeOps))),
+          chip(`HTTP ${http.activeConnections ?? 0}/${http.maxConnections ?? "?"}`, (http.activeConnections ?? 0) < (http.maxConnections ?? 1) ? "good" : "warn"),
+          chip(`Pool shards ${upstreamPool.shardCount ?? 1}`, "warn"),
+          chip(`Profile ${hub.activeProfile || readiness.activeProfile || "unknown"}`, "warn"),
+          chip(`Client key ${clientCatalog.configuredClientKeyName || "none"}`, "warn")
+        ].join("");
+
+        els.runtimeSummary.textContent =
+          `Hub ${hub.status || "unknown"} · ${readiness.serverCount ?? 0} configured servers · generated ${formatDate(overview.generatedAtMs)}`;
+
+        const enabledCount = servers.filter(server => server.effectiveEnabled).length;
+        const requiredCount = servers.filter(server => server.required).length;
+        const projectLocalCount = servers.filter(server => server.scopeClass === "project-local").length;
+        els.serverSummaryChips.innerHTML = [
+          chip(`${enabledCount} enabled`, enabledCount > 0 ? "good" : "warn"),
+          chip(`${requiredCount} required`, requiredCount > 0 ? "warn" : "good"),
+          chip(`${projectLocalCount} project-local`, projectLocalCount > 0 ? "warn" : "good"),
+          chip(`${servers.length} total`, "warn")
+        ].join("");
+
+        const familyCounts = clientCatalog.familyCounts || {};
+        const surfaceCounts = clientCatalog.surfaceClassCounts || {};
+        els.clientSummaryChips.innerHTML = [
+          ...Object.entries(surfaceCounts).map(([key, value]) => chip(`${value} ${key}`, key === "local" ? "good" : "warn")),
+          ...Object.entries(familyCounts).slice(0, 4).map(([key, value]) => chip(`${value} ${key}`, "warn"))
+        ].join("");
+
+        renderServers(servers);
+        renderWarnings(warnings);
+        renderClients(clients);
+        renderLogs(state.logs);
+      }
+
+      function renderServers(servers) {
+        const query = state.serverQuery.trim().toLowerCase();
+        const filtered = servers.filter(server => {
+          if (state.enabledOnly && !server.effectiveEnabled) return false;
+          if (!query) return true;
+          return [
+            server.name,
+            server.kind,
+            server.scopeClass,
+            server.transportPreference
+          ].join(" ").toLowerCase().includes(query);
+        });
+
+        if (!filtered.length) {
+          els.serverList.innerHTML = `<div class="empty">No servers match the current filter.</div>`;
+          return;
+        }
+
+        els.serverList.innerHTML = filtered.map(server => {
+          const tone = server.effectiveEnabled ? "good" : server.required ? "warn" : "bad";
+          return `
+            <article class="server-item">
+              <div class="server-top">
+                <div class="server-name">${escapeHtml(server.name)}</div>
+                <span class="chip"><span class="dot ${tone}"></span>${server.effectiveEnabled ? "enabled" : "disabled"}</span>
+              </div>
+              <div class="server-meta">
+                ${escapeHtml(server.kind)} · scope ${escapeHtml(server.scopeClass)} · concurrency ${escapeHtml(server.concurrencyPolicy)}
+              </div>
+              <div class="server-tags">
+                <span class="tag">${server.required ? "required" : "optional"}</span>
+                <span class="tag">${escapeHtml(server.transportPreference || "stdio-default")}</span>
+                <span class="tag">${escapeHtml(server.stateBinding)}</span>
+                <span class="tag">${escapeHtml(server.credentialBinding)}</span>
+              </div>
+            </article>
+          `;
+        }).join("");
+      }
+
+      function renderWarnings(warnings) {
+        if (!warnings.length) {
+          els.warningList.innerHTML = `<div class="empty">No active readiness warnings.</div>`;
+          return;
+        }
+        els.warningList.innerHTML = warnings.map(text => `
+          <article class="warning-item">${escapeHtml(text)}</article>
+        `).join("");
+      }
+
+      function renderClients(clients) {
+        const preview = clients.slice(0, 10);
+        if (!preview.length) {
+          els.clientList.innerHTML = `<div class="empty">No documented client surfaces were returned.</div>`;
+          return;
+        }
+        els.clientList.innerHTML = preview.map(client => `
+          <article class="client-item">
+            <div class="client-top">
+              <div class="client-name">${escapeHtml(client.displayName)}</div>
+              <span class="chip"><span class="dot ${client.surfaceClass === "local" ? "good" : "warn"}"></span>${escapeHtml(client.surfaceClass)}</span>
+            </div>
+            <div class="client-meta">
+              ${escapeHtml(client.id)} · ${escapeHtml(client.surfaceKind)} · ingress ${escapeHtml((client.supportedIngresses || []).join(", "))}
+            </div>
+            <div class="client-tags">
+              ${(client.nativeScopes || []).slice(0, 4).map(scope => `<span class="tag">${escapeHtml(scope)}</span>`).join("")}
+            </div>
+          </article>
+        `).join("");
+      }
+
+      function renderLogs(logs) {
+        if (!Array.isArray(logs) || !logs.length) {
+          els.logList.innerHTML = `<div class="empty">No recent log entries.</div>`;
+          return;
+        }
+        els.logList.innerHTML = logs.slice().reverse().map(entry => `
+          <article class="log-item">
+            <div class="log-top">
+              <div class="log-name">${escapeHtml(entry.event || "event")}</div>
+              <span class="chip"><span class="dot ${entry.level === "warn" ? "warn" : entry.level === "error" ? "bad" : "good"}"></span>${escapeHtml(entry.level || "info")}</span>
+            </div>
+            <div class="log-meta">${formatDate(entry.tsMs)}</div>
+            <details>
+              <summary>View raw event payload</summary>
+              <pre>${escapeHtml(JSON.stringify(entry, null, 2))}</pre>
+            </details>
+          </article>
+        `).join("");
+      }
+
+      document.getElementById("refresh-button").addEventListener("click", () => refreshDashboard({ force: true }));
+      document.getElementById("hub-up-button").addEventListener("click", () => runAction("/api/actions/hub-up"));
+      document.getElementById("hub-down-button").addEventListener("click", () => runAction("/api/actions/hub-down"));
+      document.getElementById("repair-button").addEventListener("click", () => runAction("/api/actions/repair"));
+      els.serverSearch.addEventListener("input", event => {
+        state.serverQuery = event.target.value;
+        render();
+      });
+      els.toggleEnabledFilter.addEventListener("click", () => {
+        state.enabledOnly = !state.enabledOnly;
+        els.toggleEnabledFilter.textContent = state.enabledOnly ? "Show all servers" : "Show enabled only";
+        render();
+      });
+
+      refreshDashboard();
+      window.setInterval(refreshDashboard, 15000);
+    </script>
+  </body>
+</html>

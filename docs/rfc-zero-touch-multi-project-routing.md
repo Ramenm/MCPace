@@ -109,7 +109,7 @@ Hub должен выбирать проект в таком порядке:
 Shared/global логика подходит для:
 
 - `filesystem`
-- `browser`
+- `demo-server`
 - `windows-mcp`
 - `exa`
 - `fetch`

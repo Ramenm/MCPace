@@ -54,7 +54,7 @@ pub(super) fn repair_runtime_files(root_path: &Path) -> Result<RepairReport, Str
     let lock_path = runtimepaths::hub_lock_path(&state_root);
     let stop_path = runtimepaths::hub_stop_path(&state_root);
 
-    let diagnostics = vec![
+    let diagnostics = [
         read_json_diagnostic(&registry_path),
         read_json_diagnostic(&lease_path),
         read_json_diagnostic(&state_path),

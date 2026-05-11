@@ -4,9 +4,11 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { repoRoot, deriveProjectVersion } from './lib/project-metadata.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
 const DEFAULT_WORKSPACE = '@mcpace/cli';
 const DEFAULT_NPM_PACK_TIMEOUT_MS = 120000;
+const REPORT_SCHEMA = 'mcpace.npmPack.v1';
 const NPM_PACK_TIMEOUT_MS = parseTimeoutEnv('MCPACE_NPM_PACK_TIMEOUT_MS', DEFAULT_NPM_PACK_TIMEOUT_MS);
 const NPM_COMMAND = process.platform === 'win32' ? 'cmd.exe' : 'npm';
 const REQUIRED_FILES = [
@@ -24,14 +26,16 @@ function parseTimeoutEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function npmCommandArgs(args) {
   return process.platform === 'win32' ? ['/d', '/s', '/c', 'npm', ...args] : args;
+}
+
+function assertSafeWorkspace(workspace) {
+  if (!/^[a-z0-9@/._+-]+$/i.test(workspace)) {
+    throw new Error(`invalid npm workspace value: ${workspace}`);
+  }
+  return workspace;
 }
 
 function normalizeReportPath(filePath) {
@@ -71,6 +75,27 @@ function listRepoVendoredBinaryFiles() {
   return files.sort();
 }
 
+function fileModeIsExecutable(mode) {
+  if (process.platform === 'win32') {
+    return true;
+  }
+  return Number.isInteger(mode) && (mode & 0o111) !== 0;
+}
+
+function packedFileDetails(packInfo) {
+  if (!Array.isArray(packInfo.files)) {
+    return [];
+  }
+  return packInfo.files
+    .filter((entry) => entry && typeof entry.path === 'string')
+    .map((entry) => ({
+      path: entry.path,
+      mode: Number.isInteger(entry.mode) ? entry.mode : null,
+      size: Number.isInteger(entry.size) ? entry.size : null,
+    }))
+    .sort((left, right) => left.path.localeCompare(right.path));
+}
+
 function parsePackJson(output) {
   const parsed = JSON.parse(output);
   if (!Array.isArray(parsed) || parsed.length !== 1 || typeof parsed[0] !== 'object' || !parsed[0]) {
@@ -82,7 +107,8 @@ function parsePackJson(output) {
 export function parseArgs(argv) {
   const parsed = {
     json: false,
-    workspace: DEFAULT_WORKSPACE
+    workspace: DEFAULT_WORKSPACE,
+    write: null
   };
 
   for (let index = 0; index < argv.length; index += 1) {
@@ -94,6 +120,12 @@ export function parseArgs(argv) {
       case '--workspace':
         parsed.workspace = argv[++index] || DEFAULT_WORKSPACE;
         break;
+      case '--write':
+        parsed.write = argv[++index] || null;
+        if (!parsed.write) {
+          throw new Error('--write requires a report path');
+        }
+        break;
       default:
         throw new Error(`unsupported verify-npm-pack argument: ${token}`);
     }
@@ -102,8 +134,16 @@ export function parseArgs(argv) {
   return parsed;
 }
 
+
+function writeJsonReport(filePath, report) {
+  const absolute = path.resolve(filePath);
+  fs.mkdirSync(path.dirname(absolute), { recursive: true });
+  fs.writeFileSync(absolute, `${JSON.stringify(report, null, 2)}\n`);
+  return normalizeReportPath(absolute);
+}
+
 export function verifyNpmPack(options = {}) {
-  const workspace = options.workspace || DEFAULT_WORKSPACE;
+  const workspace = assertSafeWorkspace(options.workspace || DEFAULT_WORKSPACE);
   const command = ['pack', '--workspace', workspace, '--json', '--dry-run'];
   const result = spawnSync(NPM_COMMAND, npmCommandArgs(command), {
     cwd: repoRoot,
@@ -114,6 +154,8 @@ export function verifyNpmPack(options = {}) {
   });
 
   const report = {
+    schema: REPORT_SCHEMA,
+    generatedAt: new Date().toISOString(),
     status: 'fail',
     workspace,
     command: `npm ${command.join(' ')}`,
@@ -140,18 +182,19 @@ export function verifyNpmPack(options = {}) {
     return report;
   }
 
-  const filePaths = Array.isArray(packInfo.files)
-    ? packInfo.files
-        .map((entry) => (entry && typeof entry.path === 'string' ? entry.path : null))
-        .filter(Boolean)
-        .sort()
-    : [];
+  const fileDetails = packedFileDetails(packInfo);
+  const filePaths = fileDetails.map((entry) => entry.path);
   const filePathSet = new Set(filePaths);
+  const filesByPath = new Map(fileDetails.map((entry) => [entry.path, entry]));
   const missingFiles = REQUIRED_FILES.filter((relativePath) => !filePathSet.has(relativePath));
   const packedVendoredBinaryFiles = filePaths.filter((relativePath) => relativePath.startsWith('vendor/'));
+  const packedVendoredBinaryFileDetails = packedVendoredBinaryFiles.map((relativePath) => filesByPath.get(relativePath));
   const missingVendoredBinaryFiles = report.repoVendoredBinaryFiles.filter(
     (relativePath) => !filePathSet.has(relativePath)
   );
+  const nonExecutableVendoredBinaryFiles = packedVendoredBinaryFileDetails
+    .filter((entry) => !fileModeIsExecutable(entry?.mode))
+    .map((entry) => `${entry.path}${Number.isInteger(entry.mode) ? ` (mode ${entry.mode.toString(8)})` : ' (mode missing)'}`);
   const packageVersion = typeof packInfo.version === 'string' ? packInfo.version : null;
   const expectedVersion = deriveProjectVersion();
 
@@ -162,9 +205,12 @@ export function verifyNpmPack(options = {}) {
   report.entryCount = Number(packInfo.entryCount || filePaths.length || 0);
   report.unpackedSize = Number(packInfo.unpackedSize || 0);
   report.files = filePaths;
+  report.fileDetails = fileDetails;
   report.missingFiles = missingFiles;
   report.packedVendoredBinaryFiles = packedVendoredBinaryFiles;
+  report.packedVendoredBinaryFileDetails = packedVendoredBinaryFileDetails;
   report.missingVendoredBinaryFiles = missingVendoredBinaryFiles;
+  report.nonExecutableVendoredBinaryFiles = nonExecutableVendoredBinaryFiles;
   report.packageMode = packedVendoredBinaryFiles.length > 0 ? 'vendored-binary-bundle' : 'thin-launcher';
 
   if (!packageVersion || packageVersion !== expectedVersion) {
@@ -179,6 +225,11 @@ export function verifyNpmPack(options = {}) {
 
   if (missingVendoredBinaryFiles.length > 0) {
     report.reason = `npm pack omitted staged vendored binaries: ${missingVendoredBinaryFiles.join(', ')}`;
+    return report;
+  }
+
+  if (nonExecutableVendoredBinaryFiles.length > 0) {
+    report.reason = `npm pack includes non-executable vendored binaries: ${nonExecutableVendoredBinaryFiles.join(', ')}`;
     return report;
   }
 
@@ -198,6 +249,10 @@ function main() {
   try {
     const parsed = parseArgs(process.argv.slice(2));
     const report = verifyNpmPack(parsed);
+    if (parsed.write) {
+      report.reportPath = normalizeReportPath(path.resolve(parsed.write));
+      writeJsonReport(parsed.write, report);
+    }
     if (parsed.json) {
       process.stdout.write(`${JSON.stringify(report, null, 2)}\n`);
     } else if (report.status === 'pass') {

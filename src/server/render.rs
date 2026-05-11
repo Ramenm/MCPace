@@ -1,5 +1,6 @@
 use super::model::ServerRecord;
 use crate::json::JsonValue;
+use crate::mcp_sources::{McpServerRemoveResult, McpServerToggleResult};
 use std::io::Write;
 
 pub(super) fn render_list(
@@ -17,12 +18,13 @@ pub(super) fn render_list(
     for record in records {
         let _ = writeln!(
             stdout,
-            "- {} [{}] required={} source-enabled={} profile-enabled={} effective-enabled={} default-enabled={}",
+            "- {} [{}] required={} source-enabled={} profile-enabled={} platform-supported={} effective-enabled={} default-enabled={}",
             record.name,
             record.kind,
             yes_no(record.required),
             yes_no(record.source_enabled),
             yes_no(record.profile_enabled),
+            yes_no(record.platform_supported),
             yes_no(record.effective_enabled),
             yes_no(record.default_enabled)
         );
@@ -72,6 +74,11 @@ pub(super) fn render_capabilities(
             join_or_none(&record.supported_transports)
         );
         let _ = writeln!(stdout, "    platforms: {}", join_or_none(&record.platforms));
+        let _ = writeln!(
+            stdout,
+            "    platform supported: {}",
+            yes_no(record.platform_supported)
+        );
         let _ = writeln!(
             stdout,
             "    required commands: {}",
@@ -151,10 +158,283 @@ fn blank_to_none(value: &str) -> String {
     }
 }
 
+pub(super) fn render_test_result(
+    result: &JsonValue,
+    json_output: bool,
+    stdout: &mut dyn Write,
+) -> i32 {
+    if json_output {
+        let _ = writeln!(stdout, "{}", result.to_pretty_string());
+        return if result
+            .get("ok")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(false)
+        {
+            0
+        } else {
+            1
+        };
+    }
+
+    let ok = result
+        .get("ok")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    let server_count = result
+        .get("serverCount")
+        .and_then(JsonValue::as_i64)
+        .unwrap_or(0);
+    let ok_count = result
+        .get("okCount")
+        .and_then(JsonValue::as_i64)
+        .unwrap_or(0);
+    let failed_count = result
+        .get("failedCount")
+        .and_then(JsonValue::as_i64)
+        .unwrap_or(0);
+    let skipped_count = result
+        .get("skippedCount")
+        .and_then(JsonValue::as_i64)
+        .unwrap_or(0);
+    let _ = writeln!(
+        stdout,
+        "Server test tools/list smoke: {} (servers={} ok={} failed={} skipped={})",
+        if ok { "PASS" } else { "FAIL" },
+        server_count,
+        ok_count,
+        failed_count,
+        skipped_count
+    );
+    if let Some(results) = result.get("results").and_then(JsonValue::as_array) {
+        for item in results {
+            let server = item
+                .get("server")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("unknown");
+            let status = item
+                .get("status")
+                .and_then(JsonValue::as_str)
+                .unwrap_or("unknown");
+            let item_ok = item.get("ok").and_then(JsonValue::as_bool).unwrap_or(false);
+            let tool_count = item
+                .get("toolCount")
+                .and_then(JsonValue::as_i64)
+                .map(|value| value.to_string())
+                .unwrap_or_else(|| "n/a".to_string());
+            let _ = writeln!(
+                stdout,
+                "- {} status={} ok={} tools={}",
+                server,
+                status,
+                yes_no(item_ok),
+                tool_count
+            );
+            if !item_ok {
+                if let Some(error) = item.get("error").and_then(JsonValue::as_str) {
+                    let _ = writeln!(stdout, "    error: {}", error);
+                }
+            }
+        }
+    }
+    if ok {
+        0
+    } else {
+        1
+    }
+}
+
+pub(super) fn render_remove_result(
+    result: &McpServerRemoveResult,
+    json_output: bool,
+    stdout: &mut dyn Write,
+) -> i32 {
+    if json_output {
+        let _ = writeln!(stdout, "{}", result.to_json_value().to_pretty_string());
+        return 0;
+    }
+    let dry_run_prefix = if result.dry_run { "dry-run " } else { "" };
+    let _ = writeln!(
+        stdout,
+        "{}removed MCP server '{}' from {} (remaining servers: {})",
+        dry_run_prefix, result.name, result.path, result.remaining_server_count
+    );
+    0
+}
+
+pub(super) fn render_import_result(
+    result: &crate::mcp_sources::McpServerImportResult,
+    json_output: bool,
+    stdout: &mut dyn Write,
+) -> i32 {
+    if json_output {
+        let _ = writeln!(stdout, "{}", result.to_json_value().to_pretty_string());
+        return 0;
+    }
+
+    let dry_run_prefix = if result.dry_run { "dry-run " } else { "" };
+    let _ = writeln!(
+        stdout,
+        "{}imported {} MCP server(s) from {} into {} target file(s)",
+        dry_run_prefix, result.imported_count, result.source_path, result.target_file_count
+    );
+    for entry in &result.entries {
+        let _ = writeln!(
+            stdout,
+            "- {}: {} -> {} (existedBefore={})",
+            entry.name,
+            entry.action,
+            entry.path,
+            yes_no(entry.existed_before)
+        );
+    }
+    if !result.warnings.is_empty() {
+        let _ = writeln!(stdout, "Warnings: {}", result.warnings.join(", "));
+    }
+    if result.dry_run {
+        let _ = writeln!(stdout, "no files written; rerun without --dry-run to apply");
+    }
+    0
+}
+
 fn yes_no(value: bool) -> &'static str {
     if value {
         "yes"
     } else {
         "no"
     }
+}
+
+pub(super) fn render_sources(
+    report: &crate::mcp_sources::McpSourceReport,
+    json_output: bool,
+    stdout: &mut dyn Write,
+) -> i32 {
+    if json_output {
+        let _ = writeln!(stdout, "{}", report.to_json_value().to_pretty_string());
+        return 0;
+    }
+
+    let _ = writeln!(
+        stdout,
+        "MCP settings sources: {} active file(s), {} server(s)",
+        report.registry.sources.len(),
+        report.registry.servers.len()
+    );
+    for source in &report.source_statuses {
+        let _ = writeln!(
+            stdout,
+            "- {} [{}] exists={} servers={}",
+            source.path,
+            source.origin,
+            yes_no(source.exists),
+            source.server_count
+        );
+    }
+    if !report.registry.servers.is_empty() {
+        let _ = writeln!(stdout, "Servers:");
+        for entry in report.registry.servers.values() {
+            let _ = writeln!(
+                stdout,
+                "- {} (normalized={}, source={})",
+                entry.name, entry.normalized_name, entry.source
+            );
+        }
+    }
+    let _ = writeln!(
+        stdout,
+        "Warnings: {}",
+        join_or_none(&report.registry.warnings)
+    );
+    0
+}
+
+pub(super) fn render_add_result(
+    result: &crate::mcp_sources::McpServerWriteResult,
+    json_output: bool,
+    stdout: &mut dyn Write,
+) -> i32 {
+    if json_output {
+        let _ = writeln!(stdout, "{}", result.to_json_value().to_pretty_string());
+        return 0;
+    }
+
+    let _ = writeln!(
+        stdout,
+        "MCP server {}: {} ({})",
+        result.action, result.name, result.server_type
+    );
+    let _ = writeln!(stdout, "  source: {}", result.path);
+    if let Some(command) = &result.command {
+        let _ = writeln!(stdout, "  command: {}", command);
+    }
+    if let Some(url) = &result.url {
+        let _ = writeln!(stdout, "  url: {}", url);
+    }
+    let _ = writeln!(
+        stdout,
+        "  args={} env={} headers={} existedBefore={} dryRun={}",
+        result.args_count,
+        result.env_count,
+        result.header_count,
+        yes_no(result.existed_before),
+        yes_no(result.dry_run)
+    );
+    if result.dry_run {
+        let _ = writeln!(
+            stdout,
+            "  no files written; rerun without --dry-run to apply"
+        );
+    } else {
+        let _ = writeln!(
+            stdout,
+            "  next: mcpace server test {} --refresh",
+            result.normalized_name
+        );
+        let _ = writeln!(
+            stdout,
+            "  then: mcpace client install <client|all> --dry-run --diff"
+        );
+    }
+    0
+}
+
+pub(super) fn render_toggle_result(
+    result: &McpServerToggleResult,
+    json_output: bool,
+    stdout: &mut dyn Write,
+) -> i32 {
+    if json_output {
+        let _ = writeln!(stdout, "{}", result.to_json_value().to_pretty_string());
+        return 0;
+    }
+
+    let dry_run_prefix = if result.dry_run { "dry-run " } else { "" };
+    let previous = result
+        .previous_enabled
+        .map(yes_no)
+        .unwrap_or("implicit-yes");
+    let _ = writeln!(
+        stdout,
+        "{}{}d MCP server '{}' in {} (previous enabled={}, now enabled={})",
+        dry_run_prefix,
+        result.action,
+        result.name,
+        result.path,
+        previous,
+        yes_no(result.enabled)
+    );
+    if result.dry_run {
+        let _ = writeln!(
+            stdout,
+            "  no files written; rerun without --dry-run to apply"
+        );
+    } else {
+        let _ = writeln!(
+            stdout,
+            "  next: mcpace server test {} --refresh",
+            result.normalized_name
+        );
+        let _ = writeln!(stdout, "  then: mcpace verify readiness --json");
+    }
+    0
 }

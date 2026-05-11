@@ -1,0 +1,1002 @@
+use super::diagnostics::stderr_suffix;
+use super::inventory::configured_inventory;
+use super::process_config::child_process_path;
+use super::server_config::{find_server, load_servers};
+use super::session_pool::{
+    UpstreamPoolCallOutcome, UpstreamPoolInvocation, UpstreamSessionKey, UpstreamSessionPool,
+};
+use super::stdio_runtime::{run_stdio_request, run_stdio_tool_calls};
+use super::tool_cache::cached_tools_list;
+use super::{
+    cache_root_path, context_string, ensure_callable_stdio, optional_json_string,
+    server_fingerprint, server_runtime_callable, timeout_for, ToolRiskPolicy, UpstreamLeaseContext,
+    UpstreamServerConfig, UpstreamToolCall, TOOL_LIST_CACHE_TTL,
+};
+use crate::hub::leases::{self, RuntimeLeaseAcquireResult, RuntimeLeaseRequest};
+use crate::json::JsonValue;
+use crate::json_helpers;
+use crate::mcp_sources;
+use std::collections::BTreeSet;
+use std::path::{Path, PathBuf};
+use std::sync::{
+    atomic::{AtomicBool, AtomicUsize, Ordering},
+    mpsc::Receiver,
+    Arc, Mutex,
+};
+use std::thread;
+use std::time::{Duration, Instant};
+
+struct UpstreamLeaseGuard {
+    root_path: PathBuf,
+    lease_id: String,
+    lease: JsonValue,
+    released: bool,
+    heartbeat: Option<LeaseHeartbeat>,
+}
+
+struct LeaseHeartbeat {
+    stop: Arc<AtomicBool>,
+    lost: Arc<AtomicBool>,
+    renewal_count: Arc<AtomicUsize>,
+    failure_count: Arc<AtomicUsize>,
+    handle: Option<thread::JoinHandle<()>>,
+}
+
+enum UpstreamLeaseAttachment {
+    Attached(UpstreamLeaseGuard),
+}
+
+struct UpstreamLeaseOutcome {
+    attached: bool,
+    lease_id: Option<String>,
+    lease: JsonValue,
+    released: bool,
+    release: JsonValue,
+    bypass_reason: Option<String>,
+    heartbeat_started: bool,
+    heartbeat_renewal_count: usize,
+    heartbeat_lost: bool,
+    heartbeat_failure_count: usize,
+}
+
+impl Drop for UpstreamLeaseGuard {
+    fn drop(&mut self) {
+        if !self.released {
+            self.stop_heartbeat();
+            let _ = leases::release_runtime_lease(&self.root_path, &self.lease_id);
+            self.released = true;
+        }
+    }
+}
+
+impl UpstreamLeaseGuard {
+    fn release(&mut self) -> Result<JsonValue, String> {
+        if self.released {
+            return Ok(JsonValue::Null);
+        }
+        self.stop_heartbeat();
+        let release = leases::release_runtime_lease(&self.root_path, &self.lease_id)?;
+        self.released = true;
+        Ok(release)
+    }
+
+    fn stop_heartbeat(&mut self) {
+        if let Some(mut heartbeat) = self.heartbeat.take() {
+            heartbeat.stop.store(true, Ordering::SeqCst);
+            if let Some(handle) = heartbeat.handle.take() {
+                let _ = handle.join();
+            }
+        }
+    }
+
+    fn heartbeat_started(&self) -> bool {
+        self.heartbeat.is_some()
+    }
+
+    fn heartbeat_renewal_count(&self) -> usize {
+        self.heartbeat
+            .as_ref()
+            .map(|heartbeat| heartbeat.renewal_count.load(Ordering::SeqCst))
+            .unwrap_or(0)
+    }
+
+    fn heartbeat_lost(&self) -> bool {
+        self.heartbeat
+            .as_ref()
+            .map(|heartbeat| heartbeat.lost.load(Ordering::SeqCst))
+            .unwrap_or(false)
+    }
+
+    fn heartbeat_failure_count(&self) -> usize {
+        self.heartbeat
+            .as_ref()
+            .map(|heartbeat| heartbeat.failure_count.load(Ordering::SeqCst))
+            .unwrap_or(0)
+    }
+
+    pub(super) fn heartbeat_lost_flag(&self) -> Option<&AtomicBool> {
+        self.heartbeat
+            .as_ref()
+            .map(|heartbeat| heartbeat.lost.as_ref())
+    }
+}
+
+impl UpstreamLeaseAttachment {
+    pub(super) fn heartbeat_lost_flag(&self) -> Option<&AtomicBool> {
+        match self {
+            UpstreamLeaseAttachment::Attached(guard) => guard.heartbeat_lost_flag(),
+        }
+    }
+}
+
+pub fn callable_server_names(root_path: &Path) -> Result<Vec<String>, String> {
+    let servers = load_servers(root_path)?;
+    Ok(servers
+        .values()
+        .filter(|server| server_runtime_callable(root_path, server).0)
+        .map(|server| server.name.clone())
+        .collect())
+}
+
+pub fn request_once(
+    root_path: &Path,
+    server_name: &str,
+    method: &str,
+    params: Option<JsonValue>,
+    timeout_ms: Option<u64>,
+) -> Result<JsonValue, String> {
+    let server_name = server_name.trim();
+    let method = method.trim();
+    if server_name.is_empty() {
+        return Err("upstream request requires a non-empty server name".to_string());
+    }
+    if method.is_empty() {
+        return Err("upstream request requires a non-empty method".to_string());
+    }
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    ensure_callable_stdio(root_path, server)?;
+    let effective_timeout = timeout_for(server, timeout_ms);
+    run_stdio_request(root_path, server, method, params, effective_timeout, None)
+}
+pub fn list_tools(
+    root_path: &Path,
+    server_name: Option<&str>,
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> Result<JsonValue, String> {
+    let Some(server_name) = server_name.map(str::trim).filter(|value| !value.is_empty()) else {
+        return configured_inventory(root_path);
+    };
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    ensure_callable_stdio(root_path, server)?;
+
+    let effective_timeout = timeout_for(server, timeout_ms);
+    let (tools, cache_hit) = cached_tools_list(root_path, server, effective_timeout, refresh)?;
+    let count = tools.as_array().map(|items| items.len()).unwrap_or(0);
+
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(true)),
+        ("server", JsonValue::string(server_name)),
+        ("sourceType", JsonValue::string(&server.source_type)),
+        (
+            "timeoutMs",
+            JsonValue::number(effective_timeout.as_millis()),
+        ),
+        ("cacheHit", JsonValue::bool(cache_hit)),
+        (
+            "cacheTtlMs",
+            JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
+        ),
+        ("toolCount", JsonValue::number(count)),
+        ("tools", tools),
+    ]))
+}
+
+pub fn call_tool(
+    root_path: &Path,
+    server_name: &str,
+    tool_name: &str,
+    arguments: &JsonValue,
+    timeout_ms: Option<u64>,
+) -> Result<JsonValue, String> {
+    call_tool_with_context(
+        root_path,
+        server_name,
+        tool_name,
+        arguments,
+        timeout_ms,
+        None,
+    )
+}
+
+pub fn call_tool_with_context(
+    root_path: &Path,
+    server_name: &str,
+    tool_name: &str,
+    arguments: &JsonValue,
+    timeout_ms: Option<u64>,
+    context: Option<&UpstreamLeaseContext>,
+) -> Result<JsonValue, String> {
+    let server_name = server_name.trim();
+    let tool_name = tool_name.trim();
+    if server_name.is_empty() {
+        return Err("upstream_call requires non-empty 'server'".to_string());
+    }
+    if tool_name.is_empty() {
+        return Err("upstream_call requires non-empty 'tool'".to_string());
+    }
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    ensure_callable_stdio(root_path, server)?;
+    validate_upstream_tool_policy(server, tool_name, context)?;
+
+    let effective_timeout = timeout_for(server, timeout_ms);
+    let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
+    let heartbeat_lost = lease.heartbeat_lost_flag();
+    let result = run_stdio_request(
+        root_path,
+        server,
+        "tools/call",
+        Some(JsonValue::object([
+            ("name", JsonValue::string(tool_name)),
+            ("arguments", arguments.clone()),
+        ])),
+        effective_timeout,
+        heartbeat_lost,
+    )?;
+    let lease_outcome = finalize_upstream_lease(lease)?;
+    let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
+    let upstream_ok = !upstream_is_error;
+
+    let mut entries = vec![
+        ("ok".to_string(), JsonValue::bool(upstream_ok)),
+        ("bridgeOk".to_string(), JsonValue::bool(true)),
+        ("upstreamOk".to_string(), JsonValue::bool(upstream_ok)),
+        (
+            "upstreamIsError".to_string(),
+            JsonValue::bool(upstream_is_error),
+        ),
+        ("server".to_string(), JsonValue::string(server_name)),
+        ("tool".to_string(), JsonValue::string(tool_name)),
+        (
+            "timeoutMs".to_string(),
+            JsonValue::number(effective_timeout.as_millis()),
+        ),
+        ("upstreamResult".to_string(), result),
+    ];
+    entries.extend(upstream_lease_entries(lease_outcome));
+    Ok(JsonValue::object(entries))
+}
+
+pub fn call_tool_with_pooled_context(
+    root_path: &Path,
+    server_name: &str,
+    tool_name: &str,
+    arguments: &JsonValue,
+    timeout_ms: Option<u64>,
+    context: Option<&UpstreamLeaseContext>,
+    pool: &Mutex<UpstreamSessionPool>,
+) -> Result<JsonValue, String> {
+    let server_name = server_name.trim();
+    let tool_name = tool_name.trim();
+    if server_name.is_empty() {
+        return Err("upstream_call requires non-empty 'server'".to_string());
+    }
+    if tool_name.is_empty() {
+        return Err("upstream_call requires non-empty 'tool'".to_string());
+    }
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    ensure_callable_stdio(root_path, server)?;
+    validate_upstream_tool_policy(server, tool_name, context)?;
+
+    let effective_timeout = timeout_for(server, timeout_ms);
+    let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
+    let heartbeat_lost = lease.heartbeat_lost_flag();
+    let pool_key = upstream_session_key(root_path, server, context);
+    let (result, pool_outcome) = {
+        let mut pool = pool
+            .lock()
+            .map_err(|_| "upstream session pool lock was poisoned".to_string())?;
+        pool.call_tool(
+            UpstreamPoolInvocation {
+                root_path,
+                server,
+                key: pool_key,
+                timeout: effective_timeout,
+                lease_lost: heartbeat_lost,
+            },
+            tool_name,
+            arguments,
+        )?
+    };
+    let lease_outcome = finalize_upstream_lease(lease)?;
+    let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
+    let upstream_ok = !upstream_is_error;
+
+    let mut entries = vec![
+        ("ok".to_string(), JsonValue::bool(upstream_ok)),
+        ("bridgeOk".to_string(), JsonValue::bool(true)),
+        ("upstreamOk".to_string(), JsonValue::bool(upstream_ok)),
+        (
+            "upstreamIsError".to_string(),
+            JsonValue::bool(upstream_is_error),
+        ),
+        ("server".to_string(), JsonValue::string(server_name)),
+        ("tool".to_string(), JsonValue::string(tool_name)),
+        (
+            "timeoutMs".to_string(),
+            JsonValue::number(effective_timeout.as_millis()),
+        ),
+        ("upstreamResult".to_string(), result),
+    ];
+    entries.extend(upstream_pool_entries(pool_outcome));
+    entries.extend(upstream_lease_entries(lease_outcome));
+    Ok(JsonValue::object(entries))
+}
+
+pub fn call_tools(
+    root_path: &Path,
+    server_name: &str,
+    calls: &[UpstreamToolCall],
+    timeout_ms: Option<u64>,
+) -> Result<JsonValue, String> {
+    call_tools_with_context(root_path, server_name, calls, timeout_ms, None)
+}
+
+pub fn call_tools_with_context(
+    root_path: &Path,
+    server_name: &str,
+    calls: &[UpstreamToolCall],
+    timeout_ms: Option<u64>,
+    context: Option<&UpstreamLeaseContext>,
+) -> Result<JsonValue, String> {
+    let server_name = server_name.trim();
+    if server_name.is_empty() {
+        return Err("upstream_batch requires non-empty 'server'".to_string());
+    }
+    if calls.is_empty() {
+        return Err("upstream_batch requires at least one call".to_string());
+    }
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    ensure_callable_stdio(root_path, server)?;
+    validate_upstream_batch_tool_policy(server, calls, context)?;
+
+    let effective_timeout = timeout_for(server, timeout_ms);
+    let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
+    let heartbeat_lost = lease.heartbeat_lost_flag();
+    let results =
+        run_stdio_tool_calls(root_path, server, calls, effective_timeout, heartbeat_lost)?;
+    let lease_outcome = finalize_upstream_lease(lease)?;
+    let upstream_ok_count = results
+        .iter()
+        .filter(|item| json_helpers::bool_at_path(item, &["upstreamOk"]).unwrap_or(false))
+        .count();
+    let upstream_failed_count = results.len().saturating_sub(upstream_ok_count);
+    let upstream_ok = upstream_failed_count == 0;
+
+    let mut entries = vec![
+        ("ok".to_string(), JsonValue::bool(upstream_ok)),
+        ("bridgeOk".to_string(), JsonValue::bool(true)),
+        ("upstreamOk".to_string(), JsonValue::bool(upstream_ok)),
+        ("server".to_string(), JsonValue::string(server_name)),
+        (
+            "timeoutMs".to_string(),
+            JsonValue::number(effective_timeout.as_millis()),
+        ),
+        ("callCount".to_string(), JsonValue::number(results.len())),
+        (
+            "upstreamOkCount".to_string(),
+            JsonValue::number(upstream_ok_count),
+        ),
+        (
+            "upstreamFailedCount".to_string(),
+            JsonValue::number(upstream_failed_count),
+        ),
+        ("results".to_string(), JsonValue::array(results)),
+    ];
+    entries.extend(upstream_lease_entries(lease_outcome));
+    Ok(JsonValue::object(entries))
+}
+
+pub fn call_tools_with_pooled_context(
+    root_path: &Path,
+    server_name: &str,
+    calls: &[UpstreamToolCall],
+    timeout_ms: Option<u64>,
+    context: Option<&UpstreamLeaseContext>,
+    pool: &Mutex<UpstreamSessionPool>,
+) -> Result<JsonValue, String> {
+    let server_name = server_name.trim();
+    if server_name.is_empty() {
+        return Err("upstream_batch requires non-empty 'server'".to_string());
+    }
+    if calls.is_empty() {
+        return Err("upstream_batch requires at least one call".to_string());
+    }
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    ensure_callable_stdio(root_path, server)?;
+    validate_upstream_batch_tool_policy(server, calls, context)?;
+
+    let effective_timeout = timeout_for(server, timeout_ms);
+    let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
+    let heartbeat_lost = lease.heartbeat_lost_flag();
+    let pool_key = upstream_session_key(root_path, server, context);
+    let (results, pool_outcome) = {
+        let mut pool = pool
+            .lock()
+            .map_err(|_| "upstream session pool lock was poisoned".to_string())?;
+        pool.call_tools(
+            UpstreamPoolInvocation {
+                root_path,
+                server,
+                key: pool_key,
+                timeout: effective_timeout,
+                lease_lost: heartbeat_lost,
+            },
+            calls,
+        )?
+    };
+    let lease_outcome = finalize_upstream_lease(lease)?;
+    let upstream_ok_count = results
+        .iter()
+        .filter(|item| json_helpers::bool_at_path(item, &["upstreamOk"]).unwrap_or(false))
+        .count();
+    let upstream_failed_count = results.len().saturating_sub(upstream_ok_count);
+    let upstream_ok = upstream_failed_count == 0;
+
+    let mut entries = vec![
+        ("ok".to_string(), JsonValue::bool(upstream_ok)),
+        ("bridgeOk".to_string(), JsonValue::bool(true)),
+        ("upstreamOk".to_string(), JsonValue::bool(upstream_ok)),
+        ("server".to_string(), JsonValue::string(server_name)),
+        (
+            "timeoutMs".to_string(),
+            JsonValue::number(effective_timeout.as_millis()),
+        ),
+        ("callCount".to_string(), JsonValue::number(results.len())),
+        (
+            "upstreamOkCount".to_string(),
+            JsonValue::number(upstream_ok_count),
+        ),
+        (
+            "upstreamFailedCount".to_string(),
+            JsonValue::number(upstream_failed_count),
+        ),
+        ("results".to_string(), JsonValue::array(results)),
+    ];
+    entries.extend(upstream_pool_entries(pool_outcome));
+    entries.extend(upstream_lease_entries(lease_outcome));
+    Ok(JsonValue::object(entries))
+}
+
+pub fn tool_policy_info(
+    root_path: &Path,
+    server_name: &str,
+    tool_name: &str,
+) -> Result<JsonValue, String> {
+    let server_name = server_name.trim();
+    let tool_name = tool_name.trim();
+    if server_name.is_empty() {
+        return Err("tool_policy_info requires a non-empty server name".to_string());
+    }
+    if tool_name.is_empty() {
+        return Err("tool_policy_info requires a non-empty tool name".to_string());
+    }
+    let servers = load_servers(root_path)?;
+    let server = find_server(&servers, server_name)
+        .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
+    let mut policies = Vec::new();
+    for policy in &server.tool_policies {
+        if !policy.matches_tool(tool_name) {
+            continue;
+        }
+        policies.push(JsonValue::object([
+            (
+                "riskClass",
+                policy
+                    .risk_class
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "allowArgument",
+                policy
+                    .allow_argument
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "description",
+                policy
+                    .description
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+        ]));
+    }
+    Ok(JsonValue::object([
+        ("server", JsonValue::string(server_name)),
+        ("tool", JsonValue::string(tool_name)),
+        ("guardRequired", JsonValue::bool(!policies.is_empty())),
+        ("policyCount", JsonValue::number(policies.len())),
+        ("policies", JsonValue::array(policies)),
+    ]))
+}
+
+pub(super) fn validate_upstream_batch_tool_policy(
+    server: &UpstreamServerConfig,
+    calls: &[UpstreamToolCall],
+    context: Option<&UpstreamLeaseContext>,
+) -> Result<(), String> {
+    for (index, call) in calls.iter().enumerate() {
+        let tool_name = call.tool.trim();
+        if tool_name.is_empty() {
+            return Err(format!(
+                "upstream_batch calls[{}] requires non-empty 'tool'",
+                index
+            ));
+        }
+        validate_upstream_tool_policy(server, tool_name, context)?;
+    }
+    Ok(())
+}
+
+pub(super) fn validate_upstream_tool_policy(
+    server: &UpstreamServerConfig,
+    tool_name: &str,
+    context: Option<&UpstreamLeaseContext>,
+) -> Result<(), String> {
+    for policy in &server.tool_policies {
+        if !policy.matches_tool(tool_name) || policy.is_allowed(context) {
+            continue;
+        }
+        return Err(policy.blocked_message(&server.name, tool_name));
+    }
+
+    Ok(())
+}
+
+pub fn collect_allow_arguments(arguments: &JsonValue) -> Result<BTreeSet<String>, String> {
+    let mut values = BTreeSet::new();
+    let Some(object) = arguments.as_object() else {
+        return Ok(values);
+    };
+
+    for (key, value) in object {
+        if !key.starts_with("allow") || key == "allowToolRiskClasses" {
+            continue;
+        }
+        if key == "allowArguments" {
+            collect_allow_argument_list(value, &mut values)?;
+            continue;
+        }
+        match value {
+            JsonValue::Bool(true) => {
+                values.insert(key.clone());
+            }
+            JsonValue::Bool(false) | JsonValue::Null => {}
+            _ => return Err(format!("{} must be a boolean", key)),
+        }
+    }
+
+    Ok(values)
+}
+
+pub fn collect_allowed_tool_risk_classes(
+    arguments: &JsonValue,
+) -> Result<BTreeSet<String>, String> {
+    match json_helpers::value_at_path(arguments, &["allowToolRiskClasses"]) {
+        Some(JsonValue::Array(values)) => {
+            let mut normalized = BTreeSet::new();
+            for value in values {
+                let Some(value) = value.as_str() else {
+                    return Err("allowToolRiskClasses must be an array of strings".to_string());
+                };
+                let value = value.trim().to_ascii_lowercase();
+                if !value.is_empty() {
+                    normalized.insert(value);
+                }
+            }
+            Ok(normalized)
+        }
+        Some(JsonValue::Null) | None => Ok(BTreeSet::new()),
+        Some(_) => Err("allowToolRiskClasses must be an array of strings".to_string()),
+    }
+}
+
+fn collect_allow_argument_list(
+    value: &JsonValue,
+    values: &mut BTreeSet<String>,
+) -> Result<(), String> {
+    match value {
+        JsonValue::Array(items) => {
+            for item in items {
+                let Some(item) = item.as_str() else {
+                    return Err("allowArguments must be an array of strings".to_string());
+                };
+                let item = item.trim();
+                if !item.is_empty() {
+                    values.insert(item.to_string());
+                }
+            }
+            Ok(())
+        }
+        JsonValue::Null => Ok(()),
+        _ => Err("allowArguments must be an array of strings".to_string()),
+    }
+}
+
+impl ToolRiskPolicy {
+    pub(super) fn matches_tool(&self, tool_name: &str) -> bool {
+        self.tools
+            .iter()
+            .any(|pattern| tool_pattern_matches(pattern, tool_name))
+    }
+
+    fn is_allowed(&self, context: Option<&UpstreamLeaseContext>) -> bool {
+        let Some(context) = context else {
+            return false;
+        };
+
+        self.allow_argument
+            .as_ref()
+            .map(|argument| context.allow_arguments.contains(argument))
+            .unwrap_or(false)
+            || self
+                .risk_class
+                .as_ref()
+                .map(|risk_class| context.allowed_tool_risk_classes.contains(risk_class))
+                .unwrap_or(false)
+    }
+
+    fn blocked_message(&self, server_name: &str, tool_name: &str) -> String {
+        let mut grants = Vec::new();
+        if let Some(argument) = &self.allow_argument {
+            grants.push(format!("set {}=true", argument));
+        }
+        if let Some(risk_class) = &self.risk_class {
+            grants.push(format!("include '{}' in allowToolRiskClasses", risk_class));
+        }
+        let grant_hint = if grants.is_empty() {
+            "declare an explicit allow rule in mcpace.config.json".to_string()
+        } else {
+            grants.join(" or ")
+        };
+        let detail = self
+            .description
+            .as_ref()
+            .map(|value| format!(" ({})", value))
+            .unwrap_or_default();
+
+        format!(
+            "upstream server '{}' tool '{}' requires explicit risk authorization: {} on upstream_call/upstream_batch{}",
+            server_name, tool_name, grant_hint, detail
+        )
+    }
+}
+
+fn tool_pattern_matches(pattern: &str, tool_name: &str) -> bool {
+    let pattern = pattern.trim().to_ascii_lowercase();
+    let tool_name = tool_name.trim().to_ascii_lowercase();
+    if pattern.is_empty() {
+        return false;
+    }
+    if pattern == "*" || pattern == tool_name {
+        return true;
+    }
+    wildcard_match(&pattern, &tool_name)
+}
+
+fn wildcard_match(pattern: &str, value: &str) -> bool {
+    if !pattern.contains('*') {
+        return false;
+    }
+
+    let mut rest = value;
+    let mut first = true;
+    for segment in pattern.split('*').filter(|segment| !segment.is_empty()) {
+        let Some(index) = rest.find(segment) else {
+            return false;
+        };
+        if first && !pattern.starts_with('*') && index != 0 {
+            return false;
+        }
+        rest = &rest[index + segment.len()..];
+        first = false;
+    }
+
+    pattern.ends_with('*') || rest.is_empty()
+}
+
+fn acquire_upstream_lease(
+    root_path: &Path,
+    server_name: &str,
+    context: Option<&UpstreamLeaseContext>,
+    timeout: Duration,
+) -> Result<UpstreamLeaseAttachment, String> {
+    let effective_ttl_ms = context
+        .and_then(|value| value.ttl_ms)
+        .filter(|value| *value > 0)
+        .unwrap_or_else(|| timeout.as_millis().saturating_add(5_000));
+    let request = RuntimeLeaseRequest {
+        server_name: server_name.to_string(),
+        client_id: Some(
+            context_string(context.and_then(|value| value.client_id.as_ref()))
+                .unwrap_or_else(|| "mcpace-upstream-bridge".to_string()),
+        ),
+        session_id: context_string(context.and_then(|value| value.session_id.as_ref())),
+        project_root: context_string(context.and_then(|value| value.project_root.as_ref()))
+            .or_else(|| Some(child_process_path(root_path))),
+        transport: Some(
+            context_string(context.and_then(|value| value.transport.as_ref()))
+                .unwrap_or_else(|| "stdio".to_string()),
+        ),
+        metadata_json: context
+            .and_then(|value| value.metadata.as_ref())
+            .map(JsonValue::to_compact_string),
+        ttl_ms: Some(effective_ttl_ms),
+        takeover: false,
+    };
+
+    match leases::acquire_runtime_lease(root_path, request)? {
+        RuntimeLeaseAcquireResult::Acquired { lease_id, json } => {
+            let lease = json_helpers::value_at_path(&json, &["lease"])
+                .cloned()
+                .unwrap_or_else(|| json.clone());
+            let heartbeat = should_heartbeat_lease(effective_ttl_ms, timeout)
+                .then(|| start_lease_heartbeat(root_path, &lease_id, effective_ttl_ms));
+            Ok(UpstreamLeaseAttachment::Attached(UpstreamLeaseGuard {
+                root_path: root_path.to_path_buf(),
+                lease_id,
+                lease,
+                released: false,
+                heartbeat,
+            }))
+        }
+        RuntimeLeaseAcquireResult::Blocked { json } => Err(runtime_lease_blocked_error(
+            server_name,
+            json_helpers::string_at_path(&json, &["reason"])
+                .unwrap_or("runtime lease acquisition was blocked"),
+            &json,
+        )),
+    }
+}
+
+fn finalize_upstream_lease(
+    attachment: UpstreamLeaseAttachment,
+) -> Result<UpstreamLeaseOutcome, String> {
+    match attachment {
+        UpstreamLeaseAttachment::Attached(mut guard) => {
+            let lease_id = guard.lease_id.clone();
+            let lease = guard.lease.clone();
+            let heartbeat_started = guard.heartbeat_started();
+            let heartbeat_renewal_count = guard.heartbeat_renewal_count();
+            let heartbeat_lost = guard.heartbeat_lost();
+            let heartbeat_failure_count = guard.heartbeat_failure_count();
+            let release = guard.release()?;
+            Ok(UpstreamLeaseOutcome {
+                attached: true,
+                lease_id: Some(lease_id),
+                lease,
+                released: true,
+                release,
+                bypass_reason: None,
+                heartbeat_started,
+                heartbeat_renewal_count,
+                heartbeat_lost,
+                heartbeat_failure_count,
+            })
+        }
+    }
+}
+
+fn upstream_lease_entries(outcome: UpstreamLeaseOutcome) -> Vec<(String, JsonValue)> {
+    vec![
+        (
+            "leaseAttached".to_string(),
+            JsonValue::bool(outcome.attached),
+        ),
+        (
+            "leaseId".to_string(),
+            optional_json_string(outcome.lease_id),
+        ),
+        ("lease".to_string(), outcome.lease),
+        (
+            "leaseReleased".to_string(),
+            JsonValue::bool(outcome.released),
+        ),
+        ("leaseRelease".to_string(), outcome.release),
+        (
+            "leaseBypassReason".to_string(),
+            optional_json_string(outcome.bypass_reason),
+        ),
+        (
+            "leaseHeartbeatStarted".to_string(),
+            JsonValue::bool(outcome.heartbeat_started),
+        ),
+        (
+            "leaseHeartbeatRenewalCount".to_string(),
+            JsonValue::number(outcome.heartbeat_renewal_count),
+        ),
+        (
+            "leaseHeartbeatLost".to_string(),
+            JsonValue::bool(outcome.heartbeat_lost),
+        ),
+        (
+            "leaseHeartbeatFailureCount".to_string(),
+            JsonValue::number(outcome.heartbeat_failure_count),
+        ),
+    ]
+}
+
+fn upstream_pool_entries(outcome: UpstreamPoolCallOutcome) -> Vec<(String, JsonValue)> {
+    vec![
+        (
+            "sessionPoolEnabled".to_string(),
+            JsonValue::bool(outcome.enabled),
+        ),
+        ("sessionPoolHit".to_string(), JsonValue::bool(outcome.hit)),
+        (
+            "sessionPoolReused".to_string(),
+            JsonValue::bool(outcome.hit),
+        ),
+        (
+            "sessionPoolSessionCallCount".to_string(),
+            JsonValue::number(outcome.session_call_count),
+        ),
+        (
+            "sessionPoolSessionAgeMs".to_string(),
+            JsonValue::number(outcome.session_age_ms),
+        ),
+        (
+            "sessionPoolSize".to_string(),
+            JsonValue::number(outcome.pool_size),
+        ),
+        (
+            "sessionPoolMaxSize".to_string(),
+            JsonValue::number(outcome.max_pool_size),
+        ),
+        (
+            "sessionPoolIdleTtlMs".to_string(),
+            JsonValue::number(outcome.idle_ttl_ms),
+        ),
+        (
+            "sessionPoolEvictedIdleCount".to_string(),
+            JsonValue::number(outcome.evicted_idle_count),
+        ),
+        (
+            "sessionPoolEvictedCapacityCount".to_string(),
+            JsonValue::number(outcome.evicted_capacity_count),
+        ),
+    ]
+}
+
+fn upstream_session_key(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    context: Option<&UpstreamLeaseContext>,
+) -> UpstreamSessionKey {
+    let (settings_modified_ms, settings_len) = mcp_sources::mcp_settings_fingerprint(root_path);
+    UpstreamSessionKey {
+        root_path: cache_root_path(root_path),
+        server_name: server.name.clone(),
+        settings_modified_ms,
+        settings_len,
+        server_fingerprint: server_fingerprint(server),
+        client_id: context_string(context.and_then(|value| value.client_id.as_ref()))
+            .unwrap_or_else(|| "mcpace-upstream-bridge".to_string()),
+        session_id: context_string(context.and_then(|value| value.session_id.as_ref()))
+            .unwrap_or_else(|| "anonymous-session".to_string()),
+        project_root: context_string(context.and_then(|value| value.project_root.as_ref()))
+            .unwrap_or_else(|| child_process_path(root_path)),
+        transport: context_string(context.and_then(|value| value.transport.as_ref()))
+            .unwrap_or_else(|| "stdio".to_string()),
+        metadata_fingerprint: context
+            .and_then(|value| value.metadata.as_ref())
+            .map(JsonValue::to_compact_string)
+            .unwrap_or_default(),
+    }
+}
+
+fn should_heartbeat_lease(ttl_ms: u128, timeout: Duration) -> bool {
+    ttl_ms <= timeout.as_millis().saturating_add(1_000)
+}
+
+fn start_lease_heartbeat(root_path: &Path, lease_id: &str, ttl_ms: u128) -> LeaseHeartbeat {
+    let stop = Arc::new(AtomicBool::new(false));
+    let lost = Arc::new(AtomicBool::new(false));
+    let renewal_count = Arc::new(AtomicUsize::new(0));
+    let failure_count = Arc::new(AtomicUsize::new(0));
+    let thread_stop = Arc::clone(&stop);
+    let thread_lost = Arc::clone(&lost);
+    let thread_renewal_count = Arc::clone(&renewal_count);
+    let thread_failure_count = Arc::clone(&failure_count);
+    let thread_root_path = root_path.to_path_buf();
+    let thread_lease_id = lease_id.to_string();
+    let interval = lease_heartbeat_interval(ttl_ms);
+
+    let handle = thread::spawn(move || {
+        while !thread_stop.load(Ordering::SeqCst) {
+            sleep_interruptibly(interval, &thread_stop);
+            if thread_stop.load(Ordering::SeqCst) {
+                break;
+            }
+            match leases::renew_runtime_lease(&thread_root_path, &thread_lease_id, Some(ttl_ms)) {
+                Ok(json) if json_helpers::string_at_path(&json, &["status"]) == Some("renewed") => {
+                    thread_renewal_count.fetch_add(1, Ordering::SeqCst);
+                }
+                Ok(_) | Err(_) => {
+                    thread_failure_count.fetch_add(1, Ordering::SeqCst);
+                    thread_lost.store(true, Ordering::SeqCst);
+                    break;
+                }
+            }
+        }
+    });
+
+    LeaseHeartbeat {
+        stop,
+        lost,
+        renewal_count,
+        failure_count,
+        handle: Some(handle),
+    }
+}
+
+fn sleep_interruptibly(duration: Duration, stop: &AtomicBool) {
+    let deadline = Instant::now() + duration;
+    while !stop.load(Ordering::SeqCst) {
+        let now = Instant::now();
+        if now >= deadline {
+            break;
+        }
+        thread::sleep(
+            deadline
+                .saturating_duration_since(now)
+                .min(Duration::from_millis(25)),
+        );
+    }
+}
+
+fn lease_heartbeat_interval(ttl_ms: u128) -> Duration {
+    let ttl_ms = u64::try_from(ttl_ms).unwrap_or(u64::MAX);
+    let upper_bound = ttl_ms.saturating_sub(1).max(1);
+    let interval_ms = (ttl_ms / 3).clamp(50, 30_000).min(upper_bound);
+    Duration::from_millis(interval_ms)
+}
+
+fn runtime_lease_blocked_error(server_name: &str, reason: &str, json: &JsonValue) -> String {
+    format!(
+        "runtime lease blocked for upstream server '{}': {} | {}",
+        server_name,
+        reason,
+        json.to_compact_string()
+    )
+}
+
+pub(super) fn runtime_lease_lost_error(
+    server_name: &str,
+    method: &str,
+    stderr_rx: &Receiver<String>,
+) -> String {
+    format!(
+        "runtime lease lost while waiting for upstream server '{}' response to {}; upstream process was cancelled before using a stale result{}",
+        server_name,
+        method,
+        stderr_suffix(stderr_rx)
+    )
+}

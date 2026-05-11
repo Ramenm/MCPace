@@ -1,0 +1,195 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-03T19:03:42.880Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "pass",
+  "total": 38,
+  "selected": 8,
+  "batchSize": 8,
+  "batchCount": 1,
+  "shard": null,
+  "completedBatches": 1,
+  "completed": 8,
+  "passed": 8,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/repo-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/rust-quality-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/release-targets-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1490,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: release target manifest is the package topology source of truth\nok 1 - release target manifest is the package topology source of truth\n  ---\n  duration_ms: 196.067693\n  type: 'test'\n  ...\n# Subtest: planned targets are explicit and not advertised as supported by the npm launcher\nok 2 - planned targets are explicit and not advertised as supported by the npm launcher\n  ---\n  duration_ms: 1.594533\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1006.363409",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/repo-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/rust-quality-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/release-workflow-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1478,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: docker proof scripts restore bind-mount permissions before host cleanup\nok 6 - docker proof scripts restore bind-mount permissions before host cleanup\n  ---\n  duration_ms: 1.352895\n  type: 'test'\n  ...\n# Subtest: windows release archives avoid zip.exe backslash entries\nok 7 - windows release archives avoid zip.exe backslash entries\n  ---\n  duration_ms: 0.669448\n  type: 'test'\n  ...\n# Subtest: full docker proof keeps the default no-upstream-server plan honest\nok 8 - full docker proof keeps the default no-upstream-server plan honest\n  ---\n  duration_ms: 0.55767\n  type: 'test'\n  ...\n# Subtest: linux npm install docker proof validates local tarballs without publishing\nok 9 - linux npm install docker proof validates local tarballs without publishing\n  ---\n  duration_ms: 1.04159\n  type: 'test'\n  ...\n# Subtest: macOS proof-lane verifier keeps no-local-mac coverage explicit\nok 10 - macOS proof-lane verifier keeps no-local-mac coverage explicit\n  ---\n  duration_ms: 0.938093\n  type: 'test'\n  ...\n1..10\n# tests 10\n# suites 0\n# pass 10\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1000.468446",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/repo-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/rust-quality-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/repo-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1569,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: repo contains no ps1 files or shell bridge wrappers\nok 1 - repo contains no ps1 files or shell bridge wrappers\n  ---\n  duration_ms: 105.579499\n  type: 'test'\n  ...\n# Subtest: release manifest excludes removed shell artifacts and keeps current roots\nok 2 - release manifest excludes removed shell artifacts and keeps current roots\n  ---\n  duration_ms: 1.506902\n  type: 'test'\n  ...\n# Subtest: versions stay aligned across manifests and reports\nok 3 - versions stay aligned across manifests and reports\n  ---\n  duration_ms: 88.18071\n  type: 'test'\n  ...\n# Subtest: Cargo manifest uses reviewed runtime dependencies instead of ad-hoc parser/platform code\nok 4 - Cargo manifest uses reviewed runtime dependencies instead of ad-hoc parser/platform code\n  ---\n  duration_ms: 1.057176\n  type: 'test'\n  ...\n# Subtest: CI workflow includes Rust quality, build, test validation, and deterministic Cargo caches\nok 5 - CI workflow includes Rust quality, build, test validation, and deterministic Cargo caches\n  ---\n  duration_ms: 0.819974\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1097.973801",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/repo-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/rust-quality-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/runtime-performance-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1553,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: local HTTP serving uses a fixed rendezvous-backed worker pool with runtime telemetry\nok 1 - local HTTP serving uses a fixed rendezvous-backed worker pool with runtime telemetry\n  ---\n  duration_ms: 2.72355\n  type: 'test'\n  ...\n# Subtest: HTTP upstream session pooling is sharded and capacity remains bounded\nok 2 - HTTP upstream session pooling is sharded and capacity remains bounded\n  ---\n  duration_ms: 5.95439\n  type: 'test'\n  ...\n# Subtest: runtime benchmark helper is wired into package scripts and documents operator usage\nok 3 - runtime benchmark helper is wired into package scripts and documents operator usage\n  ---\n  duration_ms: 86.892798\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 995.896229",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/repo-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/rust-quality-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/rust-quality-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 2331,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: Rust quality gate exposes fmt, clippy, test, and release-build lanes in order\nok 1 - Rust quality gate exposes fmt, clippy, test, and release-build lanes in order\n  ---\n  duration_ms: 789.590985\n  type: 'test'\n  ...\n# Subtest: Rust quality gate can write an honest partial report when Cargo is unavailable\nok 2 - Rust quality gate can write an honest partial report when Cargo is unavailable\n  ---\n  duration_ms: 195.244929\n  type: 'test'\n  ...\n# Subtest: Rust quality gate is wired into package scripts, CI, and docs\nok 3 - Rust quality gate is wired into package scripts, CI, and docs\n  ---\n  duration_ms: 5.448538\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1815.640512",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/repo-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/rust-quality-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/rust-test-runner-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1394,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: Rust CI test runner executes suites one at a time with timeout cleanup\nok 1 - Rust CI test runner executes suites one at a time with timeout cleanup\n  ---\n  duration_ms: 1.725058\n  type: 'test'\n  ...\n# Subtest: npm scripts expose the suite-isolated Rust runner for CI\nok 2 - npm scripts expose the suite-isolated Rust runner for CI\n  ---\n  duration_ms: 1.878071\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 798.464023",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/repo-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/rust-quality-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/schema-examples.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1496,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: hub schema and examples parse and satisfy the repo subset contract\nok 1 - hub schema and examples parse and satisfy the repo subset contract\n  ---\n  duration_ms: 2.672792\n  type: 'test'\n  ...\n# Subtest: project config schema covers current serve and MCP settings registry fields\nok 2 - project config schema covers current serve and MCP settings registry fields\n  ---\n  duration_ms: 1.932955\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 898.710742",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/release-targets-contract.test.js",
+        "tests/node/release-workflow-contract.test.js",
+        "tests/node/repo-contract.test.js",
+        "tests/node/runtime-performance-contract.test.js",
+        "tests/node/rust-quality-contract.test.js",
+        "tests/node/rust-test-runner-contract.test.js",
+        "tests/node/schema-examples.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/security-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 1802,
+      "timeoutMs": 90000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: security posture documentation covers MCP stderr redaction and explicit env allowlisting\nok 2 - security posture documentation covers MCP stderr redaction and explicit env allowlisting\n  ---\n  duration_ms: 1.00002\n  type: 'test'\n  ...\n# Subtest: HTTP MCP route validates standard header/body agreement when clients send MCP headers\nok 3 - HTTP MCP route validates standard header/body agreement when clients send MCP headers\n  ---\n  duration_ms: 4.163793\n  type: 'test'\n  ...\n# Subtest: child process test helpers do not pass registry credentials or sandbox secrets by default\nok 4 - child process test helpers do not pass registry credentials or sandbox secrets by default\n  ---\n  duration_ms: 0.672755\n  type: 'test'\n  ...\n# Subtest: source proof child-process runners use sanitized environment helpers\nok 5 - source proof child-process runners use sanitized environment helpers\n  ---\n  duration_ms: 81.426857\n  type: 'test'\n  ...\n# Subtest: HTTP MCP session ids are visible-ASCII bounded, generated from OS randomness, and backed by a stateful store\nok 6 - HTTP MCP session ids are visible-ASCII bounded, generated from OS randomness, and backed by a stateful store\n  ---\n  duration_ms: 102.676993\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 1197.519443",
+      "stderrSummary": ""
+    }
+  ]
+}

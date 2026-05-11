@@ -1,6 +1,10 @@
 # Repository owner on GitHub.
 * @Ramenm
 
+/src/ @Ramenm
+/scripts/ @Ramenm
+/scripts/lib/ @Ramenm
+/packages/npm/ @Ramenm
 /docs/ @Ramenm
-/lib/ @Ramenm
 /tests/ @Ramenm
+/.github/ @Ramenm

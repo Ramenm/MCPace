@@ -31,7 +31,7 @@ stacks:
 
 - client-specific config shapes and launch commands;
 - transport mismatches between local stdio, SSE, and Streamable HTTP;
-- fragile host-specific bridges for browsers, desktop automation, and local
+- fragile host-specific bridges for interactive tools, desktop automation, and local
   processes;
 - secret, OAuth, and token state spread across too many places;
 - poor health visibility when a server is configured but not actually usable;
@@ -108,7 +108,7 @@ This path keeps `MCPace` focused on one local launcher-first endpoint.
 
 **Strengths**
 
-- Best fit for local files, browsers, desktop automation, and localhost tools.
+- Best fit for local files, interactive tools, desktop automation, and localhost tools.
 - Best control over host prerequisites and local auth bootstrap.
 - Works with today's current codebase and verification harness.
 
@@ -213,7 +213,7 @@ The runtime should classify servers by behavior, not just by transport.
 These can usually stay shared across projects.
 
 - `filesystem`
-- `browser`
+- `demo-server`
 - `windows-mcp`
 - `fetch`
 - `exa`

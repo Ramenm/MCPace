@@ -4,6 +4,7 @@ use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::runtimepaths;
 use crate::verify;
+use std::collections::BTreeSet;
 use std::io::Write;
 use std::path::Path;
 
@@ -37,6 +38,10 @@ pub(super) fn collect_status(root_path: &Path) -> Result<HubStatus, String> {
     let state_json = state_file.value.as_ref();
     let health_json = health_file.value.as_ref();
     let lock_json = lock_file.value.as_ref();
+    let now = runtime::now_ms();
+    let active_leases = active_lease_records(lease_file.value.as_ref(), now);
+    let active_lease_count = active_leases.len();
+    let active_session_count = count_active_sessions(&active_leases);
 
     let pid = first_u32(&[health_json, state_json], &["pid"]);
     let started_at_ms = first_u128(&[health_json, state_json], &["startedAtMs"]);
@@ -45,7 +50,6 @@ pub(super) fn collect_status(root_path: &Path) -> Result<HubStatus, String> {
     let lock_pid = first_u32(&[lock_json], &["pid"]);
     let mut status = first_string(&[health_json, state_json], &["status"])
         .unwrap_or_else(|| "stopped".to_string());
-    let now = runtime::now_ms();
     let heartbeat_fresh = last_heartbeat_at_ms
         .map(|value| now.saturating_sub(value) <= 2_000)
         .unwrap_or(false);
@@ -133,6 +137,8 @@ pub(super) fn collect_status(root_path: &Path) -> Result<HubStatus, String> {
         profile_enabled_server_count: readiness.profile_enabled_server_count,
         source_enabled_server_count: readiness.source_enabled_server_count,
         effective_enabled_server_count: readiness.effective_enabled_server_count,
+        active_lease_count,
+        active_session_count,
         missing_required_source_enablement: readiness.missing_required_source_enablement,
         missing_profile_source_enablement: readiness.missing_profile_source_enablement,
         missing_required_commands: readiness.missing_required_commands,
@@ -186,6 +192,8 @@ pub(super) fn write_status_response(
         status.source_enabled_server_count,
         status.effective_enabled_server_count
     );
+    let _ = writeln!(stdout, "Active leases: {}", status.active_lease_count);
+    let _ = writeln!(stdout, "Active sessions: {}", status.active_session_count);
     if let Some(pid) = status.pid {
         let _ = writeln!(stdout, "PID: {}", pid);
     }
@@ -259,14 +267,11 @@ fn first_string(documents: &[Option<&JsonValue>], path: &[&str]) -> Option<Strin
 
 fn first_u128(documents: &[Option<&JsonValue>], path: &[&str]) -> Option<u128> {
     for document in documents {
-        if let Some(value) = document.and_then(|doc| json_helpers::value_at_path(doc, path)) {
-            match value {
-                JsonValue::Number(number) => {
-                    if let Ok(parsed) = number.parse::<u128>() {
-                        return Some(parsed);
-                    }
-                }
-                _ => {}
+        if let Some(JsonValue::Number(number)) =
+            document.and_then(|doc| json_helpers::value_at_path(doc, path))
+        {
+            if let Ok(parsed) = number.parse::<u128>() {
+                return Some(parsed);
             }
         }
     }
@@ -275,6 +280,31 @@ fn first_u128(documents: &[Option<&JsonValue>], path: &[&str]) -> Option<u128> {
 
 fn first_u32(documents: &[Option<&JsonValue>], path: &[&str]) -> Option<u32> {
     first_u128(documents, path).and_then(|value| u32::try_from(value).ok())
+}
+
+fn active_lease_records(lease_store: Option<&JsonValue>, now_ms: u128) -> Vec<JsonValue> {
+    let Some(JsonValue::Object(leases)) =
+        lease_store.and_then(|store| json_helpers::value_at_path(store, &["leases"]))
+    else {
+        return Vec::new();
+    };
+    leases
+        .values()
+        .filter(|lease| {
+            first_u128(&[Some(*lease)], &["expiresAtMs"])
+                .map(|expires_at_ms| expires_at_ms > now_ms)
+                .unwrap_or(true)
+        })
+        .cloned()
+        .collect()
+}
+
+fn count_active_sessions(active_leases: &[JsonValue]) -> usize {
+    active_leases
+        .iter()
+        .filter_map(|lease| first_string(&[Some(lease)], &["sessionLeaseId"]))
+        .collect::<BTreeSet<_>>()
+        .len()
 }
 
 fn yes_no(value: bool) -> &'static str {

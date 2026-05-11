@@ -106,10 +106,10 @@ pub fn run(
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Usage: mcpace init [--json] [--root <path>]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  mcpace init [--json] [--root <path>]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "init creates the runtime state layout, seeds empty state stores, and reports current readiness.");
 }
 

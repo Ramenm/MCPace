@@ -1,5 +1,5 @@
 {
-  "version": "0.3.6",
+  "version": "0.5.9",
   "claimStatusLegend": {
     "supported": "Safe to describe as working now inside the current repo proof boundary.",
     "supported-local-only": "Working for documented local lanes, but not a broad cross-surface guarantee.",
@@ -191,16 +191,19 @@
       "title": "Live hub daemon lifecycle",
       "status": "implemented",
       "priority": "p0",
-      "summary": "The repo ships `init` plus `hub up/down/status/logs/repair` with file-backed state and health, but it still lacks live ingress, session ownership, and lease enforcement.",
+      "summary": "The repo ships `init`, `hub up/down/status/logs/repair`, file-backed lease storage with an active-session registry, request-time lease gates with heartbeat renewal, settings-only conservative leases, lost-lease cancellation, stale-id filtering, and bounded in-process upstream session pooling for explicit upstream wrapper calls, but it still lacks durable cross-process pool ownership and transport-level cancellation.",
       "evidence": [
         "src/init.rs",
         "src/hub.rs",
         "src/hub/lifecycle.rs",
         "src/hub/status.rs",
+        "src/hub/leases.rs",
+        "src/upstream.rs",
         "tests/hub_runtime.rs",
+        "tests/hub_leases.rs",
         "reports/rust-command-coverage.json"
       ],
-      "nextStep": "Layer stdio/HTTP ingress, session/instance ownership, and lease enforcement on top of the current lifecycle shell.",
+      "nextStep": "Harden the current in-process pool into durable stdio/HTTP session ownership with per-upstream concurrency/backpressure and transport-level cancellation on top of the current lifecycle, request lease gates, and active-session registry.",
       "claimStatus": "control-plane-only"
     },
     {
@@ -224,30 +227,36 @@
       "title": "Local Streamable HTTP ingress with session handling",
       "status": "planned",
       "priority": "p0",
-      "summary": "`mcpace serve` and the local `/mcp` endpoint already expose a connectable MCPace HTTP surface, but session lifecycle, upstream fan-in, and real-host proof for a full Streamable HTTP runtime are still incomplete.",
+      "summary": "`mcpace serve` and the local `/mcp` endpoint expose a connectable MCPace HTTP surface, and explicit upstream wrapper calls now acquire/release scheduler leases with heartbeat renewal, settings-only conservative leases, lost-heartbeat cancellation, and bounded in-process upstream session pooling, but full HTTP session lifecycle and real-host proof for a Streamable HTTP runtime are still incomplete.",
       "evidence": [
         "src/dashboard.rs",
+        "src/upstream.rs",
+        "src/hub/leases.rs",
         "src/mcp_server.rs",
         "tests/mcp_server.rs",
         "tests/client_surface.rs",
         "README.md"
       ],
-      "nextStep": "Turn the current connectable local `/mcp` surface into a session-aware ingress with real-host proof and explicit ownership semantics.",
+      "nextStep": "Turn the current connectable local `/mcp` surface into a session-aware ingress with real-host proof, durable ownership semantics, and transport-level cancellation/stale-result guards.",
       "claimStatus": "connectable-preview"
     },
     {
       "id": "runtime-exclusive-lease-enforcement",
       "area": "runtime",
       "title": "Exclusive lease enforcement for single-session servers",
-      "status": "planned",
+      "status": "implemented",
       "priority": "p0",
-      "summary": "The planner can warn about exclusive ownership, but no live runtime currently enforces or revokes those leases.",
+      "summary": "File-backed scheduler leases now block conflicting planned routes, maintain an active-session registry for current lease owners, and explicit stdio/HTTP upstream wrapper calls acquire, heartbeat-renew, cancel on lost heartbeat, conservatively lease settings-only servers, reuse same-context in-process upstream sessions, and release request leases around real upstream MCP calls.",
       "evidence": [
-        "src/client.rs",
-        "docs/server-segmentation-and-auto-discovery.md"
+        "src/hub/leases.rs",
+        "src/upstream.rs",
+        "src/mcp_server.rs",
+        "src/dashboard.rs",
+        "tests/hub_leases.rs",
+        "tests/mcp_server.rs"
       ],
-      "nextStep": "Implement a lease manager with owner tracking, heartbeat and timeout, and clear takeover rules.",
-      "claimStatus": "planned"
+      "nextStep": "Harden pooled-session ownership with cross-process registry semantics, per-upstream backpressure, and transport-level stale-result protection before claiming broad runtime ownership.",
+      "claimStatus": "supported-local-only"
     },
     {
       "id": "runtime-cancel-restart-guards",
@@ -255,12 +264,15 @@
       "title": "Cancellation and stale-result guards",
       "status": "planned",
       "priority": "p0",
-      "summary": "There is no runtime protection yet for transport 404/session reset, cancel-after-restart, or stale responses landing in a new lease.",
+      "summary": "Request-time upstream wrapper calls now ignore stale JSON-RPC ids, abort before accepting a result when heartbeat renewal loses the lease, expose active lease sessions for restart/cancel bookkeeping, and drop pooled upstream sessions on protocol/timeout/lease-loss errors; transport-level cancellation and durable cross-process pooled-session registries are still missing.",
       "evidence": [
+        "src/upstream.rs",
+        "src/hub/leases.rs",
+        "tests/mcp_server.rs",
         "docs/mcp-spec-alignment.md",
         "docs/test-strategy.md"
       ],
-      "nextStep": "Track in-flight requests per lease, propagate cancellation, and drop results that belong to dead sessions.",
+      "nextStep": "Track in-flight requests per durable pooled session/lease, propagate cancellation through live transports, and keep adversarial fixtures for dead pooled sessions.",
       "claimStatus": "planned"
     },
     {
@@ -285,7 +297,7 @@
       "title": "Client install and export flows",
       "status": "planned",
       "priority": "p1",
-      "summary": "Local `client install` writes MCPace-managed config for selected local surfaces, and `client export` emits connectable MCPace contracts plus preview blockers for other lanes, but a broader manifest-driven config-writing export path is not complete yet.",
+      "summary": "Local `client install` writes MCPace-managed config for selected local surfaces with dry-run/diff previews and restoreable backups, and `client export` emits connectable MCPace contracts plus preview blockers for other lanes, but a broader manifest-driven config-writing export path is not complete yet.",
       "evidence": [
         "src/client/actions.rs",
         "tests/client_surface.rs",
@@ -299,15 +311,17 @@
       "id": "adapter-config-merge-safety",
       "area": "adapter",
       "title": "Safe config merge and owned-block patching",
-      "status": "planned",
+      "status": "implemented",
       "priority": "p1",
-      "summary": "Current local installers replace only the MCPace-managed block and stay idempotent in covered fixtures, but broader merge safety, dry-run/diff, rollback, and blocked/public export lanes are not proven yet.",
+      "summary": "Current local installers replace only the MCPace-managed block, stay idempotent in covered fixtures, support dry-run/diff previews, create restoreable backups, warn during Codex TOML install when preserved stdio entries point at missing commands, surface the same broken-entry class through verify readiness clientConfigWarnings, and have real-looking JSON/YAML merge regressions covering user-owned Claude settings, existing MCP servers, Hermes comments, later YAML sections, and restore round-trip.",
       "evidence": [
         "src/client/actions.rs",
         "tests/client_surface.rs",
-        "docs/test-strategy.md"
+        "docs/test-strategy.md",
+        "TODO.md",
+        "STATE.md"
       ],
-      "nextStep": "Add dry-run/diff/rollback plus more real config fixtures before broadening config-writing export.",
+      "nextStep": "Keep adding real-client fixtures as new catalog patchers land, keep preserved-third-party-entry diagnostics non-destructive, and broaden config-writing export only after ingress/runtime proof stabilizes.",
       "claimStatus": "supported-local-only"
     },
     {

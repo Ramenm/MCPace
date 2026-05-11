@@ -219,7 +219,7 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Usage: mcpace stdio-shim --json [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]"
     );
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
         "stdio-shim is currently a bootstrap-only proof surface."

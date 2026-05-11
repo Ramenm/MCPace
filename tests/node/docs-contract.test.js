@@ -32,6 +32,8 @@ const activeDocs = [
   'docs/runtime-profiles.md',
   'docs/project-registry-v1.md',
   'docs/runtime-lab.md',
+  'docs/runtime-performance.md',
+  'docs/performance-decision-log-20260430.md',
   'TODO.md',
   'STATE.md',
   'DECISIONS.md'
@@ -43,9 +45,13 @@ test('README reflects the Rust-only repo contract and current client/server grou
   assert.match(normalized, /Rust-first local MCP hub/i);
   assert.match(normalized, /client plan/i);
   assert.match(normalized, /lab report/i);
+  assert.match(normalized, /release build/i);
+  assert.match(normalized, /does not publish/i);
   assert.match(normalized, /single local MCP hub for many clients/i);
   assert.match(normalized, /not implemented yet/i);
   assert.match(normalized, /2025-11-25/);
+  assert.doesNotMatch(normalized, /release command remains planned/i);
+  assert.doesNotMatch(normalized, /release still fail/i);
   assert.doesNotMatch(readme, /pwsh\s+\.\//i);
   assert.doesNotMatch(readme, /\.\/manager\.ps1/i);
 });
@@ -83,4 +89,40 @@ test('client surface matrix keeps local/cloud/API connector divergence explicit'
   assert.match(surfaceDoc, /cloud/i);
   assert.match(surfaceDoc, /tools-only/i);
   assert.match(surfaceDoc, /public-http-only/i);
+});
+
+
+test('runtime performance doc names the new resource controls and bounded parallelism contract', () => {
+  const readme = read('README.md');
+  const perfDoc = read('docs/runtime-performance.md');
+  const combined = `${readme}\n${perfDoc}`;
+
+  assert.match(combined, /--max-connections/);
+  assert.match(combined, /--io-timeout-ms/);
+  assert.match(combined, /--max-body-bytes/);
+  assert.match(combined, /--overview-cache-ms/);
+  assert.match(perfDoc, /available_parallelism/);
+  assert.match(perfDoc, /bounded/i);
+  assert.match(perfDoc, /upstream session pool/i);
+  assert.match(perfDoc, /tools\/list.*coalesc/i);
+  assert.match(perfDoc, /header count/i);
+  assert.match(perfDoc, /fixed worker pool/i);
+  assert.match(perfDoc, /zero-buffer/i);
+  assert.match(perfDoc, /128.*entries/i);
+  assert.match(perfDoc, /health.*cache/i);
+  assert.match(perfDoc, /cache\.stale/i);
+  assert.match(perfDoc, /runtime\.http/i);
+  assert.match(perfDoc, /session-pool shards/i);
+  assert.match(perfDoc, /runtime\.upstreamSessionPool/i);
+
+  const decisionLog = read('docs/performance-decision-log-20260430.md');
+  assert.match(decisionLog, /refresh=1/);
+  assert.match(decisionLog, /singleflight/i);
+  assert.match(decisionLog, /head-of-line/i);
+  assert.match(decisionLog, /rendezvous/i);
+  assert.match(decisionLog, /manual dashboard refresh/i);
+  assert.match(decisionLog, /health checks/i);
+  assert.match(decisionLog, /runtime counters/i);
+  assert.match(decisionLog, /pool[\s\S]*shards/i);
+  assert.match(decisionLog, /stale snapshot/i);
 });

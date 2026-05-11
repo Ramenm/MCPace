@@ -1,0 +1,56 @@
+TAP version 13
+# (node:49855) [MODULE_TYPELESS_PACKAGE_JSON] Warning: Module type of file:///mnt/data/mcpace_linux_auto_after/tests/node/linux-auto-check-contract.test.js is not specified and it doesn't parse as CommonJS.
+# Reparsing as ES module because module syntax was detected. This incurs a performance overhead.
+# To eliminate this warning, add "type": "module" to /mnt/data/mcpace_linux_auto_after/package.json.
+# (Use `node --trace-warnings ...` to show where the warning was created)
+# Subtest: linux auto-check script is wired into npm scripts
+ok 1 - linux auto-check script is wired into npm scripts
+  ---
+  duration_ms: 2.807391
+  type: 'test'
+  ...
+# Subtest: linux auto-check script covers release hygiene, executable bits, and Docker install proof
+ok 2 - linux auto-check script covers release hygiene, executable bits, and Docker install proof
+  ---
+  duration_ms: 0.548234
+  type: 'test'
+  ...
+# Subtest: linux auto-setup verifies systemd enablement and local health after setup
+ok 3 - linux auto-setup verifies systemd enablement and local health after setup
+  ---
+  duration_ms: 0.567501
+  type: 'test'
+  ...
+# Subtest: linux auto-setup avoids GNU-only realpath assumptions for minimal distros
+ok 4 - linux auto-setup avoids GNU-only realpath assumptions for minimal distros
+  ---
+  duration_ms: 0.313228
+  type: 'test'
+  ...
+# Subtest: linux auto-launch implementation enables systemd user units, not just writes files
+ok 5 - linux auto-launch implementation enables systemd user units, not just writes files
+  ---
+  duration_ms: 0.555372
+  type: 'test'
+  ...
+# Subtest: linux verification checklist documents pass criteria and upstream proof
+ok 6 - linux verification checklist documents pass criteria and upstream proof
+  ---
+  duration_ms: 0.288966
+  type: 'test'
+  ...
+# Subtest: linux npm install docker proof does not hardcode the x64 platform package in summary
+ok 7 - linux npm install docker proof does not hardcode the x64 platform package in summary
+  ---
+  duration_ms: 0.305362
+  type: 'test'
+  ...
+1..7
+# tests 7
+# suites 0
+# pass 7
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 110.813579

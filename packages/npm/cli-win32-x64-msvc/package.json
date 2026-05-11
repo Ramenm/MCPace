@@ -1,6 +1,6 @@
 {
   "name": "@mcpace/cli-win32-x64-msvc",
-  "version": "0.3.6",
+  "version": "0.5.9",
   "description": "Platform-specific MCPace native binary for win32-x64-msvc.",
   "license": "Apache-2.0",
   "os": [

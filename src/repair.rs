@@ -27,10 +27,10 @@ pub fn run(
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Usage: mcpace repair [--json] [--root <path>]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  mcpace repair [--json] [--root <path>]");
-    let _ = writeln!(stdout, "");
+    let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
         "Current scope: this grouped maintenance command is a safe shorthand for 'mcpace hub repair'."

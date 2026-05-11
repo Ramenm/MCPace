@@ -1,0 +1,80 @@
+{
+  "$schema": "mcpace.mcpPresetCatalog.v1",
+  "version": "2",
+  "description": "Curated, editable starter presets for useful MCP servers. Presets are data, not hardcoded Rust behavior; add or override catalogs through mcpace.config.json mcpPresets.includePaths or MCPACE_MCP_PRESETS.",
+  "presets": [
+    {
+      "id": "filesystem",
+      "defaultName": "filesystem",
+      "title": "Filesystem access for the current project",
+      "description": "Runs the filesystem MCP server through npx and grants access only to selected paths.",
+      "kind": "stdio",
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+      "pathMode": "append",
+      "trustLevel": "local-filesystem",
+      "source": "https://modelcontextprotocol.io/docs/tools/inspector",
+      "notes": [
+        "Only grant paths you are comfortable exposing to an MCP client.",
+        "If no --path is passed, MCPace uses the project root.",
+        "Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>."
+      ]
+    },
+    {
+      "id": "context7",
+      "defaultName": "context7",
+      "title": "Current developer documentation with Context7",
+      "description": "Runs the Context7 MCP server through npx for library/API documentation lookup during coding tasks.",
+      "kind": "stdio",
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "pathMode": "none",
+      "trustLevel": "network-docs",
+      "source": "https://developers.openai.com/codex/mcp",
+      "notes": [
+        "Useful for coding assistants that need current library documentation.",
+        "Review network and API-key behavior before enabling in restricted workspaces.",
+        "For higher limits, pass supported credentials with --env or use a remote Context7 setup directly in a client."
+      ]
+    },
+    {
+      "id": "git",
+      "defaultName": "git",
+      "title": "Git repository context",
+      "description": "Runs mcp-server-git through uvx and scopes it to one repository path.",
+      "kind": "stdio",
+      "command": "uvx",
+      "args": ["mcp-server-git"],
+      "pathMode": "repository-flag",
+      "trustLevel": "local-repository",
+      "source": "https://pypi.org/project/mcp-server-git/",
+      "notes": [
+        "Requires uv/uvx on PATH.",
+        "If no --path is passed, MCPace uses the project root as the repository.",
+        "The generated args include --repository <path>."
+      ]
+    },
+    {
+      "id": "playwright",
+      "defaultName": "playwright",
+      "title": "Browser automation through Playwright MCP",
+      "description": "Runs the official Playwright MCP package through npx so a client can inspect and interact with web pages.",
+      "kind": "stdio",
+      "command": "npx",
+      "args": ["-y", "@playwright/mcp@latest"],
+      "pathMode": "none",
+      "trustLevel": "browser-automation",
+      "source": "https://playwright.dev/docs/getting-started-mcp",
+      "notes": [
+        "Browser automation can interact with websites and should be enabled only for trusted workflows.",
+        "Pass extra Playwright flags after the preset with --arg, for example --arg --headless.",
+        "Review the server package before running it."
+      ]
+    }
+  ],
+  "starter": {
+    "name": "developer-local",
+    "description": "Small conservative starter pack for a local developer workspace.",
+    "presets": ["filesystem"]
+  }
+}

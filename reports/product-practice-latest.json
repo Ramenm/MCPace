@@ -1,0 +1,136 @@
+{
+  "schema": "mcpace.productPractice.v1",
+  "generatedAt": "2026-05-04T13:22:38.659Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.5.9"
+  },
+  "status": "ready-for-release-candidate-review",
+  "canClaim": {
+    "sourceTreeHealthy": true,
+    "sourceThinLauncherInstall": true,
+    "runtimeBeta": true,
+    "publishedBinaryInstall": true,
+    "universalRemoteMcpBroker": false
+  },
+  "gates": [
+    {
+      "id": "source-inventory",
+      "status": "pass",
+      "evidence": "inventory ok",
+      "nextAction": "Run npm run inventory:source and fix missing required source assets."
+    },
+    {
+      "id": "node-syntax",
+      "status": "pass",
+      "evidence": "99/99 JS/MJS files checked",
+      "nextAction": "Run npm run lint:npm."
+    },
+    {
+      "id": "lint-hardcode",
+      "status": "pass",
+      "evidence": "node scripts/check-node-syntax.mjs --json",
+      "nextAction": "Keep lint:npm as a small auto-discovery harness, not a hand-maintained file list."
+    },
+    {
+      "id": "rust-build",
+      "status": "pass",
+      "evidence": "pass",
+      "nextAction": "Run cargo check/test/build on a host with dependency access."
+    },
+    {
+      "id": "runtime-trace",
+      "status": "pass",
+      "evidence": "usable",
+      "nextAction": "Keep the runtime trace passing before runtime claims."
+    },
+    {
+      "id": "published-binary-install",
+      "status": "pass",
+      "evidence": "reports/vendored-binary-win32-x64-msvc.json: pass",
+      "nextAction": "Run npm run verify:vendored-binary after staging a native binary/platform package before claiming published install readiness."
+    }
+  ],
+  "freshness": {
+    "rustQuality": {
+      "path": "reports/rust-quality-latest.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T13:22:13.926Z",
+      "ageMs": 24733,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/rust-quality-latest.json fresh (0m old, max 6h old)"
+    },
+    "bootHarness": {
+      "path": "reports/boot-harness-latest.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T12:15:10.311Z",
+      "ageMs": 4048348,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/boot-harness-latest.json fresh (67m old, max 6h old)"
+    },
+    "runtimeTrace": {
+      "path": "reports/runtime-trace-latest.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T13:22:15.068Z",
+      "ageMs": 23591,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/runtime-trace-latest.json fresh (0m old, max 6h old)"
+    },
+    "installReadiness": {
+      "path": "reports/install-readiness-latest.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T13:22:28.493Z",
+      "ageMs": 10166,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/install-readiness-latest.json fresh (0m old, max 6h old)"
+    },
+    "vendoredBinary": {
+      "path": "reports/vendored-binary-win32-x64-msvc.json",
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-04T12:53:15.312Z",
+      "ageMs": 1763347,
+      "maxAgeMs": 21600000,
+      "evidence": "reports/vendored-binary-win32-x64-msvc.json fresh (29m old, max 6h old)"
+    }
+  },
+  "wrongPracticeRisks": [],
+  "proofValidity": {
+    "currentHost": {
+      "key": "win32-x64-msvc",
+      "detected": true,
+      "platform": "win32",
+      "arch": "x64"
+    },
+    "maxProofAgeHours": 6,
+    "rustQuality": {
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
+    },
+    "runtimeTrace": {
+      "usable": true,
+      "reasons": []
+    },
+    "bootHarness": {
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
+    },
+    "installReadiness": {
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
+    },
+    "vendoredBinary": {
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
+    }
+  },
+  "nextMoves": []
+}

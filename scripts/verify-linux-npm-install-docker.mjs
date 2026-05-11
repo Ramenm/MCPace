@@ -4,6 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
+import { targetByKey } from './lib/npm-platform-packages.mjs';
 
 const DEFAULT_IMAGE_TAG = 'mcpace-verify-linux-npm-install:local';
 const DEFAULT_TARGET_KEY = 'linux-x64-gnu';
@@ -20,11 +22,6 @@ function parseTimeoutEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function parseArgs(argv) {
   const parsed = {
@@ -125,6 +122,11 @@ function buildAndRun(options) {
   const startedAt = Date.now();
   const imageTag = options.imageTag || DEFAULT_IMAGE_TAG;
   const targetKey = options.targetKey || DEFAULT_TARGET_KEY;
+  const target = targetByKey(targetKey);
+  if (!target || target.publishEnabled === false) {
+    throw new Error(`unsupported or disabled target key '${targetKey}'`);
+  }
+  const targetPackageName = target.packageName;
 
   try {
     runChecked('docker', ['build', '-f', 'Dockerfile.verify', '-t', imageTag, '.'], {
@@ -136,7 +138,9 @@ function buildAndRun(options) {
 set -eu
 export PATH="/usr/local/cargo/bin:$PATH"
 TARGET_KEY="${targetKey}"
+TARGET_PACKAGE_NAME="${targetPackageName}"
 EXPECTED_VERSION="${expectedVersion}"
+export TARGET_KEY TARGET_PACKAGE_NAME EXPECTED_VERSION
 PACK_DIR="/tmp/mcpace-packs"
 CONSUMER_DIR="/tmp/mcpace-consumer"
 mkdir -p "$PACK_DIR" "$CONSUMER_DIR"
@@ -162,7 +166,7 @@ npm install --ignore-scripts --no-audit --no-fund "$PLATFORM_TGZ" "$MAIN_TGZ" >/
 printf '== run installed launcher ==\\n'
 ./node_modules/.bin/mcpace version > /tmp/mcpace-installed-version.txt
 grep -Eq "^$EXPECTED_VERSION$" /tmp/mcpace-installed-version.txt
-node -e "const fs=require('fs'); const version=fs.readFileSync('/tmp/mcpace-installed-version.txt','utf8').trim(); const pkg=require('./node_modules/@mcpace/cli/package.json'); const platform=require('./node_modules/@mcpace/cli-linux-x64-gnu/package.json'); console.log(JSON.stringify({version, mainPackage: pkg.name, platformPackage: platform.name, platformVersion: platform.version}));" > /tmp/mcpace-install-summary.json
+node -e "const fs=require('fs'); const version=fs.readFileSync('/tmp/mcpace-installed-version.txt','utf8').trim(); const pkg=require('./node_modules/@mcpace/cli/package.json'); const platform=require('./node_modules/'+process.env.TARGET_PACKAGE_NAME+'/package.json'); console.log(JSON.stringify({version, mainPackage: pkg.name, platformPackage: platform.name, platformVersion: platform.version, targetKey: process.env.TARGET_KEY}));" > /tmp/mcpace-install-summary.json
 cat /tmp/mcpace-install-summary.json
 `;
 

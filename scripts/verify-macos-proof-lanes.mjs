@@ -87,9 +87,10 @@ function verifyWorkflows(issues) {
   const ci = read(path.join('.github', 'workflows', 'ci.yml'));
   const release = read(path.join('.github', 'workflows', 'release.yml'));
   const dryRun = read(path.join('.github', 'workflows', 'release-dry-run.yml'));
-  pushIssue(issues, /macos-latest/.test(ci), 'ci.yml must keep macos-latest validation lanes');
-  pushIssue(issues, /launcher-fast-hosted:[\s\S]*macos-latest/.test(ci), 'ci.yml must keep macOS hosted launcher smoke');
-  pushIssue(issues, /rust-lifecycle-validation:[\s\S]*macos-latest/.test(ci), 'ci.yml must keep macOS lifecycle validation');
+  pushIssue(issues, /full_ci/.test(ci), 'ci.yml must keep an opt-in full_ci gate for expensive hosted platform lanes');
+  pushIssue(issues, /full-ci/.test(ci), 'ci.yml must keep the pull request full-ci label gate for expensive hosted platform lanes');
+  pushIssue(issues, /hosted-platform-validation:[\s\S]*macos-latest/.test(ci), 'ci.yml must keep opt-in macOS hosted platform validation');
+  pushIssue(issues, /launcher-fast-hosted:[\s\S]*macos-latest/.test(ci), 'ci.yml must keep opt-in macOS hosted launcher smoke');
   pushIssue(issues, /macos-15/.test(release), 'release.yml must keep explicit macOS lifecycle lanes');
   pushIssue(issues, /macos-15/.test(dryRun), 'release-dry-run.yml must keep explicit macOS lifecycle lanes');
   pushIssue(issues, /node scripts\/github-release-matrix\.mjs --github-output/.test(release), 'release.yml must use generated matrix from release-targets.json');

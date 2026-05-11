@@ -1,20 +1,18 @@
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
-use crate::{app, upstream};
+use crate::tool_result::{self, ToolResultOptions};
+use crate::{adapter, app, upstream};
+use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
-#[derive(Debug, Default)]
-struct ParsedArgs {
-    help: bool,
-    root_override: Option<PathBuf>,
-    client_id: Option<String>,
-    session_id: Option<String>,
-    project_root: Option<String>,
-    transport: Option<String>,
-    error: Option<String>,
-}
+mod args;
+mod tool_surface;
+
+use self::args::{parse_args, write_help};
+use self::tool_surface::{mcp_tool_names, tool_definition, TOOL_SPECS};
 
 #[derive(Clone, Debug)]
 struct ServerConfig {
@@ -24,117 +22,6 @@ struct ServerConfig {
     project_root: Option<String>,
     transport: String,
 }
-
-#[derive(Clone, Copy, Debug)]
-struct ToolSpec {
-    name: &'static str,
-    title: &'static str,
-    description: &'static str,
-}
-
-const TOOL_SPECS: &[ToolSpec] = &[
-    ToolSpec {
-        name: "doctor",
-        title: "Inspect MCPace readiness",
-        description: "Return the native MCPace doctor report for this root.",
-    },
-    ToolSpec {
-        name: "hub_status",
-        title: "Inspect hub status",
-        description: "Return the local hub status report without changing state.",
-    },
-    ToolSpec {
-        name: "hub_up",
-        title: "Start the hub",
-        description: "Start the local MCPace hub runtime for this root.",
-    },
-    ToolSpec {
-        name: "hub_down",
-        title: "Stop the hub",
-        description: "Stop the local MCPace hub runtime for this root.",
-    },
-    ToolSpec {
-        name: "hub_logs",
-        title: "Read hub logs",
-        description: "Return recent MCPace hub log events.",
-    },
-    ToolSpec {
-        name: "runtime_leases",
-        title: "List runtime leases",
-        description: "Return the current MCPace runtime lease store after pruning expired leases.",
-    },
-    ToolSpec {
-        name: "runtime_acquire",
-        title: "Acquire a runtime lease",
-        description:
-            "Acquire the scheduler lease for one configured server before routing work to it.",
-    },
-    ToolSpec {
-        name: "runtime_renew",
-        title: "Renew a runtime lease",
-        description: "Extend a previously acquired MCPace scheduler lease before it expires.",
-    },
-    ToolSpec {
-        name: "runtime_release",
-        title: "Release a runtime lease",
-        description: "Release a previously acquired MCPace scheduler lease.",
-    },
-    ToolSpec {
-        name: "server_list",
-        title: "List configured servers",
-        description: "Return the grouped MCPace server inventory for this root.",
-    },
-    ToolSpec {
-        name: "server_capabilities",
-        title: "Inspect one server",
-        description: "Return grouped capability details for one configured server.",
-    },
-    ToolSpec {
-        name: "client_list",
-        title: "List known client targets",
-        description: "Return the documented client surface catalog.",
-    },
-    ToolSpec {
-        name: "client_plan",
-        title: "Build a client routing plan",
-        description: "Resolve routing, session, and server arbitration for a client.",
-    },
-    ToolSpec {
-        name: "client_export",
-        title: "Build a client connection contract",
-        description: "Return the client launcher contract for a target surface.",
-    },
-    ToolSpec {
-        name: "upstream_tools",
-        title: "List one upstream server's tools",
-        description: "List callable tools for one configured stdio upstream MCP server; omit server for fast inventory only.",
-    },
-    ToolSpec {
-        name: "upstream_catalog",
-        title: "Catalog configured upstream tools",
-        description: "Discover configured upstream MCP tools with concise flat server-qualified descriptions and upstream_call arguments without hardcoded server names.",
-    },
-    ToolSpec {
-        name: "upstream_probe",
-        title: "Probe configured upstream servers",
-        description: "Probe configured upstream MCP servers without hardcoded server names; uses the short successful tools/list cache unless refresh=true is supplied.",
-    },
-    ToolSpec {
-        name: "upstream_call",
-        title: "Call one upstream tool",
-        description: "Call a tool on a configured stdio upstream MCP server.",
-    },
-    ToolSpec {
-        name: "upstream_batch",
-        title: "Call upstream tools in one session",
-        description: "Call multiple tools on one configured stdio upstream MCP server in a single state-preserving session.",
-    },
-    ToolSpec {
-        name: "browser_status",
-        title: "Explain browser bridge status",
-        description: "Explain browser MCP bridge status from the configured upstream inventory.",
-    },
-];
 
 pub fn run(
     args: &[String],
@@ -178,6 +65,7 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
     let mut initialize_seen = false;
     let mut initialized_notification_seen = false;
     let mut initialize_params: Option<JsonValue> = None;
+    let upstream_session_pool = Mutex::new(upstream::UpstreamSessionPool::default());
 
     loop {
         line.clear();
@@ -246,10 +134,7 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                     id,
                     JsonValue::object([
                         ("protocolVersion", JsonValue::string(negotiated.to_string())),
-                        (
-                            "capabilities",
-                            JsonValue::object([("tools", mcp::empty_object())]),
-                        ),
+                        ("capabilities", adapter::adapter_capabilities()),
                         (
                             "serverInfo",
                             JsonValue::object([
@@ -297,8 +182,163 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                     continue;
                 }
 
-                let tools = JsonValue::array(TOOL_SPECS.iter().map(|tool| tool_definition(tool)));
-                let response = mcp::result(id, JsonValue::object([("tools", tools)]));
+                let surface_options =
+                    adapter::tool_surface_options_from_initialize(initialize_params.as_ref());
+                let base_tools = TOOL_SPECS
+                    .iter()
+                    .map(|tool| tool_definition(tool, surface_options))
+                    .collect::<Vec<_>>();
+                let cursor = json_helpers::string_at_path(&message, &["params", "cursor"]);
+                let result = adapter::tool_list_result(
+                    &config.root_path,
+                    base_tools,
+                    initialize_params.as_ref(),
+                    cursor,
+                );
+                let response = mcp::result(id, result);
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+            }
+            "prompts/list" => {
+                let Some(id) = request_id else {
+                    continue;
+                };
+                if !initialize_seen {
+                    let response = mcp::error(
+                        id,
+                        mcp::ERROR_NOT_INITIALIZED,
+                        "Server not initialized",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    continue;
+                }
+                let cursor = json_helpers::string_at_path(&message, &["params", "cursor"]);
+                let response =
+                    mcp::result(id, adapter::list_prompts(&config.root_path, None, cursor));
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+            }
+            "prompts/get" => {
+                let Some(id) = request_id else {
+                    continue;
+                };
+                if !initialize_seen {
+                    let response = mcp::error(
+                        id,
+                        mcp::ERROR_NOT_INITIALIZED,
+                        "Server not initialized",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    continue;
+                }
+                let name = json_helpers::string_at_path(&message, &["params", "name"]);
+                let args = json_helpers::value_at_path(&message, &["params", "arguments"])
+                    .cloned()
+                    .unwrap_or_else(mcp::empty_object);
+                let response = match name {
+                    Some(name) => match adapter::get_prompt(&config.root_path, name, args, None) {
+                        Ok(value) => mcp::result(id, value),
+                        Err(error) => mcp::error(id, mcp::ERROR_INVALID_PARAMS, &error, None),
+                    },
+                    None => mcp::error(
+                        id,
+                        mcp::ERROR_INVALID_PARAMS,
+                        "prompts/get requires a prompt name",
+                        None,
+                    ),
+                };
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+            }
+            "resources/list" => {
+                let Some(id) = request_id else {
+                    continue;
+                };
+                if !initialize_seen {
+                    let response = mcp::error(
+                        id,
+                        mcp::ERROR_NOT_INITIALIZED,
+                        "Server not initialized",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    continue;
+                }
+                let cursor = json_helpers::string_at_path(&message, &["params", "cursor"]);
+                let response =
+                    mcp::result(id, adapter::list_resources(&config.root_path, None, cursor));
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+            }
+            "resources/templates/list" => {
+                let Some(id) = request_id else {
+                    continue;
+                };
+                if !initialize_seen {
+                    let response = mcp::error(
+                        id,
+                        mcp::ERROR_NOT_INITIALIZED,
+                        "Server not initialized",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    continue;
+                }
+                let response = mcp::result(
+                    id,
+                    adapter::list_resource_templates(
+                        &config.root_path,
+                        None,
+                        json_helpers::string_at_path(&message, &["params", "cursor"]),
+                    ),
+                );
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+            }
+            "resources/read" => {
+                let Some(id) = request_id else {
+                    continue;
+                };
+                if !initialize_seen {
+                    let response = mcp::error(
+                        id,
+                        mcp::ERROR_NOT_INITIALIZED,
+                        "Server not initialized",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    continue;
+                }
+                let uri = json_helpers::string_at_path(&message, &["params", "uri"]);
+                let response = match uri {
+                    Some(uri) => match adapter::read_resource(&config.root_path, uri, None) {
+                        Ok(value) => mcp::result(id, value),
+                        Err(error) => mcp::error(id, mcp::ERROR_INVALID_PARAMS, &error, None),
+                    },
+                    None => mcp::error(
+                        id,
+                        mcp::ERROR_INVALID_PARAMS,
+                        "resources/read requires a uri",
+                        None,
+                    ),
+                };
                 if write_message(stdout, &response).is_err() {
                     return 1;
                 }
@@ -339,19 +379,24 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                     .cloned()
                     .unwrap_or_else(mcp::empty_object);
 
-                let response =
-                    match execute_tool(&config, name, &arguments, initialize_params.as_ref()) {
-                        Ok(value) => mcp::result(id, value),
-                        Err(ToolCallError::InvalidParams(message)) => {
-                            mcp::error(id, mcp::ERROR_INVALID_PARAMS, &message, None)
-                        }
-                        Err(ToolCallError::UnknownTool(message)) => {
-                            mcp::error(id, mcp::ERROR_METHOD_NOT_FOUND, &message, None)
-                        }
-                        Err(ToolCallError::Execution(message)) => {
-                            mcp::result(id, tool_error_result(message))
-                        }
-                    };
+                let response = match execute_tool(
+                    &config,
+                    name,
+                    &arguments,
+                    initialize_params.as_ref(),
+                    &upstream_session_pool,
+                ) {
+                    Ok(value) => mcp::result(id, value),
+                    Err(ToolCallError::InvalidParams(message)) => {
+                        mcp::error(id, mcp::ERROR_INVALID_PARAMS, &message, None)
+                    }
+                    Err(ToolCallError::UnknownTool(message)) => {
+                        mcp::error(id, mcp::ERROR_METHOD_NOT_FOUND, &message, None)
+                    }
+                    Err(ToolCallError::Execution(message)) => {
+                        mcp::result(id, tool_error_result(message))
+                    }
+                };
                 if write_message(stdout, &response).is_err() {
                     return 1;
                 }
@@ -377,543 +422,9 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
     }
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
-
-    while index < args.len() {
-        match args[index].as_str() {
-            "--root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("mcp-server requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "--client-id" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("mcp-server requires a value after --client-id".to_string());
-                    return parsed;
-                };
-                parsed.client_id = Some(value.to_string());
-                index += 2;
-            }
-            "--session-id" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("mcp-server requires a value after --session-id".to_string());
-                    return parsed;
-                };
-                parsed.session_id = Some(value.to_string());
-                index += 2;
-            }
-            "--project-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("mcp-server requires a value after --project-root".to_string());
-                    return parsed;
-                };
-                parsed.project_root = Some(value.to_string());
-                index += 2;
-            }
-            "--transport" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("mcp-server requires a value after --transport".to_string());
-                    return parsed;
-                };
-                parsed.transport = Some(value.to_string());
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            other => {
-                parsed.error = Some(format!("unsupported mcp-server argument: {}", other));
-                return parsed;
-            }
-        }
-    }
-
-    parsed
-}
-
-fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(
-        stdout,
-        "Usage: mcpace mcp-server [--root <path>] [--client-id <id>] \
-         [--session-id <id>] [--project-root <path>] \
-         [--transport <stdio|streamable-http>]"
-    );
-    let _ = writeln!(stdout, "");
-    let _ = writeln!(
-        stdout,
-        "mcp-server starts a live MCP stdio server for local clients."
-    );
-    let _ = writeln!(
-        stdout,
-        "It speaks newline-delimited JSON-RPC over stdin/stdout and exposes a \
-         focused MCPace management tool catalog."
-    );
-}
-
 fn write_message(stdout: &mut dyn Write, message: &JsonValue) -> io::Result<()> {
     writeln!(stdout, "{}", message.to_compact_string())?;
     stdout.flush()
-}
-
-fn tool_definition(tool: &ToolSpec) -> JsonValue {
-    JsonValue::object([
-        ("name", JsonValue::string(tool.name)),
-        ("title", JsonValue::string(tool.title)),
-        ("description", JsonValue::string(tool.description)),
-        (
-            "inputSchema",
-            match tool.name {
-                "hub_logs" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([(
-                            "tail",
-                            JsonValue::object([
-                                ("type", JsonValue::string("integer")),
-                                (
-                                    "description",
-                                    JsonValue::string("Optional number of log lines to return."),
-                                ),
-                            ]),
-                        )]),
-                    ),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "runtime_acquire" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([
-                            (
-                                "server",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Configured MCPace server name to lease.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "clientId",
-                                JsonValue::object([("type", JsonValue::string("string"))]),
-                            ),
-                            (
-                                "sessionId",
-                                JsonValue::object([("type", JsonValue::string("string"))]),
-                            ),
-                            (
-                                "projectRoot",
-                                JsonValue::object([("type", JsonValue::string("string"))]),
-                            ),
-                            (
-                                "transport",
-                                JsonValue::object([("type", JsonValue::string("string"))]),
-                            ),
-                            (
-                                "ttlMs",
-                                JsonValue::object([("type", JsonValue::string("integer"))]),
-                            ),
-                            (
-                                "metadata",
-                                JsonValue::object([("type", JsonValue::string("object"))]),
-                            ),
-                        ]),
-                    ),
-                    ("required", JsonValue::array([JsonValue::string("server")])),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "runtime_renew" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([
-                            (
-                                "leaseId",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string("Lease id returned by runtime_acquire."),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "ttlMs",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("integer")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional renewed lease TTL in milliseconds.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                        ]),
-                    ),
-                    ("required", JsonValue::array([JsonValue::string("leaseId")])),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "runtime_release" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([(
-                            "leaseId",
-                            JsonValue::object([
-                                ("type", JsonValue::string("string")),
-                                (
-                                    "description",
-                                    JsonValue::string("Lease id returned by runtime_acquire."),
-                                ),
-                            ]),
-                        )]),
-                    ),
-                    ("required", JsonValue::array([JsonValue::string("leaseId")])),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "server_capabilities" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([(
-                            "name",
-                            JsonValue::object([
-                                ("type", JsonValue::string("string")),
-                                (
-                                    "description",
-                                    JsonValue::string("Configured MCPace server name to inspect."),
-                                ),
-                            ]),
-                        )]),
-                    ),
-                    ("required", JsonValue::array([JsonValue::string("name")])),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "client_plan" | "client_export" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([
-                            (
-                                "clientId",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional client target override. Defaults to the \
-                                             server launch client id.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "sessionId",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string("Optional external session id override."),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "projectRoot",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string("Optional project root override."),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "transport",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional ingress override such as stdio or \
-                                             streamable-http.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "metadata",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("object")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional MCP metadata object forwarded as \
-                                             metadata-json.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                        ]),
-                    ),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "upstream_tools" | "upstream_catalog" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([
-                            (
-                                "server",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional configured upstream server name from mcp_settings.json.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "timeoutMs",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("integer")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional per-server timeout from 1000 to 300000 ms.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "refresh",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("boolean")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Bypass the short in-process tools/list cache and refresh from the upstream server.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                        ]),
-                    ),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "upstream_probe" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([
-                            (
-                                "server",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional configured upstream server name from mcp_settings.json.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "timeoutMs",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("integer")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional per-server timeout from 1000 to 300000 ms.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "refresh",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("boolean")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Bypass the short successful tools/list cache and force a fresh upstream probe.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                        ]),
-                    ),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "upstream_call" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([
-                            (
-                                "server",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string("Configured upstream server name."),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "tool",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    ("description", JsonValue::string("Upstream tool name.")),
-                                ]),
-                            ),
-                            (
-                                "arguments",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("object")),
-                                    (
-                                        "description",
-                                        JsonValue::string("Arguments to pass to the upstream tool."),
-                                    ),
-                                    ("additionalProperties", JsonValue::bool(true)),
-                                ]),
-                            ),
-                            (
-                                "timeoutMs",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("integer")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional per-call timeout from 1000 to 300000 ms.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                        ]),
-                    ),
-                    (
-                        "required",
-                        JsonValue::array([JsonValue::string("server"), JsonValue::string("tool")]),
-                    ),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                "upstream_batch" => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    (
-                        "properties",
-                        JsonValue::object([
-                            (
-                                "server",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("string")),
-                                    (
-                                        "description",
-                                        JsonValue::string("Configured upstream server name."),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "calls",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("array")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Ordered upstream calls to execute after one initialize handshake.",
-                                        ),
-                                    ),
-                                    (
-                                        "items",
-                                        JsonValue::object([
-                                            ("type", JsonValue::string("object")),
-                                            (
-                                                "properties",
-                                                JsonValue::object([
-                                                    (
-                                                        "tool",
-                                                        JsonValue::object([
-                                                            ("type", JsonValue::string("string")),
-                                                            (
-                                                                "description",
-                                                                JsonValue::string(
-                                                                    "Upstream tool name.",
-                                                                ),
-                                                            ),
-                                                        ]),
-                                                    ),
-                                                    (
-                                                        "arguments",
-                                                        JsonValue::object([
-                                                            ("type", JsonValue::string("object")),
-                                                            (
-                                                                "description",
-                                                                JsonValue::string(
-                                                                    "Arguments to pass to the upstream tool.",
-                                                                ),
-                                                            ),
-                                                            (
-                                                                "additionalProperties",
-                                                                JsonValue::bool(true),
-                                                            ),
-                                                        ]),
-                                                    ),
-                                                ]),
-                                            ),
-                                            (
-                                                "required",
-                                                JsonValue::array([JsonValue::string("tool")]),
-                                            ),
-                                            ("additionalProperties", JsonValue::bool(false)),
-                                        ]),
-                                    ),
-                                ]),
-                            ),
-                            (
-                                "timeoutMs",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("integer")),
-                                    (
-                                        "description",
-                                        JsonValue::string(
-                                            "Optional total batch timeout from 1000 to 300000 ms.",
-                                        ),
-                                    ),
-                                ]),
-                            ),
-                        ]),
-                    ),
-                    (
-                        "required",
-                        JsonValue::array([JsonValue::string("server"), JsonValue::string("calls")]),
-                    ),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-                _ => JsonValue::object([
-                    ("type", JsonValue::string("object")),
-                    ("properties", mcp::empty_object()),
-                    ("additionalProperties", JsonValue::bool(false)),
-                ]),
-            },
-        ),
-    ])
 }
 
 enum ToolCallError {
@@ -927,7 +438,46 @@ fn execute_tool(
     tool_name: &str,
     arguments: &JsonValue,
     initialize_params: Option<&JsonValue>,
+    upstream_session_pool: &Mutex<upstream::UpstreamSessionPool>,
 ) -> Result<JsonValue, ToolCallError> {
+    if tool_name.starts_with("u_") {
+        let reserved = mcp_tool_names().into_iter().collect::<BTreeSet<_>>();
+        let target = adapter::resolve_projected_tool(
+            &config.root_path,
+            tool_name,
+            &reserved,
+            &adapter::ToolExposureOptions::for_call_resolution(),
+        )
+        .map_err(ToolCallError::Execution)?;
+        if let Some(target) = target {
+            let control_arguments = adapter::projected_adapter_control_arguments(arguments);
+            let context = ForwardedContext::from_tool_arguments(
+                config,
+                &control_arguments,
+                initialize_params,
+            )?;
+            let result_options = result_options_from_arguments(&control_arguments)?;
+            let upstream_arguments = adapter::strip_projected_adapter_arguments(arguments);
+            let ttl_ms = integer_argument(&control_arguments, "ttlMs")?;
+            let result = upstream::call_tool_with_pooled_context(
+                &config.root_path,
+                &target.server,
+                &target.tool,
+                &upstream_arguments,
+                timeout_argument(&control_arguments, "timeoutMs")?,
+                Some(&context.upstream_lease_context(ttl_ms)),
+                upstream_session_pool,
+            )
+            .map_err(ToolCallError::Execution)?;
+            return Ok(tool_result::upstream_tool_result_payload(
+                result,
+                false,
+                result_options,
+            ));
+        }
+    }
+
+    let result_options = result_options_from_arguments(arguments)?;
     let result = match tool_name {
         "doctor" => run_json_command(config, &["doctor", "--json"])?,
         "hub_status" => run_json_command(config, &["hub", "status", "--json"])?,
@@ -1002,6 +552,74 @@ fn execute_tool(
             config,
             build_client_args("export", config, arguments, initialize_params)?,
         )?,
+        "adapter_profile" => {
+            let include_live_catalog =
+                bool_argument(arguments, "includeLiveCatalog")?.unwrap_or(false);
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            let visible_tools = adapter::visible_tool_names(&mcp_tool_names(), initialize_params);
+            adapter::adapter_profile(
+                &config.root_path,
+                initialize_params,
+                &config.transport,
+                &visible_tools,
+                include_live_catalog,
+                timeout_ms,
+                refresh,
+            )
+            .map_err(ToolCallError::Execution)?
+        }
+        "adapter_route" => {
+            let include_live_catalog =
+                bool_argument(arguments, "includeLiveCatalog")?.unwrap_or(false);
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            let calls = json_helpers::value_at_path(arguments, &["calls"]);
+            adapter::adapter_route_plan(
+                &config.root_path,
+                calls,
+                include_live_catalog,
+                timeout_ms,
+                refresh,
+            )
+            .map_err(ToolCallError::Execution)?
+        }
+        "upstream_search" => {
+            let query = optional_string_argument(arguments, "query")?;
+            let server = optional_string_argument(arguments, "server")?;
+            let limit = integer_argument(arguments, "limit")?
+                .filter(|value| *value > 0)
+                .map(|value| value as usize)
+                .unwrap_or(20);
+            let include_schema = bool_argument(arguments, "includeSchema")?.unwrap_or(false);
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            adapter::upstream_search(
+                &config.root_path,
+                server.as_deref(),
+                query.as_deref(),
+                limit,
+                include_schema,
+                timeout_ms,
+                refresh,
+            )
+            .map_err(ToolCallError::Execution)?
+        }
+        "surface_manifest" => {
+            let include_live_catalog =
+                bool_argument(arguments, "includeLiveCatalog")?.unwrap_or(false);
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            upstream::surface_manifest(
+                &config.root_path,
+                &config.transport,
+                adapter::visible_tool_names(&mcp_tool_names(), initialize_params),
+                include_live_catalog,
+                timeout_ms,
+                refresh,
+            )
+            .map_err(ToolCallError::Execution)?
+        }
         "upstream_tools" => {
             let server = optional_string_argument(arguments, "server")?;
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
@@ -1023,18 +641,41 @@ fn execute_tool(
             upstream::probe_servers(&config.root_path, server.as_deref(), timeout_ms, refresh)
                 .map_err(ToolCallError::Execution)?
         }
+        "upstream_policy_audit" => {
+            let server = optional_string_argument(arguments, "server")?;
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            upstream::audit_tool_policies(&config.root_path, server.as_deref(), timeout_ms, refresh)
+                .map_err(ToolCallError::Execution)?
+        }
+        "upstream_policy_suggest" => {
+            let server = optional_string_argument(arguments, "server")?;
+            let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
+            let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
+            upstream::suggest_tool_policies(
+                &config.root_path,
+                server.as_deref(),
+                timeout_ms,
+                refresh,
+            )
+            .map_err(ToolCallError::Execution)?
+        }
         "upstream_call" => {
             let server = required_string_argument(arguments, "server")?;
             let tool = required_string_argument(arguments, "tool")?;
             let upstream_arguments =
                 optional_value_argument(arguments, "arguments").unwrap_or_else(mcp::empty_object);
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
-            upstream::call_tool(
+            let context =
+                ForwardedContext::from_tool_arguments(config, arguments, initialize_params)?;
+            upstream::call_tool_with_pooled_context(
                 &config.root_path,
                 &server,
                 &tool,
                 &upstream_arguments,
                 timeout_ms,
+                Some(&context.upstream_lease_context(integer_argument(arguments, "ttlMs")?)),
+                upstream_session_pool,
             )
             .map_err(ToolCallError::Execution)?
         }
@@ -1046,30 +687,20 @@ fn execute_tool(
                 })?;
             let mut calls = Vec::new();
             for (index, raw_call) in raw_calls.iter().enumerate() {
-                let tool = json_helpers::string_at_path(raw_call, &["tool"])
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .ok_or_else(|| {
-                        ToolCallError::InvalidParams(format!(
-                            "calls[{}].tool must be a non-empty string",
-                            index
-                        ))
-                    })?
-                    .to_string();
-                let upstream_arguments = json_helpers::value_at_path(raw_call, &["arguments"])
-                    .cloned()
-                    .unwrap_or_else(mcp::empty_object);
-                calls.push(upstream::UpstreamToolCall {
-                    tool,
-                    arguments: upstream_arguments,
-                });
+                calls.push(parse_upstream_batch_call(raw_call, index)?);
             }
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
-            upstream::call_tools(&config.root_path, &server, &calls, timeout_ms)
-                .map_err(ToolCallError::Execution)?
-        }
-        "browser_status" => {
-            upstream::browser_status(&config.root_path).map_err(ToolCallError::Execution)?
+            let context =
+                ForwardedContext::from_tool_arguments(config, arguments, initialize_params)?;
+            upstream::call_tools_with_pooled_context(
+                &config.root_path,
+                &server,
+                &calls,
+                timeout_ms,
+                Some(&context.upstream_lease_context(integer_argument(arguments, "ttlMs")?)),
+                upstream_session_pool,
+            )
+            .map_err(ToolCallError::Execution)?
         }
         _ => {
             return Err(ToolCallError::UnknownTool(format!(
@@ -1079,7 +710,57 @@ fn execute_tool(
         }
     };
 
-    Ok(tool_success_result(result))
+    if matches!(tool_name, "upstream_call" | "upstream_batch") {
+        Ok(tool_result::upstream_tool_result_payload(
+            result,
+            false,
+            result_options,
+        ))
+    } else {
+        Ok(tool_success_result(result, result_options))
+    }
+}
+
+fn parse_upstream_batch_call(
+    raw_call: &JsonValue,
+    index: usize,
+) -> Result<upstream::UpstreamToolCall, ToolCallError> {
+    if let Some(items) = raw_call.as_array() {
+        if items.is_empty() || items.len() > 2 {
+            return Err(ToolCallError::InvalidParams(format!(
+                "calls[{}] tuple form must be [tool] or [tool, arguments]",
+                index
+            )));
+        }
+        let tool = items[0]
+            .as_str()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ToolCallError::InvalidParams(format!(
+                    "calls[{}][0] must be a non-empty tool string",
+                    index
+                ))
+            })?
+            .to_string();
+        let arguments = items.get(1).cloned().unwrap_or_else(mcp::empty_object);
+        return Ok(upstream::UpstreamToolCall { tool, arguments });
+    }
+
+    let tool = json_helpers::string_at_path(raw_call, &["tool"])
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            ToolCallError::InvalidParams(format!(
+                "calls[{}].tool must be a non-empty string",
+                index
+            ))
+        })?
+        .to_string();
+    let arguments = json_helpers::value_at_path(raw_call, &["arguments"])
+        .cloned()
+        .unwrap_or_else(mcp::empty_object);
+    Ok(upstream::UpstreamToolCall { tool, arguments })
 }
 
 #[derive(Clone, Copy)]
@@ -1174,6 +855,8 @@ struct ForwardedContext {
     project_root: Option<String>,
     transport: String,
     metadata: Option<JsonValue>,
+    allow_arguments: BTreeSet<String>,
+    allowed_tool_risk_classes: BTreeSet<String>,
 }
 
 impl ForwardedContext {
@@ -1193,6 +876,8 @@ impl ForwardedContext {
                 .unwrap_or_else(|| config.transport.clone()),
             metadata: optional_value_argument(arguments, "metadata")
                 .or_else(|| initialize_params.cloned()),
+            allow_arguments: allow_arguments(arguments)?,
+            allowed_tool_risk_classes: allowed_tool_risk_classes_argument(arguments)?,
         })
     }
 
@@ -1202,6 +887,19 @@ impl ForwardedContext {
         push_arg(args, "--transport", self.transport);
         if let Some(value) = self.metadata {
             push_arg(args, "--metadata-json", value.to_compact_string());
+        }
+    }
+
+    fn upstream_lease_context(&self, ttl_ms: Option<i64>) -> upstream::UpstreamLeaseContext {
+        upstream::UpstreamLeaseContext {
+            client_id: Some(self.client_id.clone()),
+            session_id: self.session_id.clone(),
+            project_root: self.project_root.clone(),
+            transport: Some(self.transport.clone()),
+            metadata: self.metadata.clone(),
+            ttl_ms: ttl_ms.filter(|value| *value > 0).map(|value| value as u128),
+            allow_arguments: self.allow_arguments.clone(),
+            allowed_tool_risk_classes: self.allowed_tool_risk_classes.clone(),
         }
     }
 }
@@ -1300,6 +998,16 @@ fn bool_argument(arguments: &JsonValue, key: &str) -> Result<Option<bool>, ToolC
     }
 }
 
+fn allow_arguments(arguments: &JsonValue) -> Result<BTreeSet<String>, ToolCallError> {
+    upstream::collect_allow_arguments(arguments).map_err(ToolCallError::InvalidParams)
+}
+
+fn allowed_tool_risk_classes_argument(
+    arguments: &JsonValue,
+) -> Result<BTreeSet<String>, ToolCallError> {
+    upstream::collect_allowed_tool_risk_classes(arguments).map_err(ToolCallError::InvalidParams)
+}
+
 fn timeout_argument(arguments: &JsonValue, key: &str) -> Result<Option<u64>, ToolCallError> {
     Ok(integer_argument(arguments, key)?
         .filter(|value| *value > 0)
@@ -1310,19 +1018,14 @@ fn optional_value_argument(arguments: &JsonValue, key: &str) -> Option<JsonValue
     json_helpers::value_at_path(arguments, &[key]).cloned()
 }
 
-fn tool_success_result(value: JsonValue) -> JsonValue {
-    let text = value.to_pretty_string();
-    JsonValue::object([
-        (
-            "content",
-            JsonValue::array([JsonValue::object([
-                ("type", JsonValue::string("text")),
-                ("text", JsonValue::string(text)),
-            ])]),
-        ),
-        ("structuredContent", value),
-        ("isError", JsonValue::bool(false)),
-    ])
+fn tool_success_result(value: JsonValue, options: ToolResultOptions) -> JsonValue {
+    tool_result::tool_result_payload(value, false, options)
+}
+
+fn result_options_from_arguments(
+    arguments: &JsonValue,
+) -> Result<ToolResultOptions, ToolCallError> {
+    tool_result::options_from_arguments(arguments).map_err(ToolCallError::InvalidParams)
 }
 
 fn tool_error_result(message: String) -> JsonValue {
@@ -1351,13 +1054,39 @@ fn tool_error_text(error: &ToolCallError) -> String {
 }
 
 fn instructions_text(startup_notes: &[String]) -> String {
-    let base =
-        "Use MCPace tools to inspect readiness, manage the hub, and build client routing/export contracts.";
+    let instructions = adapter::adapter_instructions();
     if startup_notes.is_empty() {
-        return base.to_string();
+        instructions
+    } else {
+        let public_notes = startup_notes
+            .iter()
+            .map(|note| public_startup_note(note))
+            .collect::<Vec<_>>();
+        format!(
+            "{}\n\nStartup notes:\n- {}",
+            instructions,
+            public_notes.join("\n- ")
+        )
+    }
+}
+
+fn public_startup_note(note: &str) -> String {
+    let trimmed = note.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if !lower.contains("failed") && lower.contains("automatically") {
+        return trimmed.to_string();
     }
 
-    format!("{} Startup notes: {}", base, startup_notes.join(" | "))
+    let summary = trimmed
+        .split(':')
+        .next()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("MCPace startup diagnostic");
+    format!(
+        "{}; details withheld from initialize response; check local MCPace logs.",
+        summary
+    )
 }
 
 fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<String> {
@@ -1484,3 +1213,6 @@ fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<S
     }
     notes
 }
+
+#[cfg(test)]
+mod tests;

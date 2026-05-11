@@ -18,6 +18,27 @@ function runArchiveBuilder(outputDir, stamp) {
   );
 }
 
+function archiveEntryListingLines(archivePath) {
+  if (process.platform === 'win32') {
+    return [];
+  }
+
+  const listing = spawnSync('unzip', ['-Z', '-l', archivePath], {
+    encoding: 'utf8',
+    env: cleanChildEnv()
+  });
+  assert.equal(listing.status, 0, listing.stderr);
+  return listing.stdout.trim().split(/\r?\n/).filter(Boolean);
+}
+
+function archiveEntryMode(archivePath, suffix) {
+  const line = archiveEntryListingLines(archivePath).find((entry) => entry.endsWith(suffix));
+  if (!line) {
+    return null;
+  }
+  return line.trim().split(/\s+/)[0];
+}
+
 function listArchiveEntries(archivePath) {
   if (process.platform === 'win32') {
     const escapedArchivePath = archivePath.replace(/'/g, "''");
@@ -42,7 +63,11 @@ function listArchiveEntries(archivePath) {
       0,
       listing.stderr || listing.error?.message || listing.stdout
     );
-    return listing.stdout.trim().split(/\r?\n/).filter(Boolean);
+    return listing.stdout
+      .trim()
+      .split(/\r?\n/)
+      .filter(Boolean)
+      .map((entry) => entry.replace(/\\/g, '/'));
   }
 
   const listing = spawnSync('unzip', ['-Z1', archivePath], {
@@ -65,7 +90,10 @@ test('archive builder creates a clean zip with the required root naming contract
   assert.equal(report.projectName, 'mcpace');
   assert.equal(report.version, version);
   assert.equal(report.stamp, stamp);
-  assert.deepEqual(report.includedOptionalPaths, []);
+  const expectedOptionalPaths = fs.existsSync(path.join(repoRoot, 'packages', 'npm', 'cli', 'vendor'))
+    ? ['packages/npm/cli/vendor']
+    : [];
+  assert.deepEqual(report.includedOptionalPaths, expectedOptionalPaths);
   assert.match(report.rootName, new RegExp(`^mcpace-v${escapedVersion}-${stamp}$`));
   assert.match(report.archiveName, new RegExp(`^mcpace-v${escapedVersion}-${stamp}\\.zip$`));
   assert.equal(fs.existsSync(report.archivePath), true, report.archivePath);
@@ -85,4 +113,11 @@ test('archive builder creates a clean zip with the required root naming contract
   assert.ok(files.every((entry) => !entry.includes('/target/')));
   assert.ok(files.every((entry) => !entry.endsWith('.DS_Store')));
   assert.ok(files.every((entry) => !entry.startsWith('__MACOSX/')));
+
+  if (process.platform !== 'win32' && expectedOptionalPaths.includes('packages/npm/cli/vendor')) {
+    const binaryEntry = `${report.rootName}/packages/npm/cli/vendor/linux-x64-gnu/mcpace`;
+    if (files.includes(binaryEntry)) {
+      assert.match(archiveEntryMode(report.archivePath, binaryEntry) || '', /^-rwx/);
+    }
+  }
 });

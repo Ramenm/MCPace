@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
+import { cleanChildEnv } from './lib/safe-child-env.mjs';
 const DEFAULT_IMAGE = 'rust:1.95-bookworm';
 const DEFAULT_CPUS = '1.0';
 const DEFAULT_MEMORY = '768m';
@@ -16,11 +17,6 @@ function parseTimeoutEnv(name, fallback) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function cleanChildEnv() {
-  const env = { ...process.env };
-  delete env.NODE_TEST_CONTEXT;
-  return env;
-}
 
 function parseArgs(argv) {
   const parsed = {
@@ -80,6 +76,7 @@ ROOT="$(mktemp -d)"
 cleanup() {
   ./target/debug/mcpace hub down --json --root "$ROOT" >/tmp/mcpace-down.log 2>&1 || true
   rm -rf "$ROOT"
+  chmod -R a+rwX /work 2>/dev/null || true
 }
 trap cleanup EXIT
 cat >"$ROOT/mcpace.config.json" <<'EOF'

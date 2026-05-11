@@ -1,5 +1,5 @@
 {
-  "version": "0.3.6",
+  "version": "0.5.9",
   "families": [
     {
       "id": "project-state-reporting",
@@ -131,6 +131,19 @@
       "seedAdversarial": [
         "skills-boundary",
         "eval-showroom-benchmark-trap"
+      ],
+      "seedHeldOut": [],
+      "runtimeFixtures": []
+    },
+    {
+      "id": "mcp-configuration-safety",
+      "prevalence": "high",
+      "whyItMatters": "Removing packaged MCP defaults must not weaken child-process secret isolation or break standard user-supplied MCP config shapes.",
+      "seedTypical": [],
+      "seedEdge": [],
+      "seedAdversarial": [
+        "mcp-env-whitelist-regression",
+        "mcp-stderr-secret-leak-regression"
       ],
       "seedHeldOut": [],
       "runtimeFixtures": []
