@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.npmPack.v1",
-  "generatedAt": "2026-05-04T13:21:12.187Z",
+  "generatedAt": "2026-05-11T12:02:53.980Z",
   "status": "pass",
   "workspace": "@mcpace/cli",
   "command": "npm pack --workspace @mcpace/cli --json --dry-run",

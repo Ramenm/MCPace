@@ -14,6 +14,8 @@
 # Local IDE and agent state
 # memory-bank/ is intentionally tracked because release-manifest.json requires it.
 /.omx/
+/.omc/
+/.claude/
 /.playwright-mcp/
 /.serena/
 /.vscode/
@@ -22,6 +24,8 @@
 
 # Temporary packaging output
 /*.zip
+/screenshot_test*.png
+/%SystemDrive%/
 /testResults.xml
 /target/
 /.tmp-archive-test/

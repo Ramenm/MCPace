@@ -1,48 +1,78 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
 from __future__ import annotations
 
 import json
 import os
 import re
+import shutil
+import subprocess
 import sys
 import time
 import zipfile
-import shutil
-import subprocess
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Iterable, Optional, Tuple, List, Dict
 from collections import defaultdict
+from collections.abc import Iterable
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from pathlib import Path
 
 # --- “Авто-мусор”: папки/файлы, которые почти всегда генерятся и не нужны в “чистом” архиве.
 JUNK_DIR_NAMES = {
-    ".git", ".hg", ".svn",
-    ".idea", ".vscode",
-    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".nox",
-    ".cache", ".gradle",
-    ".venv", "venv",  # NB: "env" убрано намеренно (слишком общее имя)
+    ".git",
+    ".hg",
+    ".svn",
+    ".idea",
+    ".vscode",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".tox",
+    ".nox",
+    ".pre-commit-cache",
+    ".cache",
+    ".gradle",
+    ".venv",
+    "venv",  # NB: "env" убрано намеренно (слишком общее имя)
     "node_modules",
-    ".next", ".nuxt", ".svelte-kit", ".turbo", ".parcel-cache",
-    "dist", "build", "out", "target",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".turbo",
+    ".parcel-cache",
+    "dist",
+    "build",
+    "out",
+    "target",
 }
 
 JUNK_FILE_NAMES = {
-    ".ds_store", "thumbs.db", "desktop.ini",
+    ".ds_store",
+    "thumbs.db",
+    "desktop.ini",
 }
 
 JUNK_EXTS = {
     # python junk
-    ".pyc", ".pyo", ".pyd",
+    ".pyc",
+    ".pyo",
+    ".pyd",
     # logs / temp / editor swap
-    ".log", ".tmp", ".swp", ".swo",
+    ".log",
+    ".tmp",
+    ".swp",
+    ".swo",
     # archives (обычно не надо складывать архив в архив)
-    ".zip", ".7z", ".rar", ".tar", ".gz", ".bz2", ".xz",
+    ".zip",
+    ".7z",
+    ".rar",
+    ".tar",
+    ".gz",
+    ".bz2",
+    ".xz",
 }
 
-DEFAULT_MAX_FILE_BYTES = 15 * 1024 * 1024   # 15 MB
+DEFAULT_MAX_FILE_BYTES = 15 * 1024 * 1024  # 15 MB
 
 # zip требует год >= 1980
 ZIP_DT = (1980, 1, 1, 0, 0, 0)
@@ -58,6 +88,7 @@ REPORT_SAMPLES_LIMIT = 200
 # Статистика / отчёт
 # -------------------------------------------------------------------
 
+
 @dataclass
 class PackStats:
     input: str
@@ -66,17 +97,17 @@ class PackStats:
     max_bytes: int
     allow_dotenv: bool
     used_git: bool = False
-    generated_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    generated_at_utc: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     kept: int = 0
     dropped: int = 0
     kept_bytes: int = 0
     dropped_bytes: int = 0
 
-    dropped_reasons: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
-    dropped_samples: List[Dict[str, object]] = field(default_factory=list)
+    dropped_reasons: dict[str, int] = field(default_factory=lambda: defaultdict(int))
+    dropped_samples: list[dict[str, object]] = field(default_factory=list)
 
-    def add_drop(self, reason: str, rel: Optional[str] = None, size: Optional[int] = None) -> None:
+    def add_drop(self, reason: str, rel: str | None = None, size: int | None = None) -> None:
         self.dropped += 1
         if size is not None and size >= 0:
             self.dropped_bytes += int(size)
@@ -92,7 +123,7 @@ class PackStats:
         self.kept += 1
         self.kept_bytes += int(size)
 
-    def to_jsonable(self) -> Dict[str, object]:
+    def to_jsonable(self) -> dict[str, object]:
         return {
             "input": self.input,
             "output": self.output,
@@ -114,11 +145,14 @@ class PackStats:
 # Вспомогательные функции
 # -------------------------------------------------------------------
 
+
 def now_stamp() -> str:
     return time.strftime("%Y%m%d_%H%M%S")
 
+
 def make_output_name(base: str) -> str:
     return f"{base}_clean_{now_stamp()}.zip"
+
 
 def is_unsafe_zip_relpath(rel: str) -> bool:
     """
@@ -132,6 +166,7 @@ def is_unsafe_zip_relpath(rel: str) -> bool:
     parts = [p for p in rel.split("/") if p]
     return any(p == ".." for p in parts)
 
+
 def looks_like_dotenv_secret(name: str) -> bool:
     """
     True для ".env" и ".env.*" кроме шаблонов:
@@ -139,11 +174,9 @@ def looks_like_dotenv_secret(name: str) -> bool:
     """
     n = name.lower()
     if n == ".env" or n.startswith(".env."):
-        for suf in ENV_TEMPLATE_SUFFIXES:
-            if n.endswith(f".{suf}"):
-                return False
-        return True
+        return all(not n.endswith(f".{suf}") for suf in ENV_TEMPLATE_SUFFIXES)
     return False
+
 
 def strip_leading_dot_slash(path: str) -> str:
     """
@@ -160,7 +193,10 @@ def strip_leading_dot_slash(path: str) -> str:
 # Фильтрация “оставить/удалить”
 # -------------------------------------------------------------------
 
-def drop_reason_for_file(rel_posix: str, size: int, max_bytes: int, allow_dotenv: bool, dotenv_fallback_filter: bool) -> Optional[str]:
+
+def drop_reason_for_file(
+    rel_posix: str, size: int, max_bytes: int, allow_dotenv: bool, dotenv_fallback_filter: bool
+) -> str | None:
     """
     Возвращает причину дропа или None если файл надо оставить.
     """
@@ -195,7 +231,8 @@ def drop_reason_for_file(rel_posix: str, size: int, max_bytes: int, allow_dotenv
 # Git-интеграция
 # -------------------------------------------------------------------
 
-def try_git_toplevel(start_dir: Path) -> Optional[Path]:
+
+def try_git_toplevel(start_dir: Path) -> Path | None:
     """
     Если внутри git — возвращаем корень.
     """
@@ -209,10 +246,11 @@ def try_git_toplevel(start_dir: Path) -> Optional[Path]:
         )
         p = res.stdout.strip()
         return Path(p).resolve() if p else None
-    except Exception:
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError):
         return None
 
-def _git_ls_files(repo_root: Path, args: List[str]) -> Optional[List[str]]:
+
+def _git_ls_files(repo_root: Path, args: list[str]) -> list[str] | None:
     """
     Универсальный helper для `git ls-files ... -z`.
     Возвращает список путей (строки) относительно repo_root.
@@ -227,15 +265,16 @@ def _git_ls_files(repo_root: Path, args: List[str]) -> Optional[List[str]]:
         raw = res.stdout
         if not raw:
             return []
-        out: List[str] = []
+        out: list[str] = []
         for b in raw.split(b"\x00"):
             if b:
                 out.append(b.decode("utf-8", errors="replace"))
         return out
-    except Exception:
+    except (FileNotFoundError, OSError, subprocess.CalledProcessError):
         return None
 
-def build_force_include_specs(subpath: str) -> List[str]:
+
+def build_force_include_specs(subpath: str) -> list[str]:
     """
     Строит pathspec-и для добора env-шаблонов, даже если они игнорируются.
     Используем :(glob) + варианты:
@@ -244,7 +283,7 @@ def build_force_include_specs(subpath: str) -> List[str]:
     """
     sub = subpath.strip("/")
 
-    specs: List[str] = []
+    specs: list[str] = []
     for suf in ENV_TEMPLATE_SUFFIXES:
         pat = f".env*.{suf}"
         if sub in ("", "."):
@@ -255,7 +294,8 @@ def build_force_include_specs(subpath: str) -> List[str]:
             specs.append(f":(glob){sub}/**/{pat}")
     return specs
 
-def try_git_file_list(input_dir: Path) -> Tuple[Optional[Path], Optional[List[str]], Optional[List[str]]]:
+
+def try_git_file_list(input_dir: Path) -> tuple[Path | None, list[str] | None, list[str] | None]:
     """
     Возвращает (repo_root, files_main, files_ignored_templates)
     - files_main: tracked + untracked (без игнорируемых), ограниченные input_dir
@@ -269,7 +309,7 @@ def try_git_file_list(input_dir: Path) -> Tuple[Optional[Path], Optional[List[st
     try:
         rel_to_repo = input_dir.resolve().relative_to(repo_root)
         subpath = rel_to_repo.as_posix() if str(rel_to_repo) != "." else "."
-    except Exception:
+    except ValueError:
         subpath = "."
 
     # tracked (-c) + others/untracked (-o), но без игноров (--exclude-standard)
@@ -279,7 +319,7 @@ def try_git_file_list(input_dir: Path) -> Tuple[Optional[Path], Optional[List[st
 
     # добираем игнорируемые env-шаблоны (untracked ignored): -o -i
     force_specs = build_force_include_specs(subpath)
-    files_ignored_templates: Optional[List[str]] = []
+    files_ignored_templates: list[str] | None = []
     if force_specs:
         files_ignored_templates = _git_ls_files(
             repo_root,
@@ -295,7 +335,10 @@ def try_git_file_list(input_dir: Path) -> Tuple[Optional[Path], Optional[List[st
 # Итерация файлов директории
 # -------------------------------------------------------------------
 
-def iter_files_from_dir(root: Path, output_zip: Path, stats: PackStats) -> Iterable[Tuple[Path, str, bool]]:
+
+def iter_files_from_dir(
+    root: Path, output_zip: Path, stats: PackStats
+) -> Iterable[tuple[Path, str, bool]]:
     """
     Отдаёт (abs_path, rel_posix_in_zip, dotenv_fallback_filter)
     - Если git доступен — берём список через git (deterministic), плюс добор env-шаблонов.
@@ -311,7 +354,7 @@ def iter_files_from_dir(root: Path, output_zip: Path, stats: PackStats) -> Itera
         # input_dir относительно repo_root
         try:
             sub_rel = root.relative_to(repo_root).as_posix()
-        except Exception:
+        except ValueError:
             sub_rel = "."
 
         all_files = set(files_main)
@@ -338,14 +381,18 @@ def iter_files_from_dir(root: Path, output_zip: Path, stats: PackStats) -> Itera
                 if not rel_posix.startswith(prefix):
                     # на всякий: если вдруг git вернул что-то вне input_dir
                     continue
-                arcname = rel_posix[len(prefix):]
+                arcname = rel_posix[len(prefix) :]
 
             arcname = strip_leading_dot_slash(arcname.replace("\\", "/"))
             if not arcname or is_unsafe_zip_relpath(arcname):
                 stats.add_drop("unsafe_arcname", rel=arcname)
                 continue
 
-            yield abs_path, arcname, False  # dotenv_fallback_filter=False (в git-режиме не фильтруем)
+            yield (
+                abs_path,
+                arcname,
+                False,
+            )  # dotenv_fallback_filter=False (в git-режиме не фильтруем)
 
         return
 
@@ -377,11 +424,12 @@ def iter_files_from_dir(root: Path, output_zip: Path, stats: PackStats) -> Itera
 # Добавление в ZIP
 # -------------------------------------------------------------------
 
+
 def zip_add_stream(
     zout: zipfile.ZipFile,
     arcname: str,
     src_file,
-    st_mode: Optional[int] = None,
+    st_mode: int | None = None,
 ) -> None:
     zi = zipfile.ZipInfo(arcname)
     zi.date_time = ZIP_DT
@@ -390,6 +438,7 @@ def zip_add_stream(
         zi.external_attr = (st_mode & 0xFFFF) << 16
     with zout.open(zi, "w") as dst:
         shutil.copyfileobj(src_file, dst, length=1024 * 1024)
+
 
 def open_zip_write(output_zip: Path) -> zipfile.ZipFile:
     """
@@ -407,7 +456,10 @@ def open_zip_write(output_zip: Path) -> zipfile.ZipFile:
 # Упаковка директории
 # -------------------------------------------------------------------
 
-def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_dotenv: bool, report_path: Optional[Path]) -> None:
+
+def pack_dir_fast(
+    input_dir: Path, output_zip: Path, max_bytes: int, allow_dotenv: bool, report_path: Path | None
+) -> None:
     root = input_dir.resolve()
     output_zip.parent.mkdir(parents=True, exist_ok=True)
 
@@ -420,7 +472,9 @@ def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_doten
     )
 
     with open_zip_write(output_zip) as zout:
-        for abs_path, rel_posix, dotenv_fallback_filter in iter_files_from_dir(root, output_zip, stats):
+        for abs_path, rel_posix, dotenv_fallback_filter in iter_files_from_dir(
+            root, output_zip, stats
+        ):
             # режем мусорные директории по частям пути
             if any(part in JUNK_DIR_NAMES for part in rel_posix.split("/")):
                 stats.add_drop("junk_dir", rel=rel_posix)
@@ -429,11 +483,13 @@ def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_doten
             try:
                 st = abs_path.stat()
                 size = int(st.st_size)
-            except Exception:
+            except OSError:
                 stats.add_drop("stat_failed", rel=rel_posix)
                 continue
 
-            reason = drop_reason_for_file(rel_posix, size, max_bytes, allow_dotenv, dotenv_fallback_filter)
+            reason = drop_reason_for_file(
+                rel_posix, size, max_bytes, allow_dotenv, dotenv_fallback_filter
+            )
             if reason:
                 stats.add_drop(reason, rel=rel_posix, size=size)
                 continue
@@ -447,7 +503,7 @@ def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_doten
                         st_mode=getattr(st, "st_mode", None),
                     )
                 stats.add_keep(size)
-            except Exception:
+            except (OSError, RuntimeError, ValueError, zipfile.BadZipFile):
                 stats.add_drop("read_or_zip_failed", rel=rel_posix, size=size)
 
     print(f"OK: {output_zip}")
@@ -457,13 +513,16 @@ def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_doten
 
     if report_path:
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(stats.to_jsonable(), ensure_ascii=False, indent=2), encoding="utf-8")
+        report_path.write_text(
+            json.dumps(stats.to_jsonable(), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         print(f"report: {report_path}")
 
 
 # -------------------------------------------------------------------
 # Очистка существующего ZIP
 # -------------------------------------------------------------------
+
 
 def detect_single_toplevel_prefix(names: Iterable[str]) -> str:
     first_parts = set()
@@ -486,7 +545,10 @@ def detect_single_toplevel_prefix(names: Iterable[str]) -> str:
             return ""
     return prefix
 
-def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dotenv: bool, report_path: Optional[Path]) -> None:
+
+def clean_zip_fast(
+    input_zip: Path, output_zip: Path, max_bytes: int, allow_dotenv: bool, report_path: Path | None
+) -> None:
     output_zip.parent.mkdir(parents=True, exist_ok=True)
 
     stats = PackStats(
@@ -502,7 +564,7 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
         prefix = detect_single_toplevel_prefix(i.filename.replace("\\", "/") for i in infos)
 
         # Детерминированный порядок: сортируем по будущему имени в архиве
-        sortable: List[Tuple[str, zipfile.ZipInfo]] = []
+        sortable: list[tuple[str, zipfile.ZipInfo]] = []
         for info in infos:
             name = info.filename.replace("\\", "/")
             if not name or name.endswith("/"):
@@ -512,7 +574,7 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
 
             rel = name
             if prefix and rel.startswith(prefix):
-                rel = rel[len(prefix):]
+                rel = rel[len(prefix) :]
 
             rel = strip_leading_dot_slash(rel.replace("\\", "/"))
             if not rel:
@@ -540,7 +602,9 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
             # (Иначе можно случайно упаковать реальные секреты из чужого zip)
             dotenv_fallback_filter = True
 
-            reason = drop_reason_for_file(rel, size, max_bytes, allow_dotenv, dotenv_fallback_filter)
+            reason = drop_reason_for_file(
+                rel, size, max_bytes, allow_dotenv, dotenv_fallback_filter
+            )
             if reason:
                 stats.add_drop(reason, rel=rel, size=size)
                 continue
@@ -556,7 +620,7 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
                         shutil.copyfileobj(f, dst, length=1024 * 1024)
 
                 stats.add_keep(size)
-            except Exception:
+            except (OSError, RuntimeError, ValueError, zipfile.BadZipFile):
                 stats.add_drop("read_or_zip_failed", rel=rel, size=size)
 
     print(f"OK: {output_zip}")
@@ -565,7 +629,9 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
 
     if report_path:
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(stats.to_jsonable(), ensure_ascii=False, indent=2), encoding="utf-8")
+        report_path.write_text(
+            json.dumps(stats.to_jsonable(), ensure_ascii=False, indent=2), encoding="utf-8"
+        )
         print(f"report: {report_path}")
 
 
@@ -573,11 +639,13 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
 # CLI
 # -------------------------------------------------------------------
 
-def _try_parse_int(s: str) -> Optional[int]:
+
+def _try_parse_int(s: str) -> int | None:
     try:
         return int(s)
-    except Exception:
+    except ValueError:
         return None
+
 
 def print_help() -> None:
     exe = Path(sys.argv[0]).name
@@ -604,7 +672,8 @@ Examples:
 """
     )
 
-def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optional[str], bool, Optional[str]]:
+
+def parse_cli(argv: list[str]) -> tuple[str | None, str | None, int, str | None, bool, str | None]:
     """
     Returns: (input_str, out_str, max_bytes, report_str, allow_dotenv, err)
     Keeps backward compatibility with positional [input] [output] [max_bytes].
@@ -614,10 +683,10 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
         return None, None, DEFAULT_MAX_FILE_BYTES, None, False, "EXIT_HELP"
 
     allow_dotenv = False
-    report_str: Optional[str] = None
-    max_bytes: Optional[int] = None
+    report_str: str | None = None
+    max_bytes: int | None = None
 
-    args: List[str] = []
+    args: list[str] = []
     i = 0
     while i < len(argv):
         a = argv[i]
@@ -628,7 +697,14 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
 
         if a in ("--report", "-r"):
             if i + 1 >= len(argv):
-                return None, None, DEFAULT_MAX_FILE_BYTES, None, allow_dotenv, "ERROR: --report requires PATH"
+                return (
+                    None,
+                    None,
+                    DEFAULT_MAX_FILE_BYTES,
+                    None,
+                    allow_dotenv,
+                    "ERROR: --report requires PATH",
+                )
             report_str = argv[i + 1]
             i += 2
             continue
@@ -640,10 +716,24 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
 
         if a in ("--max-bytes", "--max"):
             if i + 1 >= len(argv):
-                return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: --max-bytes requires N"
+                return (
+                    None,
+                    None,
+                    DEFAULT_MAX_FILE_BYTES,
+                    report_str,
+                    allow_dotenv,
+                    "ERROR: --max-bytes requires N",
+                )
             v = _try_parse_int(argv[i + 1])
             if v is None:
-                return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: --max-bytes must be integer"
+                return (
+                    None,
+                    None,
+                    DEFAULT_MAX_FILE_BYTES,
+                    report_str,
+                    allow_dotenv,
+                    "ERROR: --max-bytes must be integer",
+                )
             max_bytes = v
             i += 2
             continue
@@ -651,7 +741,14 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
         if a.startswith("--max-bytes=") or a.startswith("--max="):
             v = _try_parse_int(a.split("=", 1)[1])
             if v is None:
-                return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: --max-bytes must be integer"
+                return (
+                    None,
+                    None,
+                    DEFAULT_MAX_FILE_BYTES,
+                    report_str,
+                    allow_dotenv,
+                    "ERROR: --max-bytes must be integer",
+                )
             max_bytes = v
             i += 1
             continue
@@ -670,7 +767,14 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
         max_bytes = DEFAULT_MAX_FILE_BYTES
 
     if max_bytes <= 0:
-        return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: max_bytes must be > 0"
+        return (
+            None,
+            None,
+            DEFAULT_MAX_FILE_BYTES,
+            report_str,
+            allow_dotenv,
+            "ERROR: max_bytes must be > 0",
+        )
 
     if len(args) == 0:
         return None, None, max_bytes, report_str, allow_dotenv, None
@@ -681,8 +785,9 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
 
     return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: too many arguments"
 
-def pick_input_auto(cwd: Path) -> Tuple[str, Path]:
-    zips: List[Path] = []
+
+def pick_input_auto(cwd: Path) -> tuple[str, Path]:
+    zips: list[Path] = []
     for p in cwd.glob("*.zip"):
         if re.search(r"_clean_\d{8}_\d{6}\.zip$", p.name):
             continue
@@ -694,6 +799,7 @@ def pick_input_auto(cwd: Path) -> Tuple[str, Path]:
 
     root = try_git_toplevel(cwd) or cwd
     return "dir", root
+
 
 def main() -> int:
     input_str, out_str, max_bytes, report_str, allow_dotenv, err = parse_cli(sys.argv[1:])
@@ -721,12 +827,17 @@ def main() -> int:
         root = src
         base = root.name or "project"
         final_out = out_zip if out_zip else (root / make_output_name(base))
-        pack_dir_fast(root, final_out, max_bytes=max_bytes, allow_dotenv=allow_dotenv, report_path=report_path)
+        pack_dir_fast(
+            root, final_out, max_bytes=max_bytes, allow_dotenv=allow_dotenv, report_path=report_path
+        )
         return 0
 
     final_out = out_zip if out_zip else (src.parent / make_output_name(src.stem))
-    clean_zip_fast(src, final_out, max_bytes=max_bytes, allow_dotenv=allow_dotenv, report_path=report_path)
+    clean_zip_fast(
+        src, final_out, max_bytes=max_bytes, allow_dotenv=allow_dotenv, report_path=report_path
+    )
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

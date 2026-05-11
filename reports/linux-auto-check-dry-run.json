@@ -1,0 +1,299 @@
+{
+  "schema": "mcpace.linuxAutoCheck.v1",
+  "status": "warn",
+  "profile": "host",
+  "strict": false,
+  "dryRun": true,
+  "generatedAt": "2026-05-11T10:55:58.693Z",
+  "root": "/mnt/data/mcpace_linux_human_v3",
+  "bin": null,
+  "checks": [
+    {
+      "name": "linux-platform",
+      "status": "pass",
+      "message": "platform=linux",
+      "details": {
+        "platform": "linux",
+        "arch": "x64",
+        "release": "4.4.0",
+        "distro": {
+          "id": "debian",
+          "versionId": "13",
+          "name": "Debian GNU/Linux 13 (trixie)"
+        }
+      }
+    },
+    {
+      "name": "linux-architecture",
+      "status": "pass",
+      "message": "arch=x64",
+      "details": {
+        "supported": [
+          "x64",
+          "arm64"
+        ]
+      }
+    },
+    {
+      "name": "linux-libc",
+      "status": "pass",
+      "message": "libc=gnu",
+      "details": {
+        "libc": "gnu"
+      }
+    },
+    {
+      "name": "node-runtime",
+      "status": "pass",
+      "message": "node=22.16.0",
+      "details": {
+        "required": ">=22"
+      }
+    },
+    {
+      "name": "command-npm",
+      "status": "pass",
+      "message": "/opt/nvm/versions/node/v22.16.0/bin/npm",
+      "details": {
+        "path": "/opt/nvm/versions/node/v22.16.0/bin/npm"
+      }
+    },
+    {
+      "name": "command-npx",
+      "status": "pass",
+      "message": "/opt/nvm/versions/node/v22.16.0/bin/npx",
+      "details": {
+        "path": "/opt/nvm/versions/node/v22.16.0/bin/npx"
+      }
+    },
+    {
+      "name": "command-sh",
+      "status": "pass",
+      "message": "/usr/bin/sh",
+      "details": {
+        "path": "/usr/bin/sh"
+      }
+    },
+    {
+      "name": "optional-command-cargo",
+      "status": "warn",
+      "message": "cargo not found",
+      "details": {
+        "path": null
+      }
+    },
+    {
+      "name": "optional-command-rustc",
+      "status": "warn",
+      "message": "rustc not found",
+      "details": {
+        "path": null
+      }
+    },
+    {
+      "name": "optional-command-docker",
+      "status": "warn",
+      "message": "docker not found",
+      "details": {
+        "path": null
+      }
+    },
+    {
+      "name": "optional-command-systemctl",
+      "status": "pass",
+      "message": "/usr/bin/systemctl",
+      "details": {
+        "path": "/usr/bin/systemctl"
+      }
+    },
+    {
+      "name": "package-json",
+      "status": "pass",
+      "message": "package.json present and parseable",
+      "details": {}
+    },
+    {
+      "name": "cargo-manifest",
+      "status": "pass",
+      "message": "Cargo.toml present",
+      "details": {}
+    },
+    {
+      "name": "release-targets",
+      "status": "pass",
+      "message": "release-targets.json present",
+      "details": {}
+    },
+    {
+      "name": "npm-lint",
+      "status": "skip",
+      "message": "dry-run: npm run lint:npm -- --json",
+      "details": {
+        "command": "npm run lint:npm -- --json"
+      }
+    },
+    {
+      "name": "npm-cli-tests",
+      "status": "skip",
+      "message": "dry-run: npm run test:npm",
+      "details": {
+        "command": "npm run test:npm"
+      }
+    },
+    {
+      "name": "release-targets-gate",
+      "status": "skip",
+      "message": "dry-run: npm run verify:release-targets",
+      "details": {
+        "command": "npm run verify:release-targets"
+      }
+    },
+    {
+      "name": "platform-packages-gate",
+      "status": "skip",
+      "message": "dry-run: npm run verify:platform-packages",
+      "details": {
+        "command": "npm run verify:platform-packages"
+      }
+    },
+    {
+      "name": "npm-pack-gate",
+      "status": "skip",
+      "message": "dry-run: npm run verify:npm-pack",
+      "details": {
+        "command": "npm run verify:npm-pack"
+      }
+    },
+    {
+      "name": "xdg-config-root-parent-writable",
+      "status": "pass",
+      "message": "writable: /mnt/data",
+      "details": {
+        "root": "/mnt/data/mcpace_linux_human_v3",
+        "status": "pass",
+        "message": "writable: /mnt/data",
+        "path": "/mnt/data"
+      }
+    },
+    {
+      "name": "xdg-state-root-parent-writable",
+      "status": "pass",
+      "message": "writable: /home/oai/.local/state",
+      "details": {
+        "stateRoot": "/home/oai/.local/state/mcpace",
+        "status": "pass",
+        "message": "writable: /home/oai/.local/state",
+        "path": "/home/oai/.local/state"
+      }
+    },
+    {
+      "name": "serve-host-local-only",
+      "status": "pass",
+      "message": "serve host=127.0.0.1",
+      "details": {
+        "allowedLocalHosts": [
+          "127.0.0.1",
+          "localhost",
+          "::1"
+        ]
+      }
+    },
+    {
+      "name": "systemd-user",
+      "status": "warn",
+      "message": "Failed to connect to user scope bus via local transport: Is a directory",
+      "details": {
+        "available": false,
+        "reason": "Failed to connect to user scope bus via local transport: Is a directory"
+      }
+    },
+    {
+      "name": "npx-upstream-env-vars",
+      "status": "pass",
+      "message": "npx upstream env_vars look configured or no npx upstreams enabled",
+      "details": {
+        "status": "pass",
+        "message": "npx upstream env_vars look configured or no npx upstreams enabled",
+        "findings": [],
+        "baselineEnvVars": [
+          "NPM_CONFIG_REGISTRY",
+          "NPM_CONFIG_USERCONFIG",
+          "NPM_CONFIG_GLOBALCONFIG",
+          "NPM_CONFIG_CACHE",
+          "NODE_EXTRA_CA_CERTS",
+          "SSL_CERT_FILE",
+          "REQUESTS_CA_BUNDLE",
+          "HTTP_PROXY",
+          "HTTPS_PROXY",
+          "NO_PROXY",
+          "http_proxy",
+          "https_proxy",
+          "no_proxy",
+          "CI"
+        ]
+      }
+    },
+    {
+      "name": "inline-server-env-secrets",
+      "status": "pass",
+      "message": "no inline env blocks detected in enabled npx upstreams",
+      "details": {
+        "servers": []
+      }
+    },
+    {
+      "name": "mcpace-binary",
+      "status": "warn",
+      "message": "mcpace binary not found in --bin/PATH/target",
+      "details": {
+        "bin": null
+      }
+    },
+    {
+      "name": "release-manifest-hygiene",
+      "status": "warn",
+      "message": "root-level screenshots are present; remove them from source snapshots even when release manifest excludes them",
+      "details": {
+        "dangerous": [],
+        "missing": [],
+        "rootScreenshots": [
+          "screenshot_test.png",
+          "screenshot_test2.png"
+        ]
+      }
+    },
+    {
+      "name": "archive-release-exclusions",
+      "status": "pass",
+      "message": "archive-release excludes known local machine-state directories",
+      "details": {
+        "missing": []
+      }
+    },
+    {
+      "name": "vendored-executable-bits",
+      "status": "pass",
+      "message": "vendored Unix binaries are executable",
+      "details": {
+        "findings": []
+      }
+    },
+    {
+      "name": "linux-npm-install-docker-script",
+      "status": "pass",
+      "message": "test:linux-npm-install:docker => node scripts/verify-linux-npm-install-docker.mjs --json",
+      "details": {
+        "script": "node scripts/verify-linux-npm-install-docker.mjs --json"
+      }
+    },
+    {
+      "name": "linux-npm-install-docker-proof",
+      "status": "skip",
+      "message": "Docker proof not executed for this profile",
+      "details": {
+        "profile": "host",
+        "noDocker": true
+      }
+    }
+  ]
+}

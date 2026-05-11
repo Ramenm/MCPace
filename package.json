@@ -96,7 +96,16 @@
     "test:source": "npm run lint:npm && npm run audit:source && npm run verify:defect-gates && npm run verify:bug-sweep && npm run test:repo && npm run test:npm",
     "audit:ready-footprint": "node scripts/ready-footprint-audit.mjs --json",
     "test:repo:serial": "node scripts/run-node-test-files.mjs --dir tests/node --ext .test.js --json --progress --batch-size 1 --timeout-ms 120000 --heartbeat-ms 10000 --write reports/node-tests-latest.json",
-    "test:npm:serial": "node scripts/run-node-test-files.mjs --dir packages/npm/cli/test --ext .test.mjs --json --progress --batch-size 1 --timeout-ms 120000 --heartbeat-ms 10000 --write reports/npm-cli-tests-latest.json"
+    "test:npm:serial": "node scripts/run-node-test-files.mjs --dir packages/npm/cli/test --ext .test.mjs --json --progress --batch-size 1 --timeout-ms 120000 --heartbeat-ms 10000 --write reports/npm-cli-tests-latest.json",
+    "verify:linux:auto": "node scripts/linux-auto-check.mjs --profile standard --json --write reports/linux-auto-check-latest.json --markdown reports/linux-auto-check-latest.md",
+    "verify:linux:auto:host": "node scripts/linux-auto-check.mjs --profile host --json --write reports/linux-auto-check-latest.json --markdown reports/linux-auto-check-latest.md --no-docker",
+    "verify:linux:auto:full": "node scripts/linux-auto-check.mjs --profile full --json --write reports/linux-auto-check-full-latest.json --markdown reports/linux-auto-check-full-latest.md",
+    "verify:linux:auto:release": "node scripts/linux-auto-check.mjs --profile release --json --write reports/linux-auto-check-release-latest.json --markdown reports/linux-auto-check-release-latest.md",
+    "setup:linux:auto": "bash scripts/linux-auto-setup.sh",
+    "doctor:full": "node scripts/mcpace-full-doctor.mjs --json --write reports/mcpace-full-doctor-latest.json --markdown reports/mcpace-full-doctor-latest.md",
+    "config:harden": "node scripts/mcpace-config-hardener.mjs",
+    "smoke:mcp:http": "node scripts/mcp-http-smoke.mjs --json --write reports/mcp-http-smoke-latest.json",
+    "verify:ideal:source": "npm run lint:npm && npm run test:repo:smoke && npm run test:npm && npm run verify:secrets -- --json && npm run doctor:full"
   },
   "packageManager": "npm@11.13.0",
   "devEngines": {

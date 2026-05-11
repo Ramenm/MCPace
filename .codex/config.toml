@@ -1,7 +1,0 @@
-# BEGIN MCPACE MANAGED BLOCK: MCPace
-# This block is managed by `mcpace client install codex`.
-[mcp_servers.MCPace]
-url = "http://127.0.0.1:39022/mcp"
-enabled = true
-startup_timeout_sec = 20
-# END MCPACE MANAGED BLOCK: MCPace

@@ -1,0 +1,79 @@
+name: linux-auto
+
+on:
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Run Docker clean-install proof as well.
+        required: false
+        default: false
+        type: boolean
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - ready_for_review
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-auto-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-auto-standard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Run Linux auto-check
+        run: npm run verify:linux:auto
+
+      - name: Upload Linux auto-check report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-auto-check-standard
+          path: |
+            reports/linux-auto-check-latest.json
+            reports/linux-auto-check-latest.md
+
+  linux-clean-install-docker:
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.full == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Run full Linux auto-check with Docker proof
+        run: npm run verify:linux:auto:full
+
+      - name: Upload full Linux auto-check report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: linux-auto-check-full
+          path: |
+            reports/linux-auto-check-full-latest.json
+            reports/linux-auto-check-full-latest.md

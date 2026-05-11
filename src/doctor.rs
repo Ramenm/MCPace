@@ -577,13 +577,7 @@ fn tool_status(name: &str, required: bool, args: &[&str], probe_versions: bool) 
 
 fn command_version(name: &str, args: &[&str]) -> Option<String> {
     let path = find_command_path(name)?;
-    let mut command = if cfg!(windows) && should_run_through_cmd(&path) {
-        let mut command = Command::new("cmd.exe");
-        command.arg("/d").arg("/s").arg("/c").arg(name);
-        command
-    } else {
-        Command::new(path)
-    };
+    let mut command = Command::new(path);
     #[cfg(windows)]
     crate::windows_process::configure_no_window(&mut command);
     command.args(args);
@@ -619,20 +613,6 @@ fn command_output_with_timeout(command: &mut Command, timeout: Duration) -> Opti
             }
         }
     }
-}
-
-fn is_windows_shell_script(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .map(|extension| {
-            let normalized = extension.trim().to_ascii_lowercase();
-            normalized == "cmd" || normalized == "bat"
-        })
-        .unwrap_or(false)
-}
-
-fn should_run_through_cmd(path: &Path) -> bool {
-    is_windows_shell_script(path) || path.extension().is_none()
 }
 
 fn find_command_path(name: &str) -> Option<PathBuf> {

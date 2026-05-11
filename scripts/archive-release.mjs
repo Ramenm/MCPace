@@ -18,6 +18,10 @@ const ARCHIVE_COMMAND_TIMEOUT_MS = parseTimeoutEnv(
 );
 const FORBIDDEN_SEGMENTS = new Set([
   '.git',
+  '.claude',
+  '.codex',
+  '.omc',
+  '%SystemDrive%',
   'node_modules',
   'target',
   '.DS_Store',

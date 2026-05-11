@@ -1,6 +1,5 @@
 {
   "includePaths": [
-    ".codex",
     ".config",
     ".editorconfig",
     ".env.example",

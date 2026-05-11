@@ -1,0 +1,22 @@
+
+> mcpace-workspace@0.5.9 lint:npm
+> node scripts/check-node-syntax.mjs --json --json
+
+{
+  "schema": "mcpace.nodeSyntaxCheck.v1",
+  "generatedAt": "2026-05-11T10:56:45.398Z",
+  "root": "/mnt/data/mcpace_linux_auto_after",
+  "sourceRoots": [
+    "packages/npm/cli",
+    "scripts",
+    "tests/node",
+    "tests/fixtures",
+    "examples"
+  ],
+  "status": "pass",
+  "fileCount": 101,
+  "checkedCount": 101,
+  "failureCount": 0,
+  "jobs": 6,
+  "failures": []
+}

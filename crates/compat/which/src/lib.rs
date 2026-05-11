@@ -46,13 +46,17 @@ fn candidate_names(command: &str) -> Vec<String> {
         {
             return vec![command.into()];
         }
-        let mut names = vec![command.into()];
-        names.extend(
-            pathext
-                .split(';')
-                .filter(|ext| !ext.is_empty())
-                .map(|ext| format!("{command}{ext}")),
-        );
+        // On Windows, try PATHEXT extensions first so that proper Windows
+        // executables and .cmd wrappers (e.g. npx.cmd) are preferred over
+        // extension-less shebang scripts that cannot be spawned directly.
+        let mut names: Vec<String> = pathext
+            .split(';')
+            .filter(|ext| !ext.is_empty())
+            .map(|ext| format!("{command}{ext}"))
+            .collect();
+        // Fall back to the bare name last (handles the case where a native
+        // Windows binary has no extension, e.g. a custom compiled tool).
+        names.push(command.into());
         names
     }
     #[cfg(not(windows))]
