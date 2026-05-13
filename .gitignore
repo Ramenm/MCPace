@@ -6,6 +6,14 @@
 /mcpace.cmd
 /mcpace.sh
 
+# OS/editor local artifacts
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+
 # Local secrets
 /.env
 /.env.*
@@ -22,17 +30,40 @@
 /.idea/
 /TestResults/
 
-# Temporary packaging output
+# Temporary, test, and packaging output
 /*.zip
+/*.tgz
+/*.tmp
+/*.temp
+/*.bak
+/*.orig
 /screenshot_test*.png
 /%SystemDrive%/
 /testResults.xml
+/junit.xml
+/coverage.xml
+/coverage/
+/.nyc_output/
+/playwright-report/
+/test-results/
 /target/
+/.tmp/
+/.tmp-*/
 /.tmp-archive-test/
 
 /node_modules/
 /packages/**/node_modules/
-/*.tgz
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python/tool caches from local verification helpers
+__pycache__/
+*.py[cod]
+/.pytest_cache/
+/.ruff_cache/
+/.mypy_cache/
 
 # Local MCP settings fragments are machine-specific; keep README/examples tracked.
 /mcp_settings.d/*.json

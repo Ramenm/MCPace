@@ -1,5 +1,5 @@
 use super::{
-    cache_root_path, run_stdio_request, server_fingerprint, UpstreamServerConfig,
+    cache_root_path, run_http_request, run_stdio_request, server_fingerprint, UpstreamServerConfig,
     TOOL_LIST_CACHE_MAX_ENTRIES, TOOL_LIST_CACHE_TTL,
 };
 use crate::json::JsonValue;
@@ -43,8 +43,7 @@ pub(super) fn cached_tools_list(
         match acquire_tool_list_load_permit_or_cached(&key) {
             ToolListCacheAcquire::Cached(tools) => return Ok((tools, true)),
             ToolListCacheAcquire::Load(permit) => {
-                let result =
-                    run_stdio_request(root_path, server, "tools/list", None, timeout, None)?;
+                let result = run_tool_list_request(root_path, server, timeout)?;
                 let tools = json_helpers::value_at_path(&result, &["tools"])
                     .cloned()
                     .unwrap_or_else(|| JsonValue::array([]));
@@ -55,12 +54,23 @@ pub(super) fn cached_tools_list(
         }
     }
 
-    let result = run_stdio_request(root_path, server, "tools/list", None, timeout, None)?;
+    let result = run_tool_list_request(root_path, server, timeout)?;
     let tools = json_helpers::value_at_path(&result, &["tools"])
         .cloned()
         .unwrap_or_else(|| JsonValue::array([]));
     write_cached_tools(key, tools.clone());
     Ok((tools, false))
+}
+
+fn run_tool_list_request(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    timeout: Duration,
+) -> Result<JsonValue, String> {
+    if server.source_type == "http" {
+        return run_http_request(server, "tools/list", None, timeout);
+    }
+    run_stdio_request(root_path, server, "tools/list", None, timeout, None)
 }
 
 enum ToolListCacheAcquire {

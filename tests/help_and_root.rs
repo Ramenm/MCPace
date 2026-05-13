@@ -19,7 +19,7 @@ fn help_mentions_grouped_native_read_paths() {
     assert!(text.contains("verify readiness"));
     assert!(text.contains("dashboard"));
     assert!(text.contains("serve"));
-    assert!(text.contains("serve start|stop|status"));
+    assert!(text.contains("serve start|restart|stop|status"));
     assert!(text.contains("client list"));
     assert!(text.contains("client plan"));
     assert!(text.contains("client install"));

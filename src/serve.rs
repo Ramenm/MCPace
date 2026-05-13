@@ -66,6 +66,7 @@ pub fn run(
         Some("start") => run_start(parsed, default_root, stdout, stderr),
         Some("stop") => run_stop(parsed, default_root, stdout, stderr),
         Some("status") => run_status(parsed, default_root, stdout, stderr),
+        Some("restart") => run_restart(parsed, default_root, stdout, stderr),
         _ => dashboard::run_serve(&parsed.passthrough, default_root, stdout, stderr),
     }
 }
@@ -76,7 +77,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 
     while index < args.len() {
         match args[index].as_str() {
-            "start" | "stop" | "status" => {
+            "start" | "stop" | "status" | "restart" => {
                 if parsed.action.is_some() {
                     parsed.error = Some("serve accepts only one action".to_string());
                     return parsed;
@@ -241,6 +242,10 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
         "  mcpace serve start [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace serve restart [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
     );
     let _ = writeln!(stdout, "  mcpace serve stop [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace serve status [--json] [--root <path>]");
@@ -421,20 +426,7 @@ fn run_stop(
         return 1;
     };
     let canonical_root = canonicalize_or_original(&root_path);
-    let state_root = runtimepaths::resolve_state_root(&canonical_root);
-    let state_path = runtimepaths::serve_state_path(&state_root);
-    let existing = read_state(&state_path).ok();
-    if let Some(state) = &existing {
-        let _ = kill_process(state.pid);
-        for _ in 0..40 {
-            let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
-            if !health_check(&state.host, state.port, &endpoint.health_path).unwrap_or(false) {
-                break;
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
-    }
-    let _ = fs::remove_file(&state_path);
+    stop_existing_serve(&canonical_root);
 
     let status = match collect_status(&canonical_root, None, None) {
         Ok(value) => value,
@@ -444,6 +436,39 @@ fn run_stop(
         }
     };
     write_status_response(&status, json_output, stdout)
+}
+
+fn run_restart(
+    parsed: ParsedArgs,
+    default_root: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let root_path = parsed.root_override.clone().or(default_root.clone());
+    let Some(root_path) = root_path else {
+        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        return 1;
+    };
+    let canonical_root = canonicalize_or_original(&root_path);
+    stop_existing_serve(&canonical_root);
+    run_start(parsed, default_root, stdout, stderr)
+}
+
+fn stop_existing_serve(canonical_root: &Path) {
+    let state_root = runtimepaths::resolve_state_root(canonical_root);
+    let state_path = runtimepaths::serve_state_path(&state_root);
+    let existing = read_state(&state_path).ok();
+    if let Some(state) = &existing {
+        let _ = kill_process(state.pid);
+        for _ in 0..40 {
+            let endpoint = runtimepaths::resolve_serve_endpoint(Some(canonical_root));
+            if !health_check(&state.host, state.port, &endpoint.health_path).unwrap_or(false) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+    }
+    let _ = fs::remove_file(&state_path);
 }
 
 fn run_status(
@@ -507,6 +532,11 @@ fn collect_status(
     let running = should_probe && health_check(&host, port, &endpoint.health_path).unwrap_or(false);
     let mut warnings = Vec::new();
     let status = if running {
+        if let Some(state) = &state {
+            if let Some(warning) = stale_runner_warning(state) {
+                warnings.push(warning);
+            }
+        }
         "running".to_string()
     } else if state.is_some() {
         warnings.push(
@@ -862,6 +892,41 @@ fn canonicalize_or_original(path: &Path) -> PathBuf {
     fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+fn stale_runner_warning(state: &ServeState) -> Option<String> {
+    let current_runner_path = resolve_runner_source().ok()?;
+    let runner_path = PathBuf::from(&state.runner_path);
+    stale_runner_warning_for_paths(&runner_path, &current_runner_path)
+}
+
+fn stale_runner_warning_for_paths(
+    runner_path: &Path,
+    current_runner_path: &Path,
+) -> Option<String> {
+    let runner_path = canonicalize_or_original(runner_path);
+    let current_runner_path = canonicalize_or_original(current_runner_path);
+    if runner_path == current_runner_path {
+        return None;
+    }
+    match files_have_same_contents(&runner_path, &current_runner_path) {
+        Ok(true) => None,
+        Ok(false) => Some(format!(
+            "running MCPace serve runner '{}' differs from current binary '{}'; run 'mcpace serve restart --root <project>' after rebuilding or upgrading",
+            sanitize_display(&runner_path),
+            sanitize_display(&current_runner_path)
+        )),
+        Err(_) => None,
+    }
+}
+
+fn files_have_same_contents(left: &Path, right: &Path) -> Result<bool, std::io::Error> {
+    let left_meta = fs::metadata(left)?;
+    let right_meta = fs::metadata(right)?;
+    if left_meta.len() != right_meta.len() {
+        return Ok(false);
+    }
+    Ok(fs::read(left)? == fs::read(right)?)
+}
+
 fn resolve_runner_source() -> Result<PathBuf, std::io::Error> {
     if let Some(path) = std::env::var_os("MCPACE_RUNNER_PATH") {
         let explicit = PathBuf::from(path);
@@ -1078,9 +1143,17 @@ fn kill_process(pid: u32) -> Result<(), String> {
 mod tests {
     use super::*;
     use std::net::TcpListener;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
     fn temp_root() -> PathBuf {
-        let unique = format!("mcpace-serve-test-{}-{}", std::process::id(), now_ms());
+        let unique = format!(
+            "mcpace-serve-test-{}-{}-{}",
+            std::process::id(),
+            now_ms(),
+            TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
+        );
         let path = std::env::temp_dir().join(unique);
         fs::create_dir_all(&path).unwrap();
         path
@@ -1203,6 +1276,34 @@ mod tests {
             status_text
         );
 
+        let mut restart_stdout = Vec::new();
+        let mut restart_stderr = Vec::new();
+        let restart = run(
+            &[
+                "restart".to_string(),
+                "--json".to_string(),
+                "--root".to_string(),
+                root.display().to_string(),
+                "--port".to_string(),
+                port.to_string(),
+            ],
+            None,
+            &mut restart_stdout,
+            &mut restart_stderr,
+        );
+        assert_eq!(
+            restart,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&restart_stderr)
+        );
+        let restart_text = String::from_utf8(restart_stdout).unwrap();
+        assert!(
+            restart_text.contains(r#""status": "running""#),
+            "stdout: {}",
+            restart_text
+        );
+
         let mut stop_stdout = Vec::new();
         let mut stop_stderr = Vec::new();
         let stop = run(
@@ -1223,6 +1324,35 @@ mod tests {
             "stdout: {}",
             stop_text
         );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stale_runner_warning_detects_outdated_runner_copy() {
+        let root = temp_root();
+        let current = root.join(if cfg!(windows) {
+            "mcpace-current.exe"
+        } else {
+            "mcpace-current"
+        });
+        let runner = root.join(if cfg!(windows) {
+            "mcpace-serve.exe"
+        } else {
+            "mcpace-serve"
+        });
+
+        fs::write(&current, b"current binary").unwrap();
+        fs::write(&runner, b"old").unwrap();
+        let warning = stale_runner_warning_for_paths(&runner, &current).unwrap();
+        assert!(
+            warning.contains("mcpace serve restart"),
+            "warning: {}",
+            warning
+        );
+
+        fs::write(&runner, b"current binary").unwrap();
+        assert!(stale_runner_warning_for_paths(&runner, &current).is_none());
 
         let _ = fs::remove_dir_all(root);
     }

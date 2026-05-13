@@ -12,6 +12,7 @@ use std::sync::{mpsc, Mutex};
 use std::time::{Duration, Instant};
 
 mod diagnostics;
+mod http_runtime;
 mod inventory;
 mod lease_runtime;
 mod policy_audit;
@@ -44,6 +45,7 @@ pub use self::session_pool::UpstreamSessionPool;
 use self::diagnostics::stderr_suffix;
 #[cfg(test)]
 use self::diagnostics::DIAGNOSTIC_REDACTION;
+use self::http_runtime::run_http_request;
 #[cfg(test)]
 use self::inventory::{catalog_cache_counts, flatten_catalog_tools};
 #[cfg(test)]
@@ -51,6 +53,8 @@ use self::lease_runtime::{validate_upstream_batch_tool_policy, validate_upstream
 use self::policy_audit::{audit_tool, tool_policy_summaries};
 #[cfg(test)]
 use self::policy_suggestions::report as policy_suggestion_report;
+#[cfg(test)]
+use self::process_config::spawn_program_for_command;
 use self::process_config::{
     expand_template, redact_command, resolve_command_for_cwd, validate_stdio_cwd,
 };
@@ -187,9 +191,9 @@ fn ensure_callable_stdio(root_path: &Path, server: &UpstreamServerConfig) -> Res
                 .unwrap_or("server is disabled by source or policy")
         ));
     }
-    if server.source_type != "stdio" {
+    if server.source_type != "stdio" && server.source_type != "http" {
         return Err(format!(
-            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio upstreams only; configure a stdio adapter or call runtime_diagnostics for exact status.",
+            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio and plain HTTP upstreams; configure a stdio adapter or call runtime_diagnostics for exact status.",
             server.name, server.source_type
         ));
     }
@@ -221,6 +225,44 @@ fn server_runtime_callable(
 ) -> (bool, Option<PathBuf>, Option<String>) {
     if !server.enabled {
         return (false, None, None);
+    }
+    if server.source_type == "http" {
+        let Some(url) = server
+            .url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return (
+                false,
+                None,
+                Some(format!(
+                    "HTTP upstream server '{}' has no url configured",
+                    server.name
+                )),
+            );
+        };
+        if url.to_ascii_lowercase().starts_with("http://") {
+            return (true, None, None);
+        }
+        if url.to_ascii_lowercase().starts_with("https://") {
+            return (
+                false,
+                None,
+                Some(format!(
+                    "upstream server '{}' uses HTTPS; configure a stdio HTTP adapter such as mcp-remote or a local HTTP gateway for now",
+                    server.name
+                )),
+            );
+        }
+        return (
+            false,
+            None,
+            Some(format!(
+                "HTTP upstream server '{}' url must start with http:// or https://",
+                server.name
+            )),
+        );
     }
     if server.source_type != "stdio" {
         return (false, None, None);
@@ -272,7 +314,9 @@ fn catalog_server(
     if !runtime_callable {
         let status = if !server.enabled {
             "disabled"
-        } else if server.source_type != "stdio" {
+        } else if server.source_type == "http" {
+            "blocked-http-upstream"
+        } else if server.source_type != "stdio" && server.source_type != "http" {
             "blocked-non-stdio"
         } else {
             "blocked-command-not-found"
@@ -873,6 +917,8 @@ fn server_inventory_item(root_path: &Path, server: &UpstreamServerConfig) -> Jso
         server_runtime_callable(root_path, server);
     let status = if !server.enabled {
         "disabled"
+    } else if runtime_callable && server.source_type == "http" {
+        "callable-http"
     } else if runtime_callable {
         "callable-stdio"
     } else if server.source_type == "http" {
@@ -887,12 +933,16 @@ fn server_inventory_item(root_path: &Path, server: &UpstreamServerConfig) -> Jso
             .disabled_reason
             .clone()
             .unwrap_or_else(|| "server is disabled by source or policy".to_string())
+    } else if runtime_callable && server.source_type == "http" {
+        "enabled plain HTTP server; list with upstream_tools and call with upstream_call"
+            .to_string()
     } else if runtime_callable {
         "enabled stdio server; list with upstream_tools and call with upstream_call".to_string()
     } else if let Some(error) = command_error {
         error
     } else if server.source_type == "http" {
-        "non-stdio HTTP upstream fan-out is not implemented in this stdio bridge".to_string()
+        "HTTP upstream is configured but not callable; use http:// for direct local/plain HTTP or bridge HTTPS through stdio"
+            .to_string()
     } else {
         "server does not have a callable stdio command".to_string()
     };

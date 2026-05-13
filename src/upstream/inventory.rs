@@ -15,8 +15,17 @@ pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
         .collect::<Vec<_>>();
     let callable_stdio_count = servers
         .values()
-        .filter(|server| server_runtime_callable(root_path, server).0)
+        .filter(|server| {
+            server.source_type == "stdio" && server_runtime_callable(root_path, server).0
+        })
         .count();
+    let callable_http_count = servers
+        .values()
+        .filter(|server| {
+            server.source_type == "http" && server_runtime_callable(root_path, server).0
+        })
+        .count();
+    let callable_upstream_count = callable_stdio_count + callable_http_count;
 
     Ok(JsonValue::object([
         ("ok", JsonValue::bool(true)),
@@ -24,11 +33,14 @@ pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
         (
             "summary",
             JsonValue::string(
-                "Use upstream_tools with a server name to list a configured stdio upstream; use upstream_call with server/tool/arguments for one call or upstream_batch for stateful sequences. HTTP upstream fan-out remains inventory-only until an HTTP forwarding adapter is configured.",
+                "Use upstream_tools with a server name to list a configured stdio or plain HTTP upstream; use upstream_call with server/tool/arguments for one call or upstream_batch for stateful sequences. HTTPS remote MCP endpoints should be connected through a stdio adapter such as mcp-remote until a TLS client is configured.",
             ),
         ),
         ("stdioForwardingImplemented", JsonValue::bool(true)),
+        ("plainHttpForwardingImplemented", JsonValue::bool(true)),
         ("callableConfiguredStdioServerCount", JsonValue::number(callable_stdio_count)),
+        ("callableConfiguredHttpServerCount", JsonValue::number(callable_http_count)),
+        ("callableConfiguredUpstreamServerCount", JsonValue::number(callable_upstream_count)),
         ("servers", JsonValue::array(items)),
     ]))
 }
@@ -48,6 +60,11 @@ pub fn surface_manifest(
         json_helpers::value_at_path(&upstream_inventory, &["callableConfiguredStdioServerCount"])
             .and_then(JsonValue::as_i64)
             .unwrap_or(0);
+    let callable_http_count =
+        json_helpers::value_at_path(&upstream_inventory, &["callableConfiguredHttpServerCount"])
+            .and_then(JsonValue::as_i64)
+            .unwrap_or(0);
+    let callable_upstream_count = callable_stdio_count + callable_http_count;
 
     let live_catalog = if include_live_catalog {
         Some(catalog_tools(root_path, None, timeout_ms, refresh)?)
@@ -104,7 +121,8 @@ pub fn surface_manifest(
                     ),
                 ),
                 ("stdioAutoDiscovery", JsonValue::bool(true)),
-                ("httpUpstreamForwardingImplemented", JsonValue::bool(false)),
+                ("httpUpstreamForwardingImplemented", JsonValue::bool(true)),
+                ("httpsUpstreamForwardingImplemented", JsonValue::bool(false)),
             ]),
         ),
         (
@@ -136,6 +154,14 @@ pub fn surface_manifest(
                 (
                     "callableConfiguredStdioServerCount",
                     JsonValue::number(callable_stdio_count),
+                ),
+                (
+                    "callableConfiguredHttpServerCount",
+                    JsonValue::number(callable_http_count),
+                ),
+                (
+                    "callableConfiguredUpstreamServerCount",
+                    JsonValue::number(callable_upstream_count),
                 ),
                 (
                     "liveCatalogIncluded",

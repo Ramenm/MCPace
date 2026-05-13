@@ -21,6 +21,7 @@ test('rust command coverage reflects the currently implemented launch and instal
     'dashboard',
     'serve',
     'serve start',
+    'serve restart',
     'serve status',
     'serve stop',
     'mcp-server',

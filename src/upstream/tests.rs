@@ -3,6 +3,9 @@ use super::process_config::manager_data_path;
 use super::stdio_runtime::spawn_stdio_server;
 use super::*;
 use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpListener;
+use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 fn temp_root() -> PathBuf {
@@ -444,6 +447,28 @@ fn relative_stdio_command_paths_resolve_against_configured_cwd() {
 }
 
 #[test]
+fn bare_launch_manager_commands_spawn_by_basename() {
+    let resolved = if cfg!(windows) {
+        PathBuf::from(r"C:\tools\bunx.exe")
+    } else {
+        PathBuf::from("/usr/local/bin/bunx")
+    };
+    assert_eq!(
+        spawn_program_for_command("bunx", &resolved),
+        PathBuf::from(resolved.file_name().unwrap())
+    );
+    #[cfg(windows)]
+    assert_eq!(
+        spawn_program_for_command("bunx", &PathBuf::from(r"C:\tools\bunx.EXE")),
+        PathBuf::from("bunx.exe")
+    );
+    assert_eq!(
+        spawn_program_for_command("./bin/server", &resolved),
+        resolved
+    );
+}
+
+#[test]
 fn load_servers_accepts_source_only_standard_mcp_shape() {
     let root = temp_root();
     fs::create_dir_all(root.join("workspace")).unwrap();
@@ -518,7 +543,7 @@ fn child_process_paths_strip_windows_extended_prefixes() {
 }
 
 #[test]
-fn inventory_marks_stdio_callable_and_http_blocked() {
+fn inventory_marks_stdio_and_plain_http_callable() {
     let root = temp_root();
     let command = std::env::current_exe()
         .unwrap()
@@ -554,9 +579,175 @@ fn inventory_marks_stdio_callable_and_http_blocked() {
     );
     assert_eq!(
         json_helpers::string_at_path(remote, &["status"]),
-        Some("blocked-http-upstream")
+        Some("callable-http")
     );
     let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn plain_http_upstream_lists_and_calls_tools() {
+    let root = temp_root();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind mock HTTP MCP server");
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let handle = thread::spawn(move || {
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let mut handled = 0usize;
+        while handled < 6 && std::time::Instant::now() < deadline {
+            match listener.accept() {
+                Ok((mut stream, _)) => {
+                    handled += 1;
+                    serve_mock_http_mcp_request(&mut stream);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(10));
+                }
+                Err(_) => break,
+            }
+        }
+        handled
+    });
+
+    fs::write(
+        root.join("mcp_settings.json"),
+        format!(
+            r#"{{
+  "mcpServers": {{
+    "remote": {{ "enabled": true, "type": "http", "url": "http://127.0.0.1:{}/mcp" }}
+  }}
+}}"#,
+            port
+        ),
+    )
+    .unwrap();
+    fs::write(root.join("mcpace.config.json"), r#"{ "version": "0.5.9" }"#).unwrap();
+
+    let listed = list_tools(&root, Some("remote"), Some(5_000), true).expect("list HTTP tools");
+    assert_eq!(
+        json_helpers::value_at_path(&listed, &["toolCount"]).and_then(JsonValue::as_i64),
+        Some(1)
+    );
+    let called =
+        call_tool(&root, "remote", "ok", &empty_object(), Some(5_000)).expect("call HTTP tool");
+    assert_eq!(json_helpers::bool_at_path(&called, &["ok"]), Some(true));
+    let handled = handle.join().unwrap();
+    assert_eq!(handled, 6);
+    let _ = fs::remove_dir_all(root);
+}
+
+fn serve_mock_http_mcp_request(stream: &mut std::net::TcpStream) {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
+    let mut raw = Vec::new();
+    let mut buffer = [0u8; 1024];
+    loop {
+        let Ok(read) = stream.read(&mut buffer) else {
+            return;
+        };
+        if read == 0 {
+            return;
+        }
+        raw.extend_from_slice(&buffer[..read]);
+        let text = String::from_utf8_lossy(&raw);
+        let Some((headers, body)) = text.split_once("\r\n\r\n") else {
+            continue;
+        };
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().ok())
+                    .flatten()
+            })
+            .unwrap_or(0);
+        if body.as_bytes().len() < content_length {
+            continue;
+        }
+        let request = parse_str(&body[..content_length]).unwrap();
+        let method = json_helpers::string_at_path(&request, &["method"]).unwrap_or_default();
+        let id = json_helpers::value_at_path(&request, &["id"])
+            .cloned()
+            .unwrap_or(JsonValue::Null);
+        let (status, body, extra_header) = match method {
+            "initialize" => (
+                "200 OK",
+                mcp::result(
+                    id,
+                    JsonValue::object([
+                        (
+                            "protocolVersion",
+                            JsonValue::string(mcp::CURRENT_PROTOCOL_VERSION),
+                        ),
+                        (
+                            "capabilities",
+                            JsonValue::object([("tools", empty_object())]),
+                        ),
+                        (
+                            "serverInfo",
+                            JsonValue::object([
+                                ("name", JsonValue::string("mock-http")),
+                                ("version", JsonValue::string("0.0.0")),
+                            ]),
+                        ),
+                    ]),
+                )
+                .to_compact_string(),
+                "Mcp-Session-Id: sess-test\r\n",
+            ),
+            "notifications/initialized" => ("202 Accepted", String::new(), ""),
+            "tools/list" => (
+                "200 OK",
+                mcp::result(
+                    id,
+                    JsonValue::object([(
+                        "tools",
+                        JsonValue::array([JsonValue::object([
+                            ("name", JsonValue::string("ok")),
+                            ("description", JsonValue::string("ok")),
+                            (
+                                "inputSchema",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("object")),
+                                    ("properties", empty_object()),
+                                ]),
+                            ),
+                        ])]),
+                    )]),
+                )
+                .to_compact_string(),
+                "",
+            ),
+            "tools/call" => (
+                "200 OK",
+                mcp::result(
+                    id,
+                    JsonValue::object([(
+                        "content",
+                        JsonValue::array([JsonValue::object([
+                            ("type", JsonValue::string("text")),
+                            ("text", JsonValue::string("called")),
+                        ])]),
+                    )]),
+                )
+                .to_compact_string(),
+                "",
+            ),
+            _ => (
+                "404 Not Found",
+                mcp::error(id, -32601, "not found", None).to_compact_string(),
+                "",
+            ),
+        };
+        let response = format!(
+            "HTTP/1.1 {}\r\nContent-Type: application/json\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+            status,
+            extra_header,
+            body.len(),
+            body
+        );
+        let _ = stream.write_all(response.as_bytes());
+        return;
+    }
 }
 
 #[test]
@@ -657,6 +848,13 @@ fn surface_manifest_is_explicit_about_wrapper_projection() {
             &manifest,
             &["configurationModel", "httpUpstreamForwardingImplemented"]
         ),
+        Some(true)
+    );
+    assert_eq!(
+        json_helpers::bool_at_path(
+            &manifest,
+            &["configurationModel", "httpsUpstreamForwardingImplemented"]
+        ),
         Some(false)
     );
     assert!(json_helpers::string_at_path(&manifest, &["summary"])
@@ -755,6 +953,213 @@ fn probe_reuses_successful_tool_list_cache_for_callable_stdio_servers() {
     let tool_names = json_helpers::array_at_path(&results[0], &["toolNames"]).unwrap();
     assert_eq!(tool_names[0].as_str(), Some("cached_probe_tool"));
     let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(windows)]
+#[test]
+fn stdio_request_cleanup_terminates_windows_descendant_processes() {
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+
+    let root = temp_root();
+    let child_path = root.join("child-mcp.js");
+    let launcher_path = root.join("launcher.js");
+    let pid_path = root.join("child.pid");
+
+    fs::write(
+        &child_path,
+        r#"
+const fs = require('fs');
+const readline = require('readline');
+fs.writeFileSync(process.argv[2], String(process.pid));
+setInterval(() => {}, 1000);
+const rl = readline.createInterface({ input: process.stdin });
+rl.on('line', (line) => {
+  const msg = JSON.parse(line);
+  if (msg.method === 'initialize') {
+    console.log(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'child', version: '0.0.0' } } }));
+  } else if (msg.method === 'tools/list') {
+    console.log(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { tools: [{ name: 'ping', description: 'ping', inputSchema: { type: 'object', properties: {} } }] } }));
+  }
+});
+"#,
+    )
+    .unwrap();
+    fs::write(
+        &launcher_path,
+        r#"
+const { spawn } = require('child_process');
+spawn(process.execPath, [process.argv[2], process.argv[3]], { stdio: 'inherit', windowsHide: true });
+setInterval(() => {}, 1000);
+"#,
+    )
+    .unwrap();
+
+    let server = UpstreamServerConfig {
+        name: "windows-tree".to_string(),
+        enabled: true,
+        disabled_reason: None,
+        source_type: "stdio".to_string(),
+        command: Some("node".to_string()),
+        args: vec![
+            launcher_path.display().to_string(),
+            child_path.display().to_string(),
+            pid_path.display().to_string(),
+        ],
+        env: BTreeMap::new(),
+        cwd: Some(root.clone()),
+        url: None,
+        timeout_ms: 5_000,
+        tool_policies: Vec::new(),
+    };
+
+    let result = run_stdio_request(
+        &root,
+        &server,
+        "tools/list",
+        None,
+        Duration::from_secs(5),
+        None,
+    )
+    .expect("tools/list through descendant process");
+    let tools = json_helpers::array_at_path(&result, &["tools"]).expect("tools");
+    assert_eq!(tools.len(), 1);
+
+    let pid = fs::read_to_string(&pid_path)
+        .expect("child pid")
+        .trim()
+        .parse::<u32>()
+        .expect("numeric child pid");
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while windows_pid_exists(pid) && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(
+        !windows_pid_exists(pid),
+        "descendant node process {} should be killed with the upstream tree",
+        pid
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(windows)]
+fn windows_pid_exists(pid: u32) -> bool {
+    let output = match std::process::Command::new("tasklist")
+        .args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"])
+        .output()
+    {
+        Ok(value) => value,
+        Err(_) => return false,
+    };
+    String::from_utf8_lossy(&output.stdout).contains(&format!("\"{}\"", pid))
+}
+
+#[cfg(unix)]
+#[test]
+fn stdio_request_cleanup_terminates_unix_descendant_processes() {
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+
+    let root = temp_root();
+    let child_path = root.join("child-mcp.js");
+    let launcher_path = root.join("launcher.js");
+    let pid_path = root.join("child.pid");
+
+    fs::write(
+        &child_path,
+        r#"
+const fs = require('fs');
+const readline = require('readline');
+fs.writeFileSync(process.argv[2], String(process.pid));
+setInterval(() => {}, 1000);
+const rl = readline.createInterface({ input: process.stdin });
+rl.on('line', (line) => {
+  const msg = JSON.parse(line);
+  if (msg.method === 'initialize') {
+    console.log(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'child', version: '0.0.0' } } }));
+  } else if (msg.method === 'tools/list') {
+    console.log(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: { tools: [{ name: 'ping', description: 'ping', inputSchema: { type: 'object', properties: {} } }] } }));
+  }
+});
+"#,
+    )
+    .unwrap();
+    fs::write(
+        &launcher_path,
+        r#"
+const { spawn } = require('child_process');
+spawn(process.execPath, [process.argv[2], process.argv[3]], { stdio: 'inherit' });
+setInterval(() => {}, 1000);
+"#,
+    )
+    .unwrap();
+
+    let server = UpstreamServerConfig {
+        name: "unix-tree".to_string(),
+        enabled: true,
+        disabled_reason: None,
+        source_type: "stdio".to_string(),
+        command: Some("node".to_string()),
+        args: vec![
+            launcher_path.display().to_string(),
+            child_path.display().to_string(),
+            pid_path.display().to_string(),
+        ],
+        env: BTreeMap::new(),
+        cwd: Some(root.clone()),
+        url: None,
+        timeout_ms: 5_000,
+        tool_policies: Vec::new(),
+    };
+
+    let result = run_stdio_request(
+        &root,
+        &server,
+        "tools/list",
+        None,
+        Duration::from_secs(5),
+        None,
+    )
+    .expect("tools/list through descendant process");
+    let tools = json_helpers::array_at_path(&result, &["tools"]).expect("tools");
+    assert_eq!(tools.len(), 1);
+
+    let pid = fs::read_to_string(&pid_path)
+        .expect("child pid")
+        .trim()
+        .parse::<u32>()
+        .expect("numeric child pid");
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while unix_pid_exists(pid) && std::time::Instant::now() < deadline {
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    assert!(
+        !unix_pid_exists(pid),
+        "descendant node process {} should be killed with the upstream process group",
+        pid
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(unix)]
+fn unix_pid_exists(pid: u32) -> bool {
+    unsafe extern "C" {
+        fn kill(pid: i32, sig: i32) -> i32;
+    }
+    let Ok(pid) = i32::try_from(pid) else {
+        return false;
+    };
+    unsafe { kill(pid, 0) == 0 }
 }
 
 #[test]

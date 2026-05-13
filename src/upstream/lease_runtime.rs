@@ -1,4 +1,5 @@
 use super::diagnostics::stderr_suffix;
+use super::http_runtime::run_http_request;
 use super::inventory::configured_inventory;
 use super::process_config::child_process_path;
 use super::server_config::{find_server, load_servers};
@@ -158,6 +159,9 @@ pub fn request_once(
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
     ensure_callable_stdio(root_path, server)?;
     let effective_timeout = timeout_for(server, timeout_ms);
+    if server.source_type == "http" {
+        return run_http_request(server, method, params, effective_timeout);
+    }
     run_stdio_request(root_path, server, method, params, effective_timeout, None)
 }
 pub fn list_tools(
@@ -238,17 +242,22 @@ pub fn call_tool_with_context(
     let effective_timeout = timeout_for(server, timeout_ms);
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
-    let result = run_stdio_request(
-        root_path,
-        server,
-        "tools/call",
-        Some(JsonValue::object([
-            ("name", JsonValue::string(tool_name)),
-            ("arguments", arguments.clone()),
-        ])),
-        effective_timeout,
-        heartbeat_lost,
-    )?;
+    let call_params = JsonValue::object([
+        ("name", JsonValue::string(tool_name)),
+        ("arguments", arguments.clone()),
+    ]);
+    let result = if server.source_type == "http" {
+        run_http_request(server, "tools/call", Some(call_params), effective_timeout)?
+    } else {
+        run_stdio_request(
+            root_path,
+            server,
+            "tools/call",
+            Some(call_params),
+            effective_timeout,
+            heartbeat_lost,
+        )?
+    };
     let lease_outcome = finalize_upstream_lease(lease)?;
     let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
     let upstream_ok = !upstream_is_error;
@@ -295,6 +304,16 @@ pub fn call_tool_with_pooled_context(
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
     ensure_callable_stdio(root_path, server)?;
     validate_upstream_tool_policy(server, tool_name, context)?;
+    if server.source_type == "http" {
+        return call_tool_with_context(
+            root_path,
+            server_name,
+            tool_name,
+            arguments,
+            timeout_ms,
+            context,
+        );
+    }
 
     let effective_timeout = timeout_for(server, timeout_ms);
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
@@ -373,8 +392,34 @@ pub fn call_tools_with_context(
     let effective_timeout = timeout_for(server, timeout_ms);
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
-    let results =
-        run_stdio_tool_calls(root_path, server, calls, effective_timeout, heartbeat_lost)?;
+    let results = if server.source_type == "http" {
+        let mut results = Vec::new();
+        for (index, call) in calls.iter().enumerate() {
+            let result = run_http_request(
+                server,
+                "tools/call",
+                Some(JsonValue::object([
+                    ("name", JsonValue::string(call.tool.clone())),
+                    ("arguments", call.arguments.clone()),
+                ])),
+                effective_timeout,
+            )?;
+            let upstream_is_error =
+                json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
+            let upstream_ok = !upstream_is_error;
+            results.push(JsonValue::object([
+                ("index", JsonValue::number(index)),
+                ("ok", JsonValue::bool(upstream_ok)),
+                ("upstreamOk", JsonValue::bool(upstream_ok)),
+                ("upstreamIsError", JsonValue::bool(upstream_is_error)),
+                ("tool", JsonValue::string(call.tool.clone())),
+                ("upstreamResult", result),
+            ]));
+        }
+        results
+    } else {
+        run_stdio_tool_calls(root_path, server, calls, effective_timeout, heartbeat_lost)?
+    };
     let lease_outcome = finalize_upstream_lease(lease)?;
     let upstream_ok_count = results
         .iter()
@@ -427,6 +472,9 @@ pub fn call_tools_with_pooled_context(
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
     ensure_callable_stdio(root_path, server)?;
     validate_upstream_batch_tool_policy(server, calls, context)?;
+    if server.source_type == "http" {
+        return call_tools_with_context(root_path, server_name, calls, timeout_ms, context);
+    }
 
     let effective_timeout = timeout_for(server, timeout_ms);
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;

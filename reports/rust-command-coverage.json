@@ -13,6 +13,7 @@
     "dashboard",
     "serve",
     "serve start",
+    "serve restart",
     "serve status",
     "serve stop",
     "init",
