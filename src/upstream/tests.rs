@@ -660,7 +660,7 @@ fn serve_mock_http_mcp_request(stream: &mut std::net::TcpStream) {
                     .flatten()
             })
             .unwrap_or(0);
-        if body.as_bytes().len() < content_length {
+        if body.len() < content_length {
             continue;
         }
         let request = parse_str(&body[..content_length]).unwrap();
@@ -1324,8 +1324,9 @@ fn tool_list_cache_key_tracks_settings_metadata() {
 
 #[test]
 fn tool_list_cache_returns_fresh_entries_and_drops_stale_entries() {
+    let root = temp_root();
     let key = ToolListCacheKey {
-        root_path: format!("test-root-{}", std::process::id()),
+        root_path: root.display().to_string(),
         server_name: "alpha-cache".to_string(),
         settings_modified_ms: 1,
         settings_len: 2,
@@ -1336,10 +1337,16 @@ fn tool_list_cache_returns_fresh_entries_and_drops_stale_entries() {
         JsonValue::string("cached_tool"),
     )])]);
 
-    write_cached_tools(key.clone(), tools.clone());
+    let cache = TOOL_LIST_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
+    cache.lock().unwrap().insert(
+        key.clone(),
+        CachedToolList {
+            stored_at: Instant::now(),
+            tools: tools.clone(),
+        },
+    );
     assert_eq!(read_cached_tools(&key), Some(tools));
 
-    let cache = TOOL_LIST_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
     cache.lock().unwrap().insert(
         key.clone(),
         CachedToolList {
@@ -1348,6 +1355,51 @@ fn tool_list_cache_returns_fresh_entries_and_drops_stale_entries() {
         },
     );
     assert_eq!(read_cached_tools(&key), None);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn tool_list_cache_persists_to_disk_and_invalidates_when_settings_change() {
+    let root = temp_root();
+    let settings_path = root.join("mcp_settings.json");
+    fs::write(
+        &settings_path,
+        r#"{
+  "mcpServers": {
+    "alpha": { "enabled": true, "type": "stdio", "command": "node", "args": ["a"] }
+  }
+}"#,
+    )
+    .unwrap();
+    let servers = load_servers(&root).expect("servers");
+    let key_before = tool_list_cache_key(&root, servers.get("alpha").unwrap());
+    let tools = JsonValue::array([JsonValue::object([(
+        "name",
+        JsonValue::string("persisted_tool"),
+    )])]);
+
+    write_cached_tools(key_before.clone(), tools.clone());
+    let cache = TOOL_LIST_CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
+    cache.lock().unwrap().remove(&key_before);
+
+    assert_eq!(read_cached_tools(&key_before), Some(tools));
+
+    fs::write(
+        &settings_path,
+        r#"{
+  "mcpServers": {
+    "alpha": { "enabled": true, "type": "stdio", "command": "node", "args": ["a", "changed"] }
+  }
+}"#,
+    )
+    .unwrap();
+    let servers = load_servers(&root).expect("updated servers");
+    let key_after = tool_list_cache_key(&root, servers.get("alpha").unwrap());
+    cache.lock().unwrap().remove(&key_before);
+
+    assert_ne!(key_before, key_after);
+    assert_eq!(read_cached_tools(&key_after), None);
+    let _ = fs::remove_dir_all(root);
 }
 
 #[test]

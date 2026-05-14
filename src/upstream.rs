@@ -9,6 +9,7 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::{mpsc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 mod diagnostics;
@@ -67,11 +68,10 @@ use self::server_config::{
 };
 use self::source_type::infer_source_type;
 use self::stdio_runtime::run_stdio_request;
-use self::tool_cache::cached_tools_list;
+use self::tool_cache::{cached_tools_list, read_cached_tools, tool_list_cache_key};
 #[cfg(test)]
 use self::tool_cache::{
-    prune_tool_list_cache, read_cached_tools, tool_list_cache_key, write_cached_tools,
-    CachedToolList, ToolListCacheKey, TOOL_LIST_CACHE,
+    prune_tool_list_cache, write_cached_tools, CachedToolList, ToolListCacheKey, TOOL_LIST_CACHE,
 };
 #[cfg(test)]
 use crate::json::parse_str;
@@ -458,6 +458,211 @@ fn catalog_server(
                     .as_ref()
                     .map(|value| JsonValue::string(value.display().to_string()))
                     .unwrap_or(JsonValue::Null),
+            ),
+            ("toolCount", JsonValue::number(0)),
+            ("tools", JsonValue::array([])),
+            ("error", JsonValue::string(error)),
+        ]),
+    }
+}
+
+pub fn callable_tools_raw_catalog(
+    root_path: &Path,
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> Result<JsonValue, String> {
+    let started = Instant::now();
+    let servers = load_servers(root_path)?;
+    let callable_servers = servers
+        .values()
+        .filter(|server| server_runtime_callable(root_path, server).0)
+        .cloned()
+        .collect::<Vec<_>>();
+    let results = run_server_tasks(
+        root_path,
+        callable_servers,
+        timeout_ms,
+        move |root, server, timeout| catalog_server_raw(root, server, timeout, refresh),
+    );
+    let ok_count = results
+        .iter()
+        .filter(|item| json_helpers::bool_at_path(item, &["ok"]).unwrap_or(false))
+        .count();
+    let failed_count = results.len().saturating_sub(ok_count);
+    let tool_count = results
+        .iter()
+        .filter_map(|item| json_helpers::value_at_path(item, &["toolCount"]))
+        .filter_map(JsonValue::as_i64)
+        .sum::<i64>();
+
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(failed_count == 0)),
+        ("mode", JsonValue::string("raw-callable-tools-catalog")),
+        (
+            "summary",
+            JsonValue::string(
+                "Discovered raw tools/list definitions for runtime-callable upstream MCP servers with bounded parallel workers.",
+            ),
+        ),
+        ("serverCount", JsonValue::number(results.len())),
+        ("okCount", JsonValue::number(ok_count)),
+        ("failedCount", JsonValue::number(failed_count)),
+        ("toolCount", JsonValue::number(tool_count)),
+        ("elapsedMs", JsonValue::number(started.elapsed().as_millis())),
+        ("servers", JsonValue::array(results)),
+    ]))
+}
+
+pub fn callable_tools_cached_catalog(root_path: &Path) -> Result<JsonValue, String> {
+    let started = Instant::now();
+    let servers = load_servers(root_path)?;
+    let mut results = Vec::new();
+    let mut ok_count = 0usize;
+    let mut missing_count = 0usize;
+    let mut tool_count = 0usize;
+
+    for server in servers.values() {
+        if !server.enabled || (server.source_type != "stdio" && server.source_type != "http") {
+            continue;
+        }
+        let key = tool_list_cache_key(root_path, server);
+        if let Some(raw_tools) = read_cached_tools(&key) {
+            let count = raw_tools.as_array().map(|items| items.len()).unwrap_or(0);
+            tool_count = tool_count.saturating_add(count);
+            ok_count = ok_count.saturating_add(1);
+            results.push(JsonValue::object([
+                ("name", JsonValue::string(&server.name)),
+                ("ok", JsonValue::bool(true)),
+                ("enabled", JsonValue::bool(server.enabled)),
+                ("sourceType", JsonValue::string(&server.source_type)),
+                ("runtimeCallable", JsonValue::bool(true)),
+                ("status", JsonValue::string("cached-tools")),
+                ("elapsedMs", JsonValue::number(0)),
+                ("cacheHit", JsonValue::bool(true)),
+                (
+                    "cacheTtlMs",
+                    JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
+                ),
+                ("toolCount", JsonValue::number(count)),
+                ("tools", raw_tools),
+            ]));
+        } else {
+            missing_count = missing_count.saturating_add(1);
+            results.push(JsonValue::object([
+                ("name", JsonValue::string(&server.name)),
+                ("ok", JsonValue::bool(false)),
+                ("enabled", JsonValue::bool(server.enabled)),
+                ("sourceType", JsonValue::string(&server.source_type)),
+                ("runtimeCallable", JsonValue::bool(true)),
+                ("status", JsonValue::string("cache-miss")),
+                ("elapsedMs", JsonValue::number(0)),
+                ("cacheHit", JsonValue::bool(false)),
+                (
+                    "cacheTtlMs",
+                    JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
+                ),
+                ("toolCount", JsonValue::number(0)),
+                ("tools", JsonValue::array([])),
+                (
+                    "error",
+                    JsonValue::string(
+                        "no fresh tools/list cache entry; broker fallback remains available",
+                    ),
+                ),
+            ]));
+        }
+    }
+
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(missing_count == 0)),
+        ("mode", JsonValue::string("raw-callable-tools-cache")),
+        (
+            "summary",
+            JsonValue::string(
+                "Read cached raw tools/list definitions for runtime-callable upstream MCP servers without launching upstream processes.",
+            ),
+        ),
+        ("serverCount", JsonValue::number(results.len())),
+        ("okCount", JsonValue::number(ok_count)),
+        ("failedCount", JsonValue::number(missing_count)),
+        ("cacheMissCount", JsonValue::number(missing_count)),
+        ("toolCount", JsonValue::number(tool_count)),
+        ("elapsedMs", JsonValue::number(started.elapsed().as_millis())),
+        ("servers", JsonValue::array(results)),
+    ]))
+}
+
+pub fn warm_tool_list_cache(
+    root_path: &Path,
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> Result<JsonValue, String> {
+    callable_tools_raw_catalog(root_path, timeout_ms, refresh)
+}
+
+pub fn warm_tool_list_cache_background(root_path: PathBuf, timeout_ms: Option<u64>, refresh: bool) {
+    let _ = thread::Builder::new()
+        .name("mcpace-tool-list-cache-warmup".to_string())
+        .spawn(move || {
+            let _ = warm_tool_list_cache(&root_path, timeout_ms, refresh);
+        });
+}
+
+fn catalog_server_raw(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> JsonValue {
+    let started = Instant::now();
+    let effective_timeout = probe_timeout_for(server, timeout_ms);
+
+    match cached_tools_list(root_path, server, effective_timeout, refresh) {
+        Ok((raw_tools, cache_hit)) => {
+            let count = raw_tools.as_array().map(|items| items.len()).unwrap_or(0);
+            JsonValue::object([
+                ("name", JsonValue::string(&server.name)),
+                ("ok", JsonValue::bool(true)),
+                ("enabled", JsonValue::bool(server.enabled)),
+                ("sourceType", JsonValue::string(&server.source_type)),
+                ("runtimeCallable", JsonValue::bool(true)),
+                ("status", JsonValue::string("listed-tools")),
+                (
+                    "timeoutMs",
+                    JsonValue::number(effective_timeout.as_millis()),
+                ),
+                (
+                    "elapsedMs",
+                    JsonValue::number(started.elapsed().as_millis()),
+                ),
+                ("cacheHit", JsonValue::bool(cache_hit)),
+                (
+                    "cacheTtlMs",
+                    JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
+                ),
+                ("toolCount", JsonValue::number(count)),
+                ("tools", raw_tools),
+            ])
+        }
+        Err(error) => JsonValue::object([
+            ("name", JsonValue::string(&server.name)),
+            ("ok", JsonValue::bool(false)),
+            ("enabled", JsonValue::bool(server.enabled)),
+            ("sourceType", JsonValue::string(&server.source_type)),
+            ("runtimeCallable", JsonValue::bool(true)),
+            ("status", JsonValue::string("catalog-failed")),
+            (
+                "timeoutMs",
+                JsonValue::number(effective_timeout.as_millis()),
+            ),
+            (
+                "elapsedMs",
+                JsonValue::number(started.elapsed().as_millis()),
+            ),
+            ("cacheHit", JsonValue::bool(false)),
+            (
+                "cacheTtlMs",
+                JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
             ),
             ("toolCount", JsonValue::number(0)),
             ("tools", JsonValue::array([])),

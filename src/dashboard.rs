@@ -299,6 +299,8 @@ fn run_internal(
     };
     let _ = stdout.flush();
 
+    maybe_start_tool_list_cache_warmup(&root_path, surface);
+
     serve_listener(
         listener,
         DashboardConfig {
@@ -318,6 +320,26 @@ fn run_internal(
         },
         stderr,
     )
+}
+
+fn maybe_start_tool_list_cache_warmup(root_path: &Path, surface: ServeSurface) {
+    if !matches!(surface, ServeSurface::UnifiedServe) || !tool_list_cache_warmup_enabled() {
+        return;
+    }
+    let timeout_ms = crate::adapter::ToolExposureOptions::from_env().timeout_ms;
+    upstream::warm_tool_list_cache_background(root_path.to_path_buf(), timeout_ms, true);
+}
+
+fn tool_list_cache_warmup_enabled() -> bool {
+    std::env::var("MCPACE_TOOL_LIST_WARMUP")
+        .ok()
+        .map(|value| {
+            !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "no" | "off" | "disabled"
+            )
+        })
+        .unwrap_or(true)
 }
 
 fn is_loopback_bind_host(host: &str) -> bool {

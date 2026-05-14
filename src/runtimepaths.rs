@@ -174,6 +174,17 @@ pub fn ensure_runtime_dir(state_root: &Path) -> Result<PathBuf, String> {
     Ok(path)
 }
 
+pub fn tool_list_cache_dir(state_root: &Path) -> PathBuf {
+    runtime_dir(state_root).join("tool-list-cache")
+}
+
+pub fn ensure_tool_list_cache_dir(state_root: &Path) -> Result<PathBuf, String> {
+    let path = tool_list_cache_dir(state_root);
+    std::fs::create_dir_all(&path)
+        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
+    Ok(path)
+}
+
 pub fn project_registry_path(state_root: &Path) -> PathBuf {
     runtime_dir(state_root).join("project-registry.json")
 }
