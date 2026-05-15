@@ -22,6 +22,11 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 - Real-client runtime traces through at least one tier-1 local client.
 - Published native binary packages with checksums, attestations, and npm Trusted Publishing proof.
 
+## 0.6.0
+
+- Source package refresh: message-integrity hardening, tool exposure guards, lifecycle/scale/failsafe checks, and clean source archive packaging.
+- Prebuilt binaries are intentionally omitted from this source ZIP; rebuild with the Rust toolchain before publishing platform packages.
+
 ## 0.5.9
 
 ### Current status

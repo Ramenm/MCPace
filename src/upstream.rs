@@ -191,14 +191,14 @@ fn ensure_callable_stdio(root_path: &Path, server: &UpstreamServerConfig) -> Res
                 .unwrap_or("server is disabled by source or policy")
         ));
     }
-    if server.source_type != "stdio" && server.source_type != "http" {
-        return Err(format!(
-            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio and plain HTTP upstreams; configure a stdio adapter or call runtime_diagnostics for exact status.",
-            server.name, server.source_type
-        ));
-    }
     if let Some(error) = command_error {
         return Err(error);
+    }
+    if server.source_type != "stdio" && server.source_type != "http" {
+        return Err(format!(
+            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio and plain local Streamable HTTP upstreams; configure a stdio adapter or call runtime_diagnostics for exact status.",
+            server.name, server.source_type
+        ));
     }
     Err(format!(
         "upstream server '{}' is not callable through the stdio bridge",
@@ -250,7 +250,7 @@ fn server_runtime_callable(
                 false,
                 None,
                 Some(format!(
-                    "upstream server '{}' uses HTTPS; configure a stdio HTTP adapter such as mcp-remote or a local HTTP gateway for now",
+                    "upstream server '{}' uses HTTPS; direct TLS upstream forwarding is not enabled in this build. Use a stdio adapter such as mcp-remote or a local HTTP gateway for now.",
                     server.name
                 )),
             );
@@ -264,8 +264,25 @@ fn server_runtime_callable(
             )),
         );
     }
+    if server.source_type == "legacy-sse" {
+        return (
+            false,
+            None,
+            Some(format!(
+                "upstream server '{}' declares the deprecated HTTP+SSE transport. Use a stdio compatibility adapter or migrate the endpoint to Streamable HTTP before direct forwarding.",
+                server.name
+            )),
+        );
+    }
     if server.source_type != "stdio" {
-        return (false, None, None);
+        return (
+            false,
+            None,
+            Some(format!(
+                "upstream server '{}' uses unsupported '{}' transport",
+                server.name, server.source_type
+            )),
+        );
     }
     let Some(command) = server
         .command
@@ -301,6 +318,29 @@ fn server_runtime_callable(
     }
 }
 
+fn upstream_blocked_status(server: &UpstreamServerConfig) -> &'static str {
+    if !server.enabled {
+        return "disabled";
+    }
+    match server.source_type.as_str() {
+        "stdio" => "blocked-command-not-found",
+        "http" => {
+            if server
+                .url
+                .as_deref()
+                .map(|url| url.trim().to_ascii_lowercase().starts_with("https://"))
+                .unwrap_or(false)
+            {
+                "blocked-https-upstream"
+            } else {
+                "blocked-http-upstream"
+            }
+        }
+        "legacy-sse" => "blocked-legacy-sse-upstream",
+        _ => "blocked-unsupported-transport",
+    }
+}
+
 fn catalog_server(
     root_path: &Path,
     server: &UpstreamServerConfig,
@@ -312,15 +352,7 @@ fn catalog_server(
         server_runtime_callable(root_path, server);
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     if !runtime_callable {
-        let status = if !server.enabled {
-            "disabled"
-        } else if server.source_type == "http" {
-            "blocked-http-upstream"
-        } else if server.source_type != "stdio" && server.source_type != "http" {
-            "blocked-non-stdio"
-        } else {
-            "blocked-command-not-found"
-        };
+        let status = upstream_blocked_status(server);
         return JsonValue::object([
             ("name", JsonValue::string(&server.name)),
             ("ok", JsonValue::bool(false)),
@@ -701,13 +733,7 @@ fn probe_server(
         server_runtime_callable(root_path, server);
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     if !runtime_callable {
-        let status = if !server.enabled {
-            "disabled"
-        } else if server.source_type != "stdio" {
-            "blocked-non-stdio"
-        } else {
-            "blocked-command-not-found"
-        };
+        let status = upstream_blocked_status(server);
         return JsonValue::object([
             ("name", JsonValue::string(&server.name)),
             ("ok", JsonValue::bool(false)),
@@ -867,13 +893,7 @@ fn audit_server(
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     let declared_policies = tool_policy_summaries(&server.tool_policies);
     if !runtime_callable {
-        let status = if !server.enabled {
-            "disabled"
-        } else if server.source_type != "stdio" {
-            "blocked-non-stdio"
-        } else {
-            "blocked-command-not-found"
-        };
+        let status = upstream_blocked_status(server);
         return JsonValue::object([
             ("name", JsonValue::string(&server.name)),
             ("ok", JsonValue::bool(false)),
@@ -1126,12 +1146,8 @@ fn server_inventory_item(root_path: &Path, server: &UpstreamServerConfig) -> Jso
         "callable-http"
     } else if runtime_callable {
         "callable-stdio"
-    } else if server.source_type == "http" {
-        "blocked-http-upstream"
-    } else if server.source_type == "stdio" {
-        "blocked-command-not-found"
     } else {
-        "blocked-missing-command"
+        upstream_blocked_status(server)
     };
     let reason = if !server.enabled {
         server
@@ -1147,6 +1163,9 @@ fn server_inventory_item(root_path: &Path, server: &UpstreamServerConfig) -> Jso
         error
     } else if server.source_type == "http" {
         "HTTP upstream is configured but not callable; use http:// for direct local/plain HTTP or bridge HTTPS through stdio"
+            .to_string()
+    } else if server.source_type == "legacy-sse" {
+        "legacy HTTP+SSE upstreams are not forwarded directly; use a stdio compatibility adapter or migrate to Streamable HTTP"
             .to_string()
     } else {
         "server does not have a callable stdio command".to_string()

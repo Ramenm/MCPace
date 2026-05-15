@@ -100,23 +100,20 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
         };
 
         let request_id = mcp::request_id(&message);
-        let method = match json_helpers::string_at_path(&message, &["method"]) {
-            Some(value) => value,
-            None => {
-                if let Some(id) = request_id {
-                    let response = mcp::error(
-                        id,
-                        mcp::ERROR_INVALID_REQUEST,
-                        "JSON-RPC request requires a method",
-                        None,
-                    );
-                    if write_message(stdout, &response).is_err() {
-                        return 1;
-                    }
-                }
-                continue;
+        if let Err(error) = mcp::validate_request_envelope(&message) {
+            let response = mcp::error(
+                mcp::request_id_or_null(&message),
+                mcp::ERROR_INVALID_REQUEST,
+                &error,
+                None,
+            );
+            if write_message(stdout, &response).is_err() {
+                return 1;
             }
-        };
+            continue;
+        }
+        let method = json_helpers::string_at_path(&message, &["method"])
+            .expect("validate_request_envelope checked method");
 
         match method {
             "initialize" => {
@@ -375,9 +372,16 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                         continue;
                     }
                 };
-                let arguments = json_helpers::value_at_path(&message, &["params", "arguments"])
-                    .cloned()
-                    .unwrap_or_else(mcp::empty_object);
+                let arguments = match mcp::tool_call_arguments_or_empty(&message) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        let response = mcp::error(id, mcp::ERROR_INVALID_PARAMS, &error, None);
+                        if write_message(stdout, &response).is_err() {
+                            return 1;
+                        }
+                        continue;
+                    }
+                };
 
                 let response = match execute_tool(
                     &config,
@@ -663,8 +667,7 @@ fn execute_tool(
         "upstream_call" => {
             let server = required_string_argument(arguments, "server")?;
             let tool = required_string_argument(arguments, "tool")?;
-            let upstream_arguments =
-                optional_value_argument(arguments, "arguments").unwrap_or_else(mcp::empty_object);
+            let upstream_arguments = optional_object_argument(arguments, "arguments")?;
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
             let context =
                 ForwardedContext::from_tool_arguments(config, arguments, initialize_params)?;
@@ -743,7 +746,16 @@ fn parse_upstream_batch_call(
                 ))
             })?
             .to_string();
-        let arguments = items.get(1).cloned().unwrap_or_else(mcp::empty_object);
+        let arguments = match items.get(1) {
+            Some(JsonValue::Object(_)) => items[1].clone(),
+            Some(JsonValue::Null) | None => mcp::empty_object(),
+            Some(_) => {
+                return Err(ToolCallError::InvalidParams(format!(
+                    "calls[{}][1] must be a JSON object when present",
+                    index
+                )));
+            }
+        };
         return Ok(upstream::UpstreamToolCall { tool, arguments });
     }
 
@@ -757,9 +769,18 @@ fn parse_upstream_batch_call(
             ))
         })?
         .to_string();
-    let arguments = json_helpers::value_at_path(raw_call, &["arguments"])
-        .cloned()
-        .unwrap_or_else(mcp::empty_object);
+    let arguments = match json_helpers::value_at_path(raw_call, &["arguments"]) {
+        Some(JsonValue::Object(_)) => json_helpers::value_at_path(raw_call, &["arguments"])
+            .cloned()
+            .expect("checked above"),
+        Some(JsonValue::Null) | None => mcp::empty_object(),
+        Some(_) => {
+            return Err(ToolCallError::InvalidParams(format!(
+                "upstream_batch calls[{}].arguments must be a JSON object",
+                index
+            )));
+        }
+    };
     Ok(upstream::UpstreamToolCall { tool, arguments })
 }
 
@@ -975,6 +996,14 @@ fn optional_string_argument(
             "'{}' must be a string",
             key
         ))),
+    }
+}
+
+fn optional_object_argument(arguments: &JsonValue, key: &str) -> Result<JsonValue, ToolCallError> {
+    match json_helpers::value_at_path(arguments, &[key]) {
+        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(arguments, &[key]).cloned().expect("checked above")),
+        Some(JsonValue::Null) | None => Ok(mcp::empty_object()),
+        Some(_) => Err(ToolCallError::InvalidParams(format!("'{}' must be a JSON object", key))),
     }
 }
 

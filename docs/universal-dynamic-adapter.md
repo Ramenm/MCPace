@@ -52,8 +52,8 @@ MCPACE_PROJECTED_SCHEMA_COMPACTION=false
 
 `MCPACE_PROJECTED_TOOL_SAFETY` controls which upstream tools are allowed to become native projected tools:
 
-- `review` (default): project tools that are not guarded by MCPace policy and do not look mutating/destructive.
-- `safe`: project only tools that look read-only via trusted annotations or conservative names.
+- `safe` (default): the projection safety default is `safe`; project only tools that look read-only via trusted annotations or conservative names.
+- `review`: project tools that are not guarded by MCPace policy and do not look mutating/destructive.
 - `all`: project everything that fits the budget and rely on the client/human-in-the-loop for review.
 
 Tools that do not pass projection safety are still callable through `upstream_search` and `upstream_call`, where explicit policy controls remain visible.

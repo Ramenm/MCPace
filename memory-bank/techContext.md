@@ -1,7 +1,7 @@
 # Tech Context
 
-- Rust package: `mcpace`, version `0.5.9`, edition `2021`, license `Apache-2.0`.
-- Node workspace package: `mcpace-workspace`, version `0.5.9`, private workspace.
+- Rust package: `mcpace`, version `0.6.0`, edition `2021`, license `Apache-2.0`.
+- Node workspace package: `mcpace-workspace`, version `0.6.0`, private workspace.
 - Current source checks use Node contract tests, `cargo fmt`, and source audit.
 - Full Cargo check/test/build require crates.io dependency access or a populated Cargo cache.
 - Streamable HTTP and stdio MCP are the relevant transports; remote HTTP upstream forwarding is not yet implemented as callable fan-out.

@@ -3,7 +3,7 @@ use crate::client_catalog::client_install_support_summary;
 use crate::resources;
 use crate::runtimepaths;
 use crate::{
-    candidates, client, connect, dashboard, doctor, hub, init, lab, mcp_server, profile, projects,
+    candidates, cleanup, client, connect, dashboard, doctor, hub, init, lab, mcp_server, profile, projects,
     release, repair, reporoot, serve, server, service, setup, stdio_shim, update, verify,
 };
 use std::io::Write;
@@ -55,6 +55,7 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         "stdio-shim" => stdio_shim::run(&args[1..], root_path, stdout, stderr),
         "mcp-server" => mcp_server::run(&args[1..], root_path, stdout, stderr),
         "client" => client::run(&args[1..], root_path, stdout, stderr),
+        "cleanup" => cleanup::run(&args[1..], root_path, stdout, stderr),
         "connect" => connect::run(&args[1..], root_path, stdout, stderr),
         "profile" => profile::run(&args[1..], root_path, stdout, stderr),
         "projects" => projects::run(&args[1..], root_path, stdout, stderr),
@@ -227,6 +228,7 @@ fn write_help(stdout: &mut dyn Write) {
         "  connect [<client>] [--server <name>] [--json] [--root <path>]"
     );
     let _ = writeln!(stdout, "  client list [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  cleanup [status|cache|runtime|logs|all-safe] [--json] [--root <path>] [--dry-run]");
     let _ = writeln!(stdout, "  client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]");
     let _ = writeln!(
         stdout,
@@ -278,7 +280,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "doctor/profile/projects/candidates/connect/client-plan/lab/server/verify have native Rust read paths; connect gives a client-first read-only wiring guide across endpoint, client target, upstream sources, readiness blockers, and exact next commands; server sources inventories every MCP settings source, server presets/install/starter add useful MCPs without memorizing package args, server add writes per-server fragments under mcp_settings.d/, server import copies existing mcpServers blocks into MCPace fragments, server enable/disable toggles a BYO MCP entry without deleting it, server remove deletes stale BYO MCP entries without manual JSON editing, and server test probes configured upstreams before clients use them; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes the configured health plus MCP paths in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/restart/stop/status lifecycle commands, dashboard provides the same local web control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and release build now wraps the local artifact/proof bundle without publishing.",
+        "doctor/profile/projects/candidates/connect/client-plan/lab/server/verify have native Rust read paths; connect gives a client-first read-only wiring guide across endpoint, client target, upstream sources, readiness blockers, and exact next commands; server sources inventories every MCP settings source, server presets/install/starter add useful MCPs without memorizing package args, server add writes per-server fragments under mcp_settings.d/, server import copies existing mcpServers blocks into MCPace fragments, server enable/disable toggles a BYO MCP entry without deleting it, server remove deletes stale BYO MCP entries without manual JSON editing, and server test probes configured upstreams before clients use them; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes the configured health plus MCP paths in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/restart/stop/status lifecycle commands, dashboard provides the same local web control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, cleanup removes only disposable cache/log/ephemeral runtime files while preserving durable config and backups, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and release build now wraps the local artifact/proof bundle without publishing.",
         runtimepaths::default_local_mcp_url(),
         client_install_support_summary()
     );

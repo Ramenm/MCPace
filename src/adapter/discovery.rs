@@ -22,25 +22,57 @@ pub fn upstream_search(
     refresh: bool,
 ) -> Result<JsonValue, String> {
     let limit = limit.clamp(1, 100);
-    let catalog = upstream::catalog_tools(root_path, server_name, timeout_ms, refresh)?;
-    let tools = json_helpers::array_at_path(&catalog, &["tools"]).unwrap_or(&[]);
+    let keep_limit = limit.max(2);
     let terms = search_terms(query.unwrap_or(""));
-    let mut scored = Vec::new();
+    let selected_server = server_name
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let mut scored: Vec<ScoredSearchTool> = Vec::new();
+    let mut search_space_tool_count = 0usize;
+    let mut total_matches = 0usize;
+    let mut catalog_ok = true;
+    let mut errors = Vec::new();
 
-    for tool in tools {
-        let score = score_tool(tool, &terms);
-        if terms.is_empty() || score > 0 {
-            let key = format!(
-                "{}:{}",
-                json_helpers::string_at_path(tool, &["server"]).unwrap_or(""),
-                json_helpers::string_at_path(tool, &["name"]).unwrap_or("")
+    if let Some(server) = selected_server {
+        let listing = upstream::list_tools(root_path, Some(server), timeout_ms, refresh)?;
+        scan_search_listing(
+            server,
+            &listing,
+            &terms,
+            include_schema,
+            keep_limit,
+            &mut search_space_tool_count,
+            &mut total_matches,
+            &mut scored,
+        );
+    } else {
+        let catalog = upstream::callable_tools_raw_catalog(root_path, timeout_ms, refresh)?;
+        catalog_ok = json_helpers::bool_at_path(&catalog, &["ok"]).unwrap_or(false);
+        for listing in json_helpers::array_at_path(&catalog, &["servers"]).unwrap_or(&[]) {
+            let server = json_helpers::string_at_path(listing, &["name"]).unwrap_or("unknown");
+            if !json_helpers::bool_at_path(listing, &["ok"]).unwrap_or(false) {
+                if let Some(error) = json_helpers::string_at_path(listing, &["error"]) {
+                    errors.push(JsonValue::object([
+                        ("server", JsonValue::string(server)),
+                        ("method", JsonValue::string("tools/list")),
+                        ("error", JsonValue::string(error)),
+                    ]));
+                }
+                continue;
+            }
+            scan_search_listing(
+                server,
+                listing,
+                &terms,
+                include_schema,
+                keep_limit,
+                &mut search_space_tool_count,
+                &mut total_matches,
+                &mut scored,
             );
-            scored.push((score, key, compact_search_tool(tool, score, include_schema)));
         }
     }
 
-    scored.sort_by_key(|(score, key, _)| (std::cmp::Reverse(*score), key.clone()));
-    let total_matches = scored.len();
     let selected = selected_search_result(&scored, !terms.is_empty());
     let results = scored
         .into_iter()
@@ -49,11 +81,11 @@ pub fn upstream_search(
         .collect::<Vec<_>>();
 
     Ok(JsonValue::object([
-        ("ok", JsonValue::bool(true)),
+        ("ok", JsonValue::bool(catalog_ok || !results.is_empty())),
         ("mode", JsonValue::string("upstream-search")),
         (
             "summary",
-            JsonValue::string("Searched live configured upstream MCP tool catalogs and returned compact ready-to-call results. Use each call object with upstream_call, or use a projected u_<server>_<tool>_<hash> name when it appears in tools/list."),
+            JsonValue::string("Searched live configured upstream MCP tool catalogs with bounded top-k selection and returned compact ready-to-call results. Use each call object with upstream_call, or use a projected u_<server>_<tool>_<hash> name when it appears in tools/list."),
         ),
         (
             "query",
@@ -63,18 +95,108 @@ pub fn upstream_search(
         ),
         (
             "server",
-            server_name
-                .map(|value| JsonValue::string(value.trim()))
+            selected_server
+                .map(JsonValue::string)
                 .unwrap_or(JsonValue::Null),
         ),
         ("limit", JsonValue::number(limit)),
-        ("searchSpaceToolCount", JsonValue::number(tools.len())),
+        ("searchSpaceToolCount", JsonValue::number(search_space_tool_count)),
         ("matchCount", JsonValue::number(total_matches)),
         ("resultCount", JsonValue::number(results.len())),
         ("includeSchema", JsonValue::bool(include_schema)),
         ("selected", selected),
         ("results", JsonValue::array(results)),
+        maybe_meta_errors(errors),
     ]))
+}
+
+type ScoredSearchTool = (usize, String, JsonValue);
+
+fn scan_search_listing(
+    server: &str,
+    listing: &JsonValue,
+    terms: &[String],
+    include_schema: bool,
+    keep_limit: usize,
+    search_space_tool_count: &mut usize,
+    total_matches: &mut usize,
+    scored: &mut Vec<ScoredSearchTool>,
+) {
+    for raw_tool in json_helpers::array_at_path(listing, &["tools"]).unwrap_or(&[]) {
+        *search_space_tool_count = search_space_tool_count.saturating_add(1);
+        let Some(tool) = search_tool_view(server, raw_tool, include_schema) else {
+            continue;
+        };
+        let score = score_tool(&tool, terms);
+        if terms.is_empty() || score > 0 {
+            *total_matches = total_matches.saturating_add(1);
+            let key = format!(
+                "{}:{}",
+                json_helpers::string_at_path(&tool, &["server"]).unwrap_or(""),
+                json_helpers::string_at_path(&tool, &["name"]).unwrap_or("")
+            );
+            insert_scored_tool_bounded(
+                scored,
+                (score, key, compact_search_tool(&tool, score, include_schema)),
+                keep_limit,
+            );
+        }
+    }
+}
+
+fn search_tool_view(server: &str, tool: &JsonValue, include_schema: bool) -> Option<JsonValue> {
+    let name = json_helpers::string_at_path(tool, &["name"])
+        .map(str::trim)
+        .filter(|value| !value.is_empty())?;
+    let mut entries = vec![
+        ("server", JsonValue::string(server)),
+        ("name", JsonValue::string(name)),
+        (
+            "qualifiedName",
+            JsonValue::string(format!("{}.{}", server, name)),
+        ),
+        (
+            "title",
+            json_helpers::value_at_path(tool, &["title"])
+                .cloned()
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "description",
+            JsonValue::string(json_helpers::string_at_path(tool, &["description"]).unwrap_or("")),
+        ),
+        (
+            "call",
+            JsonValue::object([
+                ("tool", JsonValue::string("upstream_call")),
+                (
+                    "arguments",
+                    JsonValue::object([
+                        ("server", JsonValue::string(server)),
+                        ("tool", JsonValue::string(name)),
+                    ]),
+                ),
+            ]),
+        ),
+    ];
+    if include_schema {
+        if let Some(schema) = json_helpers::value_at_path(tool, &["inputSchema"]) {
+            entries.push(("inputSchema", schema.clone()));
+        }
+    }
+    Some(JsonValue::object(entries))
+}
+
+fn insert_scored_tool_bounded(
+    scored: &mut Vec<ScoredSearchTool>,
+    item: ScoredSearchTool,
+    keep_limit: usize,
+) {
+    scored.push(item);
+    scored.sort_by_key(|(score, key, _)| (std::cmp::Reverse(*score), key.clone()));
+    if scored.len() > keep_limit {
+        scored.truncate(keep_limit);
+    }
 }
 
 #[derive(Clone, Debug)]

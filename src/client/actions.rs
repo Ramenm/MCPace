@@ -720,13 +720,7 @@ impl ClientInstallPlan {
             None
         };
         if changed {
-            fs::write(&self.config_path, &update.contents).map_err(|error| {
-                format!(
-                    "failed to write client config '{}': {}",
-                    self.config_path.display(),
-                    error
-                )
-            })?;
+            runtimepaths::write_text_atomic(&self.config_path, &update.contents)?;
         }
         let diff = if options.diff {
             Some(build_unified_config_diff(
@@ -797,13 +791,7 @@ impl ClientInstallPlan {
 
         let content_path = backup_path.join("config.before");
         if config_file_existed {
-            fs::write(&content_path, existing).map_err(|error| {
-                format!(
-                    "failed to write client install backup '{}': {}",
-                    content_path.display(),
-                    error
-                )
-            })?;
+            runtimepaths::write_text_atomic(&content_path, existing)?;
         }
 
         let manifest_path = backup_path.join("manifest.json");
@@ -837,13 +825,7 @@ impl ClientInstallPlan {
             ),
             ("restoreCommand", JsonValue::string(restore_command.clone())),
         ]);
-        fs::write(&manifest_path, manifest.to_pretty_string()).map_err(|error| {
-            format!(
-                "failed to write client install backup manifest '{}': {}",
-                manifest_path.display(),
-                error
-            )
-        })?;
+        runtimepaths::write_text_atomic(&manifest_path, &manifest.to_pretty_string())?;
 
         Ok(ClientInstallBackup {
             id,

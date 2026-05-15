@@ -1,6 +1,6 @@
 # Progress
 
-- Version: `0.5.9`.
+- Version: `0.6.0`.
 - Status: source/proof/native-BYO-MCP usability improved; product-practice and runtime-trace gates now prevent overclaiming. Runtime/beta readiness still blocked by Rust host proof and real-client trace.
 
 ## Completed in latest pass

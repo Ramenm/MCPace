@@ -268,9 +268,9 @@ function audit(options = {}) {
         }
       });
 
-      if (lines.length > LARGE_MODULE_LINE_THRESHOLD && relative.startsWith('src/')) {
+      if (productionLines.length > LARGE_MODULE_LINE_THRESHOLD && relative.startsWith('src/')) {
         counters.largeModules += 1;
-        addFinding(warnings, 'warning', filePath, 1, `large Rust module has ${lines.length} lines; consider another split after behavior stabilizes`, relative);
+        addFinding(warnings, 'warning', filePath, 1, `large production Rust module has ${productionLines.length} lines; consider another split after behavior stabilizes`, relative);
       }
     } else {
       counters.nodeFiles += 1;

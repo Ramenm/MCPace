@@ -12,7 +12,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const TOOL_LIST_DISK_CACHE_SCHEMA_VERSION: i64 = 1;
+const TOOL_LIST_DISK_CACHE_SCHEMA_VERSION: i64 = 2;
 const TOOL_LIST_DISK_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -208,11 +208,12 @@ fn write_disk_cached_tools(key: &ToolListCacheKey, tools: &JsonValue) -> Result<
         ("storedAtUnixMs", JsonValue::string(stored_at.to_string())),
         ("keyHash", JsonValue::string(disk_cache_key_hash(key))),
         ("serverName", JsonValue::string(&key.server_name)),
+        ("mcpaceVersion", JsonValue::string(env!("CARGO_PKG_VERSION"))),
+        ("mcpProtocolVersion", JsonValue::string(crate::mcp_protocol::CURRENT_PROTOCOL_VERSION)),
         ("toolCount", JsonValue::number(items.len())),
         ("tools", tools.clone()),
     ]);
-    fs::write(&path, envelope.to_compact_string())
-        .map_err(|error| format!("failed to write {}: {}", path.display(), error))
+    runtimepaths::write_text_atomic(&path, &envelope.to_compact_string())
 }
 
 fn read_disk_cache_path(key: &ToolListCacheKey) -> Option<PathBuf> {
@@ -268,6 +269,8 @@ fn disk_cache_key_hash(key: &ToolListCacheKey) -> String {
     feed_stable_hash(&mut hash, key.settings_modified_ms.to_string().as_bytes());
     feed_stable_hash(&mut hash, key.settings_len.to_string().as_bytes());
     feed_stable_hash(&mut hash, key.server_fingerprint.as_bytes());
+    feed_stable_hash(&mut hash, env!("CARGO_PKG_VERSION").as_bytes());
+    feed_stable_hash(&mut hash, crate::mcp_protocol::CURRENT_PROTOCOL_VERSION.as_bytes());
     format!("{hash:016x}")
 }
 

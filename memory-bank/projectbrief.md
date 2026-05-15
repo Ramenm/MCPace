@@ -3,7 +3,7 @@
 ## Confirmed from repository
 
 - Project name: `mcpace`.
-- Workspace/package version: `0.5.9`.
+- Workspace/package version: `0.6.0`.
 - Current product shape: Rust-first local MCP hub/control plane.
 - Public entrypoint contract: `serve` is the product; `hub` is internal/operator-facing lifecycle machinery; `dashboard` is an optional view/control surface.
 - Packaged upstream MCP defaults are intentionally empty: `mcp_settings.json.mcpServers` is `{}`, `mcpace.config.json.servers` is `{}`, and `server-candidates.json` is `[]`.

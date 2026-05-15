@@ -218,7 +218,7 @@ pub(super) fn spawn_stdio_server(
         command.env(key, value);
     }
     #[cfg(unix)]
-    configure_process_group(&mut command);
+    crate::process_detach::configure_unix_process_group(&mut command);
     #[cfg(windows)]
     crate::windows_process::configure_no_window(&mut command);
 
@@ -425,7 +425,7 @@ fn terminate_child_process(child: &mut Child) {
     #[cfg(windows)]
     kill_windows_process_tree(child.id());
     #[cfg(unix)]
-    kill_unix_process_group(child.id(), 15);
+    crate::process_detach::kill_unix_process_group(child.id(), 15);
 
     let _ = child.kill();
     let deadline = Instant::now() + Duration::from_secs(2);
@@ -438,7 +438,7 @@ fn terminate_child_process(child: &mut Child) {
     }
 
     #[cfg(unix)]
-    kill_unix_process_group(child.id(), 9);
+    crate::process_detach::kill_unix_process_group(child.id(), 9);
     let _ = child.kill();
     let force_deadline = Instant::now() + Duration::from_millis(500);
     while Instant::now() < force_deadline {
@@ -449,25 +449,6 @@ fn terminate_child_process(child: &mut Child) {
     }
 }
 
-#[cfg(unix)]
-fn configure_process_group(command: &mut Command) {
-    use std::os::unix::process::CommandExt;
-    command.process_group(0);
-}
-
-#[cfg(unix)]
-fn kill_unix_process_group(pid: u32, signal: i32) {
-    unsafe extern "C" {
-        fn kill(pid: i32, sig: i32) -> i32;
-    }
-    let Ok(pid) = i32::try_from(pid) else {
-        return;
-    };
-    if pid <= 1 {
-        return;
-    }
-    let _ = unsafe { kill(-pid, signal) };
-}
 
 #[cfg(windows)]
 fn kill_windows_process_tree(pid: u32) {

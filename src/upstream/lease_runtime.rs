@@ -27,6 +27,9 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant};
 
+const ALLOW_UNKNOWN_TOOL_ARGUMENT: &str = "allowUnknownTool";
+const ALLOW_UNKNOWN_UPSTREAM_TOOL_ARGUMENT: &str = "allowUnknownUpstreamTool";
+
 struct UpstreamLeaseGuard {
     root_path: PathBuf,
     lease_id: String,
@@ -237,9 +240,10 @@ pub fn call_tool_with_context(
     let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
     ensure_callable_stdio(root_path, server)?;
-    validate_upstream_tool_policy(server, tool_name, context)?;
-
     let effective_timeout = timeout_for(server, timeout_ms);
+    validate_upstream_tool_policy(server, tool_name, context)?;
+    validate_upstream_tool_known(root_path, server, tool_name, effective_timeout, context)?;
+
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
     let call_params = JsonValue::object([
@@ -303,7 +307,9 @@ pub fn call_tool_with_pooled_context(
     let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
     ensure_callable_stdio(root_path, server)?;
+    let effective_timeout = timeout_for(server, timeout_ms);
     validate_upstream_tool_policy(server, tool_name, context)?;
+    validate_upstream_tool_known(root_path, server, tool_name, effective_timeout, context)?;
     if server.source_type == "http" {
         return call_tool_with_context(
             root_path,
@@ -315,7 +321,6 @@ pub fn call_tool_with_pooled_context(
         );
     }
 
-    let effective_timeout = timeout_for(server, timeout_ms);
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
     let pool_key = upstream_session_key(root_path, server, context);
@@ -387,9 +392,10 @@ pub fn call_tools_with_context(
     let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
     ensure_callable_stdio(root_path, server)?;
-    validate_upstream_batch_tool_policy(server, calls, context)?;
-
     let effective_timeout = timeout_for(server, timeout_ms);
+    validate_upstream_batch_tool_policy(server, calls, context)?;
+    validate_upstream_batch_tools_known(root_path, server, calls, effective_timeout, context)?;
+
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
     let results = if server.source_type == "http" {
@@ -471,12 +477,13 @@ pub fn call_tools_with_pooled_context(
     let server = find_server(&servers, server_name)
         .ok_or_else(|| format!("upstream server '{}' is not configured", server_name))?;
     ensure_callable_stdio(root_path, server)?;
+    let effective_timeout = timeout_for(server, timeout_ms);
     validate_upstream_batch_tool_policy(server, calls, context)?;
+    validate_upstream_batch_tools_known(root_path, server, calls, effective_timeout, context)?;
     if server.source_type == "http" {
         return call_tools_with_context(root_path, server_name, calls, timeout_ms, context);
     }
 
-    let effective_timeout = timeout_for(server, timeout_ms);
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
     let pool_key = upstream_session_key(root_path, server, context);
@@ -583,6 +590,106 @@ pub fn tool_policy_info(
         ("policyCount", JsonValue::number(policies.len())),
         ("policies", JsonValue::array(policies)),
     ]))
+}
+
+
+fn validate_upstream_batch_tools_known(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    calls: &[UpstreamToolCall],
+    timeout: Duration,
+    context: Option<&UpstreamLeaseContext>,
+) -> Result<(), String> {
+    if calls.is_empty() {
+        return Ok(());
+    }
+    let tools = verified_tool_names_for_call(root_path, server, timeout, context)?;
+    for call in calls {
+        ensure_tool_name_in_verified_set(server, call.tool.trim(), &tools)?;
+    }
+    Ok(())
+}
+
+fn validate_upstream_tool_known(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    tool_name: &str,
+    timeout: Duration,
+    context: Option<&UpstreamLeaseContext>,
+) -> Result<(), String> {
+    let tools = verified_tool_names_for_call(root_path, server, timeout, context)?;
+    ensure_tool_name_in_verified_set(server, tool_name, &tools)
+}
+
+fn verified_tool_names_for_call(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    timeout: Duration,
+    context: Option<&UpstreamLeaseContext>,
+) -> Result<BTreeSet<String>, String> {
+    if !known_tool_validation_enabled() || context_allows_unknown_tool(context) {
+        return Ok(BTreeSet::new());
+    }
+    let (tools, cache_hit) = cached_tools_list(root_path, server, timeout, false).map_err(|error| {
+        format!(
+            "refusing to call upstream server '{}' because tools/list could not verify the requested tool: {}. Retry after upstream_tools/upstream_probe succeeds, or pass {}=true only when the server intentionally supports dynamic hidden tools.",
+            server.name, error, ALLOW_UNKNOWN_TOOL_ARGUMENT
+        )
+    })?;
+    let advertised = tools
+        .as_array()
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|tool| json_helpers::string_at_path(tool, &["name"]))
+        .map(|name| name.trim().to_string())
+        .filter(|name| !name.is_empty())
+        .collect::<BTreeSet<_>>();
+    if advertised.is_empty() {
+        return Err(format!(
+            "refusing to call upstream server '{}' because its tools/list returned no named tools{}; pass {}=true only for explicitly trusted dynamic hidden tools",
+            server.name,
+            if cache_hit { " from cache" } else { "" },
+            ALLOW_UNKNOWN_TOOL_ARGUMENT
+        ));
+    }
+    Ok(advertised)
+}
+
+fn ensure_tool_name_in_verified_set(
+    server: &UpstreamServerConfig,
+    tool_name: &str,
+    advertised: &BTreeSet<String>,
+) -> Result<(), String> {
+    if advertised.is_empty() {
+        return Ok(());
+    }
+    if advertised.contains(tool_name) {
+        return Ok(());
+    }
+    Err(format!(
+        "refusing to call upstream server '{}' tool '{}' because it is not present in the server's current tools/list; use upstream_search/upstream_tools to refresh discovery, or pass {}=true only for explicitly trusted dynamic hidden tools",
+        server.name, tool_name, ALLOW_UNKNOWN_TOOL_ARGUMENT
+    ))
+}
+
+fn context_allows_unknown_tool(context: Option<&UpstreamLeaseContext>) -> bool {
+    let Some(context) = context else {
+        return false;
+    };
+    context.allow_arguments.contains(ALLOW_UNKNOWN_TOOL_ARGUMENT)
+        || context
+            .allow_arguments
+            .contains(ALLOW_UNKNOWN_UPSTREAM_TOOL_ARGUMENT)
+}
+
+fn known_tool_validation_enabled() -> bool {
+    !std::env::var("MCPACE_ALLOW_UNKNOWN_UPSTREAM_TOOLS")
+        .ok()
+        .map(|value| {
+            let value = value.trim().to_ascii_lowercase();
+            matches!(value.as_str(), "1" | "true" | "yes" | "on")
+        })
+        .unwrap_or(false)
 }
 
 pub(super) fn validate_upstream_batch_tool_policy(

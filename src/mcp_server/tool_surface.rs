@@ -955,6 +955,18 @@ pub(super) fn tool_definition(
                                     ),
                                 ]),
                             ),
+                            (
+                                "allowUnknownTool",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Explicit opt-in to call a trusted dynamic upstream tool that is not currently advertised by tools/list. Default is false.",
+                                        ),
+                                    ),
+                                ]),
+                            ),
                         ]),
                     ),
                     (
@@ -1108,6 +1120,18 @@ pub(super) fn tool_definition(
                                     (
                                         "items",
                                         JsonValue::object([("type", JsonValue::string("string"))]),
+                                    ),
+                                ]),
+                            ),
+                            (
+                                "allowUnknownTool",
+                                JsonValue::object([
+                                    ("type", JsonValue::string("boolean")),
+                                    (
+                                        "description",
+                                        JsonValue::string(
+                                            "Explicit opt-in to call a trusted dynamic upstream tool that is not currently advertised by tools/list. Default is false.",
+                                        ),
                                     ),
                                 ]),
                             ),

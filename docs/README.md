@@ -1,6 +1,6 @@
 # MCPace docs
 
-This packaged copy tracks repo version `0.5.9`.
+This packaged copy tracks repo version `0.6.0`.
 
 MCPace is a Rust-first local MCP hub. It ships with no upstream MCP servers enabled by default and no Rust-hardcoded recommended upstream catalog; useful presets live in editable data files. Use `mcpace connect` as the read-only top-down guide. Configure user-supplied stdio MCP servers with `mcpace server presets`, `mcpace server starter`, `mcpace server install`, `mcpace server import`, `mcpace server add`, `mcpace server test`, `mcpace server enable` / `mcpace server disable`, and `mcpace server remove`, root `mcp_settings.json`, `mcp_settings.d/*.json`, `mcpSettings.includePaths` / `mcpSettings.includeDirs`, or `MCPACE_MCP_SETTINGS` / `MCPACE_MCP_SETTINGS_DIRS`; extend useful presets with `mcpPresets.includePaths` or `MCPACE_MCP_PRESETS`; add `mcpace.config.json` server policy only when you need extra routing, platform, or tool-risk metadata.
 
@@ -86,3 +86,18 @@ Manual JSON example:
 Stdio upstream children get a cleared environment plus a small process-launch baseline, MCPace runtime variables, and explicit `env` / local `env_vars` values only. This preserves generic MCP server support without forwarding every parent process secret by default.
 Cache/session fingerprints hash explicit env values so plaintext tokens are not embedded in cache keys.
 Upstream stderr included in errors is bounded and sanitized before display so diagnostics remain useful without intentionally echoing obvious credentials.
+- [Runtime state, cache, restart, and reinstall lifecycle](runtime-state-cache-lifecycle.md) - lifecycle contract for config, state, cache, sessions, restart, and reinstall behavior.
+
+- [System lifecycle hardening](system-lifecycle-hardening.md) - end-to-end install/runtime/restart/reinstall/uninstall and release contract.
+
+- [Tool scale and reuse hardening](tool-scale-and-reuse-hardening.md)
+
+- [Mixed upstream topology hardening](mixed-upstream-topologies.md)
+
+- [Upstream fail-safe hardening](upstream-failsafe-hardening.md)
+
+- [Tool exposure and call safety](tool-exposure-and-call-safety.md)
+
+## Packaged source archive
+
+This ZIP is a clean source archive. It intentionally excludes `.git`, `node_modules`, build outputs, caches, generated reports, and stale prebuilt binaries. Build the Rust binary locally before creating npm/platform release artifacts.

@@ -130,6 +130,13 @@ pub const COMMANDS: &[CommandSpec] = &[
         aliases: &["guide", "next", "onboard"],
         implemented: true,
     },
+
+    CommandSpec {
+        name: "cleanup",
+        description: "Safely inspect or remove disposable cache, logs, and ephemeral runtime markers.",
+        aliases: &["clean", "prune"],
+        implemented: true,
+    },
     CommandSpec {
         name: "repair",
         description: "Grouped repair/maintenance command.",

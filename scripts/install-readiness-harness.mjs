@@ -3,6 +3,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { runBootHarness } from './boot-harness.mjs';
+import { collectSystemLifecycleAudit } from './system-lifecycle-audit.mjs';
+import { runMixedUpstreamSimulation } from './simulate-mixed-upstreams.mjs';
+import { runUpstreamFailsafeSimulation } from './simulate-upstream-failsafe.mjs';
+import { collectToolExposureSafetyAudit } from './tool-exposure-safety-audit.mjs';
+import { collectToolMessageIntegrityAudit } from './tool-message-integrity-audit.mjs';
 
 function parseArgs(argv) {
   const parsed = { json: false, write: null, strict: false, skipNpmPack: false, help: false };
@@ -26,20 +31,37 @@ function publicStatus(bootStatus) { return bootStatus === 'pass' ? 'ready' : boo
 
 export function collectInstallReadiness(options = {}) {
   const boot = runBootHarness(options);
+  const lifecycle = collectSystemLifecycleAudit();
+  const mixedUpstreams = runMixedUpstreamSimulation({ servers: 50, tools: 200_000, memoryLimitMiB: 512 });
+  const upstreamFailsafe = runUpstreamFailsafeSimulation({ servers: 50, tools: 200_000, memoryLimitMiB: 512 });
+  const toolExposureSafety = collectToolExposureSafetyAudit();
+  const toolMessageIntegrity = collectToolMessageIntegrityAudit();
+  const lifecycleBlockers = lifecycle.findings.filter((finding) => finding.severity === 'blocker').map((finding) => `lifecycle:${finding.id}`);
+  const mixedUpstreamBlockers = mixedUpstreams.status === 'pass' ? [] : ['mixed-upstreams:simulation-failed'];
+  const upstreamFailsafeBlockers = upstreamFailsafe.status === 'pass' ? [] : ['upstream-failsafe:simulation-failed'];
+  const toolExposureSafetyBlockers = toolExposureSafety.status === 'pass' ? [] : ['tool-exposure-safety:audit-failed'];
+  const toolMessageIntegrityBlockers = toolMessageIntegrity.status === 'pass' ? [] : ['tool-message-integrity:audit-failed'];
+  const bootStatus = publicStatus(boot.installReadiness.status);
+  const status = lifecycleBlockers.length || mixedUpstreamBlockers.length || upstreamFailsafeBlockers.length || toolExposureSafetyBlockers.length || toolMessageIntegrityBlockers.length ? 'not-ready' : bootStatus;
   return {
     schema: 'mcpace.installReadiness.v1',
     generatedAt: new Date().toISOString(),
     project: boot.project,
-    status: publicStatus(boot.installReadiness.status),
+    status,
     bootHarnessStatus: boot.installReadiness.status,
     checks: [
       { id: 'source-inventory', status: boot.inventory.ok ? 'pass' : 'fail', detail: `${boot.inventory.summary.totalFiles} files inventoried` },
       { id: 'source-audit', status: boot.sourceAudit.status, detail: boot.sourceAudit.reason || boot.sourceAudit.output || null },
+      { id: 'system-lifecycle-audit', status: lifecycle.status, detail: `${lifecycle.summary.blockers} blockers, ${lifecycle.summary.warnings} warnings` },
+      { id: 'mixed-upstream-topology', status: mixedUpstreams.status, detail: `${mixedUpstreams.results.callableServerCount} callable, ${mixedUpstreams.results.blockedServerCount} blocked, ${mixedUpstreams.results.failedServerCount} failed servers isolated` },
+      { id: 'upstream-failsafe', status: upstreamFailsafe.status, detail: `${upstreamFailsafe.results.failedDiscoveryServers} discovery failures, ${upstreamFailsafe.results.circuitOpenServers} circuit-open servers, ${upstreamFailsafe.results.staleFallbackServers} stale-cache fallbacks covered` },
+      { id: 'tool-exposure-safety', status: toolExposureSafety.status, detail: `${toolExposureSafety.summary.blockers} blockers across ${toolExposureSafety.summary.checks} checks` },
+      { id: 'tool-message-integrity', status: toolMessageIntegrity.status, detail: `${toolMessageIntegrity.summary.failures} failures across ${toolMessageIntegrity.summary.checks} checks` },
       { id: 'npm-pack', status: boot.npmPack.status, detail: boot.npmPack.reason || boot.npmPack.packageMode || null },
       { id: 'binary-distribution', status: boot.binaryDistribution.readyForPublishedInstall ? 'pass' : 'warn', detail: boot.binaryDistribution.mode }
     ],
     warnings: boot.installReadiness.warnings,
-    blockers: boot.installReadiness.blockers,
+    blockers: [...boot.installReadiness.blockers, ...lifecycleBlockers, ...mixedUpstreamBlockers, ...upstreamFailsafeBlockers, ...toolExposureSafetyBlockers, ...toolMessageIntegrityBlockers],
     nextCommands: [
       'npm run verify:boot',
       'cargo check --all-targets --locked',
@@ -47,6 +69,11 @@ export function collectInstallReadiness(options = {}) {
       'mcpace connect --json',
       'mcpace server test <name> --refresh --json'
     ],
+    lifecycleAudit: lifecycle,
+    mixedUpstreamSimulation: mixedUpstreams,
+    upstreamFailsafeSimulation: upstreamFailsafe,
+    toolExposureSafetyAudit: toolExposureSafety,
+    toolMessageIntegrityAudit: toolMessageIntegrity,
     bootHarness: boot
   };
 }

@@ -1,5 +1,5 @@
 {
-  "version": "0.5.9",
+  "version": "0.6.0",
   "currentPromise": "One local MCPace endpoint and generic MCP brokering/diagnostics with no bundled upstream MCP servers enabled or recommended by default.",
   "firstICP": "advanced integrator / solo power user with 2-3 local MCP clients and hand-maintained config drift",
   "productShape": "local-first control plane plus onboarding layer with a configurable connectable local MCP endpoint and preview runtime lanes",

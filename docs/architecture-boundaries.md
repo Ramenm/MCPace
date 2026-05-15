@@ -85,3 +85,12 @@ The adapter layer is now split into smaller behavior boundaries:
 - `src/adapter/proxy_uri.rs` owns encoded MCPace proxy URIs for upstream resources and templates.
 
 Do not move client-specific branching into this layer unless it is derived from MCP `initialize` capabilities or explicit config. MCPace should stay a broker over a merged MCP settings registry, not a hardcoded map of clients or upstream server catalogs.
+
+## Runtime state and cache lifecycle
+
+The lifecycle contract for durable config, recoverable state, disposable cache, process-local sessions, restart behavior, and reinstall behavior is maintained in [`runtime-state-cache-lifecycle.md`](runtime-state-cache-lifecycle.md). Changes to critical runtime modules must preserve that contract or update it with matching tests.
+
+
+## Lifecycle hardening
+
+See `runtime-state-cache-lifecycle.md` for storage classes and `system-lifecycle-hardening.md` for the full install-to-uninstall hardening contract.

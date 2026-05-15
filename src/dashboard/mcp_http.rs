@@ -143,11 +143,17 @@ fn handle_mcp_http_request(
     let message =
         parse_str(body_text.trim()).map_err(|error| format!("invalid JSON-RPC body: {}", error))?;
     let id = json_helpers::value_at_path(&message, &["id"]).cloned();
-    let method = json_helpers::string_at_path(&message, &["method"]);
+    let method_value = json_helpers::value_at_path(&message, &["method"]);
 
     let id = id.unwrap_or(JsonValue::Null);
-    let method = match method {
-        Some(value) => value,
+    let method = match method_value {
+        Some(JsonValue::String(value)) => value.as_str(),
+        Some(_) => {
+            return Ok(McpHttpResponse::JsonStatus(
+                "400 Bad Request",
+                mcp_error_response(id, mcp::ERROR_INVALID_REQUEST, "JSON-RPC method must be a string"),
+            ));
+        }
         None => {
             if json_helpers::value_at_path(&message, &["result"]).is_some()
                 || json_helpers::value_at_path(&message, &["error"]).is_some()
@@ -162,6 +168,12 @@ fn handle_mcp_http_request(
             return Err("missing JSON-RPC method".to_string());
         }
     };
+    if let Err(error) = mcp::validate_request_envelope(&message) {
+        return Ok(McpHttpResponse::JsonStatus(
+            "400 Bad Request",
+            mcp_error_response(id, mcp::ERROR_INVALID_REQUEST, error),
+        ));
+    }
     if let Some(protocol_header) =
         http_boundary::request_header_string(Some(request), "mcp-protocol-version")
     {
@@ -290,9 +302,16 @@ fn handle_mcp_http_request(
         }
         "prompts/get" => {
             let name = json_helpers::string_at_path(&message, &["params", "name"]);
-            let args = json_helpers::value_at_path(&message, &["params", "arguments"])
-                .cloned()
-                .unwrap_or_else(empty_object);
+            let args = match mcp::params_arguments_object_or_empty(&message, "prompts/get") {
+                Ok(value) => value,
+                Err(error) => {
+                    return Ok(McpHttpResponse::Json(mcp_error_response(
+                        id,
+                        mcp::ERROR_INVALID_PARAMS,
+                        error,
+                    )));
+                }
+            };
             let result = match name {
                 Some(name) => match adapter::get_prompt(&config.root_path, name, args, None) {
                     Ok(value) => JsonValue::object([
@@ -392,9 +411,16 @@ fn handle_mcp_http_request(
         "tools/call" => {
             let tool_name = json_helpers::string_at_path(&message, &["params", "name"])
                 .ok_or_else(|| "tools/call requires a tool name".to_string())?;
-            let args = json_helpers::value_at_path(&message, &["params", "arguments"])
-                .cloned()
-                .unwrap_or_else(empty_object);
+            let args = match mcp::tool_call_arguments_or_empty(&message) {
+                Ok(value) => value,
+                Err(error) => {
+                    return Ok(McpHttpResponse::Json(mcp_error_response(
+                        id,
+                        mcp::ERROR_INVALID_PARAMS,
+                        error,
+                    )));
+                }
+            };
             let projected_call = tool_name.starts_with("u_");
             let option_arguments = if projected_call {
                 adapter::projected_adapter_control_arguments(&args)
