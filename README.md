@@ -158,6 +158,9 @@ npm run verify:github-readiness
 npm run verify:defect-gates
 npm run verify:bug-sweep
 npm run verify:runtime-trace
+npm run verify:performance
+npm run verify:dashboard-chaos
+npm run verify:experience
 npm run verify:rust-quality
 npm run benchmark:runtime
 cargo fmt --all -- --check
@@ -171,6 +174,8 @@ In constrained sandboxes, local Node checks can run with the project npm surface
 MCPace can be proved locally without a paid GitHub plan. Use `npm run verify:local:smoke` during editing, `npm run verify:local:source` before sharing a public source snapshot, and `npm run verify:publish-decision` for the final source-vs-native publication answer. Public GitHub workflows and security checks are extra trust signals, not the only proof path.
 
 ## Read paths and diagnostics
+
+Performance smoke is available with `npm run verify:performance`. It records local HTTP benchmark wiring plus synthetic tool-scale, mixed-upstream, and upstream-failsafe checks, but it does not replace real Rust host p50/p95/p99 baselines. Dashboard tab/refresh chaos smoke is available with `npm run verify:dashboard-chaos`; it exercises multi-tab refreshes, hidden/visible transitions, stale response cancellation, partial log failures, and large rendered lists without requiring a browser binary. Use `npm run verify:experience` to run both source-level experience gates. See `docs/performance-verification.md` and `docs/dashboard-chaos-verification.md`.
 
 Runtime HTTP controls remain explicit: `--max-connections`, `--io-timeout-ms`, `--max-body-bytes`, and `--overview-cache-ms`. When no flag is supplied, bounded environment overrides are also honored: `MCPACE_HTTP_MAX_CONNECTIONS`, `MCPACE_HTTP_IO_TIMEOUT_MS`, `MCPACE_HTTP_MAX_BODY_BYTES`, `MCPACE_DASHBOARD_OVERVIEW_CACHE_MS`, `MCPACE_DASHBOARD_HEALTH_CACHE_MS`, `MCPACE_UPSTREAM_WORKERS`, `MCPACE_UPSTREAM_SESSION_POOL_LIMIT`, and `MCPACE_UPSTREAM_SESSION_POOL_SHARDS`. Serve/dashboard bind to loopback hosts by default; non-loopback bind hosts such as `0.0.0.0` require the explicit `--allow-nonlocal-bind` escape hatch and are not a substitute for a real public auth mode.
 

@@ -1,0 +1,207 @@
+{
+  "schema": "mcpace.externalToolInternetSmoke.v1",
+  "status": "pass",
+  "generatedAt": "2026-05-16T13:58:13.119Z",
+  "project": "mcpace",
+  "version": "0.6.4",
+  "mode": "source-only",
+  "scenarios": [
+    {
+      "id": "local-filesystem",
+      "category": "local-only",
+      "examples": [
+        "filesystem MCP server",
+        "local git MCP server"
+      ],
+      "internet": "none required after the binary/package is present",
+      "risks": [
+        "local data access",
+        "path traversal policy",
+        "large file scanning"
+      ],
+      "expectedDefault": "register disabled or least-scope path allowlist"
+    },
+    {
+      "id": "npx-package-launch",
+      "category": "package-manager",
+      "examples": [
+        "@modelcontextprotocol/server-filesystem",
+        "brave-search-mcp-server"
+      ],
+      "internet": "npm registry may be used on first run or version change",
+      "risks": [
+        "dependency chain abuse",
+        "postinstall scripts",
+        "version drift",
+        "registry outage"
+      ],
+      "expectedDefault": "dry-run registration, pinned package, no tool call during install"
+    },
+    {
+      "id": "uvx-python-launch",
+      "category": "package-manager",
+      "examples": [
+        "Python SDK-based MCP servers"
+      ],
+      "internet": "PyPI may be used on first run or version change",
+      "risks": [
+        "version drift",
+        "native wheel availability",
+        "Python environment mismatch"
+      ],
+      "expectedDefault": "treat launch as runtime install, not MCPace install"
+    },
+    {
+      "id": "docker-image-launch",
+      "category": "container-runtime",
+      "examples": [
+        "containerized MCP server"
+      ],
+      "internet": "container registry may be used on first pull",
+      "risks": [
+        "image tag drift",
+        "privileged mounts",
+        "network and filesystem blast radius"
+      ],
+      "expectedDefault": "pin digest and keep mounts read-only by default"
+    },
+    {
+      "id": "github-api",
+      "category": "external-api",
+      "examples": [
+        "GitHub MCP server"
+      ],
+      "internet": "requires GitHub API reachability and usually a token",
+      "risks": [
+        "token scope",
+        "rate limits",
+        "private repository data exposure"
+      ],
+      "expectedDefault": "disabled until token + repo scope reviewed"
+    },
+    {
+      "id": "brave-search-api",
+      "category": "external-api",
+      "examples": [
+        "Brave Search MCP server"
+      ],
+      "internet": "requires Brave Search API reachability and API key for real queries",
+      "risks": [
+        "paid quota",
+        "API key leakage",
+        "unexpected search costs"
+      ],
+      "expectedDefault": "disabled until API key and budget reviewed"
+    },
+    {
+      "id": "fetch-web",
+      "category": "external-web",
+      "examples": [
+        "Fetch/webpage MCP server"
+      ],
+      "internet": "requires arbitrary web access",
+      "risks": [
+        "SSRF-like behavior",
+        "unexpected large downloads",
+        "untrusted content ingestion"
+      ],
+      "expectedDefault": "host/domain allowlist and response-size limit"
+    },
+    {
+      "id": "remote-streamable-http",
+      "category": "remote-mcp",
+      "examples": [
+        "third-party Streamable HTTP MCP server"
+      ],
+      "internet": "requires remote domain reachability and often auth",
+      "risks": [
+        "domain ownership confusion",
+        "auth token audience mismatch",
+        "remote downtime"
+      ],
+      "expectedDefault": "explicit owned/not-owned labeling and auth review"
+    }
+  ],
+  "liveEndpoints": [
+    {
+      "id": "mcp-docs",
+      "url": "https://modelcontextprotocol.io/examples",
+      "required": true,
+      "expectedStatuses": [
+        200
+      ]
+    },
+    {
+      "id": "npm-registry-mcp-sdk",
+      "url": "https://registry.npmjs.org/@modelcontextprotocol%2Fsdk",
+      "required": true,
+      "expectedStatuses": [
+        200
+      ]
+    },
+    {
+      "id": "pypi-mcp",
+      "url": "https://pypi.org/pypi/mcp/json",
+      "required": false,
+      "expectedStatuses": [
+        200,
+        404
+      ]
+    },
+    {
+      "id": "github-api",
+      "url": "https://api.github.com/rate_limit",
+      "required": true,
+      "expectedStatuses": [
+        200,
+        403
+      ]
+    },
+    {
+      "id": "github-mcp-servers-repo",
+      "url": "https://github.com/modelcontextprotocol/servers",
+      "required": false,
+      "expectedStatuses": [
+        200
+      ]
+    }
+  ],
+  "liveResults": [],
+  "checks": [
+    {
+      "id": "covers-local-only-tools",
+      "ok": true,
+      "evidence": "filesystem/git-style local tools"
+    },
+    {
+      "id": "covers-package-manager-launchers",
+      "ok": true,
+      "evidence": "npx, uvx, docker"
+    },
+    {
+      "id": "covers-external-api-tools",
+      "ok": true,
+      "evidence": "GitHub, Brave Search, Fetch/web"
+    },
+    {
+      "id": "covers-remote-mcp-transport",
+      "ok": true,
+      "evidence": "Streamable HTTP third-party domain"
+    },
+    {
+      "id": "does-not-execute-third-party-packages",
+      "ok": true,
+      "evidence": "matrix + optional HTTPS reachability only; no npx/uvx/docker MCP package is launched"
+    },
+    {
+      "id": "live-internet-mode",
+      "ok": true,
+      "evidence": "not requested; pass --live-internet for DNS/HTTPS checks"
+    }
+  ],
+  "notes": [
+    "This smoke does not execute third-party MCP packages.",
+    "Paid/API-key tools must remain disabled until credentials, quota, and owner/domain are reviewed.",
+    "Package manager launchers are runtime install surfaces, not pure MCPace registration."
+  ]
+}

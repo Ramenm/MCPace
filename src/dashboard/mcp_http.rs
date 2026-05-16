@@ -138,6 +138,16 @@ fn handle_mcp_http_request(
             ),
         ));
     }
+    if !http_boundary::content_type_is(request, "application/json") {
+        return Ok(McpHttpResponse::JsonStatus(
+            "400 Bad Request",
+            mcp_error_response(
+                JsonValue::Null,
+                mcp::ERROR_INVALID_REQUEST,
+                "missing required Content-Type header: application/json",
+            ),
+        ));
+    }
     let body_text = std::str::from_utf8(&request.body)
         .map_err(|error| format!("invalid UTF-8 request body: {}", error))?;
     let message =
@@ -216,7 +226,19 @@ fn handle_mcp_http_request(
                 .unwrap_or(mcp::CURRENT_PROTOCOL_VERSION);
             let negotiated = mcp::negotiate_protocol_version(requested);
 
-            let session_id = http_session::generated_mcp_http_session_id(request, &id, negotiated);
+            let session_id = match http_session::generated_mcp_http_session_id(request, &id, negotiated) {
+                Ok(value) => value,
+                Err(error) => {
+                    let message = format!(
+                        "failed to generate cryptographically secure MCP HTTP session id: {}",
+                        error
+                    );
+                    return Ok(McpHttpResponse::JsonStatus(
+                        "500 Internal Server Error",
+                        mcp_error_response(id, mcp::ERROR_INTERNAL, message),
+                    ));
+                }
+            };
             let client_name =
                 json_helpers::string_at_path(&message, &["params", "clientInfo", "name"])
                     .map(ToOwned::to_owned);

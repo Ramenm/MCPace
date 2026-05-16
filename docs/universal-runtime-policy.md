@@ -68,6 +68,18 @@ MCPace uses automatic signals where the MCP protocol or the client gives them:
   trusted upstream server actually sends them.
 - package/registry metadata can help discover installation and command shapes.
 
+
+### What is not fully automatic
+
+MCPace cannot invent a strictly unique stdio session when a client sends no
+external session id, conversation id, client-instance id, or transport-session
+id. In that case MCPace derives a stable planned lease from client/project/cwd
+and ingress so routing is deterministic, but multiple live instances of the same
+client in the same project can share that lease. For strict multi-client
+isolation, pass `--session-id`, `MCPACE_SESSION_ID`,
+`MCPACE_CLIENT_INSTANCE_ID`, `MCPACE_TRANSPORT_SESSION_ID`, or structured
+`_meta.com.mcpace/context` metadata.
+
 Those signals are not a complete concurrency contract. The MCP spec defines
 ToolAnnotations as hints, not as trusted proof, and it does not currently define
 a standard field for "parallel-safe", "single writer", "per state profile",

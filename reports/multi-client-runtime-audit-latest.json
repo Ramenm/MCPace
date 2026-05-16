@@ -1,0 +1,110 @@
+{
+  "schema": "mcpace.multiClientRuntimeAudit.v1",
+  "status": "pass",
+  "generatedAt": "2026-05-16T15:05:08.440Z",
+  "elapsedMs": 5.519,
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "summary": {
+    "checks": 9,
+    "passed": 9,
+    "failed": 0,
+    "poolMax": 8,
+    "shardMax": 4
+  },
+  "checks": [
+    {
+      "id": "http-streamable-session-id-is-generated-and-required",
+      "ok": true,
+      "severity": "critical",
+      "evidence": "src/dashboard/http_session.rs generates OS-random MCP HTTP session ids and rejects missing stateful session headers.",
+      "recommendation": "Keep HTTP session ids server-issued and fail closed when a stateful request omits them."
+    },
+    {
+      "id": "http-upstream-context-keeps-client-session-project-identity",
+      "ok": true,
+      "severity": "critical",
+      "evidence": "src/dashboard/tool_runtime.rs builds upstream lease context from MCP/forwarded headers, metadata, and project roots.",
+      "recommendation": "Do not collapse HTTP clients into anonymous upstream sessions after Streamable HTTP initialization."
+    },
+    {
+      "id": "upstream-pool-shards-by-client-session-project-transport",
+      "ok": true,
+      "severity": "high",
+      "evidence": "src/dashboard.rs hashes server, client id, session id, project root, and transport when selecting an upstream pool shard.",
+      "recommendation": "Keep the shard selector aligned with the upstream session key fields."
+    },
+    {
+      "id": "default-upstream-pool-allows-bounded-multiclient-distribution",
+      "ok": true,
+      "severity": "high",
+      "evidence": "src/resources.rs AUTO_UPSTREAM_SESSION_POOL_MAX=8, AUTO_UPSTREAM_SESSION_SHARD_MAX=4.",
+      "recommendation": "Use env overrides for host-specific high-concurrency tests; keep source defaults bounded."
+    },
+    {
+      "id": "stdio-fallback-limit-is-visible-not-silent",
+      "ok": true,
+      "severity": "high",
+      "evidence": "src/client/context.rs derives stable planned leases but warns when no external session/conversation/client-instance/transport-session id exists.",
+      "recommendation": "For strict stdio multi-client isolation, clients should pass --session-id, MCPACE_SESSION_ID, MCPACE_CLIENT_INSTANCE_ID, or metadata."
+    },
+    {
+      "id": "hub-leases-block-conflicting-client-work",
+      "ok": true,
+      "severity": "critical",
+      "evidence": "src/hub/leases.rs enforces request mutex/capacity lanes and same-session takeover rules.",
+      "recommendation": "Keep server policy as the source of truth for mutable resource serialization."
+    },
+    {
+      "id": "playwright-covers-parallel-independent-client-contexts",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "Playwright lane uses separate BrowserContexts, parallel worker config, and recorded conflict evidence.",
+      "recommendation": "Run this lane on CI with at least two workers and a real browser."
+    },
+    {
+      "id": "package-scripts-wire-multiclient-audit-into-experience",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "package.json exposes verify:multi-client-runtime and includes it in browser/experience verification.",
+      "recommendation": "Keep this source-only audit cheap enough to run in regular prepublish/source checks."
+    },
+    {
+      "id": "docs-explain-automatic-versus-required-client-identity",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "Docs distinguish HTTP automatic sessioning from stdio/client metadata requirements and Playwright context isolation.",
+      "recommendation": "Do not imply MCPace can invent strict identity for clients that send no distinguishing signal."
+    }
+  ],
+  "acceptedLimits": [
+    {
+      "id": "stdio-clients-without-any-session-signal",
+      "severity": "medium",
+      "status": "accepted-limit",
+      "summary": "MCPace can derive a stable planned lease, but it cannot prove two same-client/same-project stdio processes are separate unless the client supplies a session/conversation/client-instance/transport-session signal."
+    },
+    {
+      "id": "source-audit-not-live-rust-concurrency-proof",
+      "severity": "medium",
+      "status": "not-proven-here",
+      "summary": "This audit confirms source contracts and browser E2E wiring. Rust runtime parallel throughput still needs cargo build/test and live-host concurrency measurement."
+    }
+  ],
+  "filesReviewed": [
+    "src/resources.rs",
+    "src/dashboard.rs",
+    "src/dashboard/http_session.rs",
+    "src/dashboard/mcp_http.rs",
+    "src/dashboard/tool_runtime.rs",
+    "src/client/context.rs",
+    "src/hub/leases.rs",
+    "tests/e2e/dashboard.parallel.playwright.spec.mjs",
+    "tests/e2e/playwright.config.mjs",
+    "scripts/playwright-dashboard-e2e.mjs",
+    "docs/universal-runtime-policy.md",
+    "docs/browser-e2e-and-external-tooling.md"
+  ]
+}

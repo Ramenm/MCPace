@@ -110,6 +110,15 @@ pub(super) fn resolve_context(parsed: &ParsedArgs, metadata: &MetadataEnvelope) 
             session_lease.0, session_lease.1
         ));
     }
+    if session_id.is_none()
+        && conversation_id.is_none()
+        && client_instance_id.is_none()
+        && transport_session_id.is_none()
+    {
+        warnings.push(
+            "No external session, conversation, client-instance, or transport-session id was resolved; multiple live instances of the same client in the same project can share the derived planned lease. Pass --session-id, MCPACE_SESSION_ID, MCPACE_CLIENT_INSTANCE_ID, or _meta.com.mcpace/context metadata for strict multi-client isolation.".to_string(),
+        );
+    }
     if metadata.workspace_roots.len() > 1 && project_root.is_none() {
         warnings.push(
             "Multiple workspace roots were provided but no explicit project root or cwd selected a single project; project-local routing stays unresolved.".to_string(),

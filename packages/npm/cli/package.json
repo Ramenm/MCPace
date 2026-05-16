@@ -1,6 +1,6 @@
 {
   "name": "@mcpace/cli",
-  "version": "0.6.0",
+  "version": "0.6.5",
   "description": "Thin npm launcher for the MCPace native Rust binary.",
   "license": "Apache-2.0",
   "type": "module",
@@ -35,12 +35,12 @@
     "launcher"
   ],
   "optionalDependencies": {
-    "@mcpace/cli-darwin-arm64": "0.6.0",
-    "@mcpace/cli-darwin-x64": "0.6.0",
-    "@mcpace/cli-linux-arm64-gnu": "0.6.0",
-    "@mcpace/cli-linux-x64-gnu": "0.6.0",
-    "@mcpace/cli-win32-arm64-msvc": "0.6.0",
-    "@mcpace/cli-win32-x64-msvc": "0.6.0"
+    "@mcpace/cli-darwin-arm64": "0.6.5",
+    "@mcpace/cli-darwin-x64": "0.6.5",
+    "@mcpace/cli-linux-arm64-gnu": "0.6.5",
+    "@mcpace/cli-linux-x64-gnu": "0.6.5",
+    "@mcpace/cli-win32-arm64-msvc": "0.6.5",
+    "@mcpace/cli-win32-x64-msvc": "0.6.5"
   },
   "mcpace": {
     "targetManifest": "release-targets.json"

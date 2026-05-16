@@ -128,6 +128,14 @@ fn generic_source_server_record(
         state_binding: "runtime-source".to_string(),
         credential_binding: "source-config".to_string(),
         parallelism_limit: 1,
+        parallel_safety_class: infer_parallel_safety_class(&source_type, "configured-source", "single-writer", "runtime-source", "source-config", &source_record.command, &source_record.url, &Vec::new()),
+        default_pool_model: infer_default_pool_model(&source_type, "configured-source", "single-writer", "runtime-source", "source-config"),
+        max_workers: infer_max_workers(&source_type, "configured-source", "single-writer", 1),
+        max_in_flight_per_worker: 1,
+        transport_status: transport_status_for_source_type(&source_type),
+        launcher_kind: infer_launcher_kind(&source_record.command, &source_record.url, "user-supplied", ""),
+        lock_domains: infer_lock_domains("configured-source", "single-writer", "runtime-source", "source-config", normalized_name),
+        profile_evidence: profile_evidence_records(&source_type, "configured-source", "single-writer", "runtime-source", "source-config", &source_record.command, &source_record.url),
         conflict_domain: format!("settings-only:{}", normalized_name),
         project_root_mode: "optional".to_string(),
         worktree_binding: "none".to_string(),
@@ -165,8 +173,10 @@ fn infer_source_type(raw_source_type: &str, command: &str, url: &str) -> String 
 fn normalize_source_type(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "" => String::new(),
-        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote-sse"
-        | "remote" | "http" | "sse" => "http".to_string(),
+        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote" | "http" => {
+            "streamable-http".to_string()
+        }
+        "sse" | "remote-sse" | "http+sse" | "http-sse" | "legacy-sse" => "sse-legacy".to_string(),
         "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
         other => other.to_string(),
     }
@@ -175,7 +185,8 @@ fn normalize_source_type(value: &str) -> String {
 fn supported_transports_for_source_type(source_type: &str) -> Vec<String> {
     match source_type {
         "stdio" => vec!["stdio".to_string()],
-        "http" => vec!["streamable-http".to_string(), "sse".to_string()],
+        "streamable-http" | "http" => vec!["streamable-http".to_string()],
+        "sse-legacy" | "sse" => vec!["sse".to_string()],
         other if !other.is_empty() => vec![other.to_string()],
         _ => Vec::new(),
     }
@@ -245,15 +256,81 @@ fn normalize_server_record(
         "routingGroup",
         default_routing_group(&scope_class, &state_binding, &state_profile_mode),
     );
+    let source_type = source_record
+        .map(|record| record.source_type.clone())
+        .unwrap_or_default();
+    let source_command = source_record
+        .map(|record| record.command.clone())
+        .unwrap_or_default();
+    let source_url = source_record
+        .map(|record| record.url.clone())
+        .unwrap_or_default();
+    let kind = object
+        .get("kind")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let tool_policies = object
+        .get("toolPolicies")
+        .and_then(JsonValue::as_array)
+        .map(|items| items.to_vec())
+        .unwrap_or_default();
+    let installer_method = installer
+        .and_then(|installer| installer.get("installMethod"))
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let installer_package = installer
+        .and_then(|installer| installer.get("installPackage"))
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    let parallel_safety_class = infer_parallel_safety_class(
+        &source_type,
+        &scope_class,
+        &concurrency_policy,
+        &state_binding,
+        &credential_binding,
+        &source_command,
+        &source_url,
+        &tool_policies,
+    );
+    let default_pool_model = infer_default_pool_model(
+        &source_type,
+        &scope_class,
+        &concurrency_policy,
+        &state_binding,
+        &credential_binding,
+    );
+    let max_workers = infer_max_workers(
+        &source_type,
+        &scope_class,
+        &concurrency_policy,
+        parallelism_limit,
+    );
+    let lock_domains = infer_lock_domains(
+        &scope_class,
+        &concurrency_policy,
+        &state_binding,
+        &credential_binding,
+        name,
+    );
+    let profile_evidence = profile_evidence_records(
+        &source_type,
+        &scope_class,
+        &concurrency_policy,
+        &state_binding,
+        &credential_binding,
+        &source_command,
+        &source_url,
+    );
 
     Some(ServerRecord {
         name: name.to_string(),
-        kind: object
-            .get("kind")
-            .and_then(JsonValue::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
+        kind,
         required,
         default_enabled,
         profile_enabled,
@@ -283,6 +360,14 @@ fn normalize_server_record(
         state_binding,
         credential_binding,
         parallelism_limit,
+        parallel_safety_class,
+        default_pool_model,
+        max_workers,
+        max_in_flight_per_worker: 1,
+        transport_status: transport_status_for_source_type(&source_type),
+        launcher_kind: infer_launcher_kind(&source_command, &source_url, &installer_method, &installer_package),
+        lock_domains,
+        profile_evidence,
         conflict_domain,
         project_root_mode,
         worktree_binding,
@@ -297,38 +382,18 @@ fn normalize_server_record(
             .trim()
             .to_string(),
         source_enabled,
-        source_type: source_record
-            .map(|record| record.source_type.clone())
-            .unwrap_or_default(),
-        source_command: source_record
-            .map(|record| record.command.clone())
-            .unwrap_or_default(),
-        source_url: source_record
-            .map(|record| record.url.clone())
-            .unwrap_or_default(),
-        tool_policies: object
-            .get("toolPolicies")
-            .and_then(JsonValue::as_array)
-            .map(|items| items.to_vec())
-            .unwrap_or_default(),
+        source_type,
+        source_command,
+        source_url,
+        tool_policies,
         installer_target: installer
             .and_then(|installer| installer.get("installTarget"))
             .and_then(JsonValue::as_str)
             .unwrap_or("")
             .trim()
             .to_string(),
-        installer_method: installer
-            .and_then(|installer| installer.get("installMethod"))
-            .and_then(JsonValue::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-        installer_package: installer
-            .and_then(|installer| installer.get("installPackage"))
-            .and_then(JsonValue::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
+        installer_method,
+        installer_package,
         installer_verify_command: installer
             .and_then(|installer| installer.get("verifyCommand"))
             .and_then(JsonValue::as_str)
@@ -358,6 +423,216 @@ fn policy_usize(policy: Option<&BTreeMap<String, JsonValue>>, key: &str, fallbac
         .filter(|value| *value >= 0)
         .map(|value| value as usize)
         .unwrap_or(fallback)
+}
+
+fn transport_status_for_source_type(source_type: &str) -> String {
+    match source_type {
+        "sse-legacy" | "sse" => "legacy-compat".to_string(),
+        "streamable-http" | "http" | "stdio" => "stable".to_string(),
+        "" => "inferred".to_string(),
+        _ => "custom".to_string(),
+    }
+}
+
+fn infer_launcher_kind(command: &str, url: &str, installer_method: &str, installer_package: &str) -> String {
+    let command = command.trim().to_ascii_lowercase();
+    let method = installer_method.trim().to_ascii_lowercase();
+    let package = installer_package.trim().to_ascii_lowercase();
+    if !url.trim().is_empty() {
+        return "remote-url".to_string();
+    }
+    if command.contains("npx") || method == "npm" || package.starts_with("npm:") {
+        return "npx".to_string();
+    }
+    if command.contains("uvx") || method == "pypi" || package.starts_with("pypi:") {
+        return "uvx".to_string();
+    }
+    if command.contains("docker") || method == "oci" || package.starts_with("oci:") {
+        return "oci".to_string();
+    }
+    if command.is_empty() && method.is_empty() && package.is_empty() {
+        return "unspecified".to_string();
+    }
+    "local-command".to_string()
+}
+
+fn infer_parallel_safety_class(
+    source_type: &str,
+    scope_class: &str,
+    concurrency_policy: &str,
+    state_binding: &str,
+    credential_binding: &str,
+    command: &str,
+    url: &str,
+    tool_policies: &[JsonValue],
+) -> String {
+    if source_type == "sse-legacy" || source_type == "sse" {
+        return "PX_legacy_compat".to_string();
+    }
+    if scope_class == "shared-exclusive" || state_binding == "host-desktop" || concurrency_policy == "single-session" {
+        return "PX_forbidden".to_string();
+    }
+    if !credential_binding.trim().is_empty() && credential_binding != "none" {
+        return "P2_session_safe".to_string();
+    }
+    if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
+        return "P3_project_safe".to_string();
+    }
+    if source_type == "streamable-http" || source_type == "http" || !url.trim().is_empty() {
+        return "P4_stateless_remote_candidate".to_string();
+    }
+    if concurrency_policy == "multi-reader" {
+        return "P1_readonly_candidate".to_string();
+    }
+    if tool_policies.iter().any(|policy| policy_mentions_readonly(policy)) {
+        return "P1_readonly_candidate".to_string();
+    }
+    if !command.trim().is_empty() {
+        return "P0_unknown_stdio".to_string();
+    }
+    "P0_unknown".to_string()
+}
+
+fn policy_mentions_readonly(value: &JsonValue) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object
+        .get("readOnlyHint")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false)
+        || object
+            .get("readOnly")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(false)
+}
+
+fn infer_default_pool_model(
+    source_type: &str,
+    scope_class: &str,
+    concurrency_policy: &str,
+    state_binding: &str,
+    credential_binding: &str,
+) -> String {
+    if source_type == "sse-legacy" || source_type == "sse" {
+        return "legacy-disabled".to_string();
+    }
+    if scope_class == "shared-exclusive" || state_binding == "host-desktop" || concurrency_policy == "single-session" {
+        return "singleton".to_string();
+    }
+    if !credential_binding.trim().is_empty() && credential_binding != "none" {
+        return "credential-session-pool".to_string();
+    }
+    if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
+        return "project-pool".to_string();
+    }
+    if source_type == "streamable-http" || source_type == "http" {
+        return "remote-http-session-pool".to_string();
+    }
+    if source_type == "stdio" {
+        return "process-pool".to_string();
+    }
+    "singleton".to_string()
+}
+
+fn infer_max_workers(
+    source_type: &str,
+    scope_class: &str,
+    concurrency_policy: &str,
+    parallelism_limit: usize,
+) -> usize {
+    if source_type == "sse-legacy" || source_type == "sse" {
+        return 0;
+    }
+    if concurrency_policy == "single-session" || scope_class == "shared-exclusive" {
+        return 1;
+    }
+    if parallelism_limit > 1 {
+        return parallelism_limit;
+    }
+    if source_type == "streamable-http" || source_type == "http" {
+        return 8;
+    }
+    if source_type == "stdio" && (concurrency_policy == "multi-reader" || scope_class == "project-local") {
+        return 4;
+    }
+    1
+}
+
+fn infer_lock_domains(
+    scope_class: &str,
+    concurrency_policy: &str,
+    state_binding: &str,
+    credential_binding: &str,
+    fallback_domain: &str,
+) -> Vec<String> {
+    let mut domains = Vec::new();
+    if !credential_binding.trim().is_empty() && credential_binding != "none" {
+        domains.push(format!("credential:{}", credential_binding.trim()));
+    }
+    if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
+        domains.push("project".to_string());
+    }
+    match state_binding {
+        "repo" | "repo-path" => domains.push("repo".to_string()),
+        "file" | "file-path" => domains.push("file".to_string()),
+        "db" | "db-file-path" => domains.push("db".to_string()),
+        "host-desktop" => domains.push("browser-or-desktop-session".to_string()),
+        "host-session" => domains.push("host-session".to_string()),
+        _ => {}
+    }
+    if concurrency_policy == "single-session" {
+        domains.push("session".to_string());
+    }
+    if domains.is_empty() {
+        domains.push(format!("server:{}", fallback_domain));
+    }
+    domains.sort();
+    domains.dedup();
+    domains
+}
+
+fn profile_evidence_records(
+    source_type: &str,
+    scope_class: &str,
+    concurrency_policy: &str,
+    state_binding: &str,
+    credential_binding: &str,
+    command: &str,
+    url: &str,
+) -> Vec<JsonValue> {
+    let mut records = Vec::new();
+    records.push(JsonValue::object([
+        ("kind", JsonValue::string("static")),
+        ("confidence", JsonValue::number(0.45)),
+        (
+            "summary",
+            JsonValue::string("Initial adaptive profile inferred from local config, transport, source command/url, and policy fields; runtime probes can only lower or raise this with evidence."),
+        ),
+        (
+            "data",
+            JsonValue::object([
+                ("sourceType", JsonValue::string(source_type.to_string())),
+                ("scopeClass", JsonValue::string(scope_class.to_string())),
+                ("concurrencyPolicy", JsonValue::string(concurrency_policy.to_string())),
+                ("stateBinding", JsonValue::string(state_binding.to_string())),
+                ("credentialBinding", JsonValue::string(credential_binding.to_string())),
+                ("hasCommand", JsonValue::bool(!command.trim().is_empty())),
+                ("hasUrl", JsonValue::bool(!url.trim().is_empty())),
+            ]),
+        ),
+    ]));
+    if source_type == "sse-legacy" || source_type == "sse" {
+        records.push(JsonValue::object([
+            ("kind", JsonValue::string("policy")),
+            ("confidence", JsonValue::number(1)),
+            (
+                "summary",
+                JsonValue::string("Legacy SSE compatibility is not treated as the stable default transport; prefer Streamable HTTP or stdio."),
+            ),
+        ]));
+    }
+    records
 }
 
 fn server_supports_current_platform(platforms: &[String]) -> bool {

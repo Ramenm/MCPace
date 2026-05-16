@@ -1,0 +1,475 @@
+{
+  "status": "pass",
+  "generatedAt": "2026-05-16T15:05:07.441Z",
+  "root": "/mnt/data/work_mcpace/mcpace-v0.6.4-160526-140300",
+  "summary": {
+    "profileCount": 4,
+    "edgeCaseCount": 10,
+    "stableCount": 3,
+    "conservativeCount": 0,
+    "legacyCount": 0
+  },
+  "profiles": [
+    {
+      "serverId": "filesystem",
+      "source": "preset",
+      "transport": "stdio",
+      "launcher": "npx",
+      "parallelSafetyClass": "P3_project_safe",
+      "defaultPoolModel": "project-pool",
+      "maxWorkers": 4,
+      "maxInFlightPerWorker": 1,
+      "lockDomains": [
+        "project",
+        "file"
+      ],
+      "evidence": [
+        {
+          "kind": "static",
+          "confidence": 0.45,
+          "summary": "Profile inferred from static config/preset metadata; safe probes and runtime evidence are required before raising trust."
+        }
+      ]
+    },
+    {
+      "serverId": "context7",
+      "source": "preset",
+      "transport": "stdio",
+      "launcher": "npx",
+      "parallelSafetyClass": "P1_readonly_candidate",
+      "defaultPoolModel": "process-pool",
+      "maxWorkers": 4,
+      "maxInFlightPerWorker": 1,
+      "lockDomains": [
+        "credential-or-provider-budget"
+      ],
+      "evidence": [
+        {
+          "kind": "static",
+          "confidence": 0.45,
+          "summary": "Profile inferred from static config/preset metadata; safe probes and runtime evidence are required before raising trust."
+        }
+      ]
+    },
+    {
+      "serverId": "git",
+      "source": "preset",
+      "transport": "stdio",
+      "launcher": "uvx",
+      "parallelSafetyClass": "P3_project_safe",
+      "defaultPoolModel": "project-pool",
+      "maxWorkers": 4,
+      "maxInFlightPerWorker": 1,
+      "lockDomains": [
+        "repo"
+      ],
+      "evidence": [
+        {
+          "kind": "static",
+          "confidence": 0.45,
+          "summary": "Profile inferred from static config/preset metadata; safe probes and runtime evidence are required before raising trust."
+        }
+      ]
+    },
+    {
+      "serverId": "playwright",
+      "source": "preset",
+      "transport": "stdio",
+      "launcher": "npx",
+      "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+      "defaultPoolModel": "session-pool",
+      "maxWorkers": 2,
+      "maxInFlightPerWorker": 1,
+      "lockDomains": [
+        "browser-context",
+        "session"
+      ],
+      "evidence": [
+        {
+          "kind": "static",
+          "confidence": 0.45,
+          "summary": "Profile inferred from static config/preset metadata; safe probes and runtime evidence are required before raising trust."
+        }
+      ]
+    }
+  ],
+  "edgeCases": [
+    {
+      "id": "unknown-stdio-npx",
+      "raw": {
+        "serverId": "unknown-stdio-npx",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "npx",
+        "trustLevel": "",
+        "policy": {},
+        "args": [
+          "-y",
+          "@vendor/random-mcp"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P0_unknown_stdio",
+        "defaultPoolModel": "process-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Unknown stdio can scale only through isolated workers; a single worker stays one in-flight until probes pass.",
+      "actual": {
+        "parallelSafetyClass": "P0_unknown_stdio",
+        "defaultPoolModel": "process-pool",
+        "maxWorkers": 2,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "server"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "legacy-sse",
+      "raw": {
+        "serverId": "legacy-sse",
+        "source": "edge-fixture",
+        "transport": "sse-legacy",
+        "launcher": "remote-url",
+        "trustLevel": "network",
+        "policy": {},
+        "args": []
+      },
+      "expected": {
+        "parallelSafetyClass": "PX_legacy_compat",
+        "defaultPoolModel": "legacy-disabled",
+        "maxInFlightPerWorker": 0
+      },
+      "rationale": "Legacy SSE compatibility must not be folded into stable Streamable HTTP scheduling.",
+      "actual": {
+        "parallelSafetyClass": "PX_legacy_compat",
+        "defaultPoolModel": "legacy-disabled",
+        "maxWorkers": 0,
+        "maxInFlightPerWorker": 0,
+        "lockDomains": [
+          "legacy-transport"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "remote-streamable-http",
+      "raw": {
+        "serverId": "remote-streamable-http",
+        "source": "edge-fixture",
+        "transport": "streamable-http",
+        "launcher": "remote-url",
+        "trustLevel": "network",
+        "policy": {},
+        "args": []
+      },
+      "expected": {
+        "parallelSafetyClass": "P4_stateless_remote_candidate",
+        "defaultPoolModel": "remote-http-session-pool",
+        "maxInFlightPerWorker": 4
+      },
+      "rationale": "Remote Streamable HTTP can use session/provider budgets, not local stdio process assumptions.",
+      "actual": {
+        "parallelSafetyClass": "P4_stateless_remote_candidate",
+        "defaultPoolModel": "remote-http-session-pool",
+        "maxWorkers": 8,
+        "maxInFlightPerWorker": 4,
+        "lockDomains": [
+          "credential-or-provider-budget"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "credential-scoped-api",
+      "raw": {
+        "serverId": "credential-scoped-api",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "local-command",
+        "trustLevel": "network",
+        "policy": {
+          "credentialBinding": "oauth-subject"
+        },
+        "args": []
+      },
+      "expected": {
+        "parallelSafetyClass": "P2_session_safe",
+        "defaultPoolModel": "credential-session-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Credential identity is a scheduling boundary even when the launcher is local stdio.",
+      "actual": {
+        "parallelSafetyClass": "P2_session_safe",
+        "defaultPoolModel": "credential-session-pool",
+        "maxWorkers": 4,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "credential:oauth-subject"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "project-filesystem-write",
+      "raw": {
+        "serverId": "project-filesystem-write",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "npx",
+        "trustLevel": "filesystem",
+        "policy": {
+          "scopeClass": "project-local",
+          "stateBinding": "file"
+        },
+        "args": []
+      },
+      "expected": {
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Project-local file tools require project/file lock domains; worker concurrency comes from isolation.",
+      "actual": {
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool",
+        "maxWorkers": 4,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "project",
+          "file"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "repo-git-write",
+      "raw": {
+        "serverId": "repo-git-write",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "uvx",
+        "trustLevel": "repository",
+        "policy": {
+          "scopeClass": "project-local",
+          "stateBinding": "repo"
+        },
+        "args": []
+      },
+      "expected": {
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Git/repository tools can parallelize across repos but must serialize conflicting repo writes.",
+      "actual": {
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool",
+        "maxWorkers": 4,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "repo"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "browser-automation",
+      "raw": {
+        "serverId": "browser-automation",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "npx",
+        "trustLevel": "browser",
+        "policy": {
+          "stateBinding": "host-desktop"
+        },
+        "args": [
+          "@playwright/mcp"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+        "defaultPoolModel": "session-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Browser automation needs browser-context/session isolation before parallel scheduling.",
+      "actual": {
+        "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+        "defaultPoolModel": "session-pool",
+        "maxWorkers": 2,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "browser-context",
+          "session"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "shared-exclusive-desktop",
+      "raw": {
+        "serverId": "shared-exclusive-desktop",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "local-command",
+        "trustLevel": "desktop",
+        "policy": {
+          "scopeClass": "shared-exclusive",
+          "concurrencyPolicy": "single-session"
+        },
+        "args": []
+      },
+      "expected": {
+        "parallelSafetyClass": "PX_forbidden",
+        "defaultPoolModel": "singleton",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Desktop/host-global state stays singleton unless a stronger isolation key is proven.",
+      "actual": {
+        "parallelSafetyClass": "PX_forbidden",
+        "defaultPoolModel": "singleton",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "session"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "readonly-stdio-candidate",
+      "raw": {
+        "serverId": "readonly-stdio-candidate",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "npx",
+        "trustLevel": "network",
+        "policy": {
+          "concurrencyPolicy": "multi-reader"
+        },
+        "args": []
+      },
+      "expected": {
+        "parallelSafetyClass": "P1_readonly_candidate",
+        "defaultPoolModel": "process-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Read-heavy stdio stays one in-flight per worker until safe probes prove higher concurrency.",
+      "actual": {
+        "parallelSafetyClass": "P1_readonly_candidate",
+        "defaultPoolModel": "process-pool",
+        "maxWorkers": 4,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "credential-or-provider-budget"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "oci-unknown",
+      "raw": {
+        "serverId": "oci-unknown",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "oci",
+        "trustLevel": "",
+        "policy": {},
+        "args": [
+          "docker",
+          "run",
+          "example/mcp"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P0_unknown_stdio",
+        "defaultPoolModel": "process-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Container launchers are still untrusted upstream code until classified/probed.",
+      "actual": {
+        "parallelSafetyClass": "P0_unknown_stdio",
+        "defaultPoolModel": "process-pool",
+        "maxWorkers": 2,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "server"
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "server-profile-fields",
+      "ok": true,
+      "detail": "ServerRecord exposes adaptive profile fields."
+    },
+    {
+      "id": "source-type-normalization",
+      "ok": true,
+      "detail": "Legacy SSE is separated from stable Streamable HTTP."
+    },
+    {
+      "id": "client-plan-scheduling",
+      "ok": true,
+      "detail": "Client routing plan includes adaptive worker-pool planning and probe-gated fallback."
+    },
+    {
+      "id": "schema-profile",
+      "ok": true,
+      "detail": "Server profile schema exists."
+    },
+    {
+      "id": "schema-worker",
+      "ok": true,
+      "detail": "Worker plan schema exists."
+    },
+    {
+      "id": "docs",
+      "ok": true,
+      "detail": "Adaptive orchestration architecture doc exists."
+    },
+    {
+      "id": "edge-case-docs",
+      "ok": true,
+      "detail": "Adaptive edge-case coverage doc exists."
+    },
+    {
+      "id": "no-legacy-default",
+      "ok": true,
+      "detail": "Legacy transport is never auto-parallelized."
+    },
+    {
+      "id": "unknown-is-conservative",
+      "ok": true,
+      "detail": "Unknown profiles are maxInFlightPerWorker=1."
+    },
+    {
+      "id": "edge-case-matrix",
+      "ok": true,
+      "detail": "Synthetic edge-case matrix covers unknown, legacy, remote, credential, project, repo, browser, desktop, readonly, and OCI classifications."
+    },
+    {
+      "id": "edge-locks-present",
+      "ok": true,
+      "detail": "Every edge-case classification carries at least one lock or scheduling domain."
+    }
+  ],
+  "warnings": [
+    "playwright: high-risk/legacy profile requires explicit policy before parallelism."
+  ],
+  "blockers": []
+}

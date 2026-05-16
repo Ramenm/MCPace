@@ -1,10 +1,7 @@
 use super::http_boundary::request_header_string;
 use super::HttpRequest;
-use crate::json::JsonValue;
 use crate::resources;
-use std::collections::hash_map::DefaultHasher;
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 
 pub(super) const DEFAULT_MCP_HTTP_SESSION_TTL_MS: u128 = 60 * 60 * 1000;
 pub(super) const DEFAULT_MCP_HTTP_SESSION_LIMIT: usize = 1024;
@@ -288,23 +285,13 @@ impl McpHttpSessionStore {
 }
 
 pub(super) fn generated_mcp_http_session_id(
-    request: &HttpRequest,
-    id: &JsonValue,
-    protocol: &str,
-) -> String {
-    if let Some(random) = os_random_hex(16) {
-        return format!("mcpace-{}", random);
-    }
-
-    let mut hasher = DefaultHasher::new();
-    "mcpace-http-session-v1".hash(&mut hasher);
-    super::now_ms().hash(&mut hasher);
-    std::process::id().hash(&mut hasher);
-    request_header_string(Some(request), "host").hash(&mut hasher);
-    request.body.hash(&mut hasher);
-    id.to_compact_string().hash(&mut hasher);
-    protocol.hash(&mut hasher);
-    format!("mcpace-fallback-{:016x}", hasher.finish())
+    _request: &HttpRequest,
+    _id: &crate::json::JsonValue,
+    _protocol: &str,
+) -> Result<String, String> {
+    let random = os_random_hex(16)
+        .map_err(|error| format!("OS randomness unavailable: {}", error))?;
+    Ok(format!("mcpace-{}", random))
 }
 
 pub(super) fn normalize_mcp_http_session_id(value: &str) -> Option<String> {
@@ -322,10 +309,10 @@ pub(super) fn normalize_mcp_http_session_id(value: &str) -> Option<String> {
     }
 }
 
-fn os_random_hex(byte_count: usize) -> Option<String> {
+fn os_random_hex(byte_count: usize) -> Result<String, getrandom::Error> {
     let mut bytes = vec![0u8; byte_count];
-    getrandom::getrandom(&mut bytes).ok()?;
-    Some(hex_bytes(&bytes))
+    getrandom::getrandom(&mut bytes)?;
+    Ok(hex_bytes(&bytes))
 }
 
 fn hex_bytes(bytes: &[u8]) -> String {

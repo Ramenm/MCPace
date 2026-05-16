@@ -2,6 +2,11 @@
 
 This is the operating contract for MCPace tool visibility and upstream tool execution.
 
+
+## High-risk framing
+
+Treat MCP tools as an arbitrary code execution and arbitrary data access surface unless a narrower policy has been proven. Discovery metadata can influence model routing, but execution is a side-effecting operation. Mutating tools, paid API tools, browser automation, filesystem access, shell/process launchers, cloud/database tools, and remote-provider tools require explicit consent and policy review before live calls.
+
 ## Problem
 
 MCP clients decide what to call from the tools visible in `tools/list` plus the natural-language descriptions returned by discovery tools. With many upstream servers, accidental exposure is risky: a stale cached tool, a hallucinated name, a malicious description, or a broad native projection can make a client try a tool that should have stayed behind brokered routing.

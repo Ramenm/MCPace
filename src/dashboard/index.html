@@ -154,6 +154,11 @@
       }
 
       button:active { transform: translateY(0); }
+      button:disabled {
+        cursor: not-allowed;
+        opacity: 0.58;
+        transform: none;
+      }
       button.accent {
         background: linear-gradient(135deg, rgba(14, 165, 233, 0.28), rgba(124, 58, 237, 0.34));
       }
@@ -378,6 +383,10 @@
             <div class="meta-value" id="last-refresh">—</div>
           </div>
           <div class="meta-card">
+            <div class="meta-label">Refresh mode</div>
+            <div class="meta-value" id="refresh-mode">initializing</div>
+          </div>
+          <div class="meta-card">
             <div class="meta-label">Hub state</div>
             <div class="meta-value" id="hero-hub-state">—</div>
           </div>
@@ -494,12 +503,21 @@
         overview: null,
         logs: [],
         enabledOnly: true,
-        serverQuery: ""
+        serverQuery: "",
+        refreshSeq: 0,
+        activeRefreshController: null,
+        refreshInFlight: false,
+        autoRefreshTimer: null,
+        lastRefreshError: null
       };
+
+      const REFRESH_INTERVAL_MS = 15000;
+      const HIDDEN_REFRESH_INTERVAL_MS = 60000;
 
       const els = {
         rootPath: document.getElementById("root-path"),
         lastRefresh: document.getElementById("last-refresh"),
+        refreshMode: document.getElementById("refresh-mode"),
         heroHubState: document.getElementById("hero-hub-state"),
         warningCount: document.getElementById("warning-count"),
         overviewCache: document.getElementById("overview-cache"),
@@ -525,8 +543,54 @@
         clientSummaryChips: document.getElementById("client-summary-chips")
       };
 
-      async function fetchJson(url, options) {
-        const response = await fetch(url, options);
+      function isDocumentHidden() {
+        return document.visibilityState === "hidden";
+      }
+
+      function updateRefreshMode(label) {
+        if (!els.refreshMode) return;
+        if (label) {
+          els.refreshMode.textContent = label;
+          return;
+        }
+        if (state.refreshInFlight) {
+          els.refreshMode.textContent = "refreshing";
+        } else if (isDocumentHidden()) {
+          els.refreshMode.textContent = "paused · hidden tab";
+        } else if (state.lastRefreshError) {
+          els.refreshMode.textContent = "degraded · retrying";
+        } else {
+          els.refreshMode.textContent = `auto · ${Math.round(REFRESH_INTERVAL_MS / 1000)}s`;
+        }
+      }
+
+      function setRefreshBusy(isBusy, reason = "") {
+        state.refreshInFlight = Boolean(isBusy);
+        const refreshButton = document.getElementById("refresh-button");
+        if (refreshButton) {
+          refreshButton.disabled = Boolean(isBusy);
+          refreshButton.textContent = isBusy ? "Refreshing…" : "Refresh dashboard";
+        }
+        updateRefreshMode(isBusy ? `refreshing · ${reason || "manual"}` : null);
+      }
+
+      function scheduleAutoRefresh() {
+        if (state.autoRefreshTimer !== null) {
+          window.clearTimeout(state.autoRefreshTimer);
+        }
+        const delay = isDocumentHidden() ? HIDDEN_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
+        state.autoRefreshTimer = window.setTimeout(() => {
+          refreshDashboard({ reason: "auto" });
+        }, delay);
+        updateRefreshMode();
+      }
+
+      async function fetchJson(url, options = {}) {
+        const headers = {
+          accept: "application/json",
+          ...(options.headers || {})
+        };
+        const response = await fetch(url, { ...options, headers });
         if (!response.ok) {
           throw new Error(`${response.status} ${response.statusText}`);
         }
@@ -534,28 +598,75 @@
       }
 
       async function refreshDashboard(options = {}) {
+        const force = Boolean(options.force);
+        const reason = options.reason || (force ? "manual-force" : "manual");
+        if (!force && isDocumentHidden()) {
+          scheduleAutoRefresh();
+          return;
+        }
+
+        const refreshId = state.refreshSeq + 1;
+        state.refreshSeq = refreshId;
+        if (state.activeRefreshController) {
+          state.activeRefreshController.abort();
+        }
+        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+        state.activeRefreshController = controller;
+        setRefreshBusy(true, reason);
+
         try {
-          const overviewUrl = options.force ? "/api/overview?refresh=1" : "/api/overview";
-          const [overview, logs] = await Promise.all([
-            fetchJson(overviewUrl),
-            fetchJson("/api/logs?tail=18")
+          const overviewUrl = force ? "/api/overview?refresh=1" : "/api/overview";
+          const requestOptions = controller ? { signal: controller.signal } : {};
+          const [overviewResult, logsResult] = await Promise.allSettled([
+            fetchJson(overviewUrl, requestOptions),
+            fetchJson("/api/logs?tail=18", requestOptions)
           ]);
-          state.overview = overview;
-          state.logs = Array.isArray(logs) ? logs : [];
+
+          if (refreshId !== state.refreshSeq) {
+            return;
+          }
+          if (overviewResult.status === "rejected") {
+            throw overviewResult.reason;
+          }
+
+          state.overview = overviewResult.value;
+          if (logsResult.status === "fulfilled") {
+            state.logs = Array.isArray(logsResult.value) ? logsResult.value : [];
+          } else {
+            state.lastRefreshError = `Logs refresh failed: ${logsResult.reason?.message || logsResult.reason}`;
+          }
+          if (logsResult.status === "fulfilled") {
+            state.lastRefreshError = null;
+          }
           render();
         } catch (error) {
-          console.error(error);
-          els.runtimeSummary.textContent = `Dashboard refresh failed: ${error.message}`;
+          if (error?.name === "AbortError") {
+            return;
+          }
+          if (refreshId === state.refreshSeq) {
+            console.error(error);
+            state.lastRefreshError = error?.message || String(error);
+            els.runtimeSummary.textContent = `Dashboard refresh failed: ${state.lastRefreshError}`;
+            updateRefreshMode();
+          }
+        } finally {
+          if (refreshId === state.refreshSeq) {
+            state.activeRefreshController = null;
+            setRefreshBusy(false);
+            scheduleAutoRefresh();
+          }
         }
       }
 
       async function runAction(path) {
         try {
           await fetchJson(path, { method: "POST" });
-          await refreshDashboard({ force: true });
+          await refreshDashboard({ force: true, reason: "action" });
         } catch (error) {
           console.error(error);
-          els.runtimeSummary.textContent = `Action failed: ${error.message}`;
+          state.lastRefreshError = error?.message || String(error);
+          els.runtimeSummary.textContent = `Action failed: ${state.lastRefreshError}`;
+          updateRefreshMode();
         }
       }
 
@@ -584,8 +695,8 @@
 
       function formatDate(value) {
         if (value === null || value === undefined || value === "") return "—";
-        if (typeof value === "number") return new Date(value).toLocaleString();
-        return new Date(Number(value)).toLocaleString();
+        const date = typeof value === "number" ? new Date(value) : new Date(value);
+        return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
       }
 
       function render() {
@@ -646,6 +757,7 @@
 
         els.runtimeSummary.textContent =
           `Hub ${hub.status || "unknown"} · ${readiness.serverCount ?? 0} configured servers · generated ${formatDate(overview.generatedAtMs)}`;
+        updateRefreshMode();
 
         const enabledCount = servers.filter(server => server.effectiveEnabled).length;
         const requiredCount = servers.filter(server => server.required).length;
@@ -776,8 +888,25 @@
         render();
       });
 
-      refreshDashboard();
-      window.setInterval(refreshDashboard, 15000);
+      if (typeof document.addEventListener === "function") {
+        document.addEventListener("visibilitychange", () => {
+          if (isDocumentHidden()) {
+            scheduleAutoRefresh();
+            return;
+          }
+          refreshDashboard({ force: true, reason: "visible" });
+        });
+      }
+
+      window.__mcpaceDashboard = {
+        refreshDashboard,
+        runAction,
+        render,
+        scheduleAutoRefresh,
+        state
+      };
+
+      refreshDashboard({ reason: "initial" });
     </script>
   </body>
 </html>

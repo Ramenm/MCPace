@@ -1,0 +1,151 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpace.local/schemas/mcpace-worker-plan.schema.json",
+  "title": "MCPace Worker Plan",
+  "description": "Scheduler-level worker/pool/lock decision derived from a server profile, a request context, and policy guardrails.",
+  "type": "object",
+  "required": [
+    "serverId",
+    "source",
+    "parallelSafetyClass",
+    "poolModel",
+    "workerPoolKey",
+    "maxWorkers",
+    "maxInFlightPerWorker",
+    "affinityKeys",
+    "locks",
+    "degradationPolicy"
+  ],
+  "properties": {
+    "serverId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "poolModel": {
+      "type": "string",
+      "enum": [
+        "singleton",
+        "process-pool",
+        "session-pool",
+        "project-pool",
+        "credential-session-pool",
+        "remote-http-session-pool",
+        "legacy-disabled"
+      ]
+    },
+    "workerPoolKey": {
+      "type": "string",
+      "minLength": 1
+    },
+    "maxWorkers": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxInFlightPerWorker": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "affinityKeys": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "chatId",
+          "sessionId",
+          "transportSessionId",
+          "clientInstanceId",
+          "projectRoot",
+          "credentialProfile",
+          "tenantId",
+          "browserContextId"
+        ]
+      },
+      "uniqueItems": true
+    },
+    "locks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "domain",
+          "mode",
+          "key"
+        ],
+        "properties": {
+          "domain": {
+            "type": "string",
+            "minLength": 1
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write",
+              "exclusive",
+              "token-bucket"
+            ]
+          },
+          "key": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "requiresConsent": {
+      "type": "boolean",
+      "default": false
+    },
+    "budgetClass": {
+      "type": "string",
+      "enum": [
+        "free",
+        "metered",
+        "paid",
+        "enterprise",
+        "unknown"
+      ],
+      "default": "unknown"
+    },
+    "degradationPolicy": {
+      "type": "object",
+      "required": [
+        "onConflict",
+        "onCrashLoop",
+        "onAuthMixup",
+        "onLatencyRegression"
+      ],
+      "properties": {
+        "onConflict": {
+          "type": "string"
+        },
+        "onCrashLoop": {
+          "type": "string"
+        },
+        "onAuthMixup": {
+          "type": "string"
+        },
+        "onLatencyRegression": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "string",
+      "enum": [
+        "runtime-profile",
+        "edge-fixture",
+        "probe",
+        "runtime-observation",
+        "operator-override"
+      ]
+    },
+    "parallelSafetyClass": {
+      "type": "string",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}

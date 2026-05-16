@@ -19,6 +19,14 @@ pub struct ServerRecord {
     pub state_binding: String,
     pub credential_binding: String,
     pub parallelism_limit: usize,
+    pub parallel_safety_class: String,
+    pub default_pool_model: String,
+    pub max_workers: usize,
+    pub max_in_flight_per_worker: usize,
+    pub transport_status: String,
+    pub launcher_kind: String,
+    pub lock_domains: Vec<String>,
+    pub profile_evidence: Vec<JsonValue>,
     pub conflict_domain: String,
     pub project_root_mode: String,
     pub worktree_binding: String,
@@ -82,6 +90,29 @@ impl ServerRecord {
                 "parallelismLimit",
                 JsonValue::number(self.parallelism_limit),
             ),
+            (
+                "parallelSafetyClass",
+                JsonValue::string(self.parallel_safety_class.clone()),
+            ),
+            (
+                "defaultPoolModel",
+                JsonValue::string(self.default_pool_model.clone()),
+            ),
+            ("maxWorkers", JsonValue::number(self.max_workers)),
+            (
+                "maxInFlightPerWorker",
+                JsonValue::number(self.max_in_flight_per_worker),
+            ),
+            (
+                "transportStatus",
+                JsonValue::string(self.transport_status.clone()),
+            ),
+            ("launcherKind", JsonValue::string(self.launcher_kind.clone())),
+            (
+                "lockDomains",
+                JsonValue::array(self.lock_domains.iter().cloned().map(JsonValue::string)),
+            ),
+            ("profileEvidence", JsonValue::array(self.profile_evidence.clone())),
             (
                 "conflictDomain",
                 JsonValue::string(self.conflict_domain.clone()),
@@ -164,6 +195,29 @@ impl ServerRecord {
                         "parallelismLimit",
                         JsonValue::number(self.parallelism_limit),
                     ),
+                    (
+                        "parallelSafetyClass",
+                        JsonValue::string(self.parallel_safety_class.clone()),
+                    ),
+                    (
+                        "defaultPoolModel",
+                        JsonValue::string(self.default_pool_model.clone()),
+                    ),
+                    ("maxWorkers", JsonValue::number(self.max_workers)),
+                    (
+                        "maxInFlightPerWorker",
+                        JsonValue::number(self.max_in_flight_per_worker),
+                    ),
+                    (
+                        "transportStatus",
+                        JsonValue::string(self.transport_status.clone()),
+                    ),
+                    ("launcherKind", JsonValue::string(self.launcher_kind.clone())),
+                    (
+                        "lockDomains",
+                        JsonValue::array(self.lock_domains.iter().cloned().map(JsonValue::string)),
+                    ),
+                    ("profileEvidence", JsonValue::array(self.profile_evidence.clone())),
                     (
                         "conflictDomain",
                         JsonValue::string(self.conflict_domain.clone()),

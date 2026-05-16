@@ -1,6 +1,6 @@
 {
   "name": "mcpace",
-  "version": "0.6.0",
+  "version": "0.6.5",
   "ports": {
     "hub": 12223,
     "serve": 39022

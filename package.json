@@ -1,6 +1,6 @@
 {
   "name": "mcpace-workspace",
-  "version": "0.6.0",
+  "version": "0.6.5",
   "private": true,
   "workspaces": [
     "packages/npm/cli"
@@ -115,7 +115,32 @@
     "verify:upstream-failsafe": "node scripts/simulate-upstream-failsafe.mjs --servers 50 --tools 200000 --json --write reports/upstream-failsafe-latest.json --memory-limit-mib 512",
     "benchmark:upstream-failsafe": "node scripts/simulate-upstream-failsafe.mjs --servers 100 --tools 500000 --json --write reports/upstream-failsafe-500k-latest.json --memory-limit-mib 768 --retries 1",
     "verify:tool-exposure-safety": "node scripts/tool-exposure-safety-audit.mjs --json --write reports/tool-exposure-safety-latest.json --strict",
-    "verify:tool-message-integrity": "node scripts/tool-message-integrity-audit.mjs --json --write reports/tool-message-integrity-latest.json --strict"
+    "verify:tool-message-integrity": "node scripts/tool-message-integrity-audit.mjs --json --write reports/tool-message-integrity-latest.json --strict",
+    "verify:performance": "node scripts/performance-smoke.mjs --json --write reports/performance-smoke-latest.json --markdown reports/performance-smoke-latest.md",
+    "benchmark:performance:smoke": "node scripts/performance-smoke.mjs --json --no-write",
+    "verify:mcp-install-scenarios": "node scripts/mcp-install-scenario-smoke.mjs --json --write reports/mcp-install-scenario-smoke-latest.json --markdown reports/mcp-install-scenario-smoke-latest.md",
+    "benchmark:mcp-install-scenarios": "node scripts/mcp-install-scenario-smoke.mjs --json --no-write --servers 100",
+    "verify:dashboard-chaos": "node scripts/dashboard-chaos-smoke.mjs --json --write reports/dashboard-chaos-smoke-latest.json --markdown reports/dashboard-chaos-smoke-latest.md",
+    "benchmark:dashboard-chaos": "node scripts/dashboard-chaos-smoke.mjs --json --no-write --tabs 10 --events 160 --servers 250 --clients 40",
+    "verify:experience": "npm run verify:performance && npm run verify:dashboard-chaos && npm run verify:overhead-audit && npm run verify:multi-client-runtime && npm run verify:adaptive-parallelism",
+    "verify:lifecycle-blast-radius": "node scripts/lifecycle-blast-radius-smoke.mjs --json --write reports/lifecycle-blast-radius-latest.json --markdown reports/lifecycle-blast-radius-latest.md",
+    "benchmark:lifecycle-blast-radius": "node scripts/lifecycle-blast-radius-smoke.mjs --json --no-write",
+    "verify:hardening": "npm run verify:mcp-install-scenarios && npm run verify:lifecycle-blast-radius && npm run verify:experience && npm run verify:tool-exposure-safety && npm run verify:tool-message-integrity && npm run verify:secrets && npm run verify:supply-chain && npm run verify:external-tool-internet",
+    "verify:playwright-e2e": "node scripts/playwright-dashboard-e2e.mjs --json --write reports/playwright-dashboard-e2e-latest.json --markdown reports/playwright-dashboard-e2e-latest.md",
+    "benchmark:playwright-e2e": "node scripts/playwright-dashboard-e2e.mjs --json --no-write",
+    "verify:external-tool-internet": "node scripts/external-tool-internet-smoke.mjs --json --write reports/external-tool-internet-latest.json --markdown reports/external-tool-internet-latest.md",
+    "verify:external-tool-internet:live": "node scripts/external-tool-internet-smoke.mjs --json --live-internet --write reports/external-tool-internet-live-latest.json --markdown reports/external-tool-internet-live-latest.md",
+    "verify:live-experience": "npm run verify:playwright-e2e && npm run verify:external-tool-internet:live",
+    "verify:overhead-audit": "node scripts/overhead-audit.mjs --json --write reports/overhead-audit-latest.json --markdown reports/overhead-audit-latest.md",
+    "benchmark:overhead-audit": "node scripts/overhead-audit.mjs --json --no-write --runs 15",
+    "verify:browser-experience": "npm run verify:playwright-e2e && npm run verify:multi-client-runtime",
+    "verify:multi-client-runtime": "node scripts/multi-client-runtime-audit.mjs --json --write reports/multi-client-runtime-audit-latest.json --markdown reports/multi-client-runtime-audit-latest.md",
+    "benchmark:multi-client-runtime": "node scripts/multi-client-runtime-audit.mjs --json --no-write",
+    "verify:adaptive-parallelism": "node scripts/adaptive-parallelism-audit.mjs --json --write reports/adaptive-parallelism-latest.json --markdown reports/adaptive-parallelism-latest.md",
+    "benchmark:adaptive-parallelism": "node scripts/adaptive-parallelism-audit.mjs --json --no-write",
+    "verify:orchestration": "npm run verify:adaptive-parallelism && npm run verify:adaptive-worker-plan && npm run verify:multi-client-runtime && npm run verify:lifecycle-blast-radius && npm run verify:performance",
+    "verify:adaptive-worker-plan": "node scripts/adaptive-worker-plan.mjs --json --write reports/adaptive-worker-plan-latest.json --markdown reports/adaptive-worker-plan-latest.md",
+    "benchmark:adaptive-worker-plan": "node scripts/adaptive-worker-plan.mjs --json"
   },
   "packageManager": "npm@11.13.0",
   "devEngines": {

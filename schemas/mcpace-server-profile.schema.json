@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mcpace.local/schemas/mcpace-server-profile.schema.json",
+  "title": "MCPace Server Profile",
+  "description": "Evidence-backed adaptive orchestration profile for an upstream MCP server. This schema is MCPace-owned and complements, rather than replaces, the MCP spec.",
+  "type": "object",
+  "required": [
+    "serverId",
+    "transport",
+    "transportStatus",
+    "launcher",
+    "parallelSafetyClass",
+    "defaultPoolModel",
+    "maxWorkers",
+    "maxInFlightPerWorker",
+    "lockDomains",
+    "evidence"
+  ],
+  "properties": {
+    "serverId": { "type": "string", "minLength": 1 },
+    "version": { "type": "string" },
+    "transport": {
+      "type": "string",
+      "enum": ["stdio", "streamable-http", "sse-legacy", "custom"]
+    },
+    "transportStatus": {
+      "type": "string",
+      "enum": ["stable", "legacy-compat", "custom", "inferred"]
+    },
+    "launcher": {
+      "type": "string",
+      "enum": ["npx", "uvx", "npm", "pypi", "nuget", "oci", "mcpb", "remote-url", "local-command", "unspecified", "custom"]
+    },
+    "parallelSafetyClass": {
+      "type": "string",
+      "enum": [
+        "P0_unknown",
+        "P0_unknown_stdio",
+        "P1_readonly_candidate",
+        "P2_session_safe",
+        "P3_project_safe",
+        "P4_stateless_remote_candidate",
+        "PX_forbidden",
+        "PX_forbidden_browser_until_context_isolated",
+        "PX_legacy_compat"
+      ]
+    },
+    "defaultPoolModel": {
+      "type": "string",
+      "enum": [
+        "singleton",
+        "process-pool",
+        "session-pool",
+        "project-pool",
+        "credential-session-pool",
+        "remote-http-session-pool",
+        "legacy-disabled"
+      ]
+    },
+    "maxWorkers": { "type": "integer", "minimum": 0 },
+    "maxInFlightPerWorker": { "type": "integer", "minimum": 0 },
+    "lockDomains": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "uniqueItems": true
+    },
+    "evidence": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/evidenceRecord" }
+    }
+  },
+  "$defs": {
+    "evidenceRecord": {
+      "type": "object",
+      "required": ["kind", "confidence", "summary"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["static", "handshake", "annotation", "safe-probe", "runtime", "policy"]
+        },
+        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "data": { "type": "object" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

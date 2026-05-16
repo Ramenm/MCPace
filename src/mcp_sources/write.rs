@@ -165,9 +165,11 @@ pub fn write_mcp_server_entry(
         ));
     };
 
-    let existed_before = servers
+    let existing_key = servers
         .keys()
-        .any(|key| normalize_server_name(key) == normalized_name);
+        .find(|key| normalize_server_name(key) == normalized_name)
+        .cloned();
+    let existed_before = existing_key.is_some();
     if existed_before && !options.force {
         return Err(format!(
             "server '{}' already exists in {}; rerun with --force to replace it",
@@ -201,6 +203,11 @@ pub fn write_mcp_server_entry(
         return Ok(result);
     }
 
+    if let Some(existing_key) = existing_key {
+        if existing_key != display_name {
+            servers.remove(&existing_key);
+        }
+    }
     servers.insert(display_name, entry);
     if let Some(parent) = target_path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {

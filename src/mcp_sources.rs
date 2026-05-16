@@ -68,13 +68,17 @@ pub fn load_mcp_server_registry(root_path: &Path) -> Result<McpServerRegistry, S
             ));
             continue;
         }
-        let value = json_helpers::read_json_file(&source.path).map_err(|error| {
-            format!(
-                "failed to read MCP settings source '{}': {}",
-                source.path.display(),
-                error
-            )
-        })?;
+        let value = match json_helpers::read_json_file(&source.path) {
+            Ok(value) => value,
+            Err(error) => {
+                registry.warnings.push(format!(
+                    "failed to read MCP settings source '{}': {}; skipping",
+                    source.path.display(),
+                    error
+                ));
+                continue;
+            }
+        };
         registry.sources.push(source.path.display().to_string());
         let Some(servers) = json_helpers::object_at_path(&value, &["mcpServers"]) else {
             registry.warnings.push(format!(
@@ -142,13 +146,23 @@ pub fn load_mcp_source_report(root_path: &Path) -> Result<McpSourceReport, Strin
             });
             continue;
         }
-        let value = json_helpers::read_json_file(&source.path).map_err(|error| {
-            format!(
-                "failed to read MCP settings source '{}': {}",
-                source.path.display(),
-                error
-            )
-        })?;
+        let value = match json_helpers::read_json_file(&source.path) {
+            Ok(value) => value,
+            Err(error) => {
+                registry.warnings.push(format!(
+                    "failed to read MCP settings source '{}': {}; skipping",
+                    source.path.display(),
+                    error
+                ));
+                source_statuses.push(McpSourceStatus {
+                    path: source.path.display().to_string(),
+                    origin: source.origin,
+                    exists: true,
+                    server_count: 0,
+                });
+                continue;
+            }
+        };
         registry.sources.push(source.path.display().to_string());
         let mut source_server_count = 0usize;
         if let Some(servers) = json_helpers::object_at_path(&value, &["mcpServers"]) {

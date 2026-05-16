@@ -1,6 +1,6 @@
 # MCPace docs
 
-This packaged copy tracks repo version `0.6.0`.
+This packaged copy tracks repo version `0.6.5`.
 
 MCPace is a Rust-first local MCP hub. It ships with no upstream MCP servers enabled by default and no Rust-hardcoded recommended upstream catalog; useful presets live in editable data files. Use `mcpace connect` as the read-only top-down guide. Configure user-supplied stdio MCP servers with `mcpace server presets`, `mcpace server starter`, `mcpace server install`, `mcpace server import`, `mcpace server add`, `mcpace server test`, `mcpace server enable` / `mcpace server disable`, and `mcpace server remove`, root `mcp_settings.json`, `mcp_settings.d/*.json`, `mcpSettings.includePaths` / `mcpSettings.includeDirs`, or `MCPACE_MCP_SETTINGS` / `MCPACE_MCP_SETTINGS_DIRS`; extend useful presets with `mcpPresets.includePaths` or `MCPACE_MCP_PRESETS`; add `mcpace.config.json` server policy only when you need extra routing, platform, or tool-risk metadata.
 
@@ -29,7 +29,7 @@ mcpace connect cursor-local --server filesystem
 ```
 
 
-`product-practice.md` describes what not to claim before Rust/runtime proof.
+`product-practice.md` describes what not to claim before Rust/runtime proof. `performance-verification.md`, `multi-client-runtime.md`, `adaptive-mcp-orchestration.md`, and `adaptive-edge-case-coverage.md` define the source-level performance smoke pass and the host-specific proof still required before release performance claims.
 
 Install/readiness artifacts now include `reports/boot-harness-latest.json`, `reports/boot-harness-latest.md`, `reports/install-readiness-latest.json`, and `reports/code-inventory-latest.*`. Use these before claiming an install path is ready.
 
@@ -45,6 +45,9 @@ npm run verify:product-practice
 npm run verify:defect-gates
 npm run verify:bug-sweep
 npm run verify:runtime-trace
+npm run verify:performance
+npm run verify:dashboard-chaos
+npm run verify:experience
 npm run verify:rust-quality
 cargo fmt --all -- --check
 cargo check --all-targets --locked
@@ -101,3 +104,7 @@ Upstream stderr included in errors is bounded and sanitized before display so di
 ## Packaged source archive
 
 This ZIP is a clean source archive. It intentionally excludes `.git`, `node_modules`, build outputs, caches, generated reports, and stale prebuilt binaries. Build the Rust binary locally before creating npm/platform release artifacts.
+
+- [Performance verification](performance-verification.md) - source-level performance smoke checks and host-specific runtime proof requirements.
+
+- [Developer operating mode](developer-operating-mode.md) - grounded task intake, multi-track analysis, eval governance, cautious high-risk answers, and side-effect boundaries for maintainer/agent work.

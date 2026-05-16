@@ -1,0 +1,531 @@
+{
+  "schema": "mcpace.performanceSmoke.v1",
+  "status": "pass",
+  "generatedAt": "2026-05-16T15:05:09.622Z",
+  "environment": {
+    "node": "v22.16.0",
+    "platform": "linux",
+    "arch": "x64",
+    "cpuCount": 56,
+    "availableParallelism": 56
+  },
+  "scenario": {
+    "requests": 80,
+    "concurrency": 8,
+    "timeoutMs": 5000,
+    "servers": 20,
+    "tools": 50000,
+    "memoryLimitMiB": 256,
+    "maxHttpP95Ms": null
+  },
+  "summary": {
+    "runtimeHttpMaxP95Ms": 28.64,
+    "runtimeHttpFailures": 0,
+    "toolScaleElapsedMs": 284,
+    "mixedUpstreamsElapsedMs": 106,
+    "upstreamFailsafeElapsedMs": 2,
+    "toolScaleHeapDeltaMiB": 1.5,
+    "mixedUpstreamsHeapDeltaMiB": 1.7,
+    "upstreamFailsafeHeapDeltaMiB": 0
+  },
+  "checks": [
+    {
+      "id": "runtime-http-benchmark-ran",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "id": "runtime-http-no-failures",
+      "ok": true,
+      "detail": "failures=0"
+    },
+    {
+      "id": "runtime-http-latency-measured",
+      "ok": true,
+      "detail": "maxP95Ms=28.64"
+    },
+    {
+      "id": "toolScale-ran",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "id": "toolScale-status-pass",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "id": "toolScale-heap-budget",
+      "ok": true,
+      "detail": "heapDeltaMiB=1.5; limit=256"
+    },
+    {
+      "id": "mixedUpstreams-ran",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "id": "mixedUpstreams-status-pass",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "id": "mixedUpstreams-heap-budget",
+      "ok": true,
+      "detail": "heapDeltaMiB=1.7; limit=256"
+    },
+    {
+      "id": "upstreamFailsafe-ran",
+      "ok": true,
+      "detail": "exit=0"
+    },
+    {
+      "id": "upstreamFailsafe-status-pass",
+      "ok": true,
+      "detail": "status=pass"
+    },
+    {
+      "id": "upstreamFailsafe-heap-budget",
+      "ok": true,
+      "detail": "heapDeltaMiB=0; limit=256"
+    }
+  ],
+  "reports": {
+    "runtimeHttp": {
+      "ok": true,
+      "generatedAt": "2026-05-16T15:05:09.766Z",
+      "baseUrl": "http://127.0.0.1:46267",
+      "requestCountPerPath": 80,
+      "configuredConcurrency": 8,
+      "timeoutMs": 5000,
+      "results": [
+        {
+          "path": "/healthz",
+          "url": "http://127.0.0.1:46267/healthz",
+          "requests": 80,
+          "concurrency": 8,
+          "durationMs": 124.27,
+          "throughputPerSecond": 643.74,
+          "failureCount": 0,
+          "statusCounts": {
+            "200": 80
+          },
+          "errors": {},
+          "latencyMs": {
+            "min": 5.81,
+            "p50": 9.07,
+            "p95": 28.64,
+            "p99": 33.02,
+            "max": 33.02,
+            "avg": 11.65
+          }
+        },
+        {
+          "path": "/api/resources",
+          "url": "http://127.0.0.1:46267/api/resources",
+          "requests": 80,
+          "concurrency": 8,
+          "durationMs": 91.93,
+          "throughputPerSecond": 870.25,
+          "failureCount": 0,
+          "statusCounts": {
+            "200": 80
+          },
+          "errors": {},
+          "latencyMs": {
+            "min": 6.58,
+            "p50": 7.98,
+            "p95": 12.55,
+            "p99": 15.54,
+            "max": 15.54,
+            "avg": 8.89
+          }
+        }
+      ]
+    },
+    "toolScale": {
+      "status": "pass",
+      "scenario": {
+        "servers": 20,
+        "tools": 50000,
+        "query": "read file search",
+        "searchLimit": 25,
+        "projectionBudget": 64,
+        "projectionCandidateLimit": 512,
+        "pageSize": 128
+      },
+      "results": {
+        "searchSpaceToolCount": 50000,
+        "matchCount": 35000,
+        "returnedSearchCount": 25,
+        "retainedSearchCandidates": 25,
+        "readOnlyCount": 35000,
+        "mutatingCount": 15000,
+        "brokerOnlyCount": 15000,
+        "brokerSampleCount": 64,
+        "projectedCandidateCount": 512,
+        "projectedToolCount": 64,
+        "firstPageCount": 72
+      },
+      "budgets": {
+        "topKSearchBounded": true,
+        "projectionBounded": true,
+        "toolListPageBounded": true,
+        "heapDeltaMiB": 1.5,
+        "memoryLimitMiB": 256
+      },
+      "elapsedMs": 284
+    },
+    "mixedUpstreams": {
+      "schema": "mcpace.mixedUpstreamSimulation.v1",
+      "status": "pass",
+      "generatedAt": "2026-05-16T15:05:10.591Z",
+      "scenario": {
+        "servers": 20,
+        "tools": 50000,
+        "query": "shared lookup read search",
+        "mix": [
+          "stdio-ok",
+          "http-ok",
+          "https-blocked",
+          "legacy-sse-blocked",
+          "disabled",
+          "missing-command",
+          "bad-cwd",
+          "unsupported-custom",
+          "timeout-failed",
+          "invalid-json-failed"
+        ],
+        "searchLimit": 25,
+        "projectionBudget": 64,
+        "projectionCandidateLimit": 512,
+        "pageSize": 128,
+        "memoryLimitMiB": 256
+      },
+      "transportMatrix": {
+        "stdioDirect": true,
+        "plainStreamableHttpDirect": true,
+        "httpsDirect": false,
+        "legacyHttpSseDirect": false,
+        "customTransportDirect": false
+      },
+      "results": {
+        "configuredToolSlots": 50000,
+        "searchableToolCount": 10000,
+        "matchCount": 7268,
+        "returnedSearchCount": 25,
+        "retainedSearchCandidates": 25,
+        "readOnlyCount": 7000,
+        "mutatingCount": 3000,
+        "projectedCandidateCount": 512,
+        "projectedToolCount": 64,
+        "firstPageCount": 72,
+        "callableServerCount": 4,
+        "blockedServerCount": 12,
+        "failedServerCount": 4,
+        "degradedServerCount": 4,
+        "duplicateToolNameCollisions": 7500,
+        "qualifiedNameCollisions": 0
+      },
+      "counts": {
+        "statuses": {
+          "callable-stdio": 2,
+          "callable-http": 2,
+          "blocked-https-upstream": 2,
+          "blocked-legacy-sse-upstream": 2,
+          "disabled": 2,
+          "blocked-command-not-found": 4,
+          "blocked-unsupported-transport": 2,
+          "catalog-failed": 4
+        },
+        "sourceTypes": {
+          "stdio": 12,
+          "http": 4,
+          "legacy-sse": 2,
+          "custom": 2
+        }
+      },
+      "budgets": {
+        "searchBounded": true,
+        "projectionBounded": true,
+        "pageBounded": true,
+        "failureIsolation": true,
+        "collisionSafe": true,
+        "sourceCoverageOk": true,
+        "heapDeltaMiB": 1.7,
+        "memoryLimitMiB": 256
+      },
+      "elapsedMs": 106
+    },
+    "upstreamFailsafe": {
+      "schema": "mcpace.upstreamFailsafeSimulation.v1",
+      "status": "pass",
+      "generatedAt": "2026-05-16T15:05:10.694Z",
+      "scenario": {
+        "servers": 20,
+        "tools": 50000,
+        "mix": [
+          "healthy-stdio",
+          "healthy-http",
+          "stale-cache",
+          "startup-timeout",
+          "list-timeout",
+          "invalid-json",
+          "tool-timeout",
+          "tool-error",
+          "process-exit",
+          "flapping-recoverable",
+          "disabled",
+          "unsupported-transport"
+        ],
+        "staleFallback": true,
+        "failureThreshold": 3,
+        "failureWindow": 5,
+        "retries": 1,
+        "callsPerBatch": 5,
+        "memoryLimitMiB": 256
+      },
+      "policy": {
+        "discoveryDegradesInsteadOfFailingClosed": true,
+        "staleCacheMayAssistDiscovery": true,
+        "staleCacheDoesNotMakeCallsSafe": true,
+        "circuitBreakerProtectsRepeatedFailures": true,
+        "perServerFailureIsolation": true,
+        "batchDefaultMode": "stateful fail-fast; use independent upstream_call calls for cross-server fan-out",
+        "retryBudget": 1
+      },
+      "results": {
+        "configuredToolSlots": 50000,
+        "freshSearchableTools": 22500,
+        "staleSearchableTools": 5000,
+        "searchableTools": 27500,
+        "healthyServers": 4,
+        "recoverableServers": 1,
+        "staleFallbackServers": 2,
+        "blockedServers": 2,
+        "failedDiscoveryServers": 7,
+        "degradedServers": 9,
+        "circuitOpenServers": 9,
+        "callCount": 9,
+        "bridgeOkCount": 9,
+        "upstreamOkCount": 3,
+        "upstreamFailedCount": 6,
+        "circuitOpenedByCalls": 4,
+        "retrySuccessCount": 1,
+        "staleCallUnavailableCount": 1
+      },
+      "counts": {
+        "discoveryStatuses": {
+          "listed-tools": 8,
+          "stale-cache-used": 2,
+          "startup-timeout": 2,
+          "catalog-timeout": 2,
+          "protocol-error": 2,
+          "startup-exit": 1,
+          "listed-tools-after-retry": 1,
+          "disabled": 1,
+          "blocked-unsupported-transport": 1
+        },
+        "sourceTypes": {
+          "stdio": 17,
+          "http": 2,
+          "custom": 1
+        }
+      },
+      "callOutcomes": [
+        {
+          "index": 0,
+          "kind": "healthy-stdio",
+          "action": "ok",
+          "attempts": 1,
+          "bridgeOk": true,
+          "upstreamOk": true,
+          "finalStatus": "ok",
+          "fallbackUsed": false,
+          "circuitOpened": false
+        },
+        {
+          "index": 1,
+          "kind": "healthy-http",
+          "action": "ok",
+          "attempts": 1,
+          "bridgeOk": true,
+          "upstreamOk": true,
+          "finalStatus": "ok",
+          "fallbackUsed": false,
+          "circuitOpened": false
+        },
+        {
+          "index": 2,
+          "kind": "stale-cache",
+          "action": "stale-only-call-unavailable",
+          "attempts": 1,
+          "bridgeOk": true,
+          "upstreamOk": false,
+          "finalStatus": "unavailable-from-stale-catalog",
+          "fallbackUsed": true,
+          "circuitOpened": false
+        },
+        {
+          "index": 3,
+          "kind": "tool-error",
+          "action": "upstream-is-error",
+          "attempts": 1,
+          "bridgeOk": true,
+          "upstreamOk": false,
+          "finalStatus": "upstream-is-error",
+          "fallbackUsed": false,
+          "circuitOpened": false
+        },
+        {
+          "index": 4,
+          "kind": "tool-timeout",
+          "action": "timeout",
+          "attempts": 2,
+          "bridgeOk": true,
+          "upstreamOk": false,
+          "finalStatus": "retry-timeout",
+          "fallbackUsed": false,
+          "circuitOpened": true
+        },
+        {
+          "index": 5,
+          "kind": "process-exit",
+          "action": "process-exit",
+          "attempts": 1,
+          "bridgeOk": true,
+          "upstreamOk": false,
+          "finalStatus": "process-exit",
+          "fallbackUsed": false,
+          "circuitOpened": true
+        },
+        {
+          "index": 6,
+          "kind": "flapping-recoverable",
+          "action": "retry-success",
+          "attempts": 2,
+          "bridgeOk": true,
+          "upstreamOk": true,
+          "finalStatus": "retry-success",
+          "fallbackUsed": false,
+          "circuitOpened": false
+        },
+        {
+          "index": 7,
+          "kind": "startup-timeout",
+          "action": "circuit-open",
+          "attempts": 1,
+          "bridgeOk": true,
+          "upstreamOk": false,
+          "finalStatus": "circuit-open",
+          "fallbackUsed": false,
+          "circuitOpened": true
+        },
+        {
+          "index": 8,
+          "kind": "invalid-json",
+          "action": "protocol-error",
+          "attempts": 1,
+          "bridgeOk": true,
+          "upstreamOk": false,
+          "finalStatus": "protocol-error",
+          "fallbackUsed": false,
+          "circuitOpened": true
+        }
+      ],
+      "batches": {
+        "failFast": {
+          "mode": "fail-fast",
+          "requestedCalls": 5,
+          "executedCalls": 3,
+          "okCount": 2,
+          "failedCount": 1,
+          "calls": [
+            {
+              "index": 0,
+              "status": "ok",
+              "ok": true
+            },
+            {
+              "index": 1,
+              "status": "ok",
+              "ok": true
+            },
+            {
+              "index": 2,
+              "status": "upstream-is-error",
+              "ok": false
+            }
+          ]
+        },
+        "continueOnError": {
+          "mode": "continue-on-error",
+          "requestedCalls": 5,
+          "executedCalls": 5,
+          "okCount": 3,
+          "failedCount": 2,
+          "calls": [
+            {
+              "index": 0,
+              "status": "ok",
+              "ok": true
+            },
+            {
+              "index": 1,
+              "status": "ok",
+              "ok": true
+            },
+            {
+              "index": 2,
+              "status": "upstream-is-error",
+              "ok": false
+            },
+            {
+              "index": 3,
+              "status": "timeout",
+              "ok": false
+            },
+            {
+              "index": 4,
+              "status": "ok",
+              "ok": true
+            }
+          ]
+        }
+      },
+      "budgets": {
+        "heapDeltaMiB": 0,
+        "memoryLimitMiB": 256,
+        "perServerFailureIsolation": true,
+        "staleCacheSemantics": true,
+        "circuitBreakerCovered": true,
+        "flappingRecoveryCovered": true,
+        "batchModesDiverge": true
+      },
+      "elapsedMs": 2
+    }
+  },
+  "commandResults": {
+    "runtimeHttp": {
+      "status": 0,
+      "durationMs": 364.34,
+      "stderr": ""
+    },
+    "toolScale": {
+      "status": 0,
+      "durationMs": 384.8,
+      "stderr": ""
+    },
+    "mixedUpstreams": {
+      "status": 0,
+      "durationMs": 221.53,
+      "stderr": ""
+    },
+    "upstreamFailsafe": {
+      "status": 0,
+      "durationMs": 99.8,
+      "stderr": ""
+    }
+  },
+  "elapsedMs": 1087.24
+}
