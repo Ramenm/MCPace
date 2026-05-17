@@ -17,9 +17,7 @@ fn normalize_source_type(value: &str) -> String {
         "" => String::new(),
         "streamablehttp" | "streamable-http" | "streamable_http" | "http-stream"
         | "remote-http" | "remote" | "http" | "url" => "http".to_string(),
-        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => {
-            "legacy-sse".to_string()
-        }
+        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => "legacy-sse".to_string(),
         "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
         other => other.to_string(),
     }

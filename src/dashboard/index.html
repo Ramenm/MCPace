@@ -268,6 +268,8 @@
       .server-list,
       .warning-list,
       .client-list,
+      .activity-list,
+      .policy-list,
       .log-list {
         display: grid;
         gap: 12px;
@@ -276,6 +278,8 @@
       .server-item,
       .warning-item,
       .client-item,
+      .activity-item,
+      .policy-item,
       .log-item {
         border-radius: 18px;
         border: 1px solid var(--line);
@@ -285,6 +289,8 @@
 
       .server-top,
       .client-top,
+      .activity-top,
+      .policy-top,
       .log-top {
         display: flex;
         align-items: center;
@@ -294,6 +300,8 @@
 
       .server-name,
       .client-name,
+      .activity-name,
+      .policy-name,
       .log-name {
         font-size: 16px;
         font-weight: 650;
@@ -302,6 +310,8 @@
 
       .server-meta,
       .client-meta,
+      .activity-meta,
+      .policy-meta,
       .log-meta,
       .warning-item {
         color: var(--muted);
@@ -310,7 +320,9 @@
       }
 
       .server-tags,
-      .client-tags {
+      .client-tags,
+      .activity-tags,
+      .policy-tags {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
@@ -456,6 +468,15 @@
           </article>
 
           <article class="card">
+            <h2>Policy Review</h2>
+            <p class="section-note">
+              Minimal review queue for server isolation, default trust, and
+              stateful/concurrency policy. Unknown servers stay conservative.
+            </p>
+            <div class="policy-list" id="policy-review-list"></div>
+          </article>
+
+          <article class="card">
             <h2>Hub logs</h2>
             <p class="section-note">
               Recent lifecycle events from the local runtime log.
@@ -473,6 +494,15 @@
             </p>
             <div class="chip-row" id="runtime-chip-row"></div>
             <div class="footer-note" id="runtime-summary">—</div>
+          </article>
+
+          <article class="card">
+            <h2>Activity</h2>
+            <p class="section-note">
+              Active leases, blocked work, and recent runtime pressure points.
+              This is the fast view before opening raw JSON or logs.
+            </p>
+            <div class="activity-list" id="activity-list"></div>
           </article>
 
           <article class="card">
@@ -534,6 +564,8 @@
         serverList: document.getElementById("server-list"),
         warningList: document.getElementById("warning-list"),
         clientList: document.getElementById("client-list"),
+        activityList: document.getElementById("activity-list"),
+        policyReviewList: document.getElementById("policy-review-list"),
         logList: document.getElementById("log-list"),
         serverSearch: document.getElementById("server-search"),
         toggleEnabledFilter: document.getElementById("toggle-enabled-filter"),
@@ -710,6 +742,9 @@
         const servers = Array.isArray(overview.servers) ? overview.servers : [];
         const clientCatalog = overview.clients || {};
         const clients = Array.isArray(clientCatalog.targets) ? clientCatalog.targets : [];
+        const leases = overview.leases || {};
+        const leaseItems = Array.isArray(leases.leases) ? leases.leases : Array.isArray(leases.activeLeases) ? leases.activeLeases : [];
+        const policyReviews = buildPolicyReviews(servers);
         const warnings = [
           ...(Array.isArray(hub.warnings) ? hub.warnings : []),
           ...(Array.isArray(readiness.missingRequiredSourceEnablement)
@@ -717,7 +752,8 @@
             : []),
           ...(Array.isArray(readiness.missingRequiredCommands)
             ? readiness.missingRequiredCommands.map(value => `Missing required command: ${value}`)
-            : [])
+            : []),
+          ...policyReviews.filter(item => item.severity === "bad").map(item => `Policy review required: ${item.name} · ${item.reason}`)
         ];
 
         els.rootPath.textContent = overview.rootPath || "—";
@@ -751,6 +787,7 @@
           chip(`Runtime ops ${hub.readyForRuntimeOps ? "ready" : "blocked"}`, toneForBoolean(Boolean(hub.readyForRuntimeOps))),
           chip(`HTTP ${http.activeConnections ?? 0}/${http.maxConnections ?? "?"}`, (http.activeConnections ?? 0) < (http.maxConnections ?? 1) ? "good" : "warn"),
           chip(`Pool shards ${upstreamPool.shardCount ?? 1}`, "warn"),
+          chip(`${leaseItems.length} active leases`, leaseItems.length ? "warn" : "good"),
           chip(`Profile ${hub.activeProfile || readiness.activeProfile || "unknown"}`, "warn"),
           chip(`Client key ${clientCatalog.configuredClientKeyName || "none"}`, "warn")
         ].join("");
@@ -777,9 +814,102 @@
         ].join("");
 
         renderServers(servers);
+        renderPolicyReviews(policyReviews);
+        renderActivity(leaseItems, overview);
         renderWarnings(warnings);
         renderClients(clients);
         renderLogs(state.logs);
+      }
+
+      function humanPolicy(server) {
+        if (server.hostLock && server.hostLock !== "none") return `Browser/host lock · ${server.hostLock}`;
+        if (server.scopeClass === "project-local") return "Project isolated";
+        if (server.concurrencyPolicy === "single-session") return "Single user at a time";
+        if (server.concurrencyPolicy === "single-writer") return "Single writer";
+        if (server.concurrencyPolicy === "multi-reader") return "Read-mostly candidate";
+        return server.concurrencyPolicy || "Unknown policy";
+      }
+
+      function buildPolicyReviews(servers) {
+        return servers.map(server => {
+          const isUnknown = !server.scopeClass || server.scopeClass === "configured-source" || server.routingGroup === "settings-only";
+          const dangerous = server.routingGroup === "dangerous-command-runner" || /shell|exec|terminal|process/i.test(`${server.name} ${server.kind} ${server.sourceCommand || ""}`);
+          const stateful = server.discoveryRequiresLease || ["single-session", "single-writer", "isolated-per-project"].includes(server.concurrencyPolicy) || server.hostLock !== "none";
+          let severity = "good";
+          let reason = "Explicit policy present";
+          if (dangerous) {
+            severity = "bad";
+            reason = "Command/host-power server needs explicit review";
+          } else if (isUnknown) {
+            severity = "bad";
+            reason = "Unknown source, conservative default";
+          } else if (stateful) {
+            severity = "warn";
+            reason = "Stateful or serialized server";
+          }
+          return {
+            name: server.name,
+            severity,
+            reason,
+            policy: humanPolicy(server),
+            transport: server.transportPreference || server.sourceType || "stdio",
+            routingGroup: server.routingGroup || "—",
+            enabled: server.effectiveEnabled,
+            discoveryRequiresLease: Boolean(server.discoveryRequiresLease)
+          };
+        }).sort((left, right) => {
+          const order = { bad: 0, warn: 1, good: 2 };
+          return (order[left.severity] ?? 9) - (order[right.severity] ?? 9) || left.name.localeCompare(right.name);
+        });
+      }
+
+      function renderPolicyReviews(items) {
+        if (!items.length) {
+          els.policyReviewList.innerHTML = `<div class="empty">No configured servers to review.</div>`;
+          return;
+        }
+        els.policyReviewList.innerHTML = items.map(item => `
+          <article class="policy-item">
+            <div class="policy-top">
+              <div class="policy-name">${escapeHtml(item.name)}</div>
+              <span class="chip"><span class="dot ${item.severity}"></span>${escapeHtml(item.reason)}</span>
+            </div>
+            <div class="policy-meta">${escapeHtml(item.policy)} · routing ${escapeHtml(item.routingGroup)} · transport ${escapeHtml(item.transport)}</div>
+            <div class="policy-tags">
+              <span class="tag">${item.enabled ? "enabled" : "disabled"}</span>
+              <span class="tag">${item.discoveryRequiresLease ? "discovery uses lease" : "discovery no lease"}</span>
+            </div>
+          </article>
+        `).join("");
+      }
+
+      function renderActivity(leases, overview) {
+        const runtime = overview.runtime || {};
+        const http = runtime.http || {};
+        const pool = runtime.upstreamSessionPool || {};
+        const rows = [];
+        rows.push({ name: "HTTP workers", tone: (http.activeConnections ?? 0) < (http.maxConnections ?? 1) ? "good" : "warn", meta: `${http.activeConnections ?? 0}/${http.maxConnections ?? "?"} active connections` });
+        rows.push({ name: "Upstream pool", tone: (pool.size ?? 0) > 0 ? "warn" : "good", meta: `${pool.size ?? 0}/${pool.maxSize ?? "?"} sessions · ${pool.shardCount ?? 1} shard(s)` });
+        if (leases.length) {
+          for (const lease of leases.slice(0, 8)) {
+            rows.push({
+              name: lease.server || lease.serverName || lease.id || "lease",
+              tone: "warn",
+              meta: `${lease.status || "active"} · ${lease.requestMutexKey || lease.mutexKey || lease.conflictDomain || "lease held"}`
+            });
+          }
+        } else {
+          rows.push({ name: "Leases", tone: "good", meta: "No active leases returned by hub lease list" });
+        }
+        els.activityList.innerHTML = rows.map(item => `
+          <article class="activity-item">
+            <div class="activity-top">
+              <div class="activity-name">${escapeHtml(item.name)}</div>
+              <span class="chip"><span class="dot ${item.tone}"></span>${escapeHtml(item.tone === "good" ? "ok" : "attention")}</span>
+            </div>
+            <div class="activity-meta">${escapeHtml(item.meta)}</div>
+          </article>
+        `).join("");
       }
 
       function renderServers(servers) {

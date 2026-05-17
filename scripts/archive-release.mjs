@@ -95,6 +95,12 @@ function shouldSkipPath(relativePath) {
     .some((segment) => FORBIDDEN_SEGMENTS.has(segment));
 }
 
+function shouldForceExecutableMode(relativePath) {
+  const normalized = relativePath.split(path.sep).join('/');
+  return normalized === 'packages/npm/cli/bin/mcpace.js'
+    || /^packages\/npm\/cli\/vendor\/[^/]+\/mcpace(?:\.exe)?$/.test(normalized);
+}
+
 function normalizeManifestPaths(value, fieldName) {
   if (value == null) {
     return [];
@@ -140,7 +146,8 @@ function copyTree(sourcePath, destinationPath, relativePath = '') {
   fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
   fs.copyFileSync(sourcePath, destinationPath);
   if (process.platform !== 'win32') {
-    fs.chmodSync(destinationPath, stat.mode & 0o777);
+    const mode = shouldForceExecutableMode(relativePath) ? ((stat.mode & 0o777) | 0o755) : (stat.mode & 0o777);
+    fs.chmodSync(destinationPath, mode);
   }
 }
 

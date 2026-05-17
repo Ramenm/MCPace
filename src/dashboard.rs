@@ -361,7 +361,10 @@ fn resolve_http_auth_token(parsed: &ParsedArgs) -> Result<Option<String>, String
             let token = value.trim();
             if token.is_empty() {
                 if parsed.auth_token_env.is_some() {
-                    Err(format!("HTTP auth token environment variable '{}' is empty", env_name))
+                    Err(format!(
+                        "HTTP auth token environment variable '{}' is empty",
+                        env_name
+                    ))
                 } else {
                     Ok(None)
                 }
@@ -533,7 +536,10 @@ fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--auth-token-env" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("dashboard requires an environment variable name after --auth-token-env".to_string());
+                    parsed.error = Some(
+                        "dashboard requires an environment variable name after --auth-token-env"
+                            .to_string(),
+                    );
                     return parsed;
                 };
                 if value.trim().is_empty() {

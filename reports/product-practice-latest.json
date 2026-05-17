@@ -1,15 +1,15 @@
 {
   "schema": "mcpace.productPractice.v1",
-  "generatedAt": "2026-05-04T13:22:38.659Z",
+  "generatedAt": "2026-05-17T15:34:58.612Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
-  "status": "ready-for-release-candidate-review",
+  "status": "prove-rust-before-runtime-claims",
   "canClaim": {
     "sourceTreeHealthy": true,
     "sourceThinLauncherInstall": true,
-    "runtimeBeta": true,
+    "runtimeBeta": false,
     "publishedBinaryInstall": true,
     "universalRemoteMcpBroker": false
   },
@@ -23,7 +23,7 @@
     {
       "id": "node-syntax",
       "status": "pass",
-      "evidence": "99/99 JS/MJS files checked",
+      "evidence": "141/141 JS/MJS files checked",
       "nextAction": "Run npm run lint:npm."
     },
     {
@@ -34,8 +34,8 @@
     },
     {
       "id": "rust-build",
-      "status": "pass",
-      "evidence": "pass",
+      "status": "blocked",
+      "evidence": "rust quality status is partial",
       "nextAction": "Run cargo check/test/build on a host with dependency access."
     },
     {
@@ -47,7 +47,7 @@
     {
       "id": "published-binary-install",
       "status": "pass",
-      "evidence": "reports/vendored-binary-win32-x64-msvc.json: pass",
+      "evidence": "reports/vendored-binary-latest.json: pass",
       "nextAction": "Run npm run verify:vendored-binary after staging a native binary/platform package before claiming published install readiness."
     }
   ],
@@ -56,60 +56,64 @@
       "path": "reports/rust-quality-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T13:22:13.926Z",
-      "ageMs": 24733,
+      "generatedAt": "2026-05-17T15:34:23.374Z",
+      "ageMs": 35223,
       "maxAgeMs": 21600000,
-      "evidence": "reports/rust-quality-latest.json fresh (0m old, max 6h old)"
+      "evidence": "reports/rust-quality-latest.json fresh (1m old, max 6h old)"
     },
     "bootHarness": {
       "path": "reports/boot-harness-latest.json",
-      "status": "fresh",
-      "fresh": true,
-      "generatedAt": "2026-05-04T12:15:10.311Z",
-      "ageMs": 4048348,
+      "status": "missing",
+      "fresh": false,
+      "generatedAt": null,
+      "ageMs": null,
       "maxAgeMs": 21600000,
-      "evidence": "reports/boot-harness-latest.json fresh (67m old, max 6h old)"
+      "evidence": "missing reports/boot-harness-latest.json"
     },
     "runtimeTrace": {
       "path": "reports/runtime-trace-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T13:22:15.068Z",
-      "ageMs": 23591,
+      "generatedAt": "2026-05-17T15:29:32.943Z",
+      "ageMs": 325654,
       "maxAgeMs": 21600000,
-      "evidence": "reports/runtime-trace-latest.json fresh (0m old, max 6h old)"
+      "evidence": "reports/runtime-trace-latest.json fresh (5m old, max 6h old)"
     },
     "installReadiness": {
       "path": "reports/install-readiness-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T13:22:28.493Z",
-      "ageMs": 10166,
+      "generatedAt": "2026-05-17T15:32:27.185Z",
+      "ageMs": 151412,
       "maxAgeMs": 21600000,
-      "evidence": "reports/install-readiness-latest.json fresh (0m old, max 6h old)"
+      "evidence": "reports/install-readiness-latest.json fresh (3m old, max 6h old)"
     },
     "vendoredBinary": {
-      "path": "reports/vendored-binary-win32-x64-msvc.json",
+      "path": "reports/vendored-binary-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T12:53:15.312Z",
-      "ageMs": 1763347,
+      "generatedAt": "2026-05-17T15:29:31.915Z",
+      "ageMs": 326682,
       "maxAgeMs": 21600000,
-      "evidence": "reports/vendored-binary-win32-x64-msvc.json fresh (29m old, max 6h old)"
+      "evidence": "reports/vendored-binary-latest.json fresh (5m old, max 6h old)"
     }
   },
-  "wrongPracticeRisks": [],
+  "wrongPracticeRisks": [
+    "Feature accumulation can make the project feel done before the actual broker loop is proven with fresh reports."
+  ],
   "proofValidity": {
     "currentHost": {
-      "key": "win32-x64-msvc",
+      "key": "linux-x64-gnu",
       "detected": true,
-      "platform": "win32",
+      "platform": "linux",
       "arch": "x64"
     },
     "maxProofAgeHours": 6,
     "rustQuality": {
-      "usable": true,
-      "reasons": [],
+      "usable": false,
+      "reasons": [
+        "rust quality status is partial"
+      ],
       "maxAgeHours": 6
     },
     "runtimeTrace": {
@@ -117,9 +121,10 @@
       "reasons": []
     },
     "bootHarness": {
-      "usable": true,
-      "reasons": [],
-      "maxAgeHours": 6
+      "usable": false,
+      "reasons": [
+        "missing report"
+      ]
     },
     "installReadiness": {
       "usable": true,
@@ -132,5 +137,7 @@
       "maxAgeHours": 6
     }
   },
-  "nextMoves": []
+  "nextMoves": [
+    "Run cargo check/test/build on a host with dependency access."
+  ]
 }

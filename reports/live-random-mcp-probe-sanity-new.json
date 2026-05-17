@@ -1,0 +1,382 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v5",
+  "mode": "live-download-probe",
+  "generatedAt": "2026-05-17T13:38:18.654Z",
+  "workspace": "/tmp/mcpace-live-mcp-probe-NfyY1j",
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": false,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "packageManagerOutputRedacted": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "install": {
+    "status": "pass",
+    "packages": [
+      "@modelcontextprotocol/server-filesystem@2026.1.14",
+      "mcp-server-code-runner@0.1.8"
+    ],
+    "byKind": {
+      "npm": {
+        "kind": "npm",
+        "ok": true,
+        "packages": [
+          "@modelcontextprotocol/server-filesystem@2026.1.14",
+          "mcp-server-code-runner@0.1.8"
+        ],
+        "byPackage": {
+          "npm:@modelcontextprotocol/server-filesystem@2026.1.14": {
+            "ok": true,
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "spec": "@modelcontextprotocol/server-filesystem@2026.1.14",
+            "ignoreScripts": true,
+            "packageManagerEnv": "whitelisted",
+            "error": null
+          },
+          "npm:mcp-server-code-runner@0.1.8": {
+            "ok": true,
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "spec": "mcp-server-code-runner@0.1.8",
+            "ignoreScripts": true,
+            "packageManagerEnv": "whitelisted",
+            "error": null
+          }
+        },
+        "ignoreScripts": true
+      }
+    },
+    "byPackage": {
+      "npm:@modelcontextprotocol/server-filesystem@2026.1.14": {
+        "ok": true,
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "spec": "@modelcontextprotocol/server-filesystem@2026.1.14",
+        "ignoreScripts": true,
+        "packageManagerEnv": "whitelisted",
+        "error": null
+      },
+      "npm:mcp-server-code-runner@0.1.8": {
+        "ok": true,
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "spec": "mcp-server-code-runner@0.1.8",
+        "ignoreScripts": true,
+        "packageManagerEnv": "whitelisted",
+        "error": null
+      }
+    }
+  },
+  "summary": {
+    "total": 2,
+    "ok": 2,
+    "failed": 0,
+    "skipped": 0,
+    "allowedNonOk": [],
+    "unexpectedFailures": [],
+    "totalTools": 15,
+    "policyMismatches": [],
+    "byStatus": {
+      "ok": 2
+    },
+    "byKind": {
+      "npm": 2
+    },
+    "byPolicy": {
+      "project-filesystem-single-writer": 1,
+      "disabled-dangerous-command-runner": 1
+    },
+    "serverSideRequestMethods": {
+      "roots/list": 1
+    }
+  },
+  "results": [
+    {
+      "id": "official-filesystem",
+      "package": "@modelcontextprotocol/server-filesystem",
+      "version": "2026.1.14",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 523,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "secure-filesystem-server",
+          "version": "0.2.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 14,
+      "tools": [
+        {
+          "name": "read_file",
+          "description": "Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.",
+          "inputProps": [
+            "path",
+            "tail",
+            "head"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_text_file",
+          "description": "Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the",
+          "inputProps": [
+            "path",
+            "tail",
+            "head"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_media_file",
+          "description": "Read an image or audio file. Returns the base64 encoded data and MIME type. Only works within allowed directories.",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_multiple_files",
+          "description": "Read the contents of multiple files simultaneously. This is more efficient than reading files one by one when you need to analyze or compare multiple files. Each file's content is returned with its path as a reference. Failed reads for indi",
+          "inputProps": [
+            "paths"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "write_file",
+          "description": "Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories.",
+          "inputProps": [
+            "path",
+            "content"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": true,
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "edit_file",
+          "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories.",
+          "inputProps": [
+            "path",
+            "edits",
+            "dryRun"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": false,
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "create_directory",
+          "description": "Create a new directory or ensure a directory exists. Can create multiple nested directories in one operation. If the directory already exists, this operation will succeed silently. Perfect for setting up directory structures for projects or",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": true,
+            "destructiveHint": false
+          }
+        },
+        {
+          "name": "list_directory",
+          "description": "Get a detailed listing of all files and directories in a specified path. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is essential for understanding directory structure and finding spec",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "list_directory_with_sizes",
+          "description": "Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is useful for understanding directory structure an",
+          "inputProps": [
+            "path",
+            "sortBy"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "directory_tree",
+          "description": "Get a recursive tree view of files and directories as a JSON structure. Each entry includes 'name', 'type' (file/directory), and 'children' for directories. Files have no children array, while directories always have a children array (which",
+          "inputProps": [
+            "path",
+            "excludePatterns"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "move_file",
+          "description": "Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming withi",
+          "inputProps": [
+            "source",
+            "destination"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": false,
+            "destructiveHint": false
+          }
+        },
+        {
+          "name": "search_files",
+          "description": "Recursively search for files and directories matching a pattern. The patterns should be glob-style patterns that match paths relative to the working directory. Use pattern like '*.ext' to match files in current directory, and '**/*.ext' to ",
+          "inputProps": [
+            "path",
+            "pattern",
+            "excludePatterns"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "get_file_info",
+          "description": "Retrieve detailed metadata about a file or directory. Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading th",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "list_allowed_directories",
+          "description": "Returns the list of directories that this server is allowed to access. Subdirectories within these allowed directories are also accessible. Use this to understand which directories and their nested paths are available before trying to acces",
+          "inputProps": [],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ],
+      "riskSignals": [
+        "filesystem",
+        "mutable-or-destructive-tools"
+      ],
+      "suggestedPolicy": "project-filesystem-single-writer",
+      "expectedPolicy": "project-filesystem-single-writer",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {
+        "roots/list": 1
+      },
+      "rejectedServerRequests": [],
+      "droppedJsonRpcMessages": 0,
+      "errors": [],
+      "stderrSample": "Secure MCP Filesystem Server running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"secure-filesystem-server\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"method\":\"roots/list\",\"jsonrpc\":\"2.0\",\"id\":0}\n{\"result\":{\"tools\":[{\"name\":\"read_file\",\"title\":\"Read File (Deprecated)\",\"description\":\"Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"tail\":{\"description\":\"If provided, returns only the last N lines of the file\",\"type\":\"number\"},\"head\":{\"description\":\"If provided, returns only the first N lines of the file\",\"type\":\"number\"}},\"required\":[\"path\"]},\"annotations\":{\"readOnlyHint\":true},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"content\":{\"type\":\"string\"}},\"required\":[\"content\"],\"additionalProperties\":false}},{\"name\":\"read_text_file\",\"title\":\"Read Text File\",\"description\":\"Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the 'head' parameter to read only the first N lines of a file, or the 'tail' parameter to read only the last N lines of a file. Operates on the file as text regardless of extension. Only works within allowed directories.\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"tail\":{\"description\":\"If provided, returns only the last N lines of the file\",\"type\":\"number\"},\"head\":{\"description\":\"If provided, returns only the first N lines of the file\",\"type\":\"number\"}},\"required\":[\"path\"]},\"annotations\":{\"readOnlyHint\":true},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\""
+    },
+    {
+      "id": "code-runner",
+      "package": "mcp-server-code-runner",
+      "version": "0.1.8",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 677,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "Code Runner",
+          "version": "0.1.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 1,
+      "tools": [
+        {
+          "name": "run-code",
+          "description": "Run code snippet and return the result.",
+          "inputProps": [
+            "code",
+            "languageId"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "shell-or-process",
+        "mutable-or-destructive-tools"
+      ],
+      "suggestedPolicy": "disabled-dangerous-command-runner",
+      "expectedPolicy": "disabled-dangerous-command-runner",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": [],
+      "droppedJsonRpcMessages": 0,
+      "errors": [],
+      "stderrSample": "",
+      "stdoutSample": "Code Runner MCP Server running on stdio\n{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"Code Runner\",\"version\":\"0.1.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"run-code\",\"description\":\"Run code snippet and return the result.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"code\":{\"type\":\"string\",\"description\":\"Code Snippet\"},\"languageId\":{\"type\":\"string\",\"enum\":[\"javascript\",\"php\",\"python\",\"perl\",\"perl6\",\"ruby\",\"go\",\"lua\",\"groovy\",\"powershell\",\"bat\",\"shellscript\",\"fsharp\",\"csharp\",\"vbscript\",\"typescript\",\"coffeescript\",\"scala\",\"swift\",\"julia\",\"crystal\",\"ocaml\",\"r\",\"applescript\",\"clojure\",\"racket\",\"scheme\",\"ahk\",\"autoit\",\"dart\",\"haskell\",\"nim\",\"lisp\",\"kit\",\"v\",\"sass\",\"scss\"],\"description\":\"Language ID\"}},\"required\":[\"code\",\"languageId\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"execution\":{\"taskSupport\":\"forbidden\"}}]},\"jsonrpc\":\"2.0\",\"id\":\"tools-1\"}\n"
+    }
+  ],
+  "notes": [
+    "Only initialize, notifications/initialized, and tools/list were sent.",
+    "No user API keys or user home directory were passed to runtime processes.",
+    "npm install uses --ignore-scripts, --no-audit, --no-fund, --omit=dev, isolated HOME/cache, and a whitelisted package-manager environment.",
+    "PyPI installs happen in a disposable venv with isolated cache/HOME and a whitelisted package-manager environment; runtime processes receive a stripped environment.",
+    "Runtime network namespace isolation uses unshare -Urn when this host allows it; otherwise the probe falls back to stripped env + timeout only.",
+    "This is a smoke probe. It is not a source security audit and it does not prove destructive tool behavior is safe.",
+    "Some canaries are hard-skipped unless --allow-heavy-installs is passed because package-manager installs can hang in restricted mirrors."
+  ],
+  "safety": {
+    "executesThirdPartyPackages": true,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "packageManagerOutputRedacted": true,
+    "packageManagerCredentialsMayBeUsedForMirrors": true,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer"
+  },
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 12972,
+  "status": "pass"
+}

@@ -6,7 +6,9 @@ pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), String> {
         return Err("missing required Host header for local MCPace serve mode".to_string());
     };
     if hosts.next().is_some() {
-        return Err("multiple Host headers are not allowed for local MCPace serve mode".to_string());
+        return Err(
+            "multiple Host headers are not allowed for local MCPace serve mode".to_string(),
+        );
     }
     if !is_allowed_local_host(host.trim()) {
         return Err(format!(

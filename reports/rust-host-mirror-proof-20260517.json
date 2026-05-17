@@ -1,0 +1,118 @@
+{
+  "schema": "mcpace.rustHostMirrorProof.v1",
+  "generatedAt": "2026-05-17T15:28:23.511808Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "environment": {
+    "aptMirrorConfigured": true,
+    "mirrorClass": "OpenAI Artifactory Debian mirror",
+    "cargoRegistryMirrorAvailable": true,
+    "note": "Package manager credentials and proxy details are intentionally not serialized."
+  },
+  "toolchain": {
+    "rustc": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+    "cargo": "cargo 1.85.0 (d73d2caf9 2024-12-31)",
+    "rustfmt": "rustfmt 1.8.0",
+    "clippy": "clippy 0.1.85",
+    "projectToolchainPin": "rust-toolchain.toml requests 1.95.0",
+    "pinStatus": "not satisfied by rustup because no static.rust-lang.org/rustup mirror endpoint was available in this environment; Debian mirror toolchain was used instead"
+  },
+  "checks": [
+    {
+      "id": "cargo-generate-lockfile-offline",
+      "status": "pass",
+      "detail": "Cargo.lock regenerated offline so mcpace package version matches 0.6.5."
+    },
+    {
+      "id": "cargo-fmt-check",
+      "status": "pass",
+      "command": "cargo fmt --all -- --check"
+    },
+    {
+      "id": "cargo-check-all-targets",
+      "status": "pass",
+      "command": "cargo check --locked --all-targets"
+    },
+    {
+      "id": "cargo-clippy-all-targets",
+      "status": "pass",
+      "command": "cargo clippy --locked --all-targets -- -D warnings"
+    },
+    {
+      "id": "cargo-test-lib",
+      "status": "pass",
+      "command": "cargo test --locked --lib -j1",
+      "tests": "100 passed"
+    },
+    {
+      "id": "cargo-test-integration-client_surface",
+      "status": "pass",
+      "tests": "31 passed"
+    },
+    {
+      "id": "cargo-test-integration-config_and_server",
+      "status": "pass",
+      "tests": "11 passed"
+    },
+    {
+      "id": "cargo-test-integration-help_and_root",
+      "status": "pass",
+      "tests": "8 passed"
+    },
+    {
+      "id": "cargo-test-integration-hub_leases",
+      "status": "pass",
+      "tests": "6 passed"
+    },
+    {
+      "id": "cargo-test-integration-hub_runtime",
+      "status": "pass",
+      "tests": "7 passed"
+    },
+    {
+      "id": "cargo-test-integration-lab_surface",
+      "status": "pass",
+      "tests": "3 passed"
+    },
+    {
+      "id": "cargo-test-integration-mcp_server",
+      "status": "pass",
+      "tests": "8 passed"
+    },
+    {
+      "id": "cargo-test-integration-service",
+      "status": "pass",
+      "tests": "2 passed"
+    },
+    {
+      "id": "cargo-test-integration-setup",
+      "status": "pass",
+      "tests": "3 passed"
+    },
+    {
+      "id": "cargo-test-integration-stdio_shim",
+      "status": "pass",
+      "tests": "2 passed"
+    },
+    {
+      "id": "cargo-test-doc",
+      "status": "pass",
+      "tests": "0 doc tests"
+    },
+    {
+      "id": "cargo-build-debug-bin",
+      "status": "pass",
+      "command": "cargo build --locked --bin mcpace -j1",
+      "versionOutput": "0.6.5"
+    },
+    {
+      "id": "cargo-build-release-bin",
+      "status": "blocked",
+      "command": "cargo build --release --locked --bin mcpace -j1",
+      "detail": "Killed by the constrained tool runtime during optimized release/LTO link; no optimized release binary proof produced."
+    }
+  ],
+  "status": "pass-with-release-build-blocked"
+}

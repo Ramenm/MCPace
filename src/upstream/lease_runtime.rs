@@ -242,9 +242,9 @@ pub fn call_tool_with_context(
     ensure_callable_stdio(root_path, server)?;
     let effective_timeout = timeout_for(server, timeout_ms);
     validate_upstream_tool_policy(server, tool_name, context)?;
-    validate_upstream_tool_known(root_path, server, tool_name, effective_timeout, context)?;
 
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
+    validate_upstream_tool_known(root_path, server, tool_name, effective_timeout, context)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
     let call_params = JsonValue::object([
         ("name", JsonValue::string(tool_name)),
@@ -309,7 +309,6 @@ pub fn call_tool_with_pooled_context(
     ensure_callable_stdio(root_path, server)?;
     let effective_timeout = timeout_for(server, timeout_ms);
     validate_upstream_tool_policy(server, tool_name, context)?;
-    validate_upstream_tool_known(root_path, server, tool_name, effective_timeout, context)?;
     if server.source_type == "http" {
         return call_tool_with_context(
             root_path,
@@ -328,7 +327,18 @@ pub fn call_tool_with_pooled_context(
         let mut pool = pool
             .lock()
             .map_err(|_| "upstream session pool lock was poisoned".to_string())?;
-        pool.call_tool(
+        let initial_pool_hit = pool.session_exists(&pool_key);
+        validate_upstream_tool_known_with_pool(
+            root_path,
+            server,
+            tool_name,
+            effective_timeout,
+            context,
+            heartbeat_lost,
+            &pool_key,
+            &mut pool,
+        )?;
+        let (result, mut outcome) = pool.call_tool(
             UpstreamPoolInvocation {
                 root_path,
                 server,
@@ -338,7 +348,9 @@ pub fn call_tool_with_pooled_context(
             },
             tool_name,
             arguments,
-        )?
+        )?;
+        outcome.hit = initial_pool_hit;
+        (result, outcome)
     };
     let lease_outcome = finalize_upstream_lease(lease)?;
     let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
@@ -394,9 +406,9 @@ pub fn call_tools_with_context(
     ensure_callable_stdio(root_path, server)?;
     let effective_timeout = timeout_for(server, timeout_ms);
     validate_upstream_batch_tool_policy(server, calls, context)?;
-    validate_upstream_batch_tools_known(root_path, server, calls, effective_timeout, context)?;
 
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
+    validate_upstream_batch_tools_known(root_path, server, calls, effective_timeout, context)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
     let results = if server.source_type == "http" {
         let mut results = Vec::new();
@@ -479,7 +491,6 @@ pub fn call_tools_with_pooled_context(
     ensure_callable_stdio(root_path, server)?;
     let effective_timeout = timeout_for(server, timeout_ms);
     validate_upstream_batch_tool_policy(server, calls, context)?;
-    validate_upstream_batch_tools_known(root_path, server, calls, effective_timeout, context)?;
     if server.source_type == "http" {
         return call_tools_with_context(root_path, server_name, calls, timeout_ms, context);
     }
@@ -491,7 +502,18 @@ pub fn call_tools_with_pooled_context(
         let mut pool = pool
             .lock()
             .map_err(|_| "upstream session pool lock was poisoned".to_string())?;
-        pool.call_tools(
+        let initial_pool_hit = pool.session_exists(&pool_key);
+        validate_upstream_batch_tools_known_with_pool(
+            root_path,
+            server,
+            calls,
+            effective_timeout,
+            context,
+            heartbeat_lost,
+            &pool_key,
+            &mut pool,
+        )?;
+        let (results, mut outcome) = pool.call_tools(
             UpstreamPoolInvocation {
                 root_path,
                 server,
@@ -500,7 +522,9 @@ pub fn call_tools_with_pooled_context(
                 lease_lost: heartbeat_lost,
             },
             calls,
-        )?
+        )?;
+        outcome.hit = initial_pool_hit;
+        (results, outcome)
     };
     let lease_outcome = finalize_upstream_lease(lease)?;
     let upstream_ok_count = results
@@ -592,7 +616,6 @@ pub fn tool_policy_info(
     ]))
 }
 
-
 fn validate_upstream_batch_tools_known(
     root_path: &Path,
     server: &UpstreamServerConfig,
@@ -621,13 +644,53 @@ fn validate_upstream_tool_known(
     ensure_tool_name_in_verified_set(server, tool_name, &tools)
 }
 
+#[allow(clippy::too_many_arguments)]
+fn validate_upstream_tool_known_with_pool(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    tool_name: &str,
+    timeout: Duration,
+    context: Option<&UpstreamLeaseContext>,
+    lease_lost: Option<&AtomicBool>,
+    key: &UpstreamSessionKey,
+    pool: &mut UpstreamSessionPool,
+) -> Result<(), String> {
+    let tools = verified_tool_names_for_call_with_pool(
+        root_path, server, timeout, context, lease_lost, key, pool,
+    )?;
+    ensure_tool_name_in_verified_set(server, tool_name, &tools)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn validate_upstream_batch_tools_known_with_pool(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    calls: &[UpstreamToolCall],
+    timeout: Duration,
+    context: Option<&UpstreamLeaseContext>,
+    lease_lost: Option<&AtomicBool>,
+    key: &UpstreamSessionKey,
+    pool: &mut UpstreamSessionPool,
+) -> Result<(), String> {
+    if calls.is_empty() {
+        return Ok(());
+    }
+    let tools = verified_tool_names_for_call_with_pool(
+        root_path, server, timeout, context, lease_lost, key, pool,
+    )?;
+    for call in calls {
+        ensure_tool_name_in_verified_set(server, call.tool.trim(), &tools)?;
+    }
+    Ok(())
+}
+
 fn verified_tool_names_for_call(
     root_path: &Path,
     server: &UpstreamServerConfig,
     timeout: Duration,
     context: Option<&UpstreamLeaseContext>,
 ) -> Result<BTreeSet<String>, String> {
-    if !known_tool_validation_enabled() || context_allows_unknown_tool(context) {
+    if !known_tool_validation_required(context) {
         return Ok(BTreeSet::new());
     }
     let (tools, cache_hit) = cached_tools_list(root_path, server, timeout, false).map_err(|error| {
@@ -636,6 +699,44 @@ fn verified_tool_names_for_call(
             server.name, error, ALLOW_UNKNOWN_TOOL_ARGUMENT
         )
     })?;
+    tool_names_from_tools_list(server, &tools, if cache_hit { " from cache" } else { "" })
+}
+
+fn verified_tool_names_for_call_with_pool(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    timeout: Duration,
+    context: Option<&UpstreamLeaseContext>,
+    lease_lost: Option<&AtomicBool>,
+    key: &UpstreamSessionKey,
+    pool: &mut UpstreamSessionPool,
+) -> Result<BTreeSet<String>, String> {
+    if !known_tool_validation_required(context) {
+        return Ok(BTreeSet::new());
+    }
+    if let Some(tools) = super::tool_cache::read_cached_tools(
+        &super::tool_cache::tool_list_cache_key(root_path, server),
+    ) {
+        return tool_names_from_tools_list(server, &tools, " from cache");
+    }
+    let (result, _) = pool.list_tools(UpstreamPoolInvocation {
+        root_path,
+        server,
+        key: key.clone(),
+        timeout,
+        lease_lost,
+    })?;
+    let tools = json_helpers::value_at_path(&result, &["tools"])
+        .cloned()
+        .unwrap_or_else(|| JsonValue::array([]));
+    tool_names_from_tools_list(server, &tools, " from pooled session")
+}
+
+fn tool_names_from_tools_list(
+    server: &UpstreamServerConfig,
+    tools: &JsonValue,
+    source_hint: &str,
+) -> Result<BTreeSet<String>, String> {
     let advertised = tools
         .as_array()
         .unwrap_or(&[])
@@ -648,7 +749,7 @@ fn verified_tool_names_for_call(
         return Err(format!(
             "refusing to call upstream server '{}' because its tools/list returned no named tools{}; pass {}=true only for explicitly trusted dynamic hidden tools",
             server.name,
-            if cache_hit { " from cache" } else { "" },
+            source_hint,
             ALLOW_UNKNOWN_TOOL_ARGUMENT
         ));
     }
@@ -676,10 +777,16 @@ fn context_allows_unknown_tool(context: Option<&UpstreamLeaseContext>) -> bool {
     let Some(context) = context else {
         return false;
     };
-    context.allow_arguments.contains(ALLOW_UNKNOWN_TOOL_ARGUMENT)
+    context
+        .allow_arguments
+        .contains(ALLOW_UNKNOWN_TOOL_ARGUMENT)
         || context
             .allow_arguments
             .contains(ALLOW_UNKNOWN_UPSTREAM_TOOL_ARGUMENT)
+}
+
+fn known_tool_validation_required(context: Option<&UpstreamLeaseContext>) -> bool {
+    known_tool_validation_enabled() && !context_allows_unknown_tool(context)
 }
 
 fn known_tool_validation_enabled() -> bool {

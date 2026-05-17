@@ -1,11 +1,11 @@
 # Overhead audit
 
 - Status: pass
-- Generated: 2026-05-16T13:58:09.919Z
-- Project: mcpace 0.6.4
+- Generated: 2026-05-17T15:29:12.261Z
+- Project: mcpace 0.6.5
 - CLI source bytes: 13842
 - Vendored binary bytes: 3303408
-- Launcher overhead: 131.92ms median delta
+- Launcher overhead: 102.54ms median delta
 
 ## Checks
 
@@ -15,7 +15,7 @@
 | npm-cli-has-no-runtime-dependencies | yes | 0 dependencies in packages/npm/cli/package.json |
 | optional-platform-dependencies-only | yes | @mcpace/cli-darwin-arm64, @mcpace/cli-darwin-x64, @mcpace/cli-linux-arm64-gnu, @mcpace/cli-linux-x64-gnu, @mcpace/cli-win32-arm64-msvc, @mcpace/cli-win32-x64-msvc |
 | playwright-is-test-only-temp-install | yes | Playwright is not a runtime dependency and release manifest excludes node_modules |
-| dashboard-source-footprint-under-100kb | yes | 32365 bytes |
+| dashboard-source-footprint-under-100kb | yes | 38896 bytes |
 | npm-launcher-source-footprint-under-20kb | yes | 13842 bytes |
-| launcher-overhead-measured-or-blocked-explicitly | yes | median delta 131.92ms |
-| launcher-overhead-not-severe-on-this-host | yes | launcher median 153.32ms, delta 131.92ms |
+| launcher-overhead-measured-or-blocked-explicitly | yes | median delta 102.54ms |
+| launcher-overhead-not-severe-on-this-host | yes | launcher median 140.68ms, delta 102.54ms |

@@ -496,9 +496,9 @@ fn projection_catalog(
                     server_broker_only_tool_count = server_broker_only_tool_count.saturating_add(1);
                     if stored_broker_only_count < broker_sample_limit {
                         broker_only_tools.push(JsonValue::object([
-                        ("name", JsonValue::string("<unnamed>")),
-                        ("reason", JsonValue::string("missing tool name")),
-                    ]));
+                            ("name", JsonValue::string("<unnamed>")),
+                            ("reason", JsonValue::string("missing tool name")),
+                        ]));
                         stored_broker_only_count = stored_broker_only_count.saturating_add(1);
                     }
                     continue;
@@ -631,7 +631,10 @@ fn projection_candidate_limit(options: &ToolExposureOptions) -> usize {
         .max(1);
     env_usize("MCPACE_PROJECTION_CANDIDATE_LIMIT")
         .unwrap_or(default)
-        .clamp(options.budget.max(1), DEFAULT_PROJECTION_CANDIDATE_LIMIT_MAX)
+        .clamp(
+            options.budget.max(1),
+            DEFAULT_PROJECTION_CANDIDATE_LIMIT_MAX,
+        )
 }
 fn projection_broker_sample_limit() -> usize {
     env_usize("MCPACE_PROJECTION_BROKER_SAMPLE_LIMIT")

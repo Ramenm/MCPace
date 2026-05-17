@@ -1,0 +1,1497 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v5",
+  "mode": "fixture-replay",
+  "generatedAt": "2026-05-17T12:08:21.267Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "status": "pass",
+  "elapsedMs": 2,
+  "summary": {
+    "total": 12,
+    "ok": 10,
+    "failed": 1,
+    "skipped": 1,
+    "allowedNonOk": [
+      "deprecated-brave-search",
+      "ui5"
+    ],
+    "unexpectedFailures": [],
+    "totalTools": 91,
+    "policyMismatches": [],
+    "byStatus": {
+      "ok": 10,
+      "startup-error": 1,
+      "skipped-by-policy": 1
+    },
+    "byKind": {
+      "npm": 8,
+      "pypi": 4
+    },
+    "byPolicy": {
+      "project-filesystem-single-writer": 1,
+      "state-profile-single-session": 2,
+      "local-utility-multi-reader": 1,
+      "project-repo-single-writer": 1,
+      "network-fetch-review": 1,
+      "database-path-single-writer": 1,
+      "test-fixture-disabled": 1,
+      "credential-scoped-review": 1,
+      "network-docs-multi-reader-review": 1,
+      "shared-exclusive-host-lock": 1,
+      "project-devtools-single-writer-review": 1
+    },
+    "serverSideRequestMethods": {}
+  },
+  "install": {
+    "status": "mixed",
+    "sources": [
+      "reports/live-random-mcp-probe-npm-stable.json",
+      "reports/live-random-mcp-probe-pypi-latest.json",
+      "reports/live-random-mcp-probe-npm-canary-official-everything.json",
+      "reports/live-random-mcp-probe-npm-canary-deprecated-brave-search.json",
+      "reports/live-random-mcp-probe-npm-canary-context7.json",
+      "reports/live-random-mcp-probe-npm-canary-chrome-devtools.json",
+      "reports/live-random-mcp-probe-npm-canary-ui5.json"
+    ]
+  },
+  "safety": {
+    "executesThirdPartyPackages": false,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer",
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "packageManagerOutputRedacted": true,
+    "packageManagerCredentialsMayBeUsedForMirrors": true
+  },
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": true,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "results": [
+    {
+      "id": "official-filesystem",
+      "package": "@modelcontextprotocol/server-filesystem",
+      "version": "2026.1.14",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 339,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "secure-filesystem-server",
+          "version": "0.2.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 14,
+      "tools": [
+        {
+          "name": "read_file",
+          "description": "Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.",
+          "inputProps": [
+            "path",
+            "tail",
+            "head"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_text_file",
+          "description": "Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the",
+          "inputProps": [
+            "path",
+            "tail",
+            "head"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_media_file",
+          "description": "Read an image or audio file. Returns the base64 encoded data and MIME type. Only works within allowed directories.",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_multiple_files",
+          "description": "Read the contents of multiple files simultaneously. This is more efficient than reading files one by one when you need to analyze or compare multiple files. Each file's content is returned with its path as a reference. Failed reads for indi",
+          "inputProps": [
+            "paths"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "write_file",
+          "description": "Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories.",
+          "inputProps": [
+            "path",
+            "content"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": true,
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "edit_file",
+          "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories.",
+          "inputProps": [
+            "path",
+            "edits",
+            "dryRun"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": false,
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "create_directory",
+          "description": "Create a new directory or ensure a directory exists. Can create multiple nested directories in one operation. If the directory already exists, this operation will succeed silently. Perfect for setting up directory structures for projects or",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": true,
+            "destructiveHint": false
+          }
+        },
+        {
+          "name": "list_directory",
+          "description": "Get a detailed listing of all files and directories in a specified path. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is essential for understanding directory structure and finding spec",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "list_directory_with_sizes",
+          "description": "Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is useful for understanding directory structure an",
+          "inputProps": [
+            "path",
+            "sortBy"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "directory_tree",
+          "description": "Get a recursive tree view of files and directories as a JSON structure. Each entry includes 'name', 'type' (file/directory), and 'children' for directories. Files have no children array, while directories always have a children array (which",
+          "inputProps": [
+            "path",
+            "excludePatterns"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "move_file",
+          "description": "Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming withi",
+          "inputProps": [
+            "source",
+            "destination"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": false,
+            "destructiveHint": false
+          }
+        },
+        {
+          "name": "search_files",
+          "description": "Recursively search for files and directories matching a pattern. The patterns should be glob-style patterns that match paths relative to the working directory. Use pattern like '*.ext' to match files in current directory, and '**/*.ext' to ",
+          "inputProps": [
+            "path",
+            "pattern",
+            "excludePatterns"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "get_file_info",
+          "description": "Retrieve detailed metadata about a file or directory. Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading th",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "list_allowed_directories",
+          "description": "Returns the list of directories that this server is allowed to access. Subdirectories within these allowed directories are also accessible. Use this to understand which directories and their nested paths are available before trying to acces",
+          "inputProps": [],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ],
+      "riskSignals": [
+        "filesystem"
+      ],
+      "suggestedPolicy": "project-filesystem-single-writer",
+      "expectedPolicy": "project-filesystem-single-writer",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "Secure MCP Filesystem Server running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"secure-filesystem-server\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"method\":\"roots/list\",\"jsonrpc\":\"2.0\",\"id\":0}\n{\"result\":{\"tools\":[{\"name\":\"read_file\",\"title\":\"Read File (Deprecated)\",\"description\":\"Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"tail\":{\"description\":\"If provided, returns only the last N lines of the file\",\"type\":\"number\"},\"head\":{\"description\":\"If provided, returns only the first N lines of the file\",\"type\":\"number\"}},\"required\":[\"path\"]},\"annotations\":{\"readOnlyHint\":true},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"content\":{\"type\":\"string\"}},\"required\":[\"content\"],\"additionalProperties\":false}},{\"name\":\"read_text_file\",\"title\":\"Read Text File\",\"description\":\"Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the 'head' parameter to read only the first N lines of a file, or the 'tail' parameter to read only the last N lines of a file. Operates on the file as text regardless of extension. Only works within allowed directories.\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"tail\":{\"description\":\"If provided, returns only the last N lines of the file\",\"type\":\"number\"},\"head\":{\"description\":\"If provided, returns only the first N lines of the file\",\"type\":\"number\"}},\"required\":[\"path\"]},\"annotations\":{\"readOnlyHint\":true},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\"",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "official-memory",
+      "package": "@modelcontextprotocol/server-memory",
+      "version": "2026.1.26",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 287,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "memory-server",
+          "version": "0.6.3"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 9,
+      "tools": [
+        {
+          "name": "create_entities",
+          "description": "Create multiple new entities in the knowledge graph",
+          "inputProps": [
+            "entities"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "create_relations",
+          "description": "Create multiple new relations between entities in the knowledge graph. Relations should be in active voice",
+          "inputProps": [
+            "relations"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "add_observations",
+          "description": "Add new observations to existing entities in the knowledge graph",
+          "inputProps": [
+            "observations"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "delete_entities",
+          "description": "Delete multiple entities and their associated relations from the knowledge graph",
+          "inputProps": [
+            "entityNames"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "delete_observations",
+          "description": "Delete specific observations from entities in the knowledge graph",
+          "inputProps": [
+            "deletions"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "delete_relations",
+          "description": "Delete multiple relations from the knowledge graph",
+          "inputProps": [
+            "relations"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "read_graph",
+          "description": "Read the entire knowledge graph",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "search_nodes",
+          "description": "Search for nodes in the knowledge graph based on a query",
+          "inputProps": [
+            "query"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "open_nodes",
+          "description": "Open specific nodes in the knowledge graph by their names",
+          "inputProps": [
+            "names"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "memory-or-context"
+      ],
+      "suggestedPolicy": "state-profile-single-session",
+      "expectedPolicy": "state-profile-single-session",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "Knowledge Graph MCP Server running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"memory-server\",\"version\":\"0.6.3\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"create_entities\",\"title\":\"Create Entities\",\"description\":\"Create multiple new entities in the knowledge graph\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"]}}},\"required\":[\"entities\"]},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"],\"additionalProperties\":false}}},\"required\":[\"entities\"],\"additionalProperties\":false}},{\"name\":\"create_relations\",\"title\":\"Create Relations\",\"description\":\"Create multiple new relations between entities in the knowledge graph. Relations should be in active voice\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"relations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"from\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation starts\"},\"to\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation ends\"},\"relationType\":{\"type\":\"string\",\"description\":\"The type of",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "official-sequential-thinking",
+      "package": "@modelcontextprotocol/server-sequential-thinking",
+      "version": "2025.12.18",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 341,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "sequential-thinking-server",
+          "version": "0.2.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 1,
+      "tools": [
+        {
+          "name": "sequentialthinking",
+          "description": "A detailed tool for dynamic and reflective problem-solving through thoughts.\nThis tool helps analyze problems through a flexible thinking process that can adapt and evolve.\nEach thought can build on, question, or revise previous insights as",
+          "inputProps": [
+            "thought",
+            "nextThoughtNeeded",
+            "thoughtNumber",
+            "totalThoughts",
+            "isRevision",
+            "revisesThought",
+            "branchFromThought",
+            "branchId",
+            "needsMoreThoughts"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "memory-or-context"
+      ],
+      "suggestedPolicy": "state-profile-single-session",
+      "expectedPolicy": "state-profile-single-session",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "Sequential Thinking MCP Server running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"sequential-thinking-server\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"sequentialthinking\",\"title\":\"Sequential Thinking\",\"description\":\"A detailed tool for dynamic and reflective problem-solving through thoughts.\\nThis tool helps analyze problems through a flexible thinking process that can adapt and evolve.\\nEach thought can build on, question, or revise previous insights as understanding deepens.\\n\\nWhen to use this tool:\\n- Breaking down complex problems into steps\\n- Planning and design with room for revision\\n- Analysis that might need course correction\\n- Problems where the full scope might not be clear initially\\n- Problems that require a multi-step solution\\n- Tasks that need to maintain context over multiple steps\\n- Situations where irrelevant information needs to be filtered out\\n\\nKey features:\\n- You can adjust total_thoughts up or down as you progress\\n- You can question or revise previous thoughts\\n- You can add more thoughts even after reaching what seemed like the end\\n- You can express uncertainty and explore alternative approaches\\n- Not every thought needs to build linearly - you can branch or backtrack\\n- Generates a solution hypothesis\\n- Verifies the hypothesis based on the Chain of Thought steps\\n- Repeats the process until satisfied\\n- Provides a correct answer\\n\\nParameters explained:\\n- thought: Your current thinking step, which can include:\\n  * Regular analytical steps\\n  * Revisions of previous thoughts\\n  * Questions about previous decisions\\n  * Realizations about needing more analysis\\n  * Changes in approach\\n  * Hypothesis generation\\n  * Hypothesis verification\\n- nextThoughtNeeded: True if you need more thinking, even if at what seemed like the end\\n- thoughtNumber: Current number in sequence (can go beyond initial total if needed)\\n- totalThoughts: Current estimate of thoughts needed (can be",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "python-time",
+      "package": "mcp-server-time",
+      "version": "2026.1.26",
+      "kind": "pypi",
+      "status": "ok",
+      "elapsedMs": 1495,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "mcp-time",
+          "version": "1.27.1"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "experimental": {},
+          "tools": {
+            "listChanged": false
+          }
+        }
+      },
+      "toolCount": 2,
+      "tools": [
+        {
+          "name": "get_current_time",
+          "description": "Get current time in a specific timezones",
+          "inputProps": [
+            "timezone"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "convert_time",
+          "description": "Convert time between timezones",
+          "inputProps": [
+            "source_timezone",
+            "time",
+            "target_timezone"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "local-utility"
+      ],
+      "suggestedPolicy": "local-utility-multi-reader",
+      "expectedPolicy": "local-utility-multi-reader",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "",
+      "stdoutSample": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"experimental\":{},\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"mcp-time\",\"version\":\"1.27.1\"}}}\n{\"jsonrpc\":\"2.0\",\"id\":\"tools-1\",\"result\":{\"tools\":[{\"name\":\"get_current_time\",\"description\":\"Get current time in a specific timezones\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"timezone\":{\"type\":\"string\",\"description\":\"IANA timezone name (e.g., 'America/New_York', 'Europe/London'). Use 'UTC' as local timezone if no timezone provided by the user.\"}},\"required\":[\"timezone\"]}},{\"name\":\"convert_time\",\"description\":\"Convert time between timezones\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"source_timezone\":{\"type\":\"string\",\"description\":\"Source IANA timezone name (e.g., 'America/New_York', 'Europe/London'). Use 'UTC' as local timezone if no source timezone provided by the user.\"},\"time\":{\"type\":\"string\",\"description\":\"Time to convert in 24-hour format (HH:MM)\"},\"target_timezone\":{\"type\":\"string\",\"description\":\"Target IANA timezone name (e.g., 'Asia/Tokyo', 'America/San_Francisco'). Use 'UTC' as local timezone if no target timezone provided by the user.\"}},\"required\":[\"source_timezone\",\"time\",\"target_timezone\"]}}]}}\n",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "python-git",
+      "package": "mcp-server-git",
+      "version": "2026.1.14",
+      "kind": "pypi",
+      "status": "ok",
+      "elapsedMs": 875,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "mcp-git",
+          "version": "1.27.1"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "experimental": {},
+          "tools": {
+            "listChanged": false
+          }
+        }
+      },
+      "toolCount": 12,
+      "tools": [
+        {
+          "name": "git_status",
+          "description": "Shows the working tree status",
+          "inputProps": [
+            "repo_path"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_diff_unstaged",
+          "description": "Shows changes in the working directory that are not yet staged",
+          "inputProps": [
+            "repo_path",
+            "context_lines"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_diff_staged",
+          "description": "Shows changes that are staged for commit",
+          "inputProps": [
+            "repo_path",
+            "context_lines"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_diff",
+          "description": "Shows differences between branches or commits",
+          "inputProps": [
+            "repo_path",
+            "target",
+            "context_lines"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_commit",
+          "description": "Records changes to the repository",
+          "inputProps": [
+            "repo_path",
+            "message"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_add",
+          "description": "Adds file contents to the staging area",
+          "inputProps": [
+            "repo_path",
+            "files"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_reset",
+          "description": "Unstages all staged changes",
+          "inputProps": [
+            "repo_path"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_log",
+          "description": "Shows the commit logs",
+          "inputProps": [
+            "repo_path",
+            "max_count",
+            "start_timestamp",
+            "end_timestamp"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_create_branch",
+          "description": "Creates a new branch from an optional base branch",
+          "inputProps": [
+            "repo_path",
+            "branch_name",
+            "base_branch"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_checkout",
+          "description": "Switches branches",
+          "inputProps": [
+            "repo_path",
+            "branch_name"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_show",
+          "description": "Shows the contents of a commit",
+          "inputProps": [
+            "repo_path",
+            "revision"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "git_branch",
+          "description": "List Git branches",
+          "inputProps": [
+            "repo_path",
+            "branch_type",
+            "contains",
+            "not_contains"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "git-repository"
+      ],
+      "suggestedPolicy": "project-repo-single-writer",
+      "expectedPolicy": "project-repo-single-writer",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "",
+      "stdoutSample": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"experimental\":{},\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"mcp-git\",\"version\":\"1.27.1\"}}}\n{\"jsonrpc\":\"2.0\",\"id\":\"tools-1\",\"result\":{\"tools\":[{\"name\":\"git_status\",\"description\":\"Shows the working tree status\",\"inputSchema\":{\"properties\":{\"repo_path\":{\"title\":\"Repo Path\",\"type\":\"string\"}},\"required\":[\"repo_path\"],\"title\":\"GitStatus\",\"type\":\"object\"}},{\"name\":\"git_diff_unstaged\",\"description\":\"Shows changes in the working directory that are not yet staged\",\"inputSchema\":{\"properties\":{\"repo_path\":{\"title\":\"Repo Path\",\"type\":\"string\"},\"context_lines\":{\"default\":3,\"title\":\"Context Lines\",\"type\":\"integer\"}},\"required\":[\"repo_path\"],\"title\":\"GitDiffUnstaged\",\"type\":\"object\"}},{\"name\":\"git_diff_staged\",\"description\":\"Shows changes that are staged for commit\",\"inputSchema\":{\"properties\":{\"repo_path\":{\"title\":\"Repo Path\",\"type\":\"string\"},\"context_lines\":{\"default\":3,\"title\":\"Context Lines\",\"type\":\"integer\"}},\"required\":[\"repo_path\"],\"title\":\"GitDiffStaged\",\"type\":\"object\"}},{\"name\":\"git_diff\",\"description\":\"Shows differences between branches or commits\",\"inputSchema\":{\"properties\":{\"repo_path\":{\"title\":\"Repo Path\",\"type\":\"string\"},\"target\":{\"title\":\"Target\",\"type\":\"string\"},\"context_lines\":{\"default\":3,\"title\":\"Context Lines\",\"type\":\"integer\"}},\"required\":[\"repo_path\",\"target\"],\"title\":\"GitDiff\",\"type\":\"object\"}},{\"name\":\"git_commit\",\"description\":\"Records changes to the repository\",\"inputSchema\":{\"properties\":{\"repo_path\":{\"title\":\"Repo Path\",\"type\":\"string\"},\"message\":{\"title\":\"Message\",\"type\":\"string\"}},\"required\":[\"repo_path\",\"message\"],\"title\":\"GitCommit\",\"type\":\"object\"}},{\"name\":\"git_add\",\"description\":\"Adds file contents to the staging area\",\"inputSchema\":{\"properties\":{\"repo_path\":{\"title\":\"Repo Path\",\"type\":\"string\"},\"files\":{\"items\":{\"type\":\"string\"},\"title\":\"Files\",\"type\":\"array\"}},\"required\":[\"repo_path\",\"files\"],\"title\":\"GitAdd\",\"type\":\"object\"}},{\"name\":\"git_reset\",\"des",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "python-fetch",
+      "package": "mcp-server-fetch",
+      "version": "2025.4.7",
+      "kind": "pypi",
+      "status": "ok",
+      "elapsedMs": 1028,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "mcp-fetch",
+          "version": "1.27.1"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "experimental": {},
+          "prompts": {
+            "listChanged": false
+          },
+          "tools": {
+            "listChanged": false
+          }
+        }
+      },
+      "toolCount": 1,
+      "tools": [
+        {
+          "name": "fetch",
+          "description": "Fetches a URL from the internet and optionally extracts its contents as markdown.\n\nAlthough originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you ca",
+          "inputProps": [
+            "url",
+            "max_length",
+            "start_index",
+            "raw"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "network-fetch"
+      ],
+      "suggestedPolicy": "network-fetch-review",
+      "expectedPolicy": "network-fetch-review",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "",
+      "stdoutSample": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"experimental\":{},\"prompts\":{\"listChanged\":false},\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"mcp-fetch\",\"version\":\"1.27.1\"}}}\n{\"jsonrpc\":\"2.0\",\"id\":\"tools-1\",\"result\":{\"tools\":[{\"name\":\"fetch\",\"description\":\"Fetches a URL from the internet and optionally extracts its contents as markdown.\\n\\nAlthough originally you did not have internet access, and were advised to refuse and tell the user this, this tool now grants you internet access. Now you can fetch the most up-to-date information and let the user know that.\",\"inputSchema\":{\"description\":\"Parameters for fetching a URL.\",\"properties\":{\"url\":{\"description\":\"URL to fetch\",\"format\":\"uri\",\"minLength\":1,\"title\":\"Url\",\"type\":\"string\"},\"max_length\":{\"default\":5000,\"description\":\"Maximum number of characters to return.\",\"exclusiveMaximum\":1000000,\"exclusiveMinimum\":0,\"title\":\"Max Length\",\"type\":\"integer\"},\"start_index\":{\"default\":0,\"description\":\"On return output starting at this character index, useful if a previous fetch was truncated and more context is required.\",\"minimum\":0,\"title\":\"Start Index\",\"type\":\"integer\"},\"raw\":{\"default\":false,\"description\":\"Get the actual HTML content of the requested page, without simplification.\",\"title\":\"Raw\",\"type\":\"boolean\"}},\"required\":[\"url\"],\"title\":\"Fetch\",\"type\":\"object\"}}]}}\n",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "python-sqlite",
+      "package": "mcp-server-sqlite",
+      "version": "2025.4.25",
+      "kind": "pypi",
+      "status": "ok",
+      "elapsedMs": 839,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "sqlite",
+          "version": "0.1.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "experimental": {},
+          "prompts": {
+            "listChanged": false
+          },
+          "resources": {
+            "subscribe": false,
+            "listChanged": false
+          },
+          "tools": {
+            "listChanged": false
+          }
+        }
+      },
+      "toolCount": 6,
+      "tools": [
+        {
+          "name": "read_query",
+          "description": "Execute a SELECT query on the SQLite database",
+          "inputProps": [
+            "query"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "write_query",
+          "description": "Execute an INSERT, UPDATE, or DELETE query on the SQLite database",
+          "inputProps": [
+            "query"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "create_table",
+          "description": "Create a new table in the SQLite database",
+          "inputProps": [
+            "query"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "list_tables",
+          "description": "List all tables in the SQLite database",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "describe_table",
+          "description": "Get the schema information for a specific table",
+          "inputProps": [
+            "table_name"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "append_insight",
+          "description": "Add a business insight to the memo",
+          "inputProps": [
+            "insight"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "database"
+      ],
+      "suggestedPolicy": "database-path-single-writer",
+      "expectedPolicy": "database-path-single-writer",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "",
+      "stdoutSample": "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"experimental\":{},\"prompts\":{\"listChanged\":false},\"resources\":{\"subscribe\":false,\"listChanged\":false},\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"sqlite\",\"version\":\"0.1.0\"}}}\n{\"jsonrpc\":\"2.0\",\"id\":\"tools-1\",\"result\":{\"tools\":[{\"name\":\"read_query\",\"description\":\"Execute a SELECT query on the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"SELECT SQL query to execute\"}},\"required\":[\"query\"]}},{\"name\":\"write_query\",\"description\":\"Execute an INSERT, UPDATE, or DELETE query on the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"SQL query to execute\"}},\"required\":[\"query\"]}},{\"name\":\"create_table\",\"description\":\"Create a new table in the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"CREATE TABLE SQL statement\"}},\"required\":[\"query\"]}},{\"name\":\"list_tables\",\"description\":\"List all tables in the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},{\"name\":\"describe_table\",\"description\":\"Get the schema information for a specific table\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Name of the table to describe\"}},\"required\":[\"table_name\"]}},{\"name\":\"append_insight\",\"description\":\"Add a business insight to the memo\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"insight\":{\"type\":\"string\",\"description\":\"Business insight discovered from data analysis\"}},\"required\":[\"insight\"]}}]}}\n",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "official-everything",
+      "package": "@modelcontextprotocol/server-everything",
+      "version": "2026.1.26",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 341,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "mcp-servers/everything",
+          "title": "Everything Reference Server",
+          "version": "2.0.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          },
+          "prompts": {
+            "listChanged": true
+          },
+          "resources": {
+            "subscribe": true,
+            "listChanged": true
+          },
+          "logging": {},
+          "tasks": {
+            "list": {},
+            "cancel": {},
+            "requests": {
+              "tools": {
+                "call": {}
+              }
+            }
+          },
+          "completions": {}
+        }
+      },
+      "toolCount": 15,
+      "tools": [
+        {
+          "name": "echo",
+          "description": "Echoes back the input string",
+          "inputProps": [
+            "message"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-annotated-message",
+          "description": "Demonstrates how annotations can be used to provide metadata about content.",
+          "inputProps": [
+            "messageType",
+            "includeImage"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-env",
+          "description": "Returns all environment variables, helpful for debugging MCP server configuration",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "get-resource-links",
+          "description": "Returns up to ten resource links that reference different types of resources",
+          "inputProps": [
+            "count"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-resource-reference",
+          "description": "Returns a resource reference that can be used by MCP clients",
+          "inputProps": [
+            "resourceType",
+            "resourceId"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-structured-content",
+          "description": "Returns structured content along with an output schema for client data validation",
+          "inputProps": [
+            "location"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-sum",
+          "description": "Returns the sum of two numbers",
+          "inputProps": [
+            "a",
+            "b"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-tiny-image",
+          "description": "Returns a tiny MCP logo image.",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "gzip-file-as-resource",
+          "description": "Compresses a single file using gzip compression. Depending upon the selected output type, returns either the compressed data as a gzipped resource or a resource link, allowing it to be downloaded in a subsequent request during the current s",
+          "inputProps": [
+            "name",
+            "data",
+            "outputType"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "toggle-simulated-logging",
+          "description": "Toggles simulated, random-leveled logging on or off.",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "toggle-subscriber-updates",
+          "description": "Toggles simulated resource subscription updates on or off.",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "trigger-long-running-operation",
+          "description": "Demonstrates a long running operation with progress updates.",
+          "inputProps": [
+            "duration",
+            "steps"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-roots-list",
+          "description": "Lists the current MCP roots provided by the client. Demonstrates the roots protocol capability even though this server doesn't access files.",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "trigger-sampling-request",
+          "description": "Trigger a Request from the Server for LLM Sampling",
+          "inputProps": [
+            "prompt",
+            "maxTokens"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "simulate-research-query",
+          "description": "Simulates a deep research operation that gathers, analyzes, and synthesizes information. Demonstrates MCP task-based operations with progress through multiple stages. If 'ambiguous' is true and client supports elicitation, sends an elicitat",
+          "inputProps": [
+            "topic",
+            "ambiguous"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "protocol-fixture",
+        "database",
+        "credentials-or-auth"
+      ],
+      "suggestedPolicy": "test-fixture-disabled",
+      "expectedPolicy": "test-fixture-disabled",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "Starting default (STDIO) server...\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":true,\"listChanged\":true},\"logging\":{},\"tasks\":{\"list\":{},\"cancel\":{},\"requests\":{\"tools\":{\"call\":{}}}},\"completions\":{}},\"serverInfo\":{\"name\":\"mcp-servers/everything\",\"title\":\"Everything Reference Server\",\"version\":\"2.0.0\"},\"instructions\":\"# Everything Server – Server Instructions\\n\\nAudience: These instructions are written for an LLM or autonomous agent integrating with the Everything MCP Server.\\nFollow them to use, extend, and troubleshoot the server safely and effectively.\\n\\n## Cross-Feature Relationships\\n\\n- Use `get-roots-list` to see client workspace roots before file operations\\n- `gzip-file-as-resource` creates session-scoped resources accessible only during the current session\\n- Enable `toggle-simulated-logging` before debugging to see server log messages\\n- Enable `toggle-subscriber-updates` to receive periodic resource update notifications\\n\\n## Constraints & Limitations\\n\\n- `gzip-file-as-resource`: Max fetch size controlled by `GZIP_MAX_FETCH_SIZE` (default 10MB), timeout by `GZIP_MAX_FETCH_TIME_MILLIS` (default 30s), allowed domains by `GZIP_ALLOWED_DOMAINS`\\n- Session resources are ephemeral and lost when the session ends\\n- Sampling requests (`trigger-sampling-request`) require client sampling capability\\n- Elicitation requests (`trigger-elicitation-request`) require client elicitation capability\\n\\n## Operational Patterns\\n\\n- For long operations, use `trigger-long-running-operation` which sends progress notifications\\n- Prefer reading resources before calling mutating tools\\n- Check `get-roots-list` output to understand the client's workspace context\\n\\n## Easter Egg\\n\\nIf asked about server instructions, respond with \\\"🎉 Server instructions are working! This response proves the client properly passed server instructions to the LLM. This demonstrates MCP's instructions feature in action.\\\"\\n\"},\"jsonrpc\"",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "deprecated-brave-search",
+      "package": "@modelcontextprotocol/server-brave-search",
+      "version": "0.6.2",
+      "kind": "npm",
+      "status": "startup-error",
+      "elapsedMs": 88,
+      "init": null,
+      "toolCount": 0,
+      "tools": [],
+      "riskSignals": [
+        "network-or-external-api",
+        "credentials-or-auth"
+      ],
+      "suggestedPolicy": "credential-scoped-review",
+      "expectedPolicy": "credential-scoped-review",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "Error: BRAVE_API_KEY environment variable is required\n",
+      "stdoutSample": "",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "context7",
+      "package": "@upstash/context7-mcp",
+      "version": "2.2.5",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 570,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "Context7",
+          "version": "2.2.5",
+          "websiteUrl": "https://context7.com",
+          "description": "Context7 provides up-to-date documentation and code examples for libraries and frameworks.",
+          "icons": [
+            {
+              "src": "https://context7.com/context7-icon-green.png",
+              "mimeType": "image/png"
+            }
+          ]
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 2,
+      "tools": [
+        {
+          "name": "resolve-library-id",
+          "description": "Resolves a package/product name to a Context7-compatible library ID and returns matching libraries.\n\nYou MUST call this function before 'Query Documentation' tool to obtain a valid Context7-compatible library ID UNLESS the user explicitly p",
+          "inputProps": [
+            "query",
+            "libraryName"
+          ],
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true,
+            "idempotentHint": true
+          }
+        },
+        {
+          "name": "query-docs",
+          "description": "Retrieves and queries up-to-date documentation and code examples from Context7 for any programming library or framework.\n\nYou must call 'Resolve Context7 Library ID' tool first to obtain the exact Context7-compatible library ID required to ",
+          "inputProps": [
+            "libraryId",
+            "query"
+          ],
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true,
+            "idempotentHint": true
+          }
+        }
+      ],
+      "riskSignals": [
+        "database",
+        "network-or-external-api",
+        "credentials-or-auth"
+      ],
+      "suggestedPolicy": "network-docs-multi-reader-review",
+      "expectedPolicy": "network-docs-multi-reader-review",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "Context7 Documentation MCP Server v2.2.5 running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"Context7\",\"version\":\"2.2.5\",\"websiteUrl\":\"https://context7.com\",\"description\":\"Context7 provides up-to-date documentation and code examples for libraries and frameworks.\",\"icons\":[{\"src\":\"https://context7.com/context7-icon-green.png\",\"mimeType\":\"image/png\"}]},\"instructions\":\"Use this server to fetch current documentation whenever the user asks about a library, framework, SDK, API, CLI tool, or cloud service -- even well-known ones like React, Next.js, Prisma, Express, Tailwind, Django, or Spring Boot. This includes API syntax, configuration, version migration, library-specific debugging, setup instructions, and CLI tool usage. Use even when you think you know the answer -- your training data may not reflect recent changes. Prefer this over web search for library docs.\\n\\nDo not use for: refactoring, writing scripts from scratch, debugging business logic, code review, or general programming concepts.\"},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"resolve-library-id\",\"title\":\"Resolve Context7 Library ID\",\"description\":\"Resolves a package/product name to a Context7-compatible library ID and returns matching libraries.\\n\\nYou MUST call this function before 'Query Documentation' tool to obtain a valid Context7-compatible library ID UNLESS the user explicitly provides a library ID in the format '/org/project' or '/org/project/version' in their query.\\n\\nEach result includes:\\n- Library ID: Context7-compatible identifier (format: /org/project)\\n- Name: Library or package name\\n- Description: Short summary\\n- Code Snippets: Number of available code examples\\n- Source Reputation: Authority indicator (High, Medium, Low, or Unknown)\\n- Benchmark Score: Quality indicator (100 is the highest score)\\n- Versions: List of versions if available. Use one of those versions if the user provides a version in their query. The format of the version is /org/project/version.",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "chrome-devtools",
+      "package": "chrome-devtools-mcp",
+      "version": "0.26.0",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 1915,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "chrome_devtools",
+          "title": "Chrome DevTools MCP server",
+          "version": "0.26.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "logging": {},
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 29,
+      "tools": [
+        {
+          "name": "click",
+          "description": "Clicks on the provided element",
+          "inputProps": [
+            "uid",
+            "dblClick",
+            "includeSnapshot"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "close_page",
+          "description": "Closes the page by its index. The last open page cannot be closed.",
+          "inputProps": [
+            "pageId"
+          ],
+          "annotations": {
+            "category": "navigation",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "drag",
+          "description": "Drag an element onto another element",
+          "inputProps": [
+            "from_uid",
+            "to_uid",
+            "includeSnapshot"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "emulate",
+          "description": "Emulates various features on the selected page.",
+          "inputProps": [
+            "networkConditions",
+            "cpuThrottlingRate",
+            "geolocation",
+            "userAgent",
+            "colorScheme",
+            "viewport"
+          ],
+          "annotations": {
+            "category": "emulation",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "evaluate_script",
+          "description": "Evaluate a JavaScript function inside the currently selected page. Returns the response as JSON,\nso returned values have to be JSON-serializable.",
+          "inputProps": [
+            "function",
+            "args",
+            "dialogAction"
+          ],
+          "annotations": {
+            "category": "debugging",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "fill",
+          "description": "Type text into an input, text area or select an option from a <select> element.",
+          "inputProps": [
+            "uid",
+            "value",
+            "includeSnapshot"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "fill_form",
+          "description": "Fill out multiple form elements (inputs, selects, checkboxes, radios) at once. ALWAYS prefer this tool over multiple individual 'fill' or 'click' calls when interacting with forms. It is significantly faster, more reliable, and reduces turn",
+          "inputProps": [
+            "elements",
+            "includeSnapshot"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "get_console_message",
+          "description": "Gets a console message by its ID. You can get all messages by calling list_console_messages.",
+          "inputProps": [
+            "msgid"
+          ],
+          "annotations": {
+            "category": "debugging",
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "get_network_request",
+          "description": "Gets a network request by an optional reqid, if omitted returns the currently selected request in the DevTools Network panel.",
+          "inputProps": [
+            "reqid",
+            "requestFilePath",
+            "responseFilePath"
+          ],
+          "annotations": {
+            "category": "network",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "handle_dialog",
+          "description": "If a browser dialog was opened, use this command to handle it",
+          "inputProps": [
+            "action",
+            "promptText"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "hover",
+          "description": "Hover over the provided element",
+          "inputProps": [
+            "uid",
+            "includeSnapshot"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "lighthouse_audit",
+          "description": "Get Lighthouse score and reports for accessibility, SEO, best practices, and agentic browsing. This excludes performance. For performance audits, run performance_start_trace",
+          "inputProps": [
+            "mode",
+            "device",
+            "outputDirPath"
+          ],
+          "annotations": {
+            "category": "debugging",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "list_console_messages",
+          "description": "List all console messages for the currently selected page since the last navigation.",
+          "inputProps": [
+            "pageSize",
+            "pageIdx",
+            "types",
+            "includePreservedMessages"
+          ],
+          "annotations": {
+            "category": "debugging",
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "list_network_requests",
+          "description": "List all requests for the currently selected page since the last navigation.",
+          "inputProps": [
+            "pageSize",
+            "pageIdx",
+            "resourceTypes",
+            "includePreservedRequests"
+          ],
+          "annotations": {
+            "category": "network",
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "list_pages",
+          "description": "Get a list of pages open in the browser.",
+          "inputProps": [],
+          "annotations": {
+            "category": "navigation",
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "navigate_page",
+          "description": "Go to a URL, or back, forward, or reload. Use project URL if not specified otherwise.",
+          "inputProps": [
+            "type",
+            "url",
+            "ignoreCache",
+            "handleBeforeUnload",
+            "initScript",
+            "timeout"
+          ],
+          "annotations": {
+            "category": "navigation",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "new_page",
+          "description": "Open a new tab and load a URL. Use project URL if not specified otherwise.",
+          "inputProps": [
+            "url",
+            "background",
+            "isolatedContext",
+            "timeout"
+          ],
+          "annotations": {
+            "category": "navigation",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "performance_analyze_insight",
+          "description": "Provides more detailed information on a specific Performance Insight of an insight set that was highlighted in the results of a trace recording.",
+          "inputProps": [
+            "insightSetId",
+            "insightName"
+          ],
+          "annotations": {
+            "category": "performance",
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "performance_start_trace",
+          "description": "Start a performance trace on the selected webpage. Use to find frontend performance issues, Core Web Vitals (LCP, INP, CLS), and improve page load speed.",
+          "inputProps": [
+            "reload",
+            "autoStop",
+            "filePath"
+          ],
+          "annotations": {
+            "category": "performance",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "performance_stop_trace",
+          "description": "Stop the active performance trace recording on the selected webpage.",
+          "inputProps": [
+            "filePath"
+          ],
+          "annotations": {
+            "category": "performance",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "press_key",
+          "description": "Press a key or key combination. Use this when other input methods like fill() cannot be used (e.g., keyboard shortcuts, navigation keys, or special key combinations).",
+          "inputProps": [
+            "key",
+            "includeSnapshot"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "resize_page",
+          "description": "Resizes the selected page's window so that the page has specified dimension",
+          "inputProps": [
+            "width",
+            "height"
+          ],
+          "annotations": {
+            "category": "emulation",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "select_page",
+          "description": "Select a page as a context for future tool calls.",
+          "inputProps": [
+            "pageId",
+            "bringToFront"
+          ],
+          "annotations": {
+            "category": "navigation",
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "take_memory_snapshot",
+          "description": "Capture a heap snapshot of the currently selected page. Use to analyze the memory distribution of JavaScript objects and debug memory leaks.",
+          "inputProps": [
+            "filePath"
+          ],
+          "annotations": {
+            "category": "memory",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "take_screenshot",
+          "description": "Take a screenshot of the page or element.",
+          "inputProps": [
+            "format",
+            "quality",
+            "uid",
+            "fullPage",
+            "filePath"
+          ],
+          "annotations": {
+            "category": "debugging",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "take_snapshot",
+          "description": "Take a text snapshot of the currently selected page based on the a11y tree. The snapshot lists page elements along with a unique\nidentifier (uid). Always use the latest snapshot. Prefer taking a snapshot over taking a screenshot. The snapsh",
+          "inputProps": [
+            "verbose",
+            "filePath"
+          ],
+          "annotations": {
+            "category": "debugging",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "type_text",
+          "description": "Type text using keyboard into a previously focused input",
+          "inputProps": [
+            "text",
+            "submitKey"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "upload_file",
+          "description": "Upload a file through a provided element.",
+          "inputProps": [
+            "uid",
+            "filePath",
+            "includeSnapshot"
+          ],
+          "annotations": {
+            "category": "input",
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "wait_for",
+          "description": "Wait for the specified text to appear on the selected page.",
+          "inputProps": [
+            "text",
+            "timeout"
+          ],
+          "annotations": {
+            "category": "navigation",
+            "readOnlyHint": true
+          }
+        }
+      ],
+      "riskSignals": [
+        "browser-or-desktop"
+      ],
+      "suggestedPolicy": "shared-exclusive-host-lock",
+      "expectedPolicy": "shared-exclusive-host-lock",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "chrome-devtools-mcp exposes content of the browser instance to the MCP clients allowing them to inspect,\ndebug, and modify any data in the browser or DevTools.\nAvoid sharing sensitive or personal information that you do not want to share with MCP clients.\nPerformance tools may send trace URLs to the Google CrUX API to fetch real-user experience data. To disable, run with --no-performance-crux.\n\nGoogle collects usage statistics to improve Chrome DevTools MCP. To opt-out, run with --no-usage-statistics.\nFor more details, visit: https://github.com/ChromeDevTools/chrome-devtools-mcp#usage-statistics\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"logging\":{},\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"chrome_devtools\",\"title\":\"Chrome DevTools MCP server\",\"version\":\"0.26.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"method\":\"roots/list\",\"jsonrpc\":\"2.0\",\"id\":0}\n{\"result\":{\"tools\":[{\"name\":\"click\",\"description\":\"Clicks on the provided element\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"uid\":{\"type\":\"string\",\"description\":\"The uid of an element on the page from the page content snapshot\"},\"dblClick\":{\"type\":\"boolean\",\"description\":\"Set to true for double clicks. Default is false.\"},\"includeSnapshot\":{\"type\":\"boolean\",\"description\":\"Whether to include a snapshot in the response. Default is false.\"}},\"required\":[\"uid\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"annotations\":{\"category\":\"input\",\"readOnlyHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"}},{\"name\":\"close_page\",\"description\":\"Closes the page by its index. The last open page cannot be closed.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"pageId\":{\"type\":\"number\",\"description\":\"The ID of the page to close. Call list_pages to list pages.\"}},\"required\":[\"pageId\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"annotations\":{\"category\":\"navigation\",\"readOnlyHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"}},{\"name\":\"drag\",\"description\":\"Drag an element onto another element\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"from_uid\":{\"type\":\"string\",\"description\":\"The uid of the element to drag\"},\"to_uid\":{\"type\":\"string\",\"description\":\"The uid of the element to drop into\"},\"includeSnapshot\":{\"type\":\"boolean\",\"description\":\"Whether to include a snapshot in the response. Default is false.\"}},\"required\":[\"from_uid\",\"to_uid\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\"},\"annotations\":{\"category\":\"input\",\"readOnlyHint\":false},\"execution\":{\"taskSupport\":\"forbidden\"}},{\"name\":\"emulate\",\"descripti",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    },
+    {
+      "id": "ui5",
+      "package": "@ui5/mcp-server",
+      "version": "0.2.11",
+      "kind": "npm",
+      "status": "skipped-by-policy",
+      "elapsedMs": 0,
+      "init": null,
+      "toolCount": 0,
+      "tools": [],
+      "riskSignals": [
+        "install-blocked"
+      ],
+      "suggestedPolicy": "project-devtools-single-writer-review",
+      "expectedPolicy": "project-devtools-single-writer-review",
+      "expectedMatchesSuggested": true,
+      "errors": [
+        {
+          "phase": "install",
+          "error": "large project-devtools dependency tree; kept as policy canary while default live probe stays fast and deterministic"
+        }
+      ],
+      "stderrSample": "",
+      "stdoutSample": "",
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": []
+    }
+  ],
+  "notes": [
+    "Consolidated evidence from deterministic npm, npm canary, and PyPI/uv package-manager probes.",
+    "Each live result used only initialize, notifications/initialized, and tools/list; no tools were called.",
+    "Canaries that need credentials or have large/flaky dependency trees are represented as startup-error or skipped-by-policy rather than being force-enabled by default.",
+    "This is smoke evidence, not a source-code security audit of third-party packages."
+  ],
+  "fixture": "eval/fixtures/live-random-mcp-probe-sample.json",
+  "sourceSchema": "mcpace.liveRandomMcpProbe.v5"
+}

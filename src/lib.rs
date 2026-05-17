@@ -1,8 +1,8 @@
 pub mod adapter;
 pub mod app;
 pub mod candidates;
-pub mod cleanup;
 pub mod catalog;
+pub mod cleanup;
 pub mod client;
 pub mod client_catalog;
 pub(crate) mod codex_config;

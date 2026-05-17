@@ -190,15 +190,17 @@ pub fn encode_projected_tool_name(server: &str, tool: &str) -> Option<String> {
 }
 
 fn encode_projected_component(value: &str) -> String {
-    value
-        .as_bytes()
-        .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect::<String>()
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(value.len() * 2);
+    for byte in value.as_bytes() {
+        out.push(DIGITS[(byte >> 4) as usize] as char);
+        out.push(DIGITS[(byte & 0x0f) as usize] as char);
+    }
+    out
 }
 
 fn decode_projected_component(value: &str) -> Option<String> {
-    if value.is_empty() || !value.len().is_multiple_of(2) {
+    if value.is_empty() || value.len() % 2 != 0 {
         return None;
     }
     let mut bytes = Vec::new();

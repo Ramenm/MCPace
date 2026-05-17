@@ -40,8 +40,9 @@ export function collectToolExposureSafetyAudit() {
     check(
       'known-tool-call-guard',
       /fn validate_upstream_tool_known\(/.test(leaseRuntime)
-        && (leaseRuntime.match(/validate_upstream_tool_known\(/g) || []).length >= 3
-        && /fn validate_upstream_batch_tools_known\(/.test(leaseRuntime),
+        && /fn validate_upstream_tool_known_with_pool\(/.test(leaseRuntime)
+        && /fn validate_upstream_batch_tools_known\(/.test(leaseRuntime)
+        && /fn validate_upstream_batch_tools_known_with_pool\(/.test(leaseRuntime),
       'Brokered upstream calls validate the requested tool against current tools/list before forwarding.'
     ),
     check(

@@ -163,7 +163,6 @@ fn add_advisory_signal(
     signals.push(signal.to_string());
 }
 
-
 fn add_metadata_based_advisory_signals(
     tool: &JsonValue,
     risk_classes: &mut BTreeSet<String>,

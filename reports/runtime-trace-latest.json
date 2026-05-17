@@ -1,39 +1,39 @@
 {
   "schema": "mcpace.runtimeTraceHarness.v1",
-  "generatedAt": "2026-05-04T13:22:15.068Z",
+  "generatedAt": "2026-05-17T15:29:32.943Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "pass",
-  "endpoint": "http://127.0.0.1:63382/mcp",
-  "binary": "target/release/mcpace.exe",
+  "endpoint": "http://127.0.0.1:44309/mcp",
+  "binary": "target/debug/mcpace",
   "host": {
-    "key": "win32-x64-msvc",
+    "key": "linux-x64-gnu",
     "detected": true,
-    "platform": "win32",
+    "platform": "linux",
     "arch": "x64",
-    "libc": null,
-    "rustTarget": "x86_64-pc-windows-msvc"
+    "libc": "gnu",
+    "rustTarget": "x86_64-unknown-linux-gnu"
   },
   "binaryCandidates": [
-    "target/release/mcpace.exe",
-    "target/debug/mcpace.exe",
-    "target/x86_64-pc-windows-msvc/release/mcpace.exe",
-    "dist/mcpace.exe",
-    "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe",
-    "packages/npm/cli/vendor/mcpace.exe"
+    "target/release/mcpace",
+    "target/debug/mcpace",
+    "target/x86_64-unknown-linux-gnu/release/mcpace",
+    "dist/mcpace",
+    "packages/npm/cli/vendor/linux-x64-gnu/mcpace",
+    "packages/npm/cli/vendor/mcpace"
   ],
   "mode": "spawned-local-serve",
   "blockers": [],
   "failures": [],
   "trace": {
-    "endpoint": "http://127.0.0.1:63382/mcp",
-    "sessionId": "mcpace-5ed2115957f3d8d5beb35eacef408cbd",
+    "endpoint": "http://127.0.0.1:44309/mcp",
+    "sessionId": "mcpace-5c329f8f843f44da0b7fe9a80f945f50",
     "protocolVersion": "2025-11-25",
-    "topLevelToolCount": 9,
+    "topLevelToolCount": 8,
     "upstreamCallAdvertised": true,
-    "projectedTinyToolAdvertised": true,
+    "projectedTinyToolAdvertised": false,
     "upstream": {
       "server": "tiny",
       "tool": "tiny_echo",
@@ -45,7 +45,7 @@
       "sessionPoolReused": false
     },
     "childProcess": {
-      "stdoutTail": "Server running at http://127.0.0.1:63382 (UI: /, MCP: /mcp, health: /healthz)\n",
+      "stdoutTail": "Server running at http://127.0.0.1:44309 (UI: /, MCP: /mcp, health: /healthz)\n",
       "stderrTail": ""
     },
     "cleanup": "temporary trace root removed after run"
@@ -55,7 +55,7 @@
       "id": "binary",
       "required": true,
       "status": "pass",
-      "evidence": "C:\\Users\\rmatv\\Projects\\mcpace\\target\\release\\mcpace.exe"
+      "evidence": "/mnt/data/mcpace_work/mcpace-v0.6.5-170526-144346/target/debug/mcpace"
     },
     {
       "id": "tiny-upstream-fixture",
@@ -67,19 +67,19 @@
       "id": "serve-endpoint",
       "required": true,
       "status": "pass",
-      "evidence": "http://127.0.0.1:63382/mcp (spawned from target/release/mcpace.exe)"
+      "evidence": "http://127.0.0.1:44309/mcp (spawned from target/debug/mcpace)"
     },
     {
       "id": "initialize",
       "required": true,
       "status": "pass",
-      "evidence": "protocol=2025-11-25; session=mcpace-5ed2115957f3d8d5beb35eacef408cbd"
+      "evidence": "protocol=2025-11-25; session=mcpace-5c329f8f843f44da0b7fe9a80f945f50"
     },
     {
       "id": "tools-list",
       "required": true,
       "status": "pass",
-      "evidence": "9 tools; upstream_call advertised"
+      "evidence": "8 tools; upstream_call advertised"
     },
     {
       "id": "upstream-call",

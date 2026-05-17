@@ -94,11 +94,14 @@ test('CI workflow includes Rust quality, build, test validation, and determinist
   assert.match(workflow, /persist-credentials: false/);
 });
 
-test('node test runner isolates package/vendor mutation tests from parallel batches', () => {
+test('node test runner isolates package/vendor mutation tests from parallel batches without sync child-process deadlocks', () => {
   const runner = fs.readFileSync(path.join(repoRoot, 'scripts', 'run-node-test-files.mjs'), 'utf8');
   assert.match(runner, /ISOLATED_TEST_FILE_BASENAMES/);
   assert.match(runner, /stage-vendored-binary\.test\.js/);
   assert.match(runner, /verify-npm-pack\.test\.js/);
   assert.match(runner, /verify-vendored-binary\.test\.js/);
   assert.match(runner, /chunks\.push\(\[file\]\)/);
+  assert.match(runner, /detached:\s*process\.platform\s*!==\s*'win32'/);
+  assert.match(runner, /terminateChild\(child\)/);
+  assert.doesNotMatch(runner, /spawnSync/);
 });

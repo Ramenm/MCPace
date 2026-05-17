@@ -25,13 +25,17 @@ test('brokered calls fail closed unless requested tool is currently advertised',
   const source = read('src/upstream/lease_runtime.rs');
   assert.match(source, /fn validate_upstream_tool_known\(/);
   assert.match(source, /fn validate_upstream_batch_tools_known\(/);
+  assert.match(source, /fn validate_upstream_tool_known_with_pool\(/);
+  assert.match(source, /fn validate_upstream_batch_tools_known_with_pool\(/);
   assert.match(source, /cached_tools_list\(root_path, server, timeout, false\)/);
   assert.match(source, /not present in .*current tools\/list/);
   assert.match(source, /MCPACE_ALLOW_UNKNOWN_UPSTREAM_TOOLS/);
   assert.match(source, /allowUnknownTool/);
   assert.match(source, /allowUnknownUpstreamTool/);
-  assert.ok((source.match(/validate_upstream_tool_known\(/g) || []).length >= 3);
-  assert.ok((source.match(/validate_upstream_batch_tools_known\(/g) || []).length >= 3);
+  assert.ok((source.match(/validate_upstream_tool_known\(/g) || []).length >= 2);
+  assert.ok((source.match(/validate_upstream_tool_known_with_pool\(/g) || []).length >= 2);
+  assert.ok((source.match(/validate_upstream_batch_tools_known\(/g) || []).length >= 2);
+  assert.ok((source.match(/validate_upstream_batch_tools_known_with_pool\(/g) || []).length >= 2);
   assert.ok(source.indexOf('validate_upstream_tool_policy') < source.indexOf('validate_upstream_tool_known'));
 });
 

@@ -208,8 +208,14 @@ fn write_disk_cached_tools(key: &ToolListCacheKey, tools: &JsonValue) -> Result<
         ("storedAtUnixMs", JsonValue::string(stored_at.to_string())),
         ("keyHash", JsonValue::string(disk_cache_key_hash(key))),
         ("serverName", JsonValue::string(&key.server_name)),
-        ("mcpaceVersion", JsonValue::string(env!("CARGO_PKG_VERSION"))),
-        ("mcpProtocolVersion", JsonValue::string(crate::mcp_protocol::CURRENT_PROTOCOL_VERSION)),
+        (
+            "mcpaceVersion",
+            JsonValue::string(env!("CARGO_PKG_VERSION")),
+        ),
+        (
+            "mcpProtocolVersion",
+            JsonValue::string(crate::mcp_protocol::CURRENT_PROTOCOL_VERSION),
+        ),
         ("toolCount", JsonValue::number(items.len())),
         ("tools", tools.clone()),
     ]);
@@ -270,7 +276,10 @@ fn disk_cache_key_hash(key: &ToolListCacheKey) -> String {
     feed_stable_hash(&mut hash, key.settings_len.to_string().as_bytes());
     feed_stable_hash(&mut hash, key.server_fingerprint.as_bytes());
     feed_stable_hash(&mut hash, env!("CARGO_PKG_VERSION").as_bytes());
-    feed_stable_hash(&mut hash, crate::mcp_protocol::CURRENT_PROTOCOL_VERSION.as_bytes());
+    feed_stable_hash(
+        &mut hash,
+        crate::mcp_protocol::CURRENT_PROTOCOL_VERSION.as_bytes(),
+    );
     format!("{hash:016x}")
 }
 

@@ -124,7 +124,10 @@ fn cleanup_report(root_path: &Path, scope: &str, dry_run: bool) -> JsonValue {
     let mut warnings = Vec::new();
 
     if actions.is_empty() && !matches!(scope, "status") {
-        warnings.push(format!("unknown cleanup scope '{}'; use status, cache, runtime, logs, or all-safe", scope));
+        warnings.push(format!(
+            "unknown cleanup scope '{}'; use status, cache, runtime, logs, or all-safe",
+            scope
+        ));
     }
 
     if !dry_run && !matches!(scope, "status") {
@@ -155,7 +158,10 @@ fn cleanup_report(root_path: &Path, scope: &str, dry_run: bool) -> JsonValue {
             JsonValue::string(format!(
                 "{}: {}",
                 action.id,
-                action.error.clone().unwrap_or_else(|| "unknown".to_string())
+                action
+                    .error
+                    .clone()
+                    .unwrap_or_else(|| "unknown".to_string())
             ))
         })
         .collect::<Vec<_>>();
@@ -238,7 +244,12 @@ fn planned_actions(state_root: &Path, scope: &str) -> Vec<CleanupAction> {
     actions
 }
 
-fn action(id: &'static str, class: &'static str, path: PathBuf, destructive: bool) -> CleanupAction {
+fn action(
+    id: &'static str,
+    class: &'static str,
+    path: PathBuf,
+    destructive: bool,
+) -> CleanupAction {
     let existed = path.exists();
     CleanupAction {
         id,
@@ -290,9 +301,17 @@ fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
         .get("dryRun")
         .and_then(JsonValue::as_bool)
         .unwrap_or(false);
-    let _ = writeln!(stdout, "MCPace cleanup {}: {}", scope, if ok { "ok" } else { "blocked" });
+    let _ = writeln!(
+        stdout,
+        "MCPace cleanup {}: {}",
+        scope,
+        if ok { "ok" } else { "blocked" }
+    );
     let _ = writeln!(stdout, "Dry run: {}", if dry_run { "yes" } else { "no" });
-    let _ = writeln!(stdout, "Policy: durable config, source fragments, client config, and backups are preserved.");
+    let _ = writeln!(
+        stdout,
+        "Policy: durable config, source fragments, client config, and backups are preserved."
+    );
 }
 
 fn canonicalize_or_original(path: &Path) -> PathBuf {

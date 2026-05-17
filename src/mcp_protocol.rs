@@ -69,7 +69,6 @@ pub fn empty_object() -> JsonValue {
     JsonValue::Object(BTreeMap::new())
 }
 
-
 pub fn validate_request_envelope(message: &JsonValue) -> Result<(), String> {
     let object = message
         .as_object()
@@ -98,14 +97,20 @@ pub fn validate_request_envelope(message: &JsonValue) -> Result<(), String> {
     if let Some(params) = object.get("params") {
         match params {
             JsonValue::Object(_) | JsonValue::Array(_) | JsonValue::Null => {}
-            _ => return Err("JSON-RPC params must be an object, array, or null when present".to_string()),
+            _ => {
+                return Err(
+                    "JSON-RPC params must be an object, array, or null when present".to_string(),
+                )
+            }
         }
     }
 
     if let Some(id) = object.get("id") {
         match id {
             JsonValue::String(_) | JsonValue::Number(_) | JsonValue::Null => {}
-            _ => return Err("JSON-RPC id must be a string, number, or null when present".to_string()),
+            _ => {
+                return Err("JSON-RPC id must be a string, number, or null when present".to_string())
+            }
         }
     }
 
@@ -117,9 +122,12 @@ pub fn params_arguments_object_or_empty(
     method_label: &str,
 ) -> Result<JsonValue, String> {
     match json_helpers::value_at_path(message, &["params", "arguments"]) {
-        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(message, &["params", "arguments"])
-            .cloned()
-            .expect("checked above")),
+        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(
+            message,
+            &["params", "arguments"],
+        )
+        .cloned()
+        .expect("checked above")),
         Some(JsonValue::Null) | None => Ok(empty_object()),
         Some(_) => Err(format!(
             "{} arguments must be a JSON object when present",

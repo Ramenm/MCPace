@@ -99,6 +99,7 @@ pub(super) struct ServerCoordinationPlan {
     pub(super) warnings: Vec<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(super) struct ScopeResolution {
     pub(super) process_partition: String,

@@ -228,7 +228,9 @@ mod tests {
         assert!(default_upstream_session_pool_shard_count() >= 1);
         assert!(default_upstream_session_pool_limit() <= 8);
         assert!(default_upstream_session_pool_shard_count() <= 4);
-        assert!(default_upstream_session_pool_shard_count() <= default_upstream_session_pool_limit());
+        assert!(
+            default_upstream_session_pool_shard_count() <= default_upstream_session_pool_limit()
+        );
         assert!(default_http_io_timeout().as_millis() > 0);
         assert!(default_dashboard_overview_cache_ttl().as_millis() > 0);
         assert!(default_dashboard_health_cache_ttl().as_millis() > 0);

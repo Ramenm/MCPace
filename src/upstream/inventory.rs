@@ -328,7 +328,9 @@ pub fn catalog_tools(
     let tools = flatten_catalog_tools_with_limit(&results, response_tool_limit);
     let returned_tool_count = tools.len();
     let tools_truncated = response_tool_limit
-        .map(|limit| tool_count.max(0) as usize > returned_tool_count && returned_tool_count >= limit)
+        .map(|limit| {
+            tool_count.max(0) as usize > returned_tool_count && returned_tool_count >= limit
+        })
         .unwrap_or(false);
     let server_views = catalog_server_response_views(&results, response_tool_limit);
 
@@ -543,14 +545,12 @@ fn sum_i64_at_path(items: &[JsonValue], path: &[&str]) -> i64 {
         .sum()
 }
 
+#[allow(dead_code)]
 pub(super) fn flatten_catalog_tools(results: &[JsonValue]) -> Vec<JsonValue> {
     flatten_catalog_tools_with_limit(results, None)
 }
 
-fn flatten_catalog_tools_with_limit(
-    results: &[JsonValue],
-    limit: Option<usize>,
-) -> Vec<JsonValue> {
+fn flatten_catalog_tools_with_limit(results: &[JsonValue], limit: Option<usize>) -> Vec<JsonValue> {
     let mut flattened = Vec::new();
     for server in results {
         if !json_helpers::bool_at_path(server, &["ok"]).unwrap_or(false) {
@@ -633,22 +633,27 @@ fn catalog_server_response_view(server: &JsonValue, per_server_limit: usize) -> 
     let JsonValue::Object(mut map) = server.clone() else {
         return server.clone();
     };
-    let tools = map
-        .get("tools")
-        .and_then(JsonValue::as_array)
-        .unwrap_or(&[]);
-    let returned = tools
-        .iter()
-        .take(per_server_limit)
-        .cloned()
-        .collect::<Vec<_>>();
+    let (returned, total_tool_count) = {
+        let tools = map
+            .get("tools")
+            .and_then(JsonValue::as_array)
+            .unwrap_or(&[]);
+        (
+            tools
+                .iter()
+                .take(per_server_limit)
+                .cloned()
+                .collect::<Vec<_>>(),
+            tools.len(),
+        )
+    };
     map.insert(
         "returnedToolCount".to_string(),
         JsonValue::number(returned.len()),
     );
     map.insert(
         "toolsTruncated".to_string(),
-        JsonValue::bool(returned.len() < tools.len()),
+        JsonValue::bool(returned.len() < total_tool_count),
     );
     map.insert("tools".to_string(), JsonValue::array(returned));
     JsonValue::Object(map)
@@ -657,4 +662,3 @@ fn catalog_server_response_view(server: &JsonValue, per_server_limit: usize) -> 
 fn env_usize(name: &str) -> Option<usize> {
     std::env::var(name).ok()?.trim().parse::<usize>().ok()
 }
-

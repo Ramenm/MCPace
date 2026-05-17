@@ -289,8 +289,8 @@ pub(super) fn generated_mcp_http_session_id(
     _id: &crate::json::JsonValue,
     _protocol: &str,
 ) -> Result<String, String> {
-    let random = os_random_hex(16)
-        .map_err(|error| format!("OS randomness unavailable: {}", error))?;
+    let random =
+        os_random_hex(16).map_err(|error| format!("OS randomness unavailable: {}", error))?;
     Ok(format!("mcpace-{}", random))
 }
 

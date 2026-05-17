@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.lifecycleBlastRadiusSmoke.v1",
-  "generatedAt": "2026-05-16T15:05:09.158Z",
+  "generatedAt": "2026-05-17T15:28:57.865Z",
   "project": {
     "name": "mcpace",
     "version": "0.6.5"
@@ -8,49 +8,49 @@
   "status": "pass",
   "binaryPath": "packages/npm/cli/vendor/linux-x64-gnu/mcpace",
   "tempRoot": null,
-  "elapsedMs": 183,
+  "elapsedMs": 284,
   "checks": [
     {
       "id": "paid-server-registers-disabled-without-output-secret-leak",
       "ok": true,
       "status": "pass",
-      "detail": "exit=0 28ms"
+      "detail": "exit=0 36ms"
     },
     {
       "id": "server-enable-is-explicit-state-transition",
       "ok": true,
       "status": "pass",
-      "detail": "exit=0 30ms"
+      "detail": "exit=0 40ms"
     },
     {
       "id": "server-disable-is-explicit-state-transition",
       "ok": true,
       "status": "pass",
-      "detail": "exit=0 27ms"
+      "detail": "exit=0 38ms"
     },
     {
       "id": "server-remove-dry-run-does-not-delete",
       "ok": true,
       "status": "pass",
-      "detail": "exit=0 24ms"
+      "detail": "exit=0 34ms"
     },
     {
       "id": "server-remove-deletes-only-target-entry",
       "ok": true,
       "status": "pass",
-      "detail": "exit=0 23ms"
+      "detail": "exit=0 51ms"
     },
     {
       "id": "server-can-be-readded-after-remove",
       "ok": true,
       "status": "pass",
-      "detail": "exit=0 21ms"
+      "detail": "exit=0 42ms"
     },
     {
       "id": "normalized-duplicate-without-force-blocked",
       "ok": true,
       "status": "pass",
-      "detail": "exit=1 server 'Paid Billing' already exists in /tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json; rerun with --force to replace it"
+      "detail": "exit=1 server 'Paid Billing' already exists in /tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json; rerun with --force to replace it"
     },
     {
       "id": "source-force-replace-removes-normalized-duplicate-key",
@@ -136,12 +136,12 @@
   "commands": [
     {
       "label": "register paid server disabled",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add paid-billing --command npx --arg -y --arg @vendor/paid-billing-mcp --env PAID_BILLING_API_KEY=[REDACTED_SECRET_SENTINEL] --disabled --json --root /tmp/mcpace-lifecycle-blast-HtjN4f",
+      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add paid-billing --command npx --arg -y --arg @vendor/paid-billing-mcp --env PAID_BILLING_API_KEY=[REDACTED_SECRET_SENTINEL] --disabled --json --root /tmp/mcpace-lifecycle-blast-Q9Ul1J",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 28,
-      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 2,\n  \"command\": \"npx\",\n  \"dryRun\": false,\n  \"envCount\": 1,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-billing --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
+      "durationMs": 36,
+      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 2,\n  \"command\": \"npx\",\n  \"dryRun\": false,\n  \"envCount\": 1,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-billing --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
       "stderr": "",
       "leakedSecret": false,
       "error": null,
@@ -155,7 +155,7 @@
         "headerCount": 0,
         "name": "paid-billing",
         "normalizedName": "paid-billing",
-        "path": "/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json",
+        "path": "/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json",
         "suggestedNextCommands": [
           "mcpace server test paid-billing --refresh --json",
           "mcpace client install <client|all> --dry-run --diff"
@@ -166,12 +166,12 @@
     },
     {
       "label": "enable paid server explicitly",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server enable paid-billing --json --root /tmp/mcpace-lifecycle-blast-HtjN4f",
+      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server enable paid-billing --json --root /tmp/mcpace-lifecycle-blast-Q9Ul1J",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 30,
-      "stdout": "{\n  \"action\": \"enable\",\n  \"dryRun\": false,\n  \"enabled\": true,\n  \"existedBefore\": true,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json\",\n  \"previousEnabled\": false,\n  \"serverCount\": 1,\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-billing --refresh --json\"\n,    \"mcpace verify readiness --json\"\n  ]\n}",
+      "durationMs": 40,
+      "stdout": "{\n  \"action\": \"enable\",\n  \"dryRun\": false,\n  \"enabled\": true,\n  \"existedBefore\": true,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json\",\n  \"previousEnabled\": false,\n  \"serverCount\": 1,\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-billing --refresh --json\"\n,    \"mcpace verify readiness --json\"\n  ]\n}",
       "stderr": "",
       "leakedSecret": false,
       "error": null,
@@ -182,7 +182,7 @@
         "existedBefore": true,
         "name": "paid-billing",
         "normalizedName": "paid-billing",
-        "path": "/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json",
+        "path": "/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json",
         "previousEnabled": false,
         "serverCount": 1,
         "suggestedNextCommands": [
@@ -193,12 +193,12 @@
     },
     {
       "label": "disable paid server explicitly",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server disable paid-billing --json --root /tmp/mcpace-lifecycle-blast-HtjN4f",
+      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server disable paid-billing --json --root /tmp/mcpace-lifecycle-blast-Q9Ul1J",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 27,
-      "stdout": "{\n  \"action\": \"disable\",\n  \"dryRun\": false,\n  \"enabled\": false,\n  \"existedBefore\": true,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json\",\n  \"previousEnabled\": true,\n  \"serverCount\": 1,\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-billing --refresh --json\"\n,    \"mcpace verify readiness --json\"\n  ]\n}",
+      "durationMs": 38,
+      "stdout": "{\n  \"action\": \"disable\",\n  \"dryRun\": false,\n  \"enabled\": false,\n  \"existedBefore\": true,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json\",\n  \"previousEnabled\": true,\n  \"serverCount\": 1,\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-billing --refresh --json\"\n,    \"mcpace verify readiness --json\"\n  ]\n}",
       "stderr": "",
       "leakedSecret": false,
       "error": null,
@@ -209,7 +209,7 @@
         "existedBefore": true,
         "name": "paid-billing",
         "normalizedName": "paid-billing",
-        "path": "/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json",
+        "path": "/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json",
         "previousEnabled": true,
         "serverCount": 1,
         "suggestedNextCommands": [
@@ -220,12 +220,12 @@
     },
     {
       "label": "remove paid server dry-run",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server remove paid-billing --dry-run --json --root /tmp/mcpace-lifecycle-blast-HtjN4f",
+      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server remove paid-billing --dry-run --json --root /tmp/mcpace-lifecycle-blast-Q9Ul1J",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 24,
-      "stdout": "{\n  \"action\": \"remove\",\n  \"dryRun\": true,\n  \"existedBefore\": true,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json\",\n  \"remainingServerCount\": 0\n}",
+      "durationMs": 34,
+      "stdout": "{\n  \"action\": \"remove\",\n  \"dryRun\": true,\n  \"existedBefore\": true,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json\",\n  \"remainingServerCount\": 0\n}",
       "stderr": "",
       "leakedSecret": false,
       "error": null,
@@ -235,18 +235,18 @@
         "existedBefore": true,
         "name": "paid-billing",
         "normalizedName": "paid-billing",
-        "path": "/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json",
+        "path": "/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json",
         "remainingServerCount": 0
       }
     },
     {
       "label": "remove paid server",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server remove paid-billing --json --root /tmp/mcpace-lifecycle-blast-HtjN4f",
+      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server remove paid-billing --json --root /tmp/mcpace-lifecycle-blast-Q9Ul1J",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 23,
-      "stdout": "{\n  \"action\": \"remove\",\n  \"dryRun\": false,\n  \"existedBefore\": true,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json\",\n  \"remainingServerCount\": 0\n}",
+      "durationMs": 51,
+      "stdout": "{\n  \"action\": \"remove\",\n  \"dryRun\": false,\n  \"existedBefore\": true,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json\",\n  \"remainingServerCount\": 0\n}",
       "stderr": "",
       "leakedSecret": false,
       "error": null,
@@ -256,18 +256,18 @@
         "existedBefore": true,
         "name": "paid-billing",
         "normalizedName": "paid-billing",
-        "path": "/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json",
+        "path": "/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json",
         "remainingServerCount": 0
       }
     },
     {
       "label": "re-add after remove",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add paid-billing --command node --arg safe-stub.js --disabled --json --root /tmp/mcpace-lifecycle-blast-HtjN4f",
+      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add paid-billing --command node --arg safe-stub.js --disabled --json --root /tmp/mcpace-lifecycle-blast-Q9Ul1J",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 21,
-      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 1,\n  \"command\": \"node\",\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-billing --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
+      "durationMs": 42,
+      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 1,\n  \"command\": \"node\",\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"paid-billing\",\n  \"normalizedName\": \"paid-billing\",\n  \"path\": \"/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-billing --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
       "stderr": "",
       "leakedSecret": false,
       "error": null,
@@ -281,7 +281,7 @@
         "headerCount": 0,
         "name": "paid-billing",
         "normalizedName": "paid-billing",
-        "path": "/tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json",
+        "path": "/tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json",
         "suggestedNextCommands": [
           "mcpace server test paid-billing --refresh --json",
           "mcpace client install <client|all> --dry-run --diff"
@@ -292,13 +292,13 @@
     },
     {
       "label": "normalized duplicate blocked",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add Paid Billing --command node --arg duplicate.js --json --root /tmp/mcpace-lifecycle-blast-HtjN4f",
+      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add Paid Billing --command node --arg duplicate.js --json --root /tmp/mcpace-lifecycle-blast-Q9Ul1J",
       "status": 1,
       "signal": null,
       "timedOut": false,
-      "durationMs": 21,
+      "durationMs": 32,
       "stdout": "",
-      "stderr": "server 'Paid Billing' already exists in /tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json; rerun with --force to replace it",
+      "stderr": "server 'Paid Billing' already exists in /tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json; rerun with --force to replace it",
       "leakedSecret": false,
       "error": null,
       "json": null

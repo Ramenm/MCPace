@@ -1,7 +1,7 @@
 {
   "schema": "mcpace.performanceSmoke.v1",
   "status": "pass",
-  "generatedAt": "2026-05-16T15:05:09.622Z",
+  "generatedAt": "2026-05-17T15:28:59.003Z",
   "environment": {
     "node": "v22.16.0",
     "platform": "linux",
@@ -19,13 +19,13 @@
     "maxHttpP95Ms": null
   },
   "summary": {
-    "runtimeHttpMaxP95Ms": 28.64,
+    "runtimeHttpMaxP95Ms": 25.79,
     "runtimeHttpFailures": 0,
-    "toolScaleElapsedMs": 284,
-    "mixedUpstreamsElapsedMs": 106,
+    "toolScaleElapsedMs": 302,
+    "mixedUpstreamsElapsedMs": 101,
     "upstreamFailsafeElapsedMs": 2,
-    "toolScaleHeapDeltaMiB": 1.5,
-    "mixedUpstreamsHeapDeltaMiB": 1.7,
+    "toolScaleHeapDeltaMiB": 0.6,
+    "mixedUpstreamsHeapDeltaMiB": 1.6,
     "upstreamFailsafeHeapDeltaMiB": 0
   },
   "checks": [
@@ -42,7 +42,7 @@
     {
       "id": "runtime-http-latency-measured",
       "ok": true,
-      "detail": "maxP95Ms=28.64"
+      "detail": "maxP95Ms=25.79"
     },
     {
       "id": "toolScale-ran",
@@ -57,7 +57,7 @@
     {
       "id": "toolScale-heap-budget",
       "ok": true,
-      "detail": "heapDeltaMiB=1.5; limit=256"
+      "detail": "heapDeltaMiB=0.6; limit=256"
     },
     {
       "id": "mixedUpstreams-ran",
@@ -72,7 +72,7 @@
     {
       "id": "mixedUpstreams-heap-budget",
       "ok": true,
-      "detail": "heapDeltaMiB=1.7; limit=256"
+      "detail": "heapDeltaMiB=1.6; limit=256"
     },
     {
       "id": "upstreamFailsafe-ran",
@@ -93,52 +93,52 @@
   "reports": {
     "runtimeHttp": {
       "ok": true,
-      "generatedAt": "2026-05-16T15:05:09.766Z",
-      "baseUrl": "http://127.0.0.1:46267",
+      "generatedAt": "2026-05-17T15:28:59.164Z",
+      "baseUrl": "http://127.0.0.1:42605",
       "requestCountPerPath": 80,
       "configuredConcurrency": 8,
       "timeoutMs": 5000,
       "results": [
         {
           "path": "/healthz",
-          "url": "http://127.0.0.1:46267/healthz",
+          "url": "http://127.0.0.1:42605/healthz",
           "requests": 80,
           "concurrency": 8,
-          "durationMs": 124.27,
-          "throughputPerSecond": 643.74,
+          "durationMs": 146.53,
+          "throughputPerSecond": 545.98,
           "failureCount": 0,
           "statusCounts": {
             "200": 80
           },
           "errors": {},
           "latencyMs": {
-            "min": 5.81,
-            "p50": 9.07,
-            "p95": 28.64,
-            "p99": 33.02,
-            "max": 33.02,
-            "avg": 11.65
+            "min": 5.1,
+            "p50": 11.54,
+            "p95": 25.79,
+            "p99": 29.74,
+            "max": 29.74,
+            "avg": 13.91
           }
         },
         {
           "path": "/api/resources",
-          "url": "http://127.0.0.1:46267/api/resources",
+          "url": "http://127.0.0.1:42605/api/resources",
           "requests": 80,
           "concurrency": 8,
-          "durationMs": 91.93,
-          "throughputPerSecond": 870.25,
+          "durationMs": 121.86,
+          "throughputPerSecond": 656.52,
           "failureCount": 0,
           "statusCounts": {
             "200": 80
           },
           "errors": {},
           "latencyMs": {
-            "min": 6.58,
-            "p50": 7.98,
-            "p95": 12.55,
-            "p99": 15.54,
-            "max": 15.54,
-            "avg": 8.89
+            "min": 6.38,
+            "p50": 11.2,
+            "p95": 15.95,
+            "p99": 18.25,
+            "max": 18.25,
+            "avg": 11.85
           }
         }
       ]
@@ -171,15 +171,15 @@
         "topKSearchBounded": true,
         "projectionBounded": true,
         "toolListPageBounded": true,
-        "heapDeltaMiB": 1.5,
+        "heapDeltaMiB": 0.6,
         "memoryLimitMiB": 256
       },
-      "elapsedMs": 284
+      "elapsedMs": 302
     },
     "mixedUpstreams": {
       "schema": "mcpace.mixedUpstreamSimulation.v1",
       "status": "pass",
-      "generatedAt": "2026-05-16T15:05:10.591Z",
+      "generatedAt": "2026-05-17T15:29:00.085Z",
       "scenario": {
         "servers": 20,
         "tools": 50000,
@@ -252,15 +252,15 @@
         "failureIsolation": true,
         "collisionSafe": true,
         "sourceCoverageOk": true,
-        "heapDeltaMiB": 1.7,
+        "heapDeltaMiB": 1.6,
         "memoryLimitMiB": 256
       },
-      "elapsedMs": 106
+      "elapsedMs": 101
     },
     "upstreamFailsafe": {
       "schema": "mcpace.upstreamFailsafeSimulation.v1",
       "status": "pass",
-      "generatedAt": "2026-05-16T15:05:10.694Z",
+      "generatedAt": "2026-05-17T15:29:00.193Z",
       "scenario": {
         "servers": 20,
         "tools": 50000,
@@ -508,24 +508,24 @@
   "commandResults": {
     "runtimeHttp": {
       "status": 0,
-      "durationMs": 364.34,
+      "durationMs": 433.88,
       "stderr": ""
     },
     "toolScale": {
       "status": 0,
-      "durationMs": 384.8,
+      "durationMs": 430.54,
       "stderr": ""
     },
     "mixedUpstreams": {
       "status": 0,
-      "durationMs": 221.53,
+      "durationMs": 212.84,
       "stderr": ""
     },
     "upstreamFailsafe": {
       "status": 0,
-      "durationMs": 99.8,
+      "durationMs": 107.23,
       "stderr": ""
     }
   },
-  "elapsedMs": 1087.24
+  "elapsedMs": 1206.04
 }

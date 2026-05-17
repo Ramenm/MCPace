@@ -24,9 +24,7 @@ pub fn upstream_search(
     let limit = limit.clamp(1, 100);
     let keep_limit = limit.max(2);
     let terms = search_terms(query.unwrap_or(""));
-    let selected_server = server_name
-        .map(str::trim)
-        .filter(|value| !value.is_empty());
+    let selected_server = server_name.map(str::trim).filter(|value| !value.is_empty());
     let mut scored: Vec<ScoredSearchTool> = Vec::new();
     let mut search_space_tool_count = 0usize;
     let mut total_matches = 0usize;
@@ -112,6 +110,7 @@ pub fn upstream_search(
 
 type ScoredSearchTool = (usize, String, JsonValue);
 
+#[allow(clippy::too_many_arguments)]
 fn scan_search_listing(
     server: &str,
     listing: &JsonValue,
@@ -137,7 +136,11 @@ fn scan_search_listing(
             );
             insert_scored_tool_bounded(
                 scored,
-                (score, key, compact_search_tool(&tool, score, include_schema)),
+                (
+                    score,
+                    key,
+                    compact_search_tool(&tool, score, include_schema),
+                ),
                 keep_limit,
             );
         }

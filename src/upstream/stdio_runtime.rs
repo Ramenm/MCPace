@@ -449,7 +449,6 @@ fn terminate_child_process(child: &mut Child) {
     }
 }
 
-
 #[cfg(windows)]
 fn kill_windows_process_tree(pid: u32) {
     let system_root = env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());

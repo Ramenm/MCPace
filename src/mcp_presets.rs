@@ -33,6 +33,8 @@ pub struct McpPreset {
     pub trust_level: String,
     pub source: String,
     pub notes: Vec<String>,
+    pub policy: Option<JsonValue>,
+    pub review: Option<JsonValue>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -219,6 +221,7 @@ pub fn install_preset(
             force: options.force,
         },
     )?;
+    write_preset_policy_overlay(root_path, &preset, &write, options.dry_run, options.force)?;
 
     Ok(McpPresetInstallResult {
         preset,
@@ -262,6 +265,96 @@ pub fn install_starter(
         dry_run,
         installed,
     })
+}
+
+fn write_preset_policy_overlay(
+    root_path: &Path,
+    preset: &McpPreset,
+    write: &McpServerWriteResult,
+    dry_run: bool,
+    force: bool,
+) -> Result<(), String> {
+    let Some(policy) = preset.policy.clone() else {
+        return Ok(());
+    };
+    let JsonValue::Object(_) = &policy else {
+        return Err(format!(
+            "MCP preset '{}' policy must be a JSON object",
+            preset.id
+        ));
+    };
+    if dry_run {
+        return Ok(());
+    }
+
+    let config_path = root_path.join("mcpace.config.json");
+    let mut config = if config_path.is_file() {
+        json_helpers::read_json_file(&config_path)?
+    } else {
+        JsonValue::object([(String::from("servers"), JsonValue::Object(BTreeMap::new()))])
+    };
+    let JsonValue::Object(root_object) = &mut config else {
+        return Err(format!(
+            "MCPace config '{}' must contain a JSON object",
+            config_path.display()
+        ));
+    };
+    if !root_object.contains_key("servers") {
+        root_object.insert("servers".to_string(), JsonValue::Object(BTreeMap::new()));
+    }
+    let Some(JsonValue::Object(servers)) = root_object.get_mut("servers") else {
+        return Err(format!(
+            "MCPace config '{}' has non-object servers",
+            config_path.display()
+        ));
+    };
+
+    if servers.contains_key(&write.name) && !force {
+        return Err(format!(
+            "server '{}' already has a policy overlay in {}; rerun with --force to replace it",
+            write.name,
+            config_path.display()
+        ));
+    }
+
+    let entry = JsonValue::object([
+        ("kind", JsonValue::string(format!("preset-{}", preset.id))),
+        ("defaultEnabled", JsonValue::bool(true)),
+        (
+            "transportPreference",
+            JsonValue::string(preset.kind.clone()),
+        ),
+        (
+            "supportedTransports",
+            JsonValue::array(vec![JsonValue::string(preset.kind.clone())]),
+        ),
+        (
+            "requiredCommands",
+            JsonValue::array(vec![JsonValue::string(preset.command.clone())]),
+        ),
+        ("policy", policy),
+        ("review", preset.review.clone().unwrap_or(JsonValue::Null)),
+        (
+            "installer",
+            JsonValue::object([
+                ("installTarget", JsonValue::string("mcp_settings")),
+                ("installMethod", JsonValue::string("preset")),
+                ("installPackage", JsonValue::string(preset.id.clone())),
+                (
+                    "verifyCommand",
+                    JsonValue::string(format!(
+                        "mcpace server test {} --refresh",
+                        write.normalized_name
+                    )),
+                ),
+            ]),
+        ),
+    ]);
+    servers.insert(write.name.clone(), entry);
+
+    let mut serialized = config.to_pretty_string();
+    serialized.push('\n');
+    crate::runtimepaths::write_text_atomic(&config_path, &serialized)
 }
 
 fn collect_preset_catalog_paths(root_path: &Path, warnings: &mut Vec<String>) -> Vec<PathBuf> {
@@ -429,6 +522,8 @@ fn parse_preset(value: &JsonValue) -> Result<McpPreset, String> {
         trust_level,
         source,
         notes,
+        policy: value.get("policy").cloned(),
+        review: value.get("review").cloned(),
     })
 }
 
@@ -576,6 +671,8 @@ impl McpPreset {
                 "notes",
                 JsonValue::array(self.notes.iter().cloned().map(JsonValue::string)),
             ),
+            ("policy", self.policy.clone().unwrap_or(JsonValue::Null)),
+            ("review", self.review.clone().unwrap_or(JsonValue::Null)),
         ])
     }
 }

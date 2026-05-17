@@ -97,6 +97,34 @@ impl PooledUpstreamSession {
         request_id
     }
 
+    pub(super) fn list_tools(
+        &mut self,
+        server: &UpstreamServerConfig,
+        deadline: Instant,
+        lease_lost: Option<&AtomicBool>,
+    ) -> Result<JsonValue, String> {
+        let request_id = self.next_request_id();
+        write_jsonrpc(
+            &mut self.running.stdin,
+            JsonValue::object([
+                ("jsonrpc", JsonValue::string("2.0")),
+                ("id", JsonValue::number(request_id)),
+                ("method", JsonValue::string("tools/list")),
+            ]),
+        )?;
+        let result = read_response(
+            &self.running.stdout_rx,
+            &self.running.stderr_rx,
+            request_id,
+            deadline,
+            &server.name,
+            "tools/list",
+            lease_lost,
+        )?;
+        self.last_used = Instant::now();
+        Ok(result)
+    }
+
     pub(super) fn call_tool(
         &mut self,
         server: &UpstreamServerConfig,
@@ -205,6 +233,59 @@ impl UpstreamSessionPool {
 
     pub fn idle_ttl_ms(&self) -> u128 {
         UPSTREAM_SESSION_IDLE_TTL.as_millis()
+    }
+
+    pub(super) fn session_exists(&self, key: &UpstreamSessionKey) -> bool {
+        self.sessions.contains_key(key)
+    }
+
+    pub(super) fn list_tools(
+        &mut self,
+        invocation: UpstreamPoolInvocation<'_>,
+    ) -> Result<(JsonValue, UpstreamPoolCallOutcome), String> {
+        let deadline = Instant::now() + invocation.timeout;
+        let key = invocation.key;
+        let (evicted_idle_count, evicted_capacity_count) = self.prepare_for_key(&key);
+        let hit = self.sessions.contains_key(&key);
+        if !hit {
+            let session = PooledUpstreamSession::new(
+                invocation.root_path,
+                invocation.server,
+                invocation.timeout,
+                invocation.lease_lost,
+            )?;
+            self.sessions.insert(key.clone(), session);
+        }
+
+        let list_result = self
+            .sessions
+            .get_mut(&key)
+            .ok_or_else(|| "upstream session pool lost its session entry".to_string())?
+            .list_tools(invocation.server, deadline, invocation.lease_lost);
+
+        match list_result {
+            Ok(result) => {
+                let session = self.sessions.get(&key).ok_or_else(|| {
+                    "upstream session pool lost its completed session".to_string()
+                })?;
+                let outcome = UpstreamPoolCallOutcome {
+                    enabled: true,
+                    hit,
+                    session_call_count: session.call_count,
+                    session_age_ms: session.created_at.elapsed().as_millis(),
+                    pool_size: self.sessions.len(),
+                    max_pool_size: self.max_session_count(),
+                    idle_ttl_ms: UPSTREAM_SESSION_IDLE_TTL.as_millis(),
+                    evicted_idle_count,
+                    evicted_capacity_count,
+                };
+                Ok((result, outcome))
+            }
+            Err(error) => {
+                self.sessions.remove(&key);
+                Err(error)
+            }
+        }
     }
 
     pub(super) fn call_tool(

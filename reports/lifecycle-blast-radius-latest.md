@@ -1,6 +1,6 @@
 # Lifecycle and blast-radius smoke
 
-Generated: 2026-05-16T15:05:09.158Z
+Generated: 2026-05-17T15:28:57.865Z
 Status: pass
 Project: mcpace 0.6.5
 
@@ -8,13 +8,13 @@ Project: mcpace 0.6.5
 
 | Check | Status | Detail |
 |---|---:|---|
-| paid-server-registers-disabled-without-output-secret-leak | pass | exit=0 28ms |
-| server-enable-is-explicit-state-transition | pass | exit=0 30ms |
-| server-disable-is-explicit-state-transition | pass | exit=0 27ms |
-| server-remove-dry-run-does-not-delete | pass | exit=0 24ms |
-| server-remove-deletes-only-target-entry | pass | exit=0 23ms |
-| server-can-be-readded-after-remove | pass | exit=0 21ms |
-| normalized-duplicate-without-force-blocked | pass | exit=1 server 'Paid Billing' already exists in /tmp/mcpace-lifecycle-blast-HtjN4f/mcp_settings.d/paid-billing.json; rerun with --force to replace it |
+| paid-server-registers-disabled-without-output-secret-leak | pass | exit=0 36ms |
+| server-enable-is-explicit-state-transition | pass | exit=0 40ms |
+| server-disable-is-explicit-state-transition | pass | exit=0 38ms |
+| server-remove-dry-run-does-not-delete | pass | exit=0 34ms |
+| server-remove-deletes-only-target-entry | pass | exit=0 51ms |
+| server-can-be-readded-after-remove | pass | exit=0 42ms |
+| normalized-duplicate-without-force-blocked | pass | exit=1 server 'Paid Billing' already exists in /tmp/mcpace-lifecycle-blast-Q9Ul1J/mcp_settings.d/paid-billing.json; rerun with --force to replace it |
 | source-force-replace-removes-normalized-duplicate-key | pass | Force replace removes an existing normalized-match key before inserting the replacement key. |
 | source-corrupt-settings-fragment-isolated | pass | Registry/source-report loaders skip unreadable JSON sources with warnings instead of failing the entire registry. |
 | docs-distinguish-owned-and-upstream-domains | pass | Install docs distinguish local MCPace ownership from upstream package/domain/provider ownership. |

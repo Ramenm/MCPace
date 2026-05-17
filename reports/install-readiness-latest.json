@@ -1,22 +1,22 @@
 {
   "schema": "mcpace.installReadiness.v1",
-  "generatedAt": "2026-05-16T15:07:02.876Z",
+  "generatedAt": "2026-05-17T15:32:27.185Z",
   "project": {
     "name": "mcpace",
     "version": "0.6.5"
   },
-  "status": "ready-with-warnings",
-  "bootHarnessStatus": "partial",
+  "status": "ready",
+  "bootHarnessStatus": "pass",
   "checks": [
     {
       "id": "source-inventory",
       "status": "pass",
-      "detail": "598 files inventoried"
+      "detail": "679 files inventoried"
     },
     {
       "id": "source-audit",
       "status": "pass",
-      "detail": "{\n  \"ok\": true,\n  \"generatedAt\": \"2026-05-16T15:06:48.627Z\",\n  \"policy\": {\n    \"critical\": [\n      \"No production Rust todo! or unimplemented! macros.\",\n      \"No production Rust panic! macros.\",\n      \"Protocol primitives stay transport and command agnostic.\",\n      \"Resource defaults stay side-effect free.\",\n      \"Unsafe Rust and FFI declarations stay inside reviewed process boundary modules.\"\n    ],\n    \"warnings\": [\n      \"Rust modules over 1500 lines are tracked as refactor candidates.\",\n      \"Direct thread spawns outside reviewed runtime modules are tracked for future abstraction.\",\n      \"Production unwrap counts are tracked as hardening backlog, not as an immediate blocker.\",\n      \"Unsafe operations and foreign function blocks are counted and allowed only in reviewed process-detach modules.\"\n    ]\n  },\n  \"summary\": {\n    \"files\": 267,\n    \"rustFiles\": 130,\n    \"nodeFiles\": 137,\n    \"productionRustLines\": 38731,\n    \"testRustLines\": 12521,\n    \"nodeLines\": 23169,"
+      "detail": "{\n  \"ok\": true,\n  \"generatedAt\": \"2026-05-17T15:32:12.186Z\",\n  \"policy\": {\n    \"critical\": [\n      \"No production Rust todo! or unimplemented! macros.\",\n      \"No production Rust panic! macros.\",\n      \"Protocol primitives stay transport and command agnostic.\",\n      \"Resource defaults stay side-effect free.\",\n      \"Unsafe Rust and FFI declarations stay inside reviewed process boundary modules.\"\n    ],\n    \"warnings\": [\n      \"Rust modules over 1500 lines are tracked as refactor candidates.\",\n      \"Direct thread spawns outside reviewed runtime modules are tracked for future abstraction.\",\n      \"Production unwrap counts are tracked as hardening backlog, not as an immediate blocker.\",\n      \"Unsafe operations and foreign function blocks are counted and allowed only in reviewed process-detach modules.\"\n    ]\n  },\n  \"summary\": {\n    \"files\": 274,\n    \"rustFiles\": 130,\n    \"nodeFiles\": 144,\n    \"productionRustLines\": 39371,\n    \"testRustLines\": 12530,\n    \"nodeLines\": 25299,"
     },
     {
       "id": "system-lifecycle-audit",
@@ -59,9 +59,7 @@
       "detail": "vendored-binary-bundle"
     }
   ],
-  "warnings": [
-    "cargo/rustc is not fully available in this environment"
-  ],
+  "warnings": [],
   "blockers": [],
   "nextCommands": [
     "npm run verify:boot",
@@ -73,7 +71,7 @@
   ],
   "lifecycleAudit": {
     "schema": "mcpace.systemLifecycleAudit.v1",
-    "generatedAt": "2026-05-16T15:07:00.210Z",
+    "generatedAt": "2026-05-17T15:32:24.278Z",
     "project": {
       "name": "mcpace",
       "version": "0.6.5"
@@ -96,7 +94,7 @@
   "mixedUpstreamSimulation": {
     "schema": "mcpace.mixedUpstreamSimulation.v1",
     "status": "pass",
-    "generatedAt": "2026-05-16T15:07:00.501Z",
+    "generatedAt": "2026-05-17T15:32:24.569Z",
     "scenario": {
       "servers": 50,
       "tools": 200000,
@@ -169,7 +167,7 @@
       "failureIsolation": true,
       "collisionSafe": true,
       "sourceCoverageOk": true,
-      "heapDeltaMiB": 7.6,
+      "heapDeltaMiB": 5.8,
       "memoryLimitMiB": 512
     },
     "elapsedMs": 290
@@ -177,7 +175,7 @@
   "upstreamFailsafeSimulation": {
     "schema": "mcpace.upstreamFailsafeSimulation.v1",
     "status": "pass",
-    "generatedAt": "2026-05-16T15:07:00.504Z",
+    "generatedAt": "2026-05-17T15:32:24.571Z",
     "scenario": {
       "servers": 50,
       "tools": 200000,
@@ -419,11 +417,11 @@
       "flappingRecoveryCovered": true,
       "batchModesDiverge": true
     },
-    "elapsedMs": 2
+    "elapsedMs": 1
   },
   "toolExposureSafetyAudit": {
     "schema": "mcpace.toolExposureSafetyAudit.v1",
-    "generatedAt": "2026-05-16T15:07:00.507Z",
+    "generatedAt": "2026-05-17T15:32:24.574Z",
     "project": {
       "name": "mcpace",
       "version": "0.6.5"
@@ -486,7 +484,7 @@
   },
   "toolMessageIntegrityAudit": {
     "schema": "mcpace.toolMessageIntegrityAudit.v1",
-    "generatedAt": "2026-05-16T15:07:00.508Z",
+    "generatedAt": "2026-05-17T15:32:24.576Z",
     "status": "pass",
     "summary": {
       "checks": 17,
@@ -582,7 +580,7 @@
   },
   "mcpInstallScenarioSmoke": {
     "schema": "mcpace.mcpInstallScenarioSmoke.v1",
-    "generatedAt": "2026-05-16T15:07:02.867Z",
+    "generatedAt": "2026-05-17T15:32:27.177Z",
     "project": {
       "name": "mcpace",
       "version": "0.6.5"
@@ -590,7 +588,7 @@
     "status": "pass",
     "binaryPath": "packages/npm/cli/vendor/linux-x64-gnu/mcpace",
     "tempRoot": null,
-    "elapsedMs": 2338,
+    "elapsedMs": 2580,
     "scenarioMatrix": [
       {
         "scenario": "preset install dry-run",
@@ -627,12 +625,12 @@
       {
         "id": "preset-install-dry-run-is-config-only",
         "status": "pass",
-        "detail": "exit=0 21ms"
+        "detail": "exit=0 26ms"
       },
       {
         "id": "preset-install-writes-one-fragment",
         "status": "pass",
-        "detail": "exit=0 19ms"
+        "detail": "exit=0 24ms"
       },
       {
         "id": "preset-install-does-not-run-package-command",
@@ -642,22 +640,22 @@
       {
         "id": "reinstall-without-force-is-blocked",
         "status": "pass",
-        "detail": "exit=1 server 'filesystem' already exists in /tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json; rerun with --force to replace it"
+        "detail": "exit=1 server 'filesystem' already exists in /tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json; rerun with --force to replace it"
       },
       {
         "id": "reinstall-with-force-replaces",
         "status": "pass",
-        "detail": "exit=0 22ms"
+        "detail": "exit=0 23ms"
       },
       {
         "id": "custom-stdio-server-add",
         "status": "pass",
-        "detail": "exit=0 20ms"
+        "detail": "exit=0 24ms"
       },
       {
         "id": "remote-http-server-add",
         "status": "pass",
-        "detail": "exit=0 20ms"
+        "detail": "exit=0 24ms"
       },
       {
         "id": "invalid-remote-url-is-rejected",
@@ -667,13 +665,13 @@
       {
         "id": "paid-server-can-be-registered-disabled",
         "status": "pass",
-        "detail": "exit=0 20ms"
+        "detail": "exit=0 23ms"
       },
       {
         "id": "hundred-server-config-scale",
         "status": "pass",
-        "detail": "100 fragments written in 2128ms; inventory serverCount=104",
-        "durationMs": 2128,
+        "detail": "100 fragments written in 2347ms; inventory serverCount=104",
+        "durationMs": 2347,
         "serverCount": 100
       }
     ],
@@ -690,17 +688,17 @@
     "commands": [
       {
         "label": "preset dry-run",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --dry-run --json --path . --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --dry-run --json --path . --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 0,
         "signal": null,
         "timedOut": false,
-        "durationMs": 21,
-        "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-mKdPSp\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"dry-run-add\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": true,\n    \"envCount\": 0,\n    \"existedBefore\": false,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
+        "durationMs": 26,
+        "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-u8G0ba\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"dry-run-add\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": true,\n    \"envCount\": 0,\n    \"existedBefore\": false,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
         "stderr": "",
         "error": null,
         "json": {
           "paths": [
-            "/tmp/mcpace-install-scenarios-mKdPSp"
+            "/tmp/mcpace-install-scenarios-u8G0ba"
           ],
           "preset": {
             "args": [
@@ -733,7 +731,7 @@
             "headerCount": 0,
             "name": "filesystem",
             "normalizedName": "filesystem",
-            "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json",
+            "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json",
             "suggestedNextCommands": [
               "mcpace server test filesystem --refresh --json",
               "mcpace client install <client|all> --dry-run --diff"
@@ -745,17 +743,17 @@
       },
       {
         "label": "preset apply",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --json --path . --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --json --path . --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 0,
         "signal": null,
         "timedOut": false,
-        "durationMs": 19,
-        "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-mKdPSp\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"add\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": false,\n    \"envCount\": 0,\n    \"existedBefore\": false,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
+        "durationMs": 24,
+        "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-u8G0ba\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"add\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": false,\n    \"envCount\": 0,\n    \"existedBefore\": false,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
         "stderr": "",
         "error": null,
         "json": {
           "paths": [
-            "/tmp/mcpace-install-scenarios-mKdPSp"
+            "/tmp/mcpace-install-scenarios-u8G0ba"
           ],
           "preset": {
             "args": [
@@ -788,7 +786,7 @@
             "headerCount": 0,
             "name": "filesystem",
             "normalizedName": "filesystem",
-            "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json",
+            "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json",
             "suggestedNextCommands": [
               "mcpace server test filesystem --refresh --json",
               "mcpace client install <client|all> --dry-run --diff"
@@ -800,29 +798,29 @@
       },
       {
         "label": "preset reapply without force",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --json --path . --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --json --path . --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 1,
         "signal": null,
         "timedOut": false,
-        "durationMs": 20,
+        "durationMs": 22,
         "stdout": "",
-        "stderr": "server 'filesystem' already exists in /tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json; rerun with --force to replace it",
+        "stderr": "server 'filesystem' already exists in /tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json; rerun with --force to replace it",
         "error": null,
         "json": null
       },
       {
         "label": "preset force replace",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --force --json --path . --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --force --json --path . --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 0,
         "signal": null,
         "timedOut": false,
-        "durationMs": 22,
-        "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-mKdPSp\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"replace\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": false,\n    \"envCount\": 0,\n    \"existedBefore\": true,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
+        "durationMs": 23,
+        "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-u8G0ba\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"replace\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": false,\n    \"envCount\": 0,\n    \"existedBefore\": true,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
         "stderr": "",
         "error": null,
         "json": {
           "paths": [
-            "/tmp/mcpace-install-scenarios-mKdPSp"
+            "/tmp/mcpace-install-scenarios-u8G0ba"
           ],
           "preset": {
             "args": [
@@ -855,7 +853,7 @@
             "headerCount": 0,
             "name": "filesystem",
             "normalizedName": "filesystem",
-            "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json",
+            "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json",
             "suggestedNextCommands": [
               "mcpace server test filesystem --refresh --json",
               "mcpace client install <client|all> --dry-run --diff"
@@ -867,12 +865,12 @@
       },
       {
         "label": "custom stdio add",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add custom-stdio --command node --arg server.js --json --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add custom-stdio --command node --arg server.js --json --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 0,
         "signal": null,
         "timedOut": false,
-        "durationMs": 20,
-        "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 1,\n  \"command\": \"node\",\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"custom-stdio\",\n  \"normalizedName\": \"custom-stdio\",\n  \"path\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/custom-stdio.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test custom-stdio --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
+        "durationMs": 24,
+        "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 1,\n  \"command\": \"node\",\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"custom-stdio\",\n  \"normalizedName\": \"custom-stdio\",\n  \"path\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/custom-stdio.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test custom-stdio --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
         "stderr": "",
         "error": null,
         "json": {
@@ -885,7 +883,7 @@
           "headerCount": 0,
           "name": "custom-stdio",
           "normalizedName": "custom-stdio",
-          "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/custom-stdio.json",
+          "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/custom-stdio.json",
           "suggestedNextCommands": [
             "mcpace server test custom-stdio --refresh --json",
             "mcpace client install <client|all> --dry-run --diff"
@@ -896,12 +894,12 @@
       },
       {
         "label": "remote streamable-http add",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add remote-docs --url https://mcp.example.invalid/mcp --type streamable-http --header Authorization=Bearer ${REMOTE_DOCS_TOKEN} --json --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add remote-docs --url https://mcp.example.invalid/mcp --type streamable-http --header Authorization=Bearer ${REMOTE_DOCS_TOKEN} --json --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 0,
         "signal": null,
         "timedOut": false,
-        "durationMs": 20,
-        "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 0,\n  \"command\": null,\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 1,\n  \"name\": \"remote-docs\",\n  \"normalizedName\": \"remote-docs\",\n  \"path\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/remote-docs.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server sources --json\"\n,    \"HTTP upstream forwarding is inventoried only until the remote connector is implemented\"\n  ],\n  \"type\": \"streamable-http\",\n  \"url\": \"https://mcp.example.invalid/mcp\"\n}",
+        "durationMs": 24,
+        "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 0,\n  \"command\": null,\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 1,\n  \"name\": \"remote-docs\",\n  \"normalizedName\": \"remote-docs\",\n  \"path\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/remote-docs.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server sources --json\"\n,    \"HTTP upstream forwarding is inventoried only until the remote connector is implemented\"\n  ],\n  \"type\": \"streamable-http\",\n  \"url\": \"https://mcp.example.invalid/mcp\"\n}",
         "stderr": "",
         "error": null,
         "json": {
@@ -914,7 +912,7 @@
           "headerCount": 1,
           "name": "remote-docs",
           "normalizedName": "remote-docs",
-          "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/remote-docs.json",
+          "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/remote-docs.json",
           "suggestedNextCommands": [
             "mcpace server sources --json",
             "HTTP upstream forwarding is inventoried only until the remote connector is implemented"
@@ -925,11 +923,11 @@
       },
       {
         "label": "invalid URL rejected",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add bad-remote --url ssh://mcp.example.invalid --json --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add bad-remote --url ssh://mcp.example.invalid --json --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 1,
         "signal": null,
         "timedOut": false,
-        "durationMs": 20,
+        "durationMs": 21,
         "stdout": "",
         "stderr": "server add --url currently accepts only http:// or https:// MCP endpoints",
         "error": null,
@@ -937,12 +935,12 @@
       },
       {
         "label": "paid server disabled add",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add paid-analytics --command npx --arg -y --arg @vendor/paid-analytics-mcp --env PAID_ANALYTICS_API_KEY=${PAID_ANALYTICS_API_KEY} --disabled --json --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add paid-analytics --command npx --arg -y --arg @vendor/paid-analytics-mcp --env PAID_ANALYTICS_API_KEY=${PAID_ANALYTICS_API_KEY} --disabled --json --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 0,
         "signal": null,
         "timedOut": false,
-        "durationMs": 20,
-        "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 2,\n  \"command\": \"npx\",\n  \"dryRun\": false,\n  \"envCount\": 1,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"paid-analytics\",\n  \"normalizedName\": \"paid-analytics\",\n  \"path\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/paid-analytics.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-analytics --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
+        "durationMs": 23,
+        "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 2,\n  \"command\": \"npx\",\n  \"dryRun\": false,\n  \"envCount\": 1,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"paid-analytics\",\n  \"normalizedName\": \"paid-analytics\",\n  \"path\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/paid-analytics.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-analytics --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
         "stderr": "",
         "error": null,
         "json": {
@@ -955,7 +953,7 @@
           "headerCount": 0,
           "name": "paid-analytics",
           "normalizedName": "paid-analytics",
-          "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/paid-analytics.json",
+          "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/paid-analytics.json",
           "suggestedNextCommands": [
             "mcpace server test paid-analytics --refresh --json",
             "mcpace client install <client|all> --dry-run --diff"
@@ -966,12 +964,12 @@
       },
       {
         "label": "source inventory after scale",
-        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server sources --json --root /tmp/mcpace-install-scenarios-mKdPSp",
+        "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server sources --json --root /tmp/mcpace-install-scenarios-u8G0ba",
         "status": 0,
         "signal": null,
         "timedOut": false,
-        "durationMs": 41,
-        "stdout": "{\n  \"serverCount\": 104,\n  \"servers\": [\n    {\n      \"name\": \"custom-stdio\",\n      \"normalizedName\": \"custom-stdio\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/custom-stdio.json\"\n    }\n,    {\n      \"name\": \"filesystem\",\n      \"normalizedName\": \"filesystem\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json\"\n    }\n,    {\n      \"name\": \"paid-analytics\",\n      \"normalizedName\": \"paid-analytics\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/paid-analytics.json\"\n    }\n,    {\n      \"name\": \"remote-docs\",\n      \"normalizedName\": \"remote-docs\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/remote-docs.json\"\n    }\n,    {\n      \"name\": \"scale-001\",\n      \"normalizedName\": \"scale-001\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-001.json\"\n    }\n,    {\n      \"name\": \"scale-002\",\n      \"normalizedName\": \"scale-002\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-002.json\"\n    }\n,    {\n      \"name\": \"scale-003\",\n      \"normalizedName\": \"scale-003\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-003.json\"\n    }\n,    {\n      \"name\": \"scale-004\",\n      \"normalizedName\": \"scale-004\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-004.json\"\n    }\n,    {\n      \"name\": \"scale-005\",\n      \"normalizedName\": \"scale-005\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-005.json\"\n    }\n,    {\n      \"name\": \"scale-006\",\n      \"normalizedName\": \"scale-006\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-006.json\"\n    }\n,    {\n      \"name\": \"scale-007\",\n      \"normalizedName\": \"scale-007\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-007.json\"\n    }\n,    {\n      \"name\": \"scale-008\",\n      \"normalizedName\": \"scale-008\",\n      \"source\": \"/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-0",
+        "durationMs": 39,
+        "stdout": "{\n  \"serverCount\": 104,\n  \"servers\": [\n    {\n      \"name\": \"custom-stdio\",\n      \"normalizedName\": \"custom-stdio\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/custom-stdio.json\"\n    }\n,    {\n      \"name\": \"filesystem\",\n      \"normalizedName\": \"filesystem\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json\"\n    }\n,    {\n      \"name\": \"paid-analytics\",\n      \"normalizedName\": \"paid-analytics\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/paid-analytics.json\"\n    }\n,    {\n      \"name\": \"remote-docs\",\n      \"normalizedName\": \"remote-docs\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/remote-docs.json\"\n    }\n,    {\n      \"name\": \"scale-001\",\n      \"normalizedName\": \"scale-001\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-001.json\"\n    }\n,    {\n      \"name\": \"scale-002\",\n      \"normalizedName\": \"scale-002\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-002.json\"\n    }\n,    {\n      \"name\": \"scale-003\",\n      \"normalizedName\": \"scale-003\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-003.json\"\n    }\n,    {\n      \"name\": \"scale-004\",\n      \"normalizedName\": \"scale-004\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-004.json\"\n    }\n,    {\n      \"name\": \"scale-005\",\n      \"normalizedName\": \"scale-005\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-005.json\"\n    }\n,    {\n      \"name\": \"scale-006\",\n      \"normalizedName\": \"scale-006\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-006.json\"\n    }\n,    {\n      \"name\": \"scale-007\",\n      \"normalizedName\": \"scale-007\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-007.json\"\n    }\n,    {\n      \"name\": \"scale-008\",\n      \"normalizedName\": \"scale-008\",\n      \"source\": \"/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-0",
         "stderr": "",
         "error": null,
         "json": {
@@ -980,522 +978,522 @@
             {
               "name": "custom-stdio",
               "normalizedName": "custom-stdio",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/custom-stdio.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/custom-stdio.json"
             },
             {
               "name": "filesystem",
               "normalizedName": "filesystem",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json"
             },
             {
               "name": "paid-analytics",
               "normalizedName": "paid-analytics",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/paid-analytics.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/paid-analytics.json"
             },
             {
               "name": "remote-docs",
               "normalizedName": "remote-docs",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/remote-docs.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/remote-docs.json"
             },
             {
               "name": "scale-001",
               "normalizedName": "scale-001",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-001.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-001.json"
             },
             {
               "name": "scale-002",
               "normalizedName": "scale-002",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-002.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-002.json"
             },
             {
               "name": "scale-003",
               "normalizedName": "scale-003",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-003.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-003.json"
             },
             {
               "name": "scale-004",
               "normalizedName": "scale-004",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-004.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-004.json"
             },
             {
               "name": "scale-005",
               "normalizedName": "scale-005",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-005.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-005.json"
             },
             {
               "name": "scale-006",
               "normalizedName": "scale-006",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-006.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-006.json"
             },
             {
               "name": "scale-007",
               "normalizedName": "scale-007",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-007.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-007.json"
             },
             {
               "name": "scale-008",
               "normalizedName": "scale-008",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-008.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-008.json"
             },
             {
               "name": "scale-009",
               "normalizedName": "scale-009",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-009.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-009.json"
             },
             {
               "name": "scale-010",
               "normalizedName": "scale-010",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-010.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-010.json"
             },
             {
               "name": "scale-011",
               "normalizedName": "scale-011",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-011.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-011.json"
             },
             {
               "name": "scale-012",
               "normalizedName": "scale-012",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-012.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-012.json"
             },
             {
               "name": "scale-013",
               "normalizedName": "scale-013",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-013.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-013.json"
             },
             {
               "name": "scale-014",
               "normalizedName": "scale-014",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-014.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-014.json"
             },
             {
               "name": "scale-015",
               "normalizedName": "scale-015",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-015.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-015.json"
             },
             {
               "name": "scale-016",
               "normalizedName": "scale-016",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-016.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-016.json"
             },
             {
               "name": "scale-017",
               "normalizedName": "scale-017",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-017.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-017.json"
             },
             {
               "name": "scale-018",
               "normalizedName": "scale-018",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-018.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-018.json"
             },
             {
               "name": "scale-019",
               "normalizedName": "scale-019",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-019.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-019.json"
             },
             {
               "name": "scale-020",
               "normalizedName": "scale-020",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-020.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-020.json"
             },
             {
               "name": "scale-021",
               "normalizedName": "scale-021",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-021.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-021.json"
             },
             {
               "name": "scale-022",
               "normalizedName": "scale-022",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-022.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-022.json"
             },
             {
               "name": "scale-023",
               "normalizedName": "scale-023",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-023.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-023.json"
             },
             {
               "name": "scale-024",
               "normalizedName": "scale-024",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-024.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-024.json"
             },
             {
               "name": "scale-025",
               "normalizedName": "scale-025",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-025.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-025.json"
             },
             {
               "name": "scale-026",
               "normalizedName": "scale-026",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-026.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-026.json"
             },
             {
               "name": "scale-027",
               "normalizedName": "scale-027",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-027.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-027.json"
             },
             {
               "name": "scale-028",
               "normalizedName": "scale-028",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-028.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-028.json"
             },
             {
               "name": "scale-029",
               "normalizedName": "scale-029",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-029.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-029.json"
             },
             {
               "name": "scale-030",
               "normalizedName": "scale-030",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-030.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-030.json"
             },
             {
               "name": "scale-031",
               "normalizedName": "scale-031",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-031.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-031.json"
             },
             {
               "name": "scale-032",
               "normalizedName": "scale-032",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-032.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-032.json"
             },
             {
               "name": "scale-033",
               "normalizedName": "scale-033",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-033.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-033.json"
             },
             {
               "name": "scale-034",
               "normalizedName": "scale-034",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-034.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-034.json"
             },
             {
               "name": "scale-035",
               "normalizedName": "scale-035",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-035.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-035.json"
             },
             {
               "name": "scale-036",
               "normalizedName": "scale-036",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-036.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-036.json"
             },
             {
               "name": "scale-037",
               "normalizedName": "scale-037",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-037.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-037.json"
             },
             {
               "name": "scale-038",
               "normalizedName": "scale-038",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-038.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-038.json"
             },
             {
               "name": "scale-039",
               "normalizedName": "scale-039",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-039.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-039.json"
             },
             {
               "name": "scale-040",
               "normalizedName": "scale-040",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-040.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-040.json"
             },
             {
               "name": "scale-041",
               "normalizedName": "scale-041",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-041.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-041.json"
             },
             {
               "name": "scale-042",
               "normalizedName": "scale-042",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-042.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-042.json"
             },
             {
               "name": "scale-043",
               "normalizedName": "scale-043",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-043.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-043.json"
             },
             {
               "name": "scale-044",
               "normalizedName": "scale-044",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-044.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-044.json"
             },
             {
               "name": "scale-045",
               "normalizedName": "scale-045",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-045.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-045.json"
             },
             {
               "name": "scale-046",
               "normalizedName": "scale-046",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-046.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-046.json"
             },
             {
               "name": "scale-047",
               "normalizedName": "scale-047",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-047.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-047.json"
             },
             {
               "name": "scale-048",
               "normalizedName": "scale-048",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-048.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-048.json"
             },
             {
               "name": "scale-049",
               "normalizedName": "scale-049",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-049.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-049.json"
             },
             {
               "name": "scale-050",
               "normalizedName": "scale-050",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-050.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-050.json"
             },
             {
               "name": "scale-051",
               "normalizedName": "scale-051",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-051.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-051.json"
             },
             {
               "name": "scale-052",
               "normalizedName": "scale-052",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-052.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-052.json"
             },
             {
               "name": "scale-053",
               "normalizedName": "scale-053",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-053.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-053.json"
             },
             {
               "name": "scale-054",
               "normalizedName": "scale-054",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-054.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-054.json"
             },
             {
               "name": "scale-055",
               "normalizedName": "scale-055",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-055.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-055.json"
             },
             {
               "name": "scale-056",
               "normalizedName": "scale-056",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-056.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-056.json"
             },
             {
               "name": "scale-057",
               "normalizedName": "scale-057",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-057.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-057.json"
             },
             {
               "name": "scale-058",
               "normalizedName": "scale-058",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-058.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-058.json"
             },
             {
               "name": "scale-059",
               "normalizedName": "scale-059",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-059.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-059.json"
             },
             {
               "name": "scale-060",
               "normalizedName": "scale-060",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-060.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-060.json"
             },
             {
               "name": "scale-061",
               "normalizedName": "scale-061",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-061.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-061.json"
             },
             {
               "name": "scale-062",
               "normalizedName": "scale-062",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-062.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-062.json"
             },
             {
               "name": "scale-063",
               "normalizedName": "scale-063",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-063.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-063.json"
             },
             {
               "name": "scale-064",
               "normalizedName": "scale-064",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-064.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-064.json"
             },
             {
               "name": "scale-065",
               "normalizedName": "scale-065",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-065.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-065.json"
             },
             {
               "name": "scale-066",
               "normalizedName": "scale-066",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-066.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-066.json"
             },
             {
               "name": "scale-067",
               "normalizedName": "scale-067",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-067.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-067.json"
             },
             {
               "name": "scale-068",
               "normalizedName": "scale-068",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-068.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-068.json"
             },
             {
               "name": "scale-069",
               "normalizedName": "scale-069",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-069.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-069.json"
             },
             {
               "name": "scale-070",
               "normalizedName": "scale-070",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-070.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-070.json"
             },
             {
               "name": "scale-071",
               "normalizedName": "scale-071",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-071.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-071.json"
             },
             {
               "name": "scale-072",
               "normalizedName": "scale-072",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-072.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-072.json"
             },
             {
               "name": "scale-073",
               "normalizedName": "scale-073",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-073.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-073.json"
             },
             {
               "name": "scale-074",
               "normalizedName": "scale-074",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-074.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-074.json"
             },
             {
               "name": "scale-075",
               "normalizedName": "scale-075",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-075.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-075.json"
             },
             {
               "name": "scale-076",
               "normalizedName": "scale-076",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-076.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-076.json"
             },
             {
               "name": "scale-077",
               "normalizedName": "scale-077",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-077.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-077.json"
             },
             {
               "name": "scale-078",
               "normalizedName": "scale-078",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-078.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-078.json"
             },
             {
               "name": "scale-079",
               "normalizedName": "scale-079",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-079.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-079.json"
             },
             {
               "name": "scale-080",
               "normalizedName": "scale-080",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-080.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-080.json"
             },
             {
               "name": "scale-081",
               "normalizedName": "scale-081",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-081.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-081.json"
             },
             {
               "name": "scale-082",
               "normalizedName": "scale-082",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-082.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-082.json"
             },
             {
               "name": "scale-083",
               "normalizedName": "scale-083",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-083.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-083.json"
             },
             {
               "name": "scale-084",
               "normalizedName": "scale-084",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-084.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-084.json"
             },
             {
               "name": "scale-085",
               "normalizedName": "scale-085",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-085.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-085.json"
             },
             {
               "name": "scale-086",
               "normalizedName": "scale-086",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-086.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-086.json"
             },
             {
               "name": "scale-087",
               "normalizedName": "scale-087",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-087.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-087.json"
             },
             {
               "name": "scale-088",
               "normalizedName": "scale-088",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-088.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-088.json"
             },
             {
               "name": "scale-089",
               "normalizedName": "scale-089",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-089.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-089.json"
             },
             {
               "name": "scale-090",
               "normalizedName": "scale-090",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-090.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-090.json"
             },
             {
               "name": "scale-091",
               "normalizedName": "scale-091",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-091.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-091.json"
             },
             {
               "name": "scale-092",
               "normalizedName": "scale-092",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-092.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-092.json"
             },
             {
               "name": "scale-093",
               "normalizedName": "scale-093",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-093.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-093.json"
             },
             {
               "name": "scale-094",
               "normalizedName": "scale-094",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-094.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-094.json"
             },
             {
               "name": "scale-095",
               "normalizedName": "scale-095",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-095.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-095.json"
             },
             {
               "name": "scale-096",
               "normalizedName": "scale-096",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-096.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-096.json"
             },
             {
               "name": "scale-097",
               "normalizedName": "scale-097",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-097.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-097.json"
             },
             {
               "name": "scale-098",
               "normalizedName": "scale-098",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-098.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-098.json"
             },
             {
               "name": "scale-099",
               "normalizedName": "scale-099",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-099.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-099.json"
             },
             {
               "name": "scale-100",
               "normalizedName": "scale-100",
-              "source": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-100.json"
+              "source": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-100.json"
             }
           ],
           "sourceCount": 105,
@@ -1503,631 +1501,631 @@
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/custom-stdio.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/custom-stdio.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/filesystem.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/filesystem.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/paid-analytics.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/paid-analytics.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/remote-docs.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/remote-docs.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-001.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-001.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-002.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-002.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-003.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-003.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-004.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-004.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-005.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-005.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-006.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-006.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-007.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-007.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-008.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-008.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-009.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-009.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-010.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-010.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-011.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-011.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-012.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-012.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-013.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-013.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-014.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-014.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-015.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-015.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-016.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-016.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-017.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-017.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-018.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-018.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-019.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-019.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-020.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-020.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-021.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-021.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-022.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-022.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-023.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-023.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-024.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-024.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-025.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-025.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-026.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-026.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-027.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-027.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-028.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-028.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-029.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-029.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-030.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-030.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-031.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-031.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-032.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-032.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-033.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-033.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-034.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-034.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-035.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-035.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-036.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-036.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-037.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-037.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-038.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-038.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-039.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-039.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-040.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-040.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-041.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-041.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-042.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-042.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-043.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-043.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-044.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-044.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-045.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-045.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-046.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-046.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-047.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-047.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-048.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-048.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-049.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-049.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-050.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-050.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-051.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-051.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-052.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-052.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-053.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-053.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-054.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-054.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-055.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-055.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-056.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-056.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-057.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-057.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-058.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-058.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-059.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-059.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-060.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-060.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-061.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-061.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-062.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-062.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-063.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-063.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-064.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-064.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-065.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-065.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-066.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-066.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-067.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-067.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-068.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-068.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-069.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-069.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-070.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-070.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-071.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-071.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-072.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-072.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-073.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-073.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-074.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-074.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-075.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-075.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-076.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-076.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-077.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-077.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-078.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-078.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-079.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-079.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-080.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-080.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-081.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-081.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-082.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-082.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-083.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-083.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-084.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-084.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-085.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-085.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-086.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-086.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-087.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-087.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-088.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-088.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-089.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-089.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-090.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-090.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-091.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-091.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-092.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-092.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-093.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-093.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-094.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-094.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-095.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-095.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-096.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-096.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-097.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-097.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-098.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-098.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-099.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-099.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "default-dir",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.d/scale-100.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.d/scale-100.json",
               "serverCount": 1
             },
             {
               "exists": true,
               "origin": "root",
-              "path": "/tmp/mcpace-install-scenarios-mKdPSp/mcp_settings.json",
+              "path": "/tmp/mcpace-install-scenarios-u8G0ba/mcp_settings.json",
               "serverCount": 0
             }
           ],
@@ -2138,7 +2136,7 @@
   },
   "bootHarness": {
     "schema": "mcpace.bootHarness.v1",
-    "generatedAt": "2026-05-16T15:07:00.187Z",
+    "generatedAt": "2026-05-17T15:32:24.252Z",
     "project": {
       "name": "mcpace",
       "version": "0.6.5"
@@ -2164,40 +2162,40 @@
       },
       "rust": {
         "cargo": {
-          "available": false,
-          "status": null,
+          "available": true,
+          "status": 0,
           "signal": null,
-          "versionText": null,
-          "error": "spawnSync cargo ENOENT"
+          "versionText": "cargo 1.85.0 (d73d2caf9 2024-12-31)",
+          "error": null
         },
         "rustc": {
-          "available": false,
-          "status": null,
+          "available": true,
+          "status": 0,
           "signal": null,
-          "versionText": null,
-          "error": "spawnSync rustc ENOENT"
+          "versionText": "rustc 1.85.0 (4d91de4e4 2025-02-17) (built from a source tarball)",
+          "error": null
         },
-        "available": false
+        "available": true
       }
     },
     "inventory": {
       "schema": "mcpace.sourceInventory.v1",
-      "generatedAt": "2026-05-16T15:06:48.374Z",
+      "generatedAt": "2026-05-17T15:32:11.962Z",
       "project": {
         "name": "mcpace",
         "version": "0.6.5"
       },
       "summary": {
-        "totalFiles": 598,
-        "textFiles": 574,
-        "totalTextLines": 106663,
+        "totalFiles": 679,
+        "textFiles": 655,
+        "totalTextLines": 126577,
         "rustFiles": 134,
-        "nodeFiles": 137,
-        "markdownFiles": 168,
-        "jsonFiles": 101,
-        "testFiles": 72,
-        "docsFiles": 106,
-        "reportsFiles": 70,
+        "nodeFiles": 144,
+        "markdownFiles": 203,
+        "jsonFiles": 140,
+        "testFiles": 76,
+        "docsFiles": 108,
+        "reportsFiles": 138,
         "schemaFiles": 4,
         "presetCatalogs": 1
       },
@@ -2206,14 +2204,14 @@
         "[none]": 20,
         ".example": 1,
         ".yml": 20,
-        ".md": 168,
+        ".md": 203,
         ".lock": 1,
         ".cff": 1,
         ".py": 1,
         ".rs": 134,
-        ".json": 101,
-        ".js": 59,
-        ".mjs": 78,
+        ".json": 140,
+        ".js": 63,
+        ".mjs": 81,
         ".sh": 3,
         ".dockerfile": 1,
         ".txt": 1,
@@ -2223,23 +2221,23 @@
         "config": 1,
         "root-or-other": 42,
         "github": 21,
-        "docs": 106,
-        "eval": 44,
+        "docs": 108,
+        "eval": 48,
         "examples": 2,
         "memory-bank": 7,
         "npm-platform-packages": 24,
         "npm-cli": 11,
         "presets": 2,
-        "reports": 70,
+        "reports": 138,
         "schemas": 4,
-        "scripts": 75,
+        "scripts": 78,
         "rust-source": 120,
-        "tests": 69
+        "tests": 73
       },
       "largestTextFiles": [
         {
           "path": "reports/install-readiness-latest.json",
-          "lines": 2848,
+          "lines": 2738,
           "category": "reports"
         },
         {
@@ -2258,13 +2256,28 @@
           "category": "reports"
         },
         {
+          "path": "reports/live-random-mcp-probe-fixture-check.json",
+          "lines": 1498,
+          "category": "reports"
+        },
+        {
+          "path": "reports/live-random-mcp-probe-latest.json",
+          "lines": 1498,
+          "category": "reports"
+        },
+        {
+          "path": "eval/fixtures/live-random-mcp-probe-sample.json",
+          "lines": 1497,
+          "category": "eval"
+        },
+        {
           "path": "src/dashboard/tests.rs",
-          "lines": 1409,
+          "lines": 1410,
           "category": "rust-source"
         },
         {
           "path": "src/adapter/discovery.rs",
-          "lines": 1398,
+          "lines": 1401,
           "category": "rust-source"
         },
         {
@@ -2278,8 +2291,13 @@
           "category": "rust-source"
         },
         {
+          "path": "src/upstream/lease_runtime.rs",
+          "lines": 1265,
+          "category": "rust-source"
+        },
+        {
           "path": "src/mcp_server.rs",
-          "lines": 1248,
+          "lines": 1247,
           "category": "rust-source"
         },
         {
@@ -2294,23 +2312,33 @@
         },
         {
           "path": "src/dashboard.rs",
-          "lines": 1174,
+          "lines": 1180,
           "category": "rust-source"
         },
         {
           "path": "src/adapter.rs",
-          "lines": 1168,
+          "lines": 1171,
           "category": "rust-source"
         },
         {
-          "path": "src/upstream/lease_runtime.rs",
-          "lines": 1158,
-          "category": "rust-source"
+          "path": "reports/node-tests-latest.json",
+          "lines": 1110,
+          "category": "reports"
+        },
+        {
+          "path": "reports/node-tests-sharded-latest.json",
+          "lines": 1110,
+          "category": "reports"
         },
         {
           "path": "tests/mcp_server.rs",
           "lines": 1095,
           "category": "tests"
+        },
+        {
+          "path": "src/dashboard/index.html",
+          "lines": 1043,
+          "category": "rust-source"
         },
         {
           "path": "src/client/actions.rs",
@@ -2323,43 +2351,13 @@
           "category": "rust-source"
         },
         {
+          "path": "src/server/loader.rs",
+          "lines": 1006,
+          "category": "rust-source"
+        },
+        {
           "path": "src/client_catalog.rs",
           "lines": 913,
-          "category": "rust-source"
-        },
-        {
-          "path": "src/dashboard/index.html",
-          "lines": 913,
-          "category": "rust-source"
-        },
-        {
-          "path": "reports/publish-decision-latest.json",
-          "lines": 869,
-          "category": "reports"
-        },
-        {
-          "path": "src/client/actions/config_update.rs",
-          "lines": 790,
-          "category": "rust-source"
-        },
-        {
-          "path": "src/service.rs",
-          "lines": 744,
-          "category": "rust-source"
-        },
-        {
-          "path": "src/tool_result.rs",
-          "lines": 741,
-          "category": "rust-source"
-        },
-        {
-          "path": "src/server/loader.rs",
-          "lines": 733,
-          "category": "rust-source"
-        },
-        {
-          "path": "src/client/plan.rs",
-          "lines": 726,
           "category": "rust-source"
         }
       ],
@@ -2370,11 +2368,11 @@
         },
         {
           "path": "src/dashboard/tests.rs",
-          "lines": 1409
+          "lines": 1410
         },
         {
           "path": "src/adapter/discovery.rs",
-          "lines": 1398
+          "lines": 1401
         },
         {
           "path": "src/serve.rs",
@@ -2385,8 +2383,12 @@
           "lines": 1310
         },
         {
+          "path": "src/upstream/lease_runtime.rs",
+          "lines": 1265
+        },
+        {
           "path": "src/mcp_server.rs",
-          "lines": 1248
+          "lines": 1247
         },
         {
           "path": "src/mcp_server/tool_surface.rs",
@@ -2398,15 +2400,11 @@
         },
         {
           "path": "src/dashboard.rs",
-          "lines": 1174
+          "lines": 1180
         },
         {
           "path": "src/adapter.rs",
-          "lines": 1168
-        },
-        {
-          "path": "src/upstream/lease_runtime.rs",
-          "lines": 1158
+          "lines": 1171
         },
         {
           "path": "src/client/actions.rs",
@@ -2415,6 +2413,10 @@
         {
           "path": "src/dashboard/http_tools.rs",
           "lines": 1019
+        },
+        {
+          "path": "src/server/loader.rs",
+          "lines": 1006
         },
         {
           "path": "src/client_catalog.rs",
@@ -2433,10 +2435,6 @@
           "lines": 741
         },
         {
-          "path": "src/server/loader.rs",
-          "lines": 733
-        },
-        {
           "path": "src/client/plan.rs",
           "lines": 726
         },
@@ -2445,8 +2443,12 @@
           "lines": 715
         },
         {
+          "path": "src/mcp_presets.rs",
+          "lines": 712
+        },
+        {
           "path": "src/upstream/inventory.rs",
-          "lines": 661
+          "lines": 665
         },
         {
           "path": "src/lab/render.rs",
@@ -2455,10 +2457,6 @@
         {
           "path": "src/doctor.rs",
           "lines": 628
-        },
-        {
-          "path": "src/mcp_presets.rs",
-          "lines": 615
         },
         {
           "path": "src/client/actions/render_models.rs",
@@ -2532,7 +2530,7 @@
         "drift": []
       },
       "releaseManifest": {
-        "includePathCount": 85,
+        "includePathCount": 158,
         "optionalIncludePathCount": 1,
         "missing": [],
         "optionalPresent": [
@@ -2605,7 +2603,7 @@
       "error": null,
       "report": {
         "ok": true,
-        "generatedAt": "2026-05-16T15:06:48.627Z",
+        "generatedAt": "2026-05-17T15:32:12.186Z",
         "policy": {
           "critical": [
             "No production Rust todo! or unimplemented! macros.",
@@ -2622,12 +2620,12 @@
           ]
         },
         "summary": {
-          "files": 267,
+          "files": 274,
           "rustFiles": 130,
-          "nodeFiles": 137,
-          "productionRustLines": 38731,
-          "testRustLines": 12521,
-          "nodeLines": 23169,
+          "nodeFiles": 144,
+          "productionRustLines": 39371,
+          "testRustLines": 12530,
+          "nodeLines": 25299,
           "largeModules": 0,
           "directThreadSpawns": 6,
           "commandSpawns": 9,
@@ -2655,12 +2653,12 @@
         "warnings": [],
         "warningCount": 0
       },
-      "output": "{\n  \"ok\": true,\n  \"generatedAt\": \"2026-05-16T15:06:48.627Z\",\n  \"policy\": {\n    \"critical\": [\n      \"No production Rust todo! or unimplemented! macros.\",\n      \"No production Rust panic! macros.\",\n      \"Protocol primitives stay transport and command agnostic.\",\n      \"Resource defaults stay side-effect free.\",\n      \"Unsafe Rust and FFI declarations stay inside reviewed process boundary modules.\"\n    ],\n    \"warnings\": [\n      \"Rust modules over 1500 lines are tracked as refactor candidates.\",\n      \"Direct thread spawns outside reviewed runtime modules are tracked for future abstraction.\",\n      \"Production unwrap counts are tracked as hardening backlog, not as an immediate blocker.\",\n      \"Unsafe operations and foreign function blocks are counted and allowed only in reviewed process-detach modules.\"\n    ]\n  },\n  \"summary\": {\n    \"files\": 267,\n    \"rustFiles\": 130,\n    \"nodeFiles\": 137,\n    \"productionRustLines\": 38731,\n    \"testRustLines\": 12521,\n    \"nodeLines\": 23169,"
+      "output": "{\n  \"ok\": true,\n  \"generatedAt\": \"2026-05-17T15:32:12.186Z\",\n  \"policy\": {\n    \"critical\": [\n      \"No production Rust todo! or unimplemented! macros.\",\n      \"No production Rust panic! macros.\",\n      \"Protocol primitives stay transport and command agnostic.\",\n      \"Resource defaults stay side-effect free.\",\n      \"Unsafe Rust and FFI declarations stay inside reviewed process boundary modules.\"\n    ],\n    \"warnings\": [\n      \"Rust modules over 1500 lines are tracked as refactor candidates.\",\n      \"Direct thread spawns outside reviewed runtime modules are tracked for future abstraction.\",\n      \"Production unwrap counts are tracked as hardening backlog, not as an immediate blocker.\",\n      \"Unsafe operations and foreign function blocks are counted and allowed only in reviewed process-detach modules.\"\n    ]\n  },\n  \"summary\": {\n    \"files\": 274,\n    \"rustFiles\": 130,\n    \"nodeFiles\": 144,\n    \"productionRustLines\": 39371,\n    \"testRustLines\": 12530,\n    \"nodeLines\": 25299,"
     },
     "nodeSyntax": {
       "schema": "mcpace.nodeSyntaxCheck.v1",
-      "generatedAt": "2026-05-16T15:07:00.186Z",
-      "root": "/mnt/data/work_mcpace/mcpace-v0.6.4-160526-140300",
+      "generatedAt": "2026-05-17T15:32:24.251Z",
+      "root": "/mnt/data/mcpace_work/mcpace-v0.6.5-170526-144346",
       "sourceRoots": [
         "packages/npm/cli",
         "scripts",
@@ -2669,8 +2667,8 @@
         "examples"
       ],
       "status": "pass",
-      "fileCount": 134,
-      "checkedCount": 134,
+      "fileCount": 141,
+      "checkedCount": 141,
       "failureCount": 0,
       "jobs": 1,
       "failures": []
@@ -2727,11 +2725,9 @@
       "platformBinaryCount": 0
     },
     "installReadiness": {
-      "status": "partial",
+      "status": "pass",
       "blockers": [],
-      "warnings": [
-        "cargo/rustc is not fully available in this environment"
-      ]
+      "warnings": []
     },
     "nextActions": [
       "Run `cargo check --all-targets --locked` and `cargo test --all-targets --locked` on a host with Cargo dependency access.",

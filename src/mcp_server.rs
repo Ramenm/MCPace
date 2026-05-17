@@ -7,13 +7,10 @@ use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
 use std::sync::Mutex;
-
 mod args;
 mod tool_surface;
-
 use self::args::{parse_args, write_help};
 use self::tool_surface::{mcp_tool_names, tool_definition, TOOL_SPECS};
-
 #[derive(Clone, Debug)]
 struct ServerConfig {
     root_path: PathBuf,
@@ -22,7 +19,6 @@ struct ServerConfig {
     project_root: Option<String>,
     transport: String,
 }
-
 pub fn run(
     args: &[String],
     default_root: Option<PathBuf>,
@@ -38,13 +34,11 @@ pub fn run(
         write_help(stdout);
         return 0;
     }
-
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
         return 1;
     };
-
     let config = ServerConfig {
         root_path,
         client_id: parsed
@@ -1001,9 +995,14 @@ fn optional_string_argument(
 
 fn optional_object_argument(arguments: &JsonValue, key: &str) -> Result<JsonValue, ToolCallError> {
     match json_helpers::value_at_path(arguments, &[key]) {
-        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(arguments, &[key]).cloned().expect("checked above")),
+        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(arguments, &[key])
+            .cloned()
+            .expect("checked above")),
         Some(JsonValue::Null) | None => Ok(mcp::empty_object()),
-        Some(_) => Err(ToolCallError::InvalidParams(format!("'{}' must be a JSON object", key))),
+        Some(_) => Err(ToolCallError::InvalidParams(format!(
+            "'{}' must be a JSON object",
+            key
+        ))),
     }
 }
 

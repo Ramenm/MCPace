@@ -3,8 +3,8 @@ use crate::client_catalog::client_install_support_summary;
 use crate::resources;
 use crate::runtimepaths;
 use crate::{
-    candidates, cleanup, client, connect, dashboard, doctor, hub, init, lab, mcp_server, profile, projects,
-    release, repair, reporoot, serve, server, service, setup, stdio_shim, update, verify,
+    candidates, cleanup, client, connect, dashboard, doctor, hub, init, lab, mcp_server, profile,
+    projects, release, repair, reporoot, serve, server, service, setup, stdio_shim, update, verify,
 };
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -228,7 +228,10 @@ fn write_help(stdout: &mut dyn Write) {
         "  connect [<client>] [--server <name>] [--json] [--root <path>]"
     );
     let _ = writeln!(stdout, "  client list [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  cleanup [status|cache|runtime|logs|all-safe] [--json] [--root <path>] [--dry-run]");
+    let _ = writeln!(
+        stdout,
+        "  cleanup [status|cache|runtime|logs|all-safe] [--json] [--root <path>] [--dry-run]"
+    );
     let _ = writeln!(stdout, "  client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]");
     let _ = writeln!(
         stdout,

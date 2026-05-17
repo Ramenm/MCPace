@@ -6,6 +6,23 @@ use crate::profile;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+#[derive(Debug, Clone)]
+struct GenericSourcePolicy {
+    scope_class: &'static str,
+    concurrency_policy: &'static str,
+    state_binding: &'static str,
+    credential_binding: &'static str,
+    parallelism_limit: usize,
+    conflict_domain_prefix: &'static str,
+    project_root_mode: &'static str,
+    worktree_binding: &'static str,
+    state_profile_mode: &'static str,
+    host_lock: &'static str,
+    startup_strategy: &'static str,
+    routing_group: &'static str,
+    discovery_requires_lease: bool,
+}
+
 pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String> {
     let config_path = root_path.join("mcpace.config.json");
     let config = json_helpers::read_json_file(&config_path)?;
@@ -98,6 +115,7 @@ fn generic_source_server_record(
         &source_record.command,
         &source_record.url,
     );
+    let policy = infer_generic_source_policy(normalized_name, source_record, &source_type);
     let kind = format!("source-{}", source_type);
     let display_name = if source_record.name.trim().is_empty() {
         normalized_name
@@ -108,6 +126,11 @@ fn generic_source_server_record(
         vec![source_record.command.clone()]
     } else {
         Vec::new()
+    };
+    let conflict_domain = if policy.conflict_domain_prefix.is_empty() {
+        normalized_name.to_string()
+    } else {
+        format!("{}:{}", policy.conflict_domain_prefix, normalized_name)
     };
 
     ServerRecord {
@@ -123,26 +146,66 @@ fn generic_source_server_record(
         supported_transports: supported_transports_for_source_type(&source_type),
         platforms: Vec::new(),
         required_commands,
-        scope_class: "configured-source".to_string(),
-        concurrency_policy: "single-writer".to_string(),
-        state_binding: "runtime-source".to_string(),
-        credential_binding: "source-config".to_string(),
-        parallelism_limit: 1,
-        parallel_safety_class: infer_parallel_safety_class(&source_type, "configured-source", "single-writer", "runtime-source", "source-config", &source_record.command, &source_record.url, &Vec::new()),
-        default_pool_model: infer_default_pool_model(&source_type, "configured-source", "single-writer", "runtime-source", "source-config"),
-        max_workers: infer_max_workers(&source_type, "configured-source", "single-writer", 1),
+        scope_class: policy.scope_class.to_string(),
+        concurrency_policy: policy.concurrency_policy.to_string(),
+        state_binding: policy.state_binding.to_string(),
+        credential_binding: policy.credential_binding.to_string(),
+        parallelism_limit: policy.parallelism_limit,
+        parallel_safety_class: infer_parallel_safety_class(
+            &source_type,
+            policy.scope_class,
+            policy.concurrency_policy,
+            policy.state_binding,
+            policy.credential_binding,
+            &source_record.command,
+            &source_record.url,
+            &Vec::new(),
+        ),
+        default_pool_model: infer_default_pool_model(
+            &source_type,
+            policy.scope_class,
+            policy.concurrency_policy,
+            policy.state_binding,
+            policy.credential_binding,
+        ),
+        max_workers: infer_max_workers(
+            &source_type,
+            policy.scope_class,
+            policy.concurrency_policy,
+            policy.parallelism_limit,
+        ),
         max_in_flight_per_worker: 1,
         transport_status: transport_status_for_source_type(&source_type),
-        launcher_kind: infer_launcher_kind(&source_record.command, &source_record.url, "user-supplied", ""),
-        lock_domains: infer_lock_domains("configured-source", "single-writer", "runtime-source", "source-config", normalized_name),
-        profile_evidence: profile_evidence_records(&source_type, "configured-source", "single-writer", "runtime-source", "source-config", &source_record.command, &source_record.url),
-        conflict_domain: format!("settings-only:{}", normalized_name),
-        project_root_mode: "optional".to_string(),
-        worktree_binding: "none".to_string(),
-        state_profile_mode: "none".to_string(),
-        host_lock: "none".to_string(),
-        startup_strategy: "per-request".to_string(),
-        routing_group: "settings-only".to_string(),
+        launcher_kind: infer_launcher_kind(
+            &source_record.command,
+            &source_record.url,
+            "user-supplied",
+            "",
+        ),
+        lock_domains: infer_lock_domains(
+            policy.scope_class,
+            policy.concurrency_policy,
+            policy.state_binding,
+            policy.credential_binding,
+            normalized_name,
+        ),
+        profile_evidence: profile_evidence_records(
+            &source_type,
+            policy.scope_class,
+            policy.concurrency_policy,
+            policy.state_binding,
+            policy.credential_binding,
+            &source_record.command,
+            &source_record.url,
+        ),
+        conflict_domain,
+        project_root_mode: policy.project_root_mode.to_string(),
+        worktree_binding: policy.worktree_binding.to_string(),
+        state_profile_mode: policy.state_profile_mode.to_string(),
+        host_lock: policy.host_lock.to_string(),
+        startup_strategy: policy.startup_strategy.to_string(),
+        routing_group: policy.routing_group.to_string(),
+        discovery_requires_lease: policy.discovery_requires_lease,
         health_url: String::new(),
         source_enabled: source_record.enabled,
         source_type,
@@ -153,6 +216,162 @@ fn generic_source_server_record(
         installer_method: "user-supplied".to_string(),
         installer_package: String::new(),
         installer_verify_command: String::new(),
+    }
+}
+
+fn infer_generic_source_policy(
+    normalized_name: &str,
+    source_record: &SourceServerRecord,
+    source_type: &str,
+) -> GenericSourcePolicy {
+    let haystack = format!(
+        "{} {} {} {}",
+        normalized_name, source_record.name, source_record.command, source_record.url
+    )
+    .to_ascii_lowercase();
+
+    if haystack.contains("playwright")
+        || haystack.contains("puppeteer")
+        || haystack.contains("browser")
+        || haystack.contains("desktop")
+    {
+        return GenericSourcePolicy {
+            scope_class: "shared-exclusive",
+            concurrency_policy: "single-session",
+            state_binding: "host-desktop",
+            credential_binding: "browser-profile",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "browser-profile",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "required",
+            host_lock: "browser-profile",
+            startup_strategy: "singleton-host",
+            routing_group: "browser",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if haystack.contains("git") || haystack.contains("repository") || haystack.contains("worktree")
+    {
+        return GenericSourcePolicy {
+            scope_class: "project-local",
+            concurrency_policy: "single-writer",
+            state_binding: "repo",
+            credential_binding: "git-config",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "git-repository",
+            project_root_mode: "required",
+            worktree_binding: "repository-root",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-per-project",
+            routing_group: "project-git",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if haystack.contains("filesystem")
+        || haystack.contains("server-filesystem")
+        || haystack.contains("file-system")
+    {
+        return GenericSourcePolicy {
+            scope_class: "project-local",
+            concurrency_policy: "isolated-per-project",
+            state_binding: "file",
+            credential_binding: "none",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "project-filesystem",
+            project_root_mode: "required",
+            worktree_binding: "project-root",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-per-project",
+            routing_group: "project-filesystem",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if haystack.contains("context7")
+        || haystack.contains("docs")
+        || haystack.contains("documentation")
+    {
+        return GenericSourcePolicy {
+            scope_class: "credential-scoped",
+            concurrency_policy: "multi-reader",
+            state_binding: "none",
+            credential_binding: "api-key-or-anonymous",
+            parallelism_limit: 4,
+            conflict_domain_prefix: "network-docs",
+            project_root_mode: "none",
+            worktree_binding: "none",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-shared",
+            routing_group: "network-docs",
+            discovery_requires_lease: false,
+        };
+    }
+
+    if haystack.contains("memory")
+        || haystack.contains("sequential-thinking")
+        || haystack.contains("context-store")
+        || haystack.contains("stateful")
+    {
+        return GenericSourcePolicy {
+            scope_class: "state-profile",
+            concurrency_policy: "single-session",
+            state_binding: "context-store",
+            credential_binding: "none",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "state-profile",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "required",
+            host_lock: "none",
+            startup_strategy: "lazy-per-profile",
+            routing_group: "memory-context",
+            discovery_requires_lease: true,
+        };
+    }
+
+    let remote = source_type == "streamable-http"
+        || source_type == "http"
+        || !source_record.url.trim().is_empty();
+    GenericSourcePolicy {
+        scope_class: if remote {
+            "credential-scoped"
+        } else {
+            "configured-source"
+        },
+        concurrency_policy: "single-writer",
+        state_binding: if remote {
+            "remote-session"
+        } else {
+            "runtime-source"
+        },
+        credential_binding: if remote {
+            "remote-origin-or-credential"
+        } else {
+            "source-config"
+        },
+        parallelism_limit: 1,
+        conflict_domain_prefix: if remote {
+            "remote-mcp"
+        } else {
+            "settings-only"
+        },
+        project_root_mode: "optional",
+        worktree_binding: "none",
+        state_profile_mode: if remote { "optional" } else { "none" },
+        host_lock: "none",
+        startup_strategy: "lazy-shared",
+        routing_group: if remote {
+            "remote-mcp"
+        } else {
+            "settings-only"
+        },
+        discovery_requires_lease: true,
     }
 }
 
@@ -173,9 +392,8 @@ fn infer_source_type(raw_source_type: &str, command: &str, url: &str) -> String 
 fn normalize_source_type(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "" => String::new(),
-        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote" | "http" => {
-            "streamable-http".to_string()
-        }
+        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote"
+        | "http" => "streamable-http".to_string(),
         "sse" | "remote-sse" | "http+sse" | "http-sse" | "legacy-sse" => "sse-legacy".to_string(),
         "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
         other => other.to_string(),
@@ -255,6 +473,11 @@ fn normalize_server_record(
         policy,
         "routingGroup",
         default_routing_group(&scope_class, &state_binding, &state_profile_mode),
+    );
+    let discovery_requires_lease = policy_bool(
+        policy,
+        "discoveryRequiresLease",
+        default_discovery_requires_lease(&scope_class, &concurrency_policy, &state_binding),
     );
     let source_type = source_record
         .map(|record| record.source_type.clone())
@@ -365,7 +588,12 @@ fn normalize_server_record(
         max_workers,
         max_in_flight_per_worker: 1,
         transport_status: transport_status_for_source_type(&source_type),
-        launcher_kind: infer_launcher_kind(&source_command, &source_url, &installer_method, &installer_package),
+        launcher_kind: infer_launcher_kind(
+            &source_command,
+            &source_url,
+            &installer_method,
+            &installer_package,
+        ),
         lock_domains,
         profile_evidence,
         conflict_domain,
@@ -375,6 +603,7 @@ fn normalize_server_record(
         host_lock,
         startup_strategy,
         routing_group,
+        discovery_requires_lease,
         health_url: object
             .get("healthUrl")
             .and_then(JsonValue::as_str)
@@ -425,6 +654,13 @@ fn policy_usize(policy: Option<&BTreeMap<String, JsonValue>>, key: &str, fallbac
         .unwrap_or(fallback)
 }
 
+fn policy_bool(policy: Option<&BTreeMap<String, JsonValue>>, key: &str, fallback: bool) -> bool {
+    policy
+        .and_then(|policy| policy.get(key))
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(fallback)
+}
+
 fn transport_status_for_source_type(source_type: &str) -> String {
     match source_type {
         "sse-legacy" | "sse" => "legacy-compat".to_string(),
@@ -434,7 +670,12 @@ fn transport_status_for_source_type(source_type: &str) -> String {
     }
 }
 
-fn infer_launcher_kind(command: &str, url: &str, installer_method: &str, installer_package: &str) -> String {
+fn infer_launcher_kind(
+    command: &str,
+    url: &str,
+    installer_method: &str,
+    installer_package: &str,
+) -> String {
     let command = command.trim().to_ascii_lowercase();
     let method = installer_method.trim().to_ascii_lowercase();
     let package = installer_package.trim().to_ascii_lowercase();
@@ -456,6 +697,7 @@ fn infer_launcher_kind(command: &str, url: &str, installer_method: &str, install
     "local-command".to_string()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn infer_parallel_safety_class(
     source_type: &str,
     scope_class: &str,
@@ -469,7 +711,10 @@ fn infer_parallel_safety_class(
     if source_type == "sse-legacy" || source_type == "sse" {
         return "PX_legacy_compat".to_string();
     }
-    if scope_class == "shared-exclusive" || state_binding == "host-desktop" || concurrency_policy == "single-session" {
+    if scope_class == "shared-exclusive"
+        || state_binding == "host-desktop"
+        || concurrency_policy == "single-session"
+    {
         return "PX_forbidden".to_string();
     }
     if !credential_binding.trim().is_empty() && credential_binding != "none" {
@@ -484,7 +729,7 @@ fn infer_parallel_safety_class(
     if concurrency_policy == "multi-reader" {
         return "P1_readonly_candidate".to_string();
     }
-    if tool_policies.iter().any(|policy| policy_mentions_readonly(policy)) {
+    if tool_policies.iter().any(policy_mentions_readonly) {
         return "P1_readonly_candidate".to_string();
     }
     if !command.trim().is_empty() {
@@ -517,7 +762,10 @@ fn infer_default_pool_model(
     if source_type == "sse-legacy" || source_type == "sse" {
         return "legacy-disabled".to_string();
     }
-    if scope_class == "shared-exclusive" || state_binding == "host-desktop" || concurrency_policy == "single-session" {
+    if scope_class == "shared-exclusive"
+        || state_binding == "host-desktop"
+        || concurrency_policy == "single-session"
+    {
         return "singleton".to_string();
     }
     if !credential_binding.trim().is_empty() && credential_binding != "none" {
@@ -553,7 +801,9 @@ fn infer_max_workers(
     if source_type == "streamable-http" || source_type == "http" {
         return 8;
     }
-    if source_type == "stdio" && (concurrency_policy == "multi-reader" || scope_class == "project-local") {
+    if source_type == "stdio"
+        && (concurrency_policy == "multi-reader" || scope_class == "project-local")
+    {
         return 4;
     }
     1
@@ -713,6 +963,29 @@ fn default_startup_strategy<'a>(
     } else {
         "lazy-shared"
     }
+}
+
+fn default_discovery_requires_lease(
+    scope_class: &str,
+    concurrency_policy: &str,
+    state_binding: &str,
+) -> bool {
+    scope_class == "shared-exclusive"
+        || scope_class == "project-local"
+        || scope_class == "state-profile"
+        || concurrency_policy == "single-session"
+        || concurrency_policy == "single-writer"
+        || concurrency_policy == "isolated-per-project"
+        || matches!(
+            state_binding,
+            "host-desktop"
+                | "host-session"
+                | "repo"
+                | "file"
+                | "db"
+                | "database-file"
+                | "context-store"
+        )
 }
 
 fn default_routing_group<'a>(

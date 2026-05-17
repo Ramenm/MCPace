@@ -2,8 +2,8 @@
 
 - Status: pass
 - Mode: source-only
-- Generated: 2026-05-16T13:58:13.119Z
-- Project: mcpace 0.6.4
+- Generated: 2026-05-17T15:29:15.837Z
+- Project: mcpace 0.6.5
 
 ## Scenario matrix
 

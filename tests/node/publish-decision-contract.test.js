@@ -38,4 +38,18 @@ test('package scripts expose local source, release, and final decision gates', (
   assert.match(pkg.scripts['verify:local:release'], /local-quality-suite\.mjs --profile release/);
   assert.match(pkg.scripts['verify:local:publish'], /verify:publish-decision/);
   assert.equal(pkg.scripts['verify:publish-decision'], 'node scripts/publish-decision.mjs --json --write reports/publish-decision-latest.json --markdown reports/publish-decision-latest.md');
+  assert.equal(pkg.scripts['verify:publish-decision:source'], 'node scripts/publish-decision.mjs --json --strict-source-snapshot --write reports/publish-decision-latest.json --markdown reports/publish-decision-latest.md');
+  assert.equal(pkg.scripts['verify:publish-decision:release'], 'node scripts/publish-decision.mjs --json --strict-native-publication --write reports/publish-decision-latest.json --markdown reports/publish-decision-latest.md');
+});
+
+test('strict native publication mode fails closed while non-strict mode still writes a decision report', () => {
+  const normal = runNode(['scripts/publish-decision.mjs', '--json']);
+  assert.equal(normal.status, 0, normal.stderr || normal.stdout);
+  const normalReport = JSON.parse(normal.stdout);
+  assert.ok(typeof normalReport.okForNpmNativePublication === 'boolean');
+
+  const strict = runNode(['scripts/publish-decision.mjs', '--json', '--strict-native-publication']);
+  const strictReport = JSON.parse(strict.stdout || '{}');
+  assert.equal(strictReport.schema, 'mcpace.publishDecision.v1');
+  assert.equal(strict.status, strictReport.okForNpmNativePublication ? 0 : 1, strict.stderr || strict.stdout);
 });

@@ -1,5 +1,5 @@
 {
-  "version": "0.6.2",
+  "version": "0.6.5",
   "tracks": [
     {
       "id": "seed-prompt",
@@ -22,9 +22,9 @@
         }
       ],
       "splitCounts": {
-        "typical": 3,
+        "typical": 4,
         "edge": 8,
-        "adversarial": 10,
+        "adversarial": 11,
         "held-out": 2
       },
       "evaluationMethods": [
@@ -40,7 +40,8 @@
       ],
       "notes": [
         "No raw production logs are checked into this repo today.",
-        "Until sanitized traces exist, historical regressions and repo-grounded maintainer tasks are the safest production-like proxy."
+        "Until sanitized traces exist, historical regressions and repo-grounded maintainer tasks are the safest production-like proxy.",
+        "Raw autonomous-agent workloop prompts are now covered so broad maintainer asks are evaluated as execution tasks, not only prose planning."
       ]
     },
     {

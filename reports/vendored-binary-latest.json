@@ -1,23 +1,23 @@
 {
   "schema": "mcpace.vendoredBinary.v1",
-  "generatedAt": "2026-05-16T09:44:12.061Z",
+  "generatedAt": "2026-05-17T15:29:31.915Z",
   "project": {
     "name": "mcpace",
-    "version": "0.6.2"
+    "version": "0.6.5"
   },
   "status": "pass",
   "targetKey": "linux-x64-gnu",
   "binaryName": "mcpace",
   "binaryPath": "packages/npm/cli/vendor/linux-x64-gnu/mcpace",
-  "expectedVersion": "0.6.2",
+  "expectedVersion": "0.6.5",
   "checks": [
     "vendored binary version",
     "vendored binary help",
     "vendored binary verify doctor",
     "vendored binary verify readiness"
   ],
-  "versionOutput": "0.6.2",
-  "binaryVersion": "0.6.2",
+  "versionOutput": "0.6.5",
+  "binaryVersion": "0.6.5",
   "versionCommand": "packages/npm/cli/vendor/linux-x64-gnu/mcpace version",
   "helpMentionsMcpace": true,
   "helpCommand": "packages/npm/cli/vendor/linux-x64-gnu/mcpace help",
@@ -26,7 +26,7 @@
   "doctorSummary": {
     "configFound": true,
     "cargoManifestFound": true,
-    "rustSourceReady": false,
+    "rustSourceReady": true,
     "rustSourceReadyRequired": false,
     "npmSurfaceReady": true
   },

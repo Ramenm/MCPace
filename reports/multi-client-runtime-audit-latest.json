@@ -1,8 +1,8 @@
 {
   "schema": "mcpace.multiClientRuntimeAudit.v1",
   "status": "pass",
-  "generatedAt": "2026-05-16T15:05:08.440Z",
-  "elapsedMs": 5.519,
+  "generatedAt": "2026-05-17T15:29:12.717Z",
+  "elapsedMs": 5.142,
   "project": {
     "name": "mcpace",
     "version": "0.6.5"

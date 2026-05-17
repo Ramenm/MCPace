@@ -34,6 +34,7 @@ pub struct ServerRecord {
     pub host_lock: String,
     pub startup_strategy: String,
     pub routing_group: String,
+    pub discovery_requires_lease: bool,
     pub health_url: String,
     pub source_enabled: bool,
     pub source_type: String,
@@ -107,12 +108,18 @@ impl ServerRecord {
                 "transportStatus",
                 JsonValue::string(self.transport_status.clone()),
             ),
-            ("launcherKind", JsonValue::string(self.launcher_kind.clone())),
+            (
+                "launcherKind",
+                JsonValue::string(self.launcher_kind.clone()),
+            ),
             (
                 "lockDomains",
                 JsonValue::array(self.lock_domains.iter().cloned().map(JsonValue::string)),
             ),
-            ("profileEvidence", JsonValue::array(self.profile_evidence.clone())),
+            (
+                "profileEvidence",
+                JsonValue::array(self.profile_evidence.clone()),
+            ),
             (
                 "conflictDomain",
                 JsonValue::string(self.conflict_domain.clone()),
@@ -137,6 +144,10 @@ impl ServerRecord {
             (
                 "routingGroup",
                 JsonValue::string(self.routing_group.clone()),
+            ),
+            (
+                "discoveryRequiresLease",
+                JsonValue::bool(self.discovery_requires_lease),
             ),
         ])
     }
@@ -212,12 +223,18 @@ impl ServerRecord {
                         "transportStatus",
                         JsonValue::string(self.transport_status.clone()),
                     ),
-                    ("launcherKind", JsonValue::string(self.launcher_kind.clone())),
+                    (
+                        "launcherKind",
+                        JsonValue::string(self.launcher_kind.clone()),
+                    ),
                     (
                         "lockDomains",
                         JsonValue::array(self.lock_domains.iter().cloned().map(JsonValue::string)),
                     ),
-                    ("profileEvidence", JsonValue::array(self.profile_evidence.clone())),
+                    (
+                        "profileEvidence",
+                        JsonValue::array(self.profile_evidence.clone()),
+                    ),
                     (
                         "conflictDomain",
                         JsonValue::string(self.conflict_domain.clone()),
@@ -242,6 +259,10 @@ impl ServerRecord {
                     (
                         "routingGroup",
                         JsonValue::string(self.routing_group.clone()),
+                    ),
+                    (
+                        "discoveryRequiresLease",
+                        JsonValue::bool(self.discovery_requires_lease),
                     ),
                 ]),
             ),

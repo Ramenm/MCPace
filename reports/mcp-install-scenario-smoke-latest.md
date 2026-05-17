@@ -1,23 +1,23 @@
 # MCP install scenario smoke
 
-Generated: 2026-05-16T13:57:56.144Z
+Generated: 2026-05-17T15:28:56.995Z
 Status: pass
-Project: mcpace 0.6.4
+Project: mcpace 0.6.5
 
 ## Checks
 
 | Check | Status | Detail |
 |---|---:|---|
-| preset-install-dry-run-is-config-only | pass | exit=0 30ms |
-| preset-install-writes-one-fragment | pass | exit=0 23ms |
+| preset-install-dry-run-is-config-only | pass | exit=0 28ms |
+| preset-install-writes-one-fragment | pass | exit=0 25ms |
 | preset-install-does-not-run-package-command | pass | Install output materialized command/args in JSON only; package execution is deferred until runtime/test/client launch. |
-| reinstall-without-force-is-blocked | pass | exit=1 server 'filesystem' already exists in /tmp/mcpace-install-scenarios-CFLpea/mcp_settings.d/filesystem.json; rerun with --force to replace it |
-| reinstall-with-force-replaces | pass | exit=0 24ms |
-| custom-stdio-server-add | pass | exit=0 22ms |
-| remote-http-server-add | pass | exit=0 20ms |
+| reinstall-without-force-is-blocked | pass | exit=1 server 'filesystem' already exists in /tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json; rerun with --force to replace it |
+| reinstall-with-force-replaces | pass | exit=0 27ms |
+| custom-stdio-server-add | pass | exit=0 25ms |
+| remote-http-server-add | pass | exit=0 23ms |
 | invalid-remote-url-is-rejected | pass | exit=1 server add --url currently accepts only http:// or https:// MCP endpoints |
-| paid-server-can-be-registered-disabled | pass | exit=0 21ms |
-| hundred-server-config-scale | pass | 100 fragments written in 2143ms; inventory serverCount=104 |
+| paid-server-can-be-registered-disabled | pass | exit=0 27ms |
+| hundred-server-config-scale | pass | 100 fragments written in 2755ms; inventory serverCount=104 |
 
 ## Scenario matrix
 

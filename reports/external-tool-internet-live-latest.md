@@ -2,8 +2,8 @@
 
 - Status: blocked
 - Mode: live-internet
-- Generated: 2026-05-16T14:01:11.847Z
-- Project: mcpace 0.6.4
+- Generated: 2026-05-17T11:06:23.903Z
+- Project: mcpace 0.6.5
 
 ## Scenario matrix
 
@@ -22,11 +22,11 @@
 
 | Endpoint | Required | Status | OK | Elapsed |
 |---|---:|---:|---:|---:|
-| mcp-docs | yes | fetch failed | no | 140.04ms |
-| npm-registry-mcp-sdk | yes | fetch failed | no | 13.04ms |
-| pypi-mcp | no | fetch failed | no | 11.81ms |
-| github-api | yes | fetch failed | no | 5003.5ms |
-| github-mcp-servers-repo | no | fetch failed | no | 5003.73ms |
+| mcp-docs | yes | fetch failed | no | 88.84ms |
+| npm-registry-mcp-sdk | yes | fetch failed | no | 9.85ms |
+| pypi-mcp | no | fetch failed | no | 6.18ms |
+| github-api | yes | fetch failed | no | 5003.68ms |
+| github-mcp-servers-repo | no | fetch failed | no | 5002.75ms |
 
 ## Checks
 

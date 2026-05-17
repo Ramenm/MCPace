@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { deriveProjectName, deriveProjectVersion, repoRoot } from './lib/project-metadata.mjs';
 import { childEnvForCommand } from './lib/safe-child-env.mjs';
 
@@ -206,37 +206,8 @@ function summarize(text, maxLines = 40) {
 }
 
 
-function runTestFileSync(file, options) {
-  const startedAt = Date.now();
-  const childArgs = SUPPORTS_TEST_FORCE_EXIT ? ['--test', '--test-force-exit', file] : ['--test', file];
-  const result = spawnSync(process.execPath, childArgs, {
-    cwd: repoRoot,
-    env: childEnvForCommand('node'),
-    encoding: 'utf8',
-    timeout: options.timeoutMs,
-    windowsHide: true,
-  });
-  const timedOut = result.error?.code === 'ETIMEDOUT';
-  const stdout = appendBounded('', result.stdout || '', options.maxCaptureBytes);
-  const stderr = appendBounded('', result.stderr || '', options.maxCaptureBytes);
-  return {
-    file,
-    status: result.status === 0 && !timedOut ? 'pass' : timedOut ? 'timeout' : 'fail',
-    ok: result.status === 0 && !timedOut,
-    code: result.status,
-    signal: result.signal,
-    durationMs: Date.now() - startedAt,
-    timeoutMs: options.timeoutMs,
-    error: result.error ? String(result.error.message || result.error) : null,
-    stdoutSummary: summarize(stdout),
-    stderrSummary: summarize(stderr),
-  };
-}
 
 function runTestFile(file, options) {
-  if (ISOLATED_TEST_FILE_BASENAMES.has(path.basename(file))) {
-    return Promise.resolve(runTestFileSync(file, options));
-  }
   return new Promise((resolve) => {
     const startedAt = Date.now();
     const childArgs = SUPPORTS_TEST_FORCE_EXIT ? ['--test', '--test-force-exit', file] : ['--test', file];

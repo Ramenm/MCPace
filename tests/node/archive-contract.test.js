@@ -104,7 +104,8 @@ test('archive builder creates a clean zip with the required root naming contract
   assert.ok(files.includes(`${report.rootName}/reports/summary.md`));
   assert.ok(files.includes(`${report.rootName}/reports/performance-smoke-latest.json`));
   assert.ok(files.includes(`${report.rootName}/reports/performance-smoke-latest.md`));
-  assert.equal(files.includes(`${report.rootName}/reports/publish-decision-latest.json`), false);
+  assert.ok(files.includes(`${report.rootName}/reports/publish-decision-latest.json`));
+  assert.ok(files.includes(`${report.rootName}/reports/publish-decision-latest.md`));
   assert.equal(files.includes(`${report.rootName}/reports/code-inventory-latest.json`), false);
   assert.ok(files.includes(`${report.rootName}/TODO.md`));
   assert.ok(files.includes(`${report.rootName}/STATE.md`));

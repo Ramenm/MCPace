@@ -125,7 +125,7 @@
     "verify:experience": "npm run verify:performance && npm run verify:dashboard-chaos && npm run verify:overhead-audit && npm run verify:multi-client-runtime && npm run verify:adaptive-parallelism",
     "verify:lifecycle-blast-radius": "node scripts/lifecycle-blast-radius-smoke.mjs --json --write reports/lifecycle-blast-radius-latest.json --markdown reports/lifecycle-blast-radius-latest.md",
     "benchmark:lifecycle-blast-radius": "node scripts/lifecycle-blast-radius-smoke.mjs --json --no-write",
-    "verify:hardening": "npm run verify:mcp-install-scenarios && npm run verify:lifecycle-blast-radius && npm run verify:experience && npm run verify:tool-exposure-safety && npm run verify:tool-message-integrity && npm run verify:secrets && npm run verify:supply-chain && npm run verify:external-tool-internet",
+    "verify:hardening": "npm run verify:mcp-install-scenarios && npm run verify:lifecycle-blast-radius && npm run verify:experience && npm run verify:tool-exposure-safety && npm run verify:tool-message-integrity && npm run verify:secrets && npm run verify:supply-chain && npm run verify:external-tool-internet && npm run verify:registry-lab && npm run verify:live-random-mcp-probe && npm run verify:eval-fixtures",
     "verify:playwright-e2e": "node scripts/playwright-dashboard-e2e.mjs --json --write reports/playwright-dashboard-e2e-latest.json --markdown reports/playwright-dashboard-e2e-latest.md",
     "benchmark:playwright-e2e": "node scripts/playwright-dashboard-e2e.mjs --json --no-write",
     "verify:external-tool-internet": "node scripts/external-tool-internet-smoke.mjs --json --write reports/external-tool-internet-latest.json --markdown reports/external-tool-internet-latest.md",
@@ -140,7 +140,16 @@
     "benchmark:adaptive-parallelism": "node scripts/adaptive-parallelism-audit.mjs --json --no-write",
     "verify:orchestration": "npm run verify:adaptive-parallelism && npm run verify:adaptive-worker-plan && npm run verify:multi-client-runtime && npm run verify:lifecycle-blast-radius && npm run verify:performance",
     "verify:adaptive-worker-plan": "node scripts/adaptive-worker-plan.mjs --json --write reports/adaptive-worker-plan-latest.json --markdown reports/adaptive-worker-plan-latest.md",
-    "benchmark:adaptive-worker-plan": "node scripts/adaptive-worker-plan.mjs --json"
+    "benchmark:adaptive-worker-plan": "node scripts/adaptive-worker-plan.mjs --json",
+    "verify:registry-lab": "node scripts/registry-lab.mjs --json --write reports/registry-lab-latest.json --markdown reports/registry-lab-latest.md",
+    "verify:live-random-mcp-probe": "node scripts/live-random-mcp-probe.mjs --json --write reports/live-random-mcp-probe-fixture-check.json --markdown reports/live-random-mcp-probe-fixture-check.md",
+    "verify:live-random-mcp-probe:download": "node scripts/live-random-mcp-probe.mjs --download --kinds pypi --json --write reports/live-random-mcp-probe-pypi-latest.json --markdown reports/live-random-mcp-probe-pypi-latest.md",
+    "verify:live-random-mcp-probe:npm-stable": "node scripts/live-random-mcp-probe.mjs --download --kinds npm --ids official-filesystem,official-memory,official-sequential-thinking --json --write reports/live-random-mcp-probe-npm-stable.json --markdown reports/live-random-mcp-probe-npm-stable.md",
+    "verify:live-random-mcp-probe:npm-canary": "node scripts/live-random-mcp-probe.mjs --download --force-canaries --kinds npm --ids chrome-devtools,context7,deprecated-brave-search --json --write reports/live-random-mcp-probe-npm-canary-selected.json --markdown reports/live-random-mcp-probe-npm-canary-selected.md",
+    "verify:live-random-mcp-probe:extra-canary": "node scripts/live-random-mcp-probe.mjs --download --force-canaries --kinds npm --ids playwright-official,google-maps-official,azure-mcp,evm-mcp --json --write reports/live-random-mcp-probe-extra-canaries.json --markdown reports/live-random-mcp-probe-extra-canaries.md",
+    "verify:eval-fixtures": "node scripts/eval-fixture-check.mjs --json --write reports/eval-fixture-check-latest.json --markdown reports/eval-fixture-check-latest.md",
+    "verify:publish-decision:source": "node scripts/publish-decision.mjs --json --strict-source-snapshot --write reports/publish-decision-latest.json --markdown reports/publish-decision-latest.md",
+    "verify:publish-decision:release": "node scripts/publish-decision.mjs --json --strict-native-publication --write reports/publish-decision-latest.json --markdown reports/publish-decision-latest.md"
   },
   "packageManager": "npm@11.13.0",
   "devEngines": {

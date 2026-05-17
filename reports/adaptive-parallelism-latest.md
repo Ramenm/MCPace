@@ -1,7 +1,7 @@
 # Adaptive parallelism audit
 
 Status: **pass**
-Generated: 2026-05-16T15:05:07.441Z
+Generated: 2026-05-17T15:29:13.177Z
 
 ## Summary
 

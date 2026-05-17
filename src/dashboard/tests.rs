@@ -160,6 +160,7 @@ fn test_config(
         metrics: super::HttpRuntimeMetrics::default(),
         surface,
         upstream_session_pools: super::new_upstream_session_pools(),
+        auth_token: None,
     }
 }
 

@@ -1,5 +1,5 @@
 {
-  "version": "0.6.2",
+  "version": "0.6.5",
   "claimStatusLegend": {
     "supported": "Safe to describe as working now inside the current repo proof boundary.",
     "supported-local-only": "Working for documented local lanes, but not a broad cross-surface guarantee.",

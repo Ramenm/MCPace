@@ -161,7 +161,11 @@ fn handle_mcp_http_request(
         Some(_) => {
             return Ok(McpHttpResponse::JsonStatus(
                 "400 Bad Request",
-                mcp_error_response(id, mcp::ERROR_INVALID_REQUEST, "JSON-RPC method must be a string"),
+                mcp_error_response(
+                    id,
+                    mcp::ERROR_INVALID_REQUEST,
+                    "JSON-RPC method must be a string",
+                ),
             ));
         }
         None => {
@@ -226,19 +230,20 @@ fn handle_mcp_http_request(
                 .unwrap_or(mcp::CURRENT_PROTOCOL_VERSION);
             let negotiated = mcp::negotiate_protocol_version(requested);
 
-            let session_id = match http_session::generated_mcp_http_session_id(request, &id, negotiated) {
-                Ok(value) => value,
-                Err(error) => {
-                    let message = format!(
-                        "failed to generate cryptographically secure MCP HTTP session id: {}",
-                        error
-                    );
-                    return Ok(McpHttpResponse::JsonStatus(
-                        "500 Internal Server Error",
-                        mcp_error_response(id, mcp::ERROR_INTERNAL, message),
-                    ));
-                }
-            };
+            let session_id =
+                match http_session::generated_mcp_http_session_id(request, &id, negotiated) {
+                    Ok(value) => value,
+                    Err(error) => {
+                        let message = format!(
+                            "failed to generate cryptographically secure MCP HTTP session id: {}",
+                            error
+                        );
+                        return Ok(McpHttpResponse::JsonStatus(
+                            "500 Internal Server Error",
+                            mcp_error_response(id, mcp::ERROR_INTERNAL, message),
+                        ));
+                    }
+                };
             let client_name =
                 json_helpers::string_at_path(&message, &["params", "clientInfo", "name"])
                     .map(ToOwned::to_owned);

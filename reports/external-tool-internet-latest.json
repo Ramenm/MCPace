@@ -1,9 +1,9 @@
 {
   "schema": "mcpace.externalToolInternetSmoke.v1",
   "status": "pass",
-  "generatedAt": "2026-05-16T13:58:13.119Z",
+  "generatedAt": "2026-05-17T15:29:15.837Z",
   "project": "mcpace",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "mode": "source-only",
   "scenarios": [
     {

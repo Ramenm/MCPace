@@ -320,7 +320,10 @@ impl ServerCoordinationPlan {
                 "defaultPoolModel",
                 JsonValue::string(self.default_pool_model.clone()),
             ),
-            ("workerPoolKey", JsonValue::string(self.worker_pool_key.clone())),
+            (
+                "workerPoolKey",
+                JsonValue::string(self.worker_pool_key.clone()),
+            ),
             ("maxWorkers", JsonValue::number(self.max_workers)),
             (
                 "maxInFlightPerWorker",
@@ -334,7 +337,10 @@ impl ServerCoordinationPlan {
                 "transportStatus",
                 JsonValue::string(self.transport_status.clone()),
             ),
-            ("launcherKind", JsonValue::string(self.launcher_kind.clone())),
+            (
+                "launcherKind",
+                JsonValue::string(self.launcher_kind.clone()),
+            ),
             (
                 "schedulerLane",
                 JsonValue::string(self.scheduler_lane.clone()),
