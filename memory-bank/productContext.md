@@ -29,4 +29,4 @@ The repo has strong proof/reporting infrastructure, but user-facing truth depend
 
 ## v0.5.9 first-use simplification
 
-MCPace now provides explicit useful-MCP install recipes as editable preset data. This improves first-run usability without changing product truth: no upstream server is enabled by default, and the user still runs an explicit `server install` or `server starter` command before an upstream is configured.
+MCPace now provides explicit useful-MCP installation from package, URL, OCI, or local command specs. This improves first-run usability without changing product truth: no upstream server is enabled by default, and the user still runs an explicit `server install` command before an upstream is configured.

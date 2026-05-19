@@ -1,9 +1,9 @@
 {
   "schema": "mcpace.githubHealth.v1",
-  "generatedAt": "2026-05-04T13:21:15.561Z",
+  "generatedAt": "2026-05-19T13:14:32.501Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "pass",
   "score": 100,

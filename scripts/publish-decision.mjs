@@ -8,13 +8,15 @@ import { deriveProjectName, deriveProjectVersion, repoRoot } from './lib/project
 const DEFAULT_MAX_AGE_HOURS = 6;
 
 function parseArgs(argv) {
-  const out = { json: false, write: null, markdown: null, maxAgeHours: DEFAULT_MAX_AGE_HOURS, help: false };
+  const out = { json: false, write: null, markdown: null, maxAgeHours: DEFAULT_MAX_AGE_HOURS, strictSourceSnapshot: false, strictNativePublication: false, help: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     if (a === '--json') out.json = true;
     else if (a === '--write') out.write = argv[++i] || null;
     else if (a === '--markdown' || a === '--write-md') out.markdown = argv[++i] || null;
     else if (a === '--max-age-hours') out.maxAgeHours = Number(argv[++i] || DEFAULT_MAX_AGE_HOURS);
+    else if (a === '--strict-source-snapshot') out.strictSourceSnapshot = true;
+    else if (a === '--strict-native-publication' || a === '--strict-release') out.strictNativePublication = true;
     else if (a === '-h' || a === '--help') out.help = true;
     else throw new Error(`unsupported publish-decision argument: ${a}`);
   }
@@ -138,12 +140,15 @@ function writeArtifacts(report, opts) {
 function main() {
   const opts = parseArgs(process.argv.slice(2));
   if (opts.help) {
-    process.stdout.write('Usage: node scripts/publish-decision.mjs [--json] [--write <path>] [--markdown <path>] [--max-age-hours <hours>]\n');
+    process.stdout.write('Usage: node scripts/publish-decision.mjs [--json] [--write <path>] [--markdown <path>] [--max-age-hours <hours>] [--strict-source-snapshot] [--strict-native-publication]\n');
     return;
   }
   const report = buildReport(opts);
   writeArtifacts(report, opts);
   process.stdout.write(opts.json ? `${JSON.stringify(report, null, 2)}\n` : renderMarkdown(report));
+  if ((opts.strictSourceSnapshot && !report.okForPublicSourceSnapshot) || (opts.strictNativePublication && !report.okForNpmNativePublication)) {
+    process.exitCode = 1;
+  }
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

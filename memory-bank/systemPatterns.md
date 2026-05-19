@@ -140,14 +140,14 @@ A user-facing onboarding command should compose existing sources of truth instea
 
 ## v0.5.9 preset simplification pattern
 
-- Useful MCP package recipes must live in preset catalog data, not Rust package-name literals.
-- Load preset catalogs from `mcpPresets.includePaths`, fallback `presets/mcp-servers.json`, and `MCPACE_MCP_PRESETS`; report sources/warnings through `server presets --json`.
+- Useful MCP entries must be derived from explicit user specs, not bundled package catalogs or Rust package-name literals.
+- Derive install plans through `src/mcp_autoinstall.rs`; report resulting settings sources/warnings through `server sources --json`.
 - Keep starter packs conservative; network docs, repository context, and browser automation remain explicit opt-ins.
-- Keep preset rendering in `src/server/preset_render.rs` and generic server rendering in `src/server/render.rs`.
+- Keep auto-install planning in `src/mcp_autoinstall.rs`, command handling in `src/server/install.rs`, and generic server rendering in `src/server/render.rs`.
 ## v0.5.9 server thin-root pattern
 
 - Keep `src/server.rs` as a dispatcher under the thin-module-root contract.
-- Put configured-server list/capability query behavior in `src/server/query.rs`; keep generic rendering in `src/server/render.rs` and preset-specific rendering in `src/server/preset_render.rs`.
+- Put configured-server list/capability query behavior in `src/server/query.rs`; keep generic rendering in `src/server/render.rs` and auto-install command handling in `src/server/install.rs`.
 
 ## Install/readiness harness pattern
 

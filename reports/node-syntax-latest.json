@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.nodeSyntaxCheck.v1",
-  "generatedAt": "2026-05-04T13:21:15.243Z",
+  "generatedAt": "2026-05-19T13:14:30.492Z",
   "root": "C:\\Users\\rmatv\\Projects\\mcpace",
   "sourceRoots": [
     "packages/npm/cli",
@@ -10,8 +10,8 @@
     "examples"
   ],
   "status": "pass",
-  "fileCount": 99,
-  "checkedCount": 99,
+  "fileCount": 162,
+  "checkedCount": 162,
   "failureCount": 0,
   "jobs": 6,
   "failures": []

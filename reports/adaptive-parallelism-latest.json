@@ -1,0 +1,653 @@
+{
+  "schema": "mcpace.adaptiveParallelismAudit.v2",
+  "generatedAt": "2026-05-19T12:36:08.242Z",
+  "root": "C:\\Users\\rmatv\\Projects\\mcpace",
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "summary": {
+    "profileCount": 0,
+    "edgeCaseCount": 13,
+    "stableCount": 8,
+    "conservativeCount": 2,
+    "legacyCount": 1,
+    "statefulCount": 11,
+    "statelessCount": 2,
+    "staticCatalogPresent": false
+  },
+  "profiles": [],
+  "edgeCases": [
+    {
+      "id": "unknown-stdio-npx",
+      "raw": {
+        "serverId": "unknown-stdio-npx",
+        "transport": "stdio",
+        "launcher": "npx",
+        "command": "npx",
+        "args": [
+          "-y",
+          "@vendor/random-mcp"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P0_unknown_stdio",
+        "defaultPoolModel": "process-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Unknown stdio remains one in-flight until probes and policy evidence exist.",
+      "actual": {
+        "serverId": "unknown-stdio-npx",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "npx",
+        "parallelSafetyClass": "P0_unknown_stdio",
+        "defaultPoolModel": "process-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "server"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "unknown-side-effects"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "legacy-sse",
+      "raw": {
+        "serverId": "legacy-sse",
+        "transport": "sse-legacy",
+        "url": "http://127.0.0.1:9000/sse"
+      },
+      "expected": {
+        "parallelSafetyClass": "PX_legacy_compat",
+        "defaultPoolModel": "legacy-disabled",
+        "maxWorkers": 0
+      },
+      "rationale": "Legacy SSE is not treated as modern Streamable HTTP scheduling.",
+      "actual": {
+        "serverId": "legacy-sse",
+        "source": "edge-fixture",
+        "transport": "sse-legacy",
+        "launcher": "remote-url",
+        "parallelSafetyClass": "PX_legacy_compat",
+        "defaultPoolModel": "legacy-disabled",
+        "maxWorkers": 0,
+        "maxInFlightPerWorker": 0,
+        "lockDomains": [
+          "legacy-transport"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "network-fetch"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "remote-streamable-http",
+      "raw": {
+        "serverId": "remote-streamable-http",
+        "transport": "streamable-http",
+        "url": "https://mcp.example.com/mcp"
+      },
+      "expected": {
+        "parallelSafetyClass": "P2_session_safe",
+        "defaultPoolModel": "remote-http-session-pool"
+      },
+      "rationale": "Remote HTTP is session-bound until MCP-Session-Id/probe evidence proves otherwise.",
+      "actual": {
+        "serverId": "remote-streamable-http",
+        "source": "edge-fixture",
+        "transport": "streamable-http",
+        "launcher": "remote-url",
+        "parallelSafetyClass": "P2_session_safe",
+        "defaultPoolModel": "remote-http-session-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "transport-session",
+          "credential:remote-origin-or-credential"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "network-fetch"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "stateless-remote-http",
+      "raw": {
+        "serverId": "stateless-remote-http",
+        "transport": "streamable-http",
+        "url": "https://docs.example.com/mcp",
+        "policy": {
+          "stateless": true,
+          "concurrencyPolicy": "multi-reader",
+          "stateBinding": "none",
+          "parallelismLimit": 8
+        }
+      },
+      "expected": {
+        "parallelSafetyClass": "P4_stateless_remote_candidate",
+        "defaultPoolModel": "remote-http-shared-pool"
+      },
+      "rationale": "Only explicit stateless evidence raises remote HTTP to broad fan-out.",
+      "actual": {
+        "serverId": "stateless-remote-http",
+        "source": "edge-fixture",
+        "transport": "streamable-http",
+        "launcher": "remote-url",
+        "parallelSafetyClass": "P4_stateless_remote_candidate",
+        "defaultPoolModel": "remote-http-shared-pool",
+        "maxWorkers": 8,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "provider-budget"
+        ],
+        "stateless": true,
+        "stateful": false,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "network-fetch",
+              "network-or-external-api"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "credential-scoped-api",
+      "raw": {
+        "serverId": "credential-scoped-api",
+        "transport": "stdio",
+        "command": "node",
+        "args": [
+          "slack-mcp",
+          "--token",
+          "$SLACK_TOKEN"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P2_session_safe",
+        "defaultPoolModel": "credential-session-pool"
+      },
+      "rationale": "Credential/API surfaces need profile or tenant affinity.",
+      "actual": {
+        "serverId": "credential-scoped-api",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "local-command",
+        "parallelSafetyClass": "P2_session_safe",
+        "defaultPoolModel": "credential-session-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "credential:credential-profile",
+          "tenant"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "credential-api",
+              "credentials-or-auth",
+              "network-or-external-api"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "project-filesystem-write",
+      "raw": {
+        "serverId": "project-filesystem-write",
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/server-filesystem",
+          "."
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool"
+      },
+      "rationale": "Filesystem tools lock project/file domains.",
+      "actual": {
+        "serverId": "project-filesystem-write",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "npx",
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "file",
+          "project"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "filesystem"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "repo-git-write",
+      "raw": {
+        "serverId": "repo-git-write",
+        "transport": "stdio",
+        "command": "uvx",
+        "args": [
+          "mcp-server-git",
+          "--repository",
+          "."
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool"
+      },
+      "rationale": "Git tools lock repo/project domains.",
+      "actual": {
+        "serverId": "repo-git-write",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "uvx",
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "repo",
+          "project"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "git-repository"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "browser-automation",
+      "raw": {
+        "serverId": "browser-automation",
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "@playwright/mcp"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+        "defaultPoolModel": "session-pool"
+      },
+      "rationale": "Browser automation cannot fan out without browser-context isolation.",
+      "actual": {
+        "serverId": "browser-automation",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "npx",
+        "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+        "defaultPoolModel": "session-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "browser-context",
+          "host-session"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "browser-or-desktop"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "shared-exclusive-desktop",
+      "raw": {
+        "serverId": "shared-exclusive-desktop",
+        "transport": "stdio",
+        "command": "desktop-control-mcp",
+        "args": [
+          "--profile",
+          "default"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+        "defaultPoolModel": "session-pool"
+      },
+      "rationale": "Desktop/profile control is shared-exclusive.",
+      "actual": {
+        "serverId": "shared-exclusive-desktop",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "local-command",
+        "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+        "defaultPoolModel": "session-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "browser-context",
+          "host-session"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "browser-or-desktop"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "readonly-stdio-candidate",
+      "raw": {
+        "serverId": "readonly-stdio-candidate",
+        "transport": "stdio",
+        "command": "uvx",
+        "args": [
+          "mcp-server-time"
+        ],
+        "policy": {
+          "stateless": true,
+          "concurrencyPolicy": "multi-reader",
+          "stateBinding": "none"
+        }
+      },
+      "expected": {
+        "parallelSafetyClass": "P1_readonly_candidate",
+        "defaultPoolModel": "process-pool"
+      },
+      "rationale": "Small local utilities can become multi-reader after explicit read-only evidence.",
+      "actual": {
+        "serverId": "readonly-stdio-candidate",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "uvx",
+        "parallelSafetyClass": "P1_readonly_candidate",
+        "defaultPoolModel": "process-pool",
+        "maxWorkers": 4,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "server"
+        ],
+        "stateless": true,
+        "stateful": false,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "local-utility"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "stateful-memory",
+      "raw": {
+        "serverId": "stateful-memory",
+        "transport": "stdio",
+        "command": "npx",
+        "args": [
+          "@modelcontextprotocol/server-memory"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P2_session_safe",
+        "defaultPoolModel": "singleton"
+      },
+      "rationale": "Memory/context stores are session/profile stateful.",
+      "actual": {
+        "serverId": "stateful-memory",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "npx",
+        "parallelSafetyClass": "P2_session_safe",
+        "defaultPoolModel": "singleton",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "context-store",
+          "session"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "memory-or-context"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "local-database",
+      "raw": {
+        "serverId": "local-database",
+        "transport": "stdio",
+        "command": "uvx",
+        "args": [
+          "mcp-server-sqlite",
+          "--db-path",
+          "./data.db"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool"
+      },
+      "rationale": "Local databases lock database/project domains.",
+      "actual": {
+        "serverId": "local-database",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "uvx",
+        "parallelSafetyClass": "P3_project_safe",
+        "defaultPoolModel": "project-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "db",
+          "project"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "database",
+              "filesystem"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    },
+    {
+      "id": "oci-unknown",
+      "raw": {
+        "serverId": "oci-unknown",
+        "transport": "stdio",
+        "launcher": "oci",
+        "command": "docker",
+        "args": [
+          "run",
+          "--rm",
+          "vendor/mcp:latest"
+        ]
+      },
+      "expected": {
+        "parallelSafetyClass": "P0_unknown_stdio",
+        "defaultPoolModel": "process-pool",
+        "maxInFlightPerWorker": 1
+      },
+      "rationale": "Container images remain unknown until provenance and probes are reviewed.",
+      "actual": {
+        "serverId": "oci-unknown",
+        "source": "edge-fixture",
+        "transport": "stdio",
+        "launcher": "oci",
+        "parallelSafetyClass": "P0_unknown_stdio",
+        "defaultPoolModel": "process-pool",
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "lockDomains": [
+          "server"
+        ],
+        "stateless": false,
+        "stateful": true,
+        "evidence": [
+          {
+            "kind": "source-config",
+            "confidence": 0.45,
+            "signals": [
+              "unknown-side-effects"
+            ],
+            "summary": "Conservative profile inferred from transport, launcher, command/url, args, and optional operator policy hints."
+          }
+        ]
+      },
+      "ok": true,
+      "locksOk": true
+    }
+  ],
+  "checks": [
+    {
+      "id": "no-packaged-upstream-catalog",
+      "ok": true,
+      "detail": "Packaged upstream-server catalogs are absent; install/profile behavior is evidence-first."
+    },
+    {
+      "id": "auto-profile-config",
+      "ok": true,
+      "detail": "mcpace.config.json documents automatic profiling and no longer exposes static server catalogs."
+    },
+    {
+      "id": "no-bundled-default-upstreams",
+      "ok": true,
+      "detail": "The project ships with no enabled upstream MCP servers by default."
+    },
+    {
+      "id": "edge-case-matrix",
+      "ok": true,
+      "detail": "Synthetic state/session/client edge cases classify to expected conservative plans."
+    },
+    {
+      "id": "unknown-is-conservative",
+      "ok": true,
+      "detail": "Unknown stdio stays one in-flight and review-gated."
+    },
+    {
+      "id": "remote-session-default",
+      "ok": true,
+      "detail": "Remote Streamable HTTP remains session-safe until stateless evidence exists."
+    },
+    {
+      "id": "live-probe-harness",
+      "ok": true,
+      "detail": "Random/live MCP package probe harness exists for package-derived evidence."
+    }
+  ],
+  "warnings": [
+    "No configured upstream MCP servers in the source snapshot; only synthetic edge cases are profiled here."
+  ],
+  "blockers": [],
+  "status": "pass"
+}

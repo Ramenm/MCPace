@@ -1,12 +1,12 @@
 {
   "schema": "mcpace.nodeTestFiles.v1",
-  "generatedAt": "2026-05-11T12:04:47.623Z",
+  "generatedAt": "2026-05-19T14:16:31.013Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "pass",
-  "total": 39,
+  "total": 65,
   "selected": 7,
   "batchSize": 4,
   "batchCount": 2,
@@ -27,10 +27,10 @@
       "status": "pass",
       "code": 0,
       "signal": null,
-      "durationMs": 268,
+      "durationMs": 305,
       "timeoutMs": 60000,
       "error": null,
-      "stdoutSummary": "✔ bug sweep automation is wired into package scripts, CI, docs, and PR hygiene (2.2557ms)\n✔ bug sweep report passes current source invariants (114.3708ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 193.2827",
+      "stdoutSummary": "✔ bug sweep automation is wired into package scripts, CI, docs, and PR hygiene (3.0389ms)\n✔ bug sweep report passes current source invariants (139.0298ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 226.8642",
       "stderrSummary": ""
     },
     {
@@ -45,10 +45,10 @@
       "status": "pass",
       "code": 0,
       "signal": null,
-      "durationMs": 229,
+      "durationMs": 248,
       "timeoutMs": 60000,
       "error": null,
-      "stdoutSummary": "✔ defect gates encode bug intake, triage, and regression-proof requirements (80.2149ms)\n✔ package script exposes defect gates for CI and local maintainer runs (0.8352ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 154.8934",
+      "stdoutSummary": "✔ defect gates encode bug intake, triage, and regression-proof requirements (85.3205ms)\n✔ package script exposes defect gates for CI and local maintainer runs (0.6676ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 169.1578",
       "stderrSummary": ""
     },
     {
@@ -63,10 +63,10 @@
       "status": "pass",
       "code": 0,
       "signal": null,
-      "durationMs": 224,
+      "durationMs": 289,
       "timeoutMs": 60000,
       "error": null,
-      "stdoutSummary": "✔ GitHub readiness harness checks public repository health files and workflows (77.1261ms)\n✔ package scripts expose GitHub readiness verification (0.9084ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 151.8398",
+      "stdoutSummary": "✔ GitHub readiness harness checks public repository health files and workflows (89.6077ms)\n✔ package scripts expose GitHub readiness verification (0.9021ms)\nℹ tests 2\nℹ suites 0\nℹ pass 2\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 212.5291",
       "stderrSummary": ""
     },
     {
@@ -81,10 +81,10 @@
       "status": "pass",
       "code": 0,
       "signal": null,
-      "durationMs": 2021,
+      "durationMs": 2749,
       "timeoutMs": 60000,
       "error": null,
-      "stdoutSummary": "✔ local-first quality scripts are wired for workstation or self-hosted verification (2.0355ms)\n✔ toolbox doctor emits a structured local tooling report (1680.2374ms)\n✔ local quality suite can render all local profiles without executing them (196.6155ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 1950.7053",
+      "stdoutSummary": "✔ local-first quality scripts are wired for workstation or self-hosted verification (2.831ms)\n✔ toolbox doctor emits a structured local tooling report (2292.1197ms)\n✔ local quality suite can render all local profiles without executing them (268.6365ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 2676.6938",
       "stderrSummary": ""
     },
     {
@@ -98,10 +98,10 @@
       "status": "pass",
       "code": 0,
       "signal": null,
-      "durationMs": 913,
+      "durationMs": 1056,
       "timeoutMs": 60000,
       "error": null,
-      "stdoutSummary": "✔ publish decision separates public source snapshot from native runtime publication (1.0544ms)\n✔ local secret and supply-chain scripts expose JSON reports (776.4904ms)\n✔ package scripts expose local source, release, and final decision gates (0.6179ms)\nℹ tests 3\nℹ suites 0\nℹ pass 3\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 842.9439",
+      "stdoutSummary": "✔ publish decision separates public source snapshot from native runtime publication (1.1091ms)\n✔ local secret and supply-chain scripts expose JSON reports (809.0104ms)\n✔ package scripts expose local source, release, and final decision gates (0.7379ms)\n✔ strict native publication mode fails closed while non-strict mode still writes a decision report (107.5986ms)\nℹ tests 4\nℹ suites 0\nℹ pass 4\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 990.2541",
       "stderrSummary": ""
     },
     {
@@ -115,10 +115,10 @@
       "status": "pass",
       "code": 0,
       "signal": null,
-      "durationMs": 143,
+      "durationMs": 142,
       "timeoutMs": 60000,
       "error": null,
-      "stdoutSummary": "✔ upstream stderr diagnostics are bounded and redact likely secrets before surfacing errors (2.8105ms)\n✔ security posture documentation covers MCP stderr redaction and explicit env allowlisting (0.5321ms)\n✔ HTTP MCP route validates standard header/body agreement when clients send MCP headers (2.6529ms)\n✔ child process test helpers do not pass registry credentials or sandbox secrets by default (0.9372ms)\n✔ source proof child-process runners use sanitized environment helpers (1.2467ms)\n✔ HTTP MCP session ids are visible-ASCII bounded, generated from OS randomness, and backed by a stateful store (2.5116ms)\nℹ tests 6\nℹ suites 0\nℹ pass 6\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 80.9444",
+      "stdoutSummary": "✔ upstream stderr diagnostics are bounded and redact likely secrets before surfacing errors (2.9514ms)\n✔ security posture documentation covers MCP stderr redaction and explicit env allowlisting (0.6362ms)\n✔ HTTP MCP route validates standard header/body agreement when clients send MCP headers (2.5234ms)\n✔ child process test helpers do not pass registry credentials or sandbox secrets by default (0.2958ms)\n✔ source proof child-process runners use sanitized environment helpers (1.2083ms)\n✔ HTTP MCP session ids are visible-ASCII bounded, generated from OS randomness, and backed by a stateful store (1.8637ms)\nℹ tests 6\nℹ suites 0\nℹ pass 6\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 74.0392",
       "stderrSummary": ""
     },
     {
@@ -132,10 +132,10 @@
       "status": "pass",
       "code": 0,
       "signal": null,
-      "durationMs": 679,
+      "durationMs": 677,
       "timeoutMs": 60000,
       "error": null,
-      "stdoutSummary": "✔ source audit reports architectural risk signals and fails only on critical production debt (130.224ms)\n✔ source audit checks explicit architecture boundaries (50.9833ms)\n✔ source audit can write a durable JSON report artifact (131.7079ms)\n✔ unsafe and FFI process detach code stays centralized (102.1201ms)\n✔ local HTTP routes convert internal command failures into structured JSON errors (2.6906ms)\n✔ source audit script remains documented and wired into package scripts (1.2178ms)\n✔ node syntax lint uses discovery instead of a hardcoded package.json file list (0.4566ms)\n✔ dashboard HTTP boundary remains split into focused modules instead of a single oversized route file (0.834ms)\n✔ adapter route projection and proxy helpers stay in focused child modules (0.9075ms)\n✔ runtime roots stay below the large-module audit threshold after modularization (109.986ms)\n✔ client catalog built-in defaults stay isolated from registry loading behavior (0.7935ms)\n✔ server preset rendering stays outside the generic server list/capability renderer (0.799ms)\n✔ client list rendering stays split from install and export mutation paths (0.5183ms)\n✔ client install backup and restore helpers stay outside the client action dispatcher (0.8473ms)\n✔ mcp stdio server argument parsing stays split from JSON-RPC serving loop (0.5933ms)\nℹ tests 15\nℹ suites 0\nℹ pass 15\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 609.1669",
+      "stdoutSummary": "✔ source audit reports architectural risk signals and fails only on critical production debt (138.7996ms)\n✔ source audit checks explicit architecture boundaries (48.0672ms)\n✔ source audit can write a durable JSON report artifact (134.8545ms)\n✔ unsafe and FFI process detach code stays centralized (94.2812ms)\n✔ local HTTP routes convert internal command failures into structured JSON errors (2.238ms)\n✔ source audit script remains documented and wired into package scripts (0.9329ms)\n✔ node syntax lint uses discovery instead of a hardcoded package.json file list (0.523ms)\n✔ dashboard HTTP boundary remains split into focused modules instead of a single oversized route file (0.9608ms)\n✔ adapter route projection and proxy helpers stay in focused child modules (0.9263ms)\n✔ runtime roots stay below the large-module audit threshold after modularization (115.4713ms)\n✔ client catalog built-in defaults stay isolated from registry loading behavior (0.6097ms)\n✔ server auto-install rendering stays explicit and separate from source profiling (0.5604ms)\n✔ client list rendering stays split from install and export mutation paths (0.945ms)\n✔ client install backup and restore helpers stay outside the client action dispatcher (0.6034ms)\n✔ mcp stdio server argument parsing stays split from JSON-RPC serving loop (0.5425ms)\nℹ tests 15\nℹ suites 0\nℹ pass 15\nℹ fail 0\nℹ cancelled 0\nℹ skipped 0\nℹ todo 0\nℹ duration_ms 614.4233",
       "stderrSummary": ""
     }
   ]

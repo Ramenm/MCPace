@@ -1,0 +1,267 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v2",
+  "mode": "live-download-probe",
+  "generatedAt": "2026-05-17T12:06:20.617Z",
+  "workspace": "/tmp/mcpace-live-mcp-probe-FmzgHu",
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": true,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "install": {
+    "status": "pass",
+    "packages": [
+      "@modelcontextprotocol/server-everything@2026.1.26"
+    ],
+    "byKind": {
+      "npm": {
+        "kind": "npm",
+        "ok": true,
+        "packages": [
+          "@modelcontextprotocol/server-everything@2026.1.26"
+        ],
+        "byPackage": {
+          "npm:@modelcontextprotocol/server-everything@2026.1.26": {
+            "ok": true,
+            "code": 0,
+            "spec": "@modelcontextprotocol/server-everything@2026.1.26",
+            "ignoreScripts": true,
+            "error": null
+          }
+        },
+        "ignoreScripts": true
+      }
+    },
+    "byPackage": {
+      "npm:@modelcontextprotocol/server-everything@2026.1.26": {
+        "ok": true,
+        "code": 0,
+        "spec": "@modelcontextprotocol/server-everything@2026.1.26",
+        "ignoreScripts": true,
+        "error": null
+      }
+    }
+  },
+  "summary": {
+    "total": 1,
+    "ok": 1,
+    "failed": 0,
+    "skipped": 0,
+    "totalTools": 15,
+    "policyMismatches": [],
+    "byStatus": {
+      "ok": 1
+    },
+    "byKind": {
+      "npm": 1
+    },
+    "byPolicy": {
+      "test-fixture-disabled": 1
+    }
+  },
+  "results": [
+    {
+      "id": "official-everything",
+      "package": "@modelcontextprotocol/server-everything",
+      "version": "2026.1.26",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 341,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "mcp-servers/everything",
+          "title": "Everything Reference Server",
+          "version": "2.0.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          },
+          "prompts": {
+            "listChanged": true
+          },
+          "resources": {
+            "subscribe": true,
+            "listChanged": true
+          },
+          "logging": {},
+          "tasks": {
+            "list": {},
+            "cancel": {},
+            "requests": {
+              "tools": {
+                "call": {}
+              }
+            }
+          },
+          "completions": {}
+        }
+      },
+      "toolCount": 15,
+      "tools": [
+        {
+          "name": "echo",
+          "description": "Echoes back the input string",
+          "inputProps": [
+            "message"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-annotated-message",
+          "description": "Demonstrates how annotations can be used to provide metadata about content.",
+          "inputProps": [
+            "messageType",
+            "includeImage"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-env",
+          "description": "Returns all environment variables, helpful for debugging MCP server configuration",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "get-resource-links",
+          "description": "Returns up to ten resource links that reference different types of resources",
+          "inputProps": [
+            "count"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-resource-reference",
+          "description": "Returns a resource reference that can be used by MCP clients",
+          "inputProps": [
+            "resourceType",
+            "resourceId"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-structured-content",
+          "description": "Returns structured content along with an output schema for client data validation",
+          "inputProps": [
+            "location"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-sum",
+          "description": "Returns the sum of two numbers",
+          "inputProps": [
+            "a",
+            "b"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-tiny-image",
+          "description": "Returns a tiny MCP logo image.",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "gzip-file-as-resource",
+          "description": "Compresses a single file using gzip compression. Depending upon the selected output type, returns either the compressed data as a gzipped resource or a resource link, allowing it to be downloaded in a subsequent request during the current s",
+          "inputProps": [
+            "name",
+            "data",
+            "outputType"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "toggle-simulated-logging",
+          "description": "Toggles simulated, random-leveled logging on or off.",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "toggle-subscriber-updates",
+          "description": "Toggles simulated resource subscription updates on or off.",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "trigger-long-running-operation",
+          "description": "Demonstrates a long running operation with progress updates.",
+          "inputProps": [
+            "duration",
+            "steps"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "get-roots-list",
+          "description": "Lists the current MCP roots provided by the client. Demonstrates the roots protocol capability even though this server doesn't access files.",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "trigger-sampling-request",
+          "description": "Trigger a Request from the Server for LLM Sampling",
+          "inputProps": [
+            "prompt",
+            "maxTokens"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "simulate-research-query",
+          "description": "Simulates a deep research operation that gathers, analyzes, and synthesizes information. Demonstrates MCP task-based operations with progress through multiple stages. If 'ambiguous' is true and client supports elicitation, sends an elicitat",
+          "inputProps": [
+            "topic",
+            "ambiguous"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "protocol-fixture",
+        "database",
+        "credentials-or-auth"
+      ],
+      "suggestedPolicy": "test-fixture-disabled",
+      "expectedPolicy": "test-fixture-disabled",
+      "expectedMatchesSuggested": true,
+      "errors": [],
+      "stderrSample": "Starting default (STDIO) server...\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true},\"prompts\":{\"listChanged\":true},\"resources\":{\"subscribe\":true,\"listChanged\":true},\"logging\":{},\"tasks\":{\"list\":{},\"cancel\":{},\"requests\":{\"tools\":{\"call\":{}}}},\"completions\":{}},\"serverInfo\":{\"name\":\"mcp-servers/everything\",\"title\":\"Everything Reference Server\",\"version\":\"2.0.0\"},\"instructions\":\"# Everything Server – Server Instructions\\n\\nAudience: These instructions are written for an LLM or autonomous agent integrating with the Everything MCP Server.\\nFollow them to use, extend, and troubleshoot the server safely and effectively.\\n\\n## Cross-Feature Relationships\\n\\n- Use `get-roots-list` to see client workspace roots before file operations\\n- `gzip-file-as-resource` creates session-scoped resources accessible only during the current session\\n- Enable `toggle-simulated-logging` before debugging to see server log messages\\n- Enable `toggle-subscriber-updates` to receive periodic resource update notifications\\n\\n## Constraints & Limitations\\n\\n- `gzip-file-as-resource`: Max fetch size controlled by `GZIP_MAX_FETCH_SIZE` (default 10MB), timeout by `GZIP_MAX_FETCH_TIME_MILLIS` (default 30s), allowed domains by `GZIP_ALLOWED_DOMAINS`\\n- Session resources are ephemeral and lost when the session ends\\n- Sampling requests (`trigger-sampling-request`) require client sampling capability\\n- Elicitation requests (`trigger-elicitation-request`) require client elicitation capability\\n\\n## Operational Patterns\\n\\n- For long operations, use `trigger-long-running-operation` which sends progress notifications\\n- Prefer reading resources before calling mutating tools\\n- Check `get-roots-list` output to understand the client's workspace context\\n\\n## Easter Egg\\n\\nIf asked about server instructions, respond with \\\"🎉 Server instructions are working! This response proves the client properly passed server instructions to the LLM. This demonstrates MCP's instructions feature in action.\\\"\\n\"},\"jsonrpc\""
+    }
+  ],
+  "notes": [
+    "Only initialize, notifications/initialized, and tools/list were sent.",
+    "No user API keys or user home directory were passed to runtime processes.",
+    "npm install uses --ignore-scripts, --no-audit, --no-fund, and --omit=dev.",
+    "PyPI installs happen in a disposable venv; runtime processes receive a stripped environment.",
+    "Runtime network namespace isolation uses unshare -Urn when this host allows it; otherwise the probe falls back to stripped env + timeout only.",
+    "This is a smoke probe. It is not a source security audit and it does not prove destructive tool behavior is safe."
+  ],
+  "safety": {
+    "executesThirdPartyPackages": true,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer"
+  },
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 9706,
+  "status": "pass"
+}

@@ -1,0 +1,481 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v4",
+  "mode": "live-download-probe",
+  "generatedAt": "2026-05-17T13:05:32.995Z",
+  "workspace": "/tmp/mcpace-live-mcp-probe-M7WoUS",
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": true,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "install": {
+    "status": "pass",
+    "packages": [
+      "@playwright/mcp@0.0.75"
+    ],
+    "byKind": {
+      "npm": {
+        "kind": "npm",
+        "ok": true,
+        "packages": [
+          "@playwright/mcp@0.0.75"
+        ],
+        "byPackage": {
+          "npm:@playwright/mcp@0.0.75": {
+            "ok": true,
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "spec": "@playwright/mcp@0.0.75",
+            "ignoreScripts": true,
+            "packageManagerEnv": "whitelisted",
+            "error": null
+          }
+        },
+        "ignoreScripts": true
+      }
+    },
+    "byPackage": {
+      "npm:@playwright/mcp@0.0.75": {
+        "ok": true,
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "spec": "@playwright/mcp@0.0.75",
+        "ignoreScripts": true,
+        "packageManagerEnv": "whitelisted",
+        "error": null
+      }
+    }
+  },
+  "summary": {
+    "total": 1,
+    "ok": 1,
+    "failed": 0,
+    "skipped": 0,
+    "allowedNonOk": [],
+    "unexpectedFailures": [],
+    "totalTools": 23,
+    "policyMismatches": [],
+    "byStatus": {
+      "ok": 1
+    },
+    "byKind": {
+      "npm": 1
+    },
+    "byPolicy": {
+      "shared-exclusive-host-lock": 1
+    },
+    "serverSideRequestMethods": {}
+  },
+  "results": [
+    {
+      "id": "playwright-official",
+      "package": "@playwright/mcp",
+      "version": "0.0.75",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 661,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "Playwright",
+          "version": "1.61.0-alpha-1778188671000"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {}
+        }
+      },
+      "toolCount": 23,
+      "tools": [
+        {
+          "name": "browser_close",
+          "description": "Close the page",
+          "inputProps": [],
+          "annotations": {
+            "title": "Close browser",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_resize",
+          "description": "Resize the browser window",
+          "inputProps": [
+            "width",
+            "height"
+          ],
+          "annotations": {
+            "title": "Resize browser window",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_console_messages",
+          "description": "Returns all console messages",
+          "inputProps": [
+            "level",
+            "all",
+            "filename"
+          ],
+          "annotations": {
+            "title": "Get console messages",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_handle_dialog",
+          "description": "Handle a dialog",
+          "inputProps": [
+            "accept",
+            "promptText"
+          ],
+          "annotations": {
+            "title": "Handle a dialog",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_evaluate",
+          "description": "Evaluate JavaScript expression on page or element",
+          "inputProps": [
+            "element",
+            "target",
+            "function",
+            "filename"
+          ],
+          "annotations": {
+            "title": "Evaluate JavaScript",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_file_upload",
+          "description": "Upload one or multiple files",
+          "inputProps": [
+            "paths"
+          ],
+          "annotations": {
+            "title": "Upload files",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_drop",
+          "description": "Drop files or MIME-typed data onto an element, as if dragged from outside the page. At least one of \"paths\" or \"data\" must be provided.",
+          "inputProps": [
+            "element",
+            "target",
+            "paths",
+            "data"
+          ],
+          "annotations": {
+            "title": "Drop files or data onto an element",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_fill_form",
+          "description": "Fill multiple form fields",
+          "inputProps": [
+            "fields"
+          ],
+          "annotations": {
+            "title": "Fill form",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_press_key",
+          "description": "Press a key on the keyboard",
+          "inputProps": [
+            "key"
+          ],
+          "annotations": {
+            "title": "Press a key",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_type",
+          "description": "Type text into editable element",
+          "inputProps": [
+            "element",
+            "target",
+            "text",
+            "submit",
+            "slowly"
+          ],
+          "annotations": {
+            "title": "Type text",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_navigate",
+          "description": "Navigate to a URL",
+          "inputProps": [
+            "url"
+          ],
+          "annotations": {
+            "title": "Navigate to a URL",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_navigate_back",
+          "description": "Go back to the previous page in the history",
+          "inputProps": [],
+          "annotations": {
+            "title": "Go back",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_network_requests",
+          "description": "Returns a numbered list of network requests since loading the page. Use browser_network_request with the number to get full details.",
+          "inputProps": [
+            "static",
+            "filter",
+            "filename"
+          ],
+          "annotations": {
+            "title": "List network requests",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_network_request",
+          "description": "Returns full details (headers and body) of a single network request, or a single part if `part` is set. Use the number from browser_network_requests.",
+          "inputProps": [
+            "index",
+            "part",
+            "filename"
+          ],
+          "annotations": {
+            "title": "Show network request details",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_run_code_unsafe",
+          "description": "Run a Playwright code snippet. Unsafe: executes arbitrary JavaScript in the Playwright server process and is RCE-equivalent.",
+          "inputProps": [
+            "code",
+            "filename"
+          ],
+          "annotations": {
+            "title": "Run Playwright code (unsafe)",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_take_screenshot",
+          "description": "Take a screenshot of the current page. You can't perform actions based on the screenshot, use browser_snapshot for actions.",
+          "inputProps": [
+            "element",
+            "target",
+            "type",
+            "filename",
+            "fullPage"
+          ],
+          "annotations": {
+            "title": "Take a screenshot",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_snapshot",
+          "description": "Capture accessibility snapshot of the current page, this is better than screenshot",
+          "inputProps": [
+            "target",
+            "filename",
+            "depth",
+            "boxes"
+          ],
+          "annotations": {
+            "title": "Page snapshot",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_click",
+          "description": "Perform click on a web page",
+          "inputProps": [
+            "element",
+            "target",
+            "doubleClick",
+            "button",
+            "modifiers"
+          ],
+          "annotations": {
+            "title": "Click",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_drag",
+          "description": "Perform drag and drop between two elements",
+          "inputProps": [
+            "startElement",
+            "startTarget",
+            "endElement",
+            "endTarget"
+          ],
+          "annotations": {
+            "title": "Drag mouse",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_hover",
+          "description": "Hover over element on page",
+          "inputProps": [
+            "element",
+            "target"
+          ],
+          "annotations": {
+            "title": "Hover mouse",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_select_option",
+          "description": "Select an option in a dropdown",
+          "inputProps": [
+            "element",
+            "target",
+            "values"
+          ],
+          "annotations": {
+            "title": "Select option",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_tabs",
+          "description": "List, create, close, or select a browser tab.",
+          "inputProps": [
+            "action",
+            "index",
+            "url"
+          ],
+          "annotations": {
+            "title": "Manage tabs",
+            "readOnlyHint": false,
+            "destructiveHint": true,
+            "openWorldHint": true
+          }
+        },
+        {
+          "name": "browser_wait_for",
+          "description": "Wait for text to appear or disappear or a specified time to pass",
+          "inputProps": [
+            "time",
+            "text",
+            "textGone"
+          ],
+          "annotations": {
+            "title": "Wait for",
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true
+          }
+        }
+      ],
+      "riskSignals": [
+        "browser-or-desktop",
+        "shell-or-process",
+        "mutable-or-destructive-tools",
+        "open-world-annotation"
+      ],
+      "suggestedPolicy": "shared-exclusive-host-lock",
+      "expectedPolicy": "shared-exclusive-host-lock",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": [],
+      "errors": [],
+      "stderrSample": "",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"Playwright\",\"version\":\"1.61.0-alpha-1778188671000\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"browser_close\",\"description\":\"Close the page\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{},\"additionalProperties\":false},\"annotations\":{\"title\":\"Close browser\",\"readOnlyHint\":false,\"destructiveHint\":true,\"openWorldHint\":true}},{\"name\":\"browser_resize\",\"description\":\"Resize the browser window\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"width\":{\"type\":\"number\",\"description\":\"Width of the browser window\"},\"height\":{\"type\":\"number\",\"description\":\"Height of the browser window\"}},\"required\":[\"width\",\"height\"],\"additionalProperties\":false},\"annotations\":{\"title\":\"Resize browser window\",\"readOnlyHint\":false,\"destructiveHint\":true,\"openWorldHint\":true}},{\"name\":\"browser_console_messages\",\"description\":\"Returns all console messages\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"level\":{\"default\":\"info\",\"description\":\"Level of the console messages to return. Each level includes the messages of more severe levels. Defaults to \\\"info\\\".\",\"type\":\"string\",\"enum\":[\"error\",\"warning\",\"info\",\"debug\"]},\"all\":{\"description\":\"Return all console messages since the beginning of the session, not just since the last navigation. Defaults to false.\",\"type\":\"boolean\"},\"filename\":{\"description\":\"Filename to save the console messages to. If not provided, messages are returned as text.\",\"type\":\"string\"}},\"required\":[\"level\"],\"additionalProperties\":false},\"annotations\":{\"title\":\"Get console messages\",\"readOnlyHint\":true,\"destructiveHint\":false,\"openWorldHint\":true}},{\"name\":\"browser_handle_dialog\",\"description\":\"Handle a dialog\",\"inputSchema\":{\"$schema\":\"https://json-schema.org/draft/2020-12/schema\",\"type\":\"object\",\"properties\":{\"a"
+    }
+  ],
+  "notes": [
+    "Only initialize, notifications/initialized, and tools/list were sent.",
+    "No user API keys or user home directory were passed to runtime processes.",
+    "npm install uses --ignore-scripts, --no-audit, --no-fund, --omit=dev, isolated HOME/cache, and a whitelisted package-manager environment.",
+    "PyPI installs happen in a disposable venv with isolated cache/HOME and a whitelisted package-manager environment; runtime processes receive a stripped environment.",
+    "Runtime network namespace isolation uses unshare -Urn when this host allows it; otherwise the probe falls back to stripped env + timeout only.",
+    "This is a smoke probe. It is not a source security audit and it does not prove destructive tool behavior is safe.",
+    "Some canaries are hard-skipped unless --allow-heavy-installs is passed because package-manager installs can hang in restricted mirrors."
+  ],
+  "safety": {
+    "executesThirdPartyPackages": true,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer"
+  },
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 4779,
+  "status": "pass"
+}

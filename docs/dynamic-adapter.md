@@ -42,7 +42,7 @@ Related knobs:
 - `MCPACE_TOOL_BUDGET=64` limits the projected native tools count budget.
 - `MCPACE_TOOL_TOKEN_BUDGET=24000` limits the approximate projected tool-list token budget.
 - `MCPACE_NATIVE_TOOL_BUDGET` and `MCPACE_NATIVE_TOOL_TOKEN_BUDGET` are accepted as aliases.
-- `MCPACE_PROJECTED_TOOL_SAFETY=review|safe|all` controls which tools may be projected natively. The default `review` keeps policy-guarded and clearly mutating tools behind broker calls.
+- `MCPACE_PROJECTED_TOOL_SAFETY=review|safe|all` controls which tools may be projected natively. The projection safety default is `safe`: only tools that look read-only via trusted annotations or conservative names may be projected. Use `review` or `all` only when a client explicitly needs broader native projection.
 - `MCPACE_TOOLS_LIST_TIMEOUT_MS=5000` controls live catalog discovery during `tools/list`.
 - `MCPACE_TOOLS_LIST_REFRESH=true` bypasses the short successful tools/list cache.
 - `MCPACE_PAGE_SIZE=<n>` enables MCP cursor pagination for every dynamic list method.
@@ -56,7 +56,7 @@ Projected upstream tools use generated names such as:
 u_<server>_<tool>_<hash>
 ```
 
-The projected name uses a short MCP-client-safe slug plus a stable hash of the upstream server and tool names, then resolves against the same live catalog and reserved MCPace tool names. This avoids static maps, preserves original upstream names for calls, and prevents collisions with MCPace's own tools. Direct projected calls and brokered `upstream_call` both go through the same upstream policy and lease handling.
+The projected name uses a short MCP-client-safe slug plus a stable hash of the upstream server and tool names, then resolves against the same live catalog and reserved MCPace tool names. This avoids static maps, preserves original upstream names for calls, and prevents collisions with MCPace's own tools. Direct projected calls and brokered `upstream_call` both go through the same upstream policy, known-tool validation, and lease handling.
 
 Projected tools pass normal upstream arguments through unchanged. Adapter-only controls such as `timeoutMs`, `resultMode`, `diagnostics`, and allow-flags belong inside a nested `_mcpace` or `mcpace` object so they cannot collide with a real upstream parameter.
 
@@ -76,7 +76,7 @@ Searches live configured upstream MCP tools and returns compact ready-to-call re
 
 ### `upstream_call` and `upstream_batch`
 
-`upstream_call` is the canonical single-call fallback. `upstream_batch` is the state-preserving path for multiple calls against one upstream server, especially stateful/session tools.
+`upstream_call` is the canonical single-call fallback. `upstream_batch` is the state-preserving path for multiple calls against one upstream server, especially stateful/session tools. By default both refuse to call a tool name that is not advertised by the server's current `tools/list`; pass `allowUnknownTool=true` only for an explicitly trusted dynamic server whose hidden tools are intentional.
 
 ## Resources and prompts
 
@@ -102,3 +102,11 @@ The intended plugin families are:
 ## Design rule
 
 Registries and brand-specific client catalogs are hints. The runtime truth is the active handshake, current transport, live upstream discovery, and the local policy/concurrency model.
+
+## Large catalog hardening
+
+For 50-server / 100k-200k-tool scenarios, see [Tool scale and reuse hardening](tool-scale-and-reuse-hardening.md).
+
+See also: [Mixed upstream topology hardening](mixed-upstream-topologies.md).
+
+See also: [Upstream fail-safe hardening](upstream-failsafe-hardening.md).

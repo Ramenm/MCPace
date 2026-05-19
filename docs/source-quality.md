@@ -124,6 +124,6 @@ Client install backup/restore helpers now live in `src/client/actions/backup.rs`
 `mcpace connect` is a read-only orchestration command. Its implementation is split across `src/connect.rs` and focused `src/connect/*` modules, and Node contract tests assert that it uses existing read paths while avoiding MCP settings and client-config mutation helpers.
 
 
-## v0.5.9 server preset rendering boundary
+## v0.6.5 automatic MCP install rendering boundary
 
-Preset-specific text/JSON rendering now lives in `src/server/preset_render.rs`. The generic `src/server/render.rs` stays focused on configured-server list, capability, test, remove, and toggle output. A source-quality contract checks this boundary so useful-MCP onboarding can grow without turning the generic server renderer back into a mixed command surface.
+`src/mcp_autoinstall.rs` now owns package/URL/command install planning and `src/server/install.rs` remains a thin command wrapper. The generic `src/server/render.rs` stays focused on configured-server list, capability, test, remove, toggle, and the compact install result output.

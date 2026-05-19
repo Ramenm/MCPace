@@ -1,12 +1,12 @@
 {
   "schema": "mcpace.runtimeTraceHarness.v1",
-  "generatedAt": "2026-05-04T13:22:15.068Z",
+  "generatedAt": "2026-05-19T12:41:21.995Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "pass",
-  "endpoint": "http://127.0.0.1:63382/mcp",
+  "endpoint": "http://127.0.0.1:63359/mcp",
   "binary": "target/release/mcpace.exe",
   "host": {
     "key": "win32-x64-msvc",
@@ -28,12 +28,12 @@
   "blockers": [],
   "failures": [],
   "trace": {
-    "endpoint": "http://127.0.0.1:63382/mcp",
-    "sessionId": "mcpace-5ed2115957f3d8d5beb35eacef408cbd",
+    "endpoint": "http://127.0.0.1:63359/mcp",
+    "sessionId": "mcpace-c3b09198d7cb7494bbc3418539f48ab6",
     "protocolVersion": "2025-11-25",
-    "topLevelToolCount": 9,
+    "topLevelToolCount": 8,
     "upstreamCallAdvertised": true,
-    "projectedTinyToolAdvertised": true,
+    "projectedTinyToolAdvertised": false,
     "upstream": {
       "server": "tiny",
       "tool": "tiny_echo",
@@ -45,7 +45,7 @@
       "sessionPoolReused": false
     },
     "childProcess": {
-      "stdoutTail": "Server running at http://127.0.0.1:63382 (UI: /, MCP: /mcp, health: /healthz)\n",
+      "stdoutTail": "Server running at http://127.0.0.1:63359 (UI: /, MCP: /mcp, health: /healthz)\n",
       "stderrTail": ""
     },
     "cleanup": "temporary trace root removed after run"
@@ -67,19 +67,19 @@
       "id": "serve-endpoint",
       "required": true,
       "status": "pass",
-      "evidence": "http://127.0.0.1:63382/mcp (spawned from target/release/mcpace.exe)"
+      "evidence": "http://127.0.0.1:63359/mcp (spawned from target/release/mcpace.exe)"
     },
     {
       "id": "initialize",
       "required": true,
       "status": "pass",
-      "evidence": "protocol=2025-11-25; session=mcpace-5ed2115957f3d8d5beb35eacef408cbd"
+      "evidence": "protocol=2025-11-25; session=mcpace-c3b09198d7cb7494bbc3418539f48ab6"
     },
     {
       "id": "tools-list",
       "required": true,
       "status": "pass",
-      "evidence": "9 tools; upstream_call advertised"
+      "evidence": "8 tools; upstream_call advertised"
     },
     {
       "id": "upstream-call",

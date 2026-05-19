@@ -1,0 +1,472 @@
+{
+  "schema": "mcpace.adaptiveWorkerPlan.v1",
+  "generatedAt": "2026-05-19T10:53:07.480Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "status": "pass",
+  "summary": {
+    "planCount": 13,
+    "runtimePlanCount": 0,
+    "edgePlanCount": 13,
+    "consentPlanCount": 5,
+    "meteredPlanCount": 3
+  },
+  "plans": [
+    {
+      "serverId": "unknown-stdio-npx",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P0_unknown_stdio",
+      "poolModel": "process-pool",
+      "workerPoolKey": "unknown-stdio-npx:process:{projectRoot}:{clientInstanceId}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "clientInstanceId",
+        "sessionId",
+        "projectRoot"
+      ],
+      "locks": [
+        {
+          "domain": "server",
+          "mode": "exclusive",
+          "key": "server:{serverId}"
+        }
+      ],
+      "requiresConsent": true,
+      "budgetClass": "unknown",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "legacy-sse",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "PX_legacy_compat",
+      "poolModel": "legacy-disabled",
+      "workerPoolKey": "legacy-sse:legacy-disabled",
+      "maxWorkers": 0,
+      "maxInFlightPerWorker": 0,
+      "affinityKeys": [],
+      "locks": [
+        {
+          "domain": "legacy-transport",
+          "mode": "exclusive",
+          "key": "legacy-transport:disabled"
+        }
+      ],
+      "requiresConsent": true,
+      "budgetClass": "free",
+      "degradationPolicy": {
+        "onConflict": "remain-disabled-and-require-migration",
+        "onCrashLoop": "remain-disabled",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "no-op"
+      }
+    },
+    {
+      "serverId": "remote-streamable-http",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P2_session_safe",
+      "poolModel": "remote-http-session-pool",
+      "workerPoolKey": "remote-streamable-http:remote:{transportSessionId}:credential:{credentialProfile}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "transportSessionId",
+        "sessionId",
+        "credentialProfile",
+        "tenantId"
+      ],
+      "locks": [
+        {
+          "domain": "transport-session",
+          "mode": "exclusive",
+          "key": "transport-session:{sessionId}:{browserContextId}"
+        },
+        {
+          "domain": "credential:remote-origin-or-credential",
+          "mode": "exclusive",
+          "key": "credential:remote-origin-or-credential:{credentialProfile}"
+        }
+      ],
+      "requiresConsent": false,
+      "budgetClass": "metered",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "stateless-remote-http",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P4_stateless_remote_candidate",
+      "poolModel": "remote-http-shared-pool",
+      "workerPoolKey": "stateless-remote-http:remote-shared:{credentialProfile}:{providerBudgetKey}",
+      "maxWorkers": 8,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "credentialProfile",
+        "tenantId",
+        "providerBudgetKey"
+      ],
+      "locks": [
+        {
+          "domain": "provider-budget",
+          "mode": "token-bucket",
+          "key": "provider-budget:{provider}"
+        }
+      ],
+      "requiresConsent": false,
+      "budgetClass": "metered",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "credential-scoped-api",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P2_session_safe",
+      "poolModel": "credential-session-pool",
+      "workerPoolKey": "credential-scoped-api:credential:{credentialProfile}:session:{sessionId}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "credentialProfile",
+        "sessionId",
+        "tenantId"
+      ],
+      "locks": [
+        {
+          "domain": "credential:credential-profile",
+          "mode": "exclusive",
+          "key": "credential:credential-profile:{credentialProfile}"
+        },
+        {
+          "domain": "tenant",
+          "mode": "exclusive",
+          "key": "tenant:{serverId}"
+        }
+      ],
+      "requiresConsent": false,
+      "budgetClass": "metered",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "project-filesystem-write",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P3_project_safe",
+      "poolModel": "project-pool",
+      "workerPoolKey": "project-filesystem-write:project:{projectRoot}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "projectRoot",
+        "sessionId",
+        "clientInstanceId"
+      ],
+      "locks": [
+        {
+          "domain": "file",
+          "mode": "write",
+          "key": "file:{projectRoot}:{resourcePath}"
+        },
+        {
+          "domain": "project",
+          "mode": "write",
+          "key": "project:{projectRoot}"
+        }
+      ],
+      "requiresConsent": false,
+      "budgetClass": "free",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "repo-git-write",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P3_project_safe",
+      "poolModel": "project-pool",
+      "workerPoolKey": "repo-git-write:project:{projectRoot}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "projectRoot",
+        "sessionId",
+        "clientInstanceId"
+      ],
+      "locks": [
+        {
+          "domain": "repo",
+          "mode": "write",
+          "key": "repo:{repoRoot}"
+        },
+        {
+          "domain": "project",
+          "mode": "write",
+          "key": "project:{projectRoot}"
+        }
+      ],
+      "requiresConsent": false,
+      "budgetClass": "free",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "browser-automation",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+      "poolModel": "session-pool",
+      "workerPoolKey": "browser-automation:session:{sessionId}:context:{browserContextId}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "browserContextId",
+        "sessionId",
+        "clientInstanceId",
+        "transportSessionId"
+      ],
+      "locks": [
+        {
+          "domain": "browser-context",
+          "mode": "exclusive",
+          "key": "browser-context:{sessionId}:{browserContextId}"
+        },
+        {
+          "domain": "host-session",
+          "mode": "exclusive",
+          "key": "host-session:{sessionId}:{browserContextId}"
+        }
+      ],
+      "requiresConsent": true,
+      "budgetClass": "free",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "shared-exclusive-desktop",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "PX_forbidden_browser_until_context_isolated",
+      "poolModel": "session-pool",
+      "workerPoolKey": "shared-exclusive-desktop:session:{sessionId}:context:{browserContextId}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "browserContextId",
+        "sessionId",
+        "clientInstanceId",
+        "transportSessionId"
+      ],
+      "locks": [
+        {
+          "domain": "browser-context",
+          "mode": "exclusive",
+          "key": "browser-context:{sessionId}:{browserContextId}"
+        },
+        {
+          "domain": "host-session",
+          "mode": "exclusive",
+          "key": "host-session:{sessionId}:{browserContextId}"
+        }
+      ],
+      "requiresConsent": true,
+      "budgetClass": "free",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "readonly-stdio-candidate",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P1_readonly_candidate",
+      "poolModel": "process-pool",
+      "workerPoolKey": "readonly-stdio-candidate:process:{projectRoot}:{clientInstanceId}",
+      "maxWorkers": 4,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "clientInstanceId",
+        "sessionId",
+        "projectRoot"
+      ],
+      "locks": [
+        {
+          "domain": "server",
+          "mode": "exclusive",
+          "key": "server:{serverId}"
+        }
+      ],
+      "requiresConsent": false,
+      "budgetClass": "free",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "stateful-memory",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P2_session_safe",
+      "poolModel": "singleton",
+      "workerPoolKey": "stateful-memory:singleton",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "tenantId"
+      ],
+      "locks": [
+        {
+          "domain": "context-store",
+          "mode": "exclusive",
+          "key": "context-store:{serverId}"
+        },
+        {
+          "domain": "session",
+          "mode": "exclusive",
+          "key": "session:{sessionId}:{browserContextId}"
+        }
+      ],
+      "requiresConsent": false,
+      "budgetClass": "free",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "local-database",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P3_project_safe",
+      "poolModel": "project-pool",
+      "workerPoolKey": "local-database:project:{projectRoot}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "projectRoot",
+        "sessionId",
+        "clientInstanceId"
+      ],
+      "locks": [
+        {
+          "domain": "db",
+          "mode": "exclusive",
+          "key": "db:{serverId}"
+        },
+        {
+          "domain": "project",
+          "mode": "write",
+          "key": "project:{projectRoot}"
+        }
+      ],
+      "requiresConsent": false,
+      "budgetClass": "free",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    },
+    {
+      "serverId": "oci-unknown",
+      "source": "edge-fixture",
+      "parallelSafetyClass": "P0_unknown_stdio",
+      "poolModel": "process-pool",
+      "workerPoolKey": "oci-unknown:process:{projectRoot}:{clientInstanceId}",
+      "maxWorkers": 1,
+      "maxInFlightPerWorker": 1,
+      "affinityKeys": [
+        "clientInstanceId",
+        "sessionId",
+        "projectRoot"
+      ],
+      "locks": [
+        {
+          "domain": "server",
+          "mode": "exclusive",
+          "key": "server:{serverId}"
+        }
+      ],
+      "requiresConsent": true,
+      "budgetClass": "unknown",
+      "degradationPolicy": {
+        "onConflict": "downgrade-to-singleton-and-record-conflict-evidence",
+        "onCrashLoop": "halve-workers-then-singleton-after-repeated-crashes",
+        "onAuthMixup": "disable-server-until-credential-boundary-is-reviewed",
+        "onLatencyRegression": "reduce-workers-before-raising-timeouts"
+      }
+    }
+  ],
+  "checks": [
+    {
+      "id": "profiles-materialized",
+      "ok": true,
+      "detail": "Runtime server profiles resolve to worker plans when upstreams are configured; an empty source snapshot is valid."
+    },
+    {
+      "id": "edge-cases-materialized",
+      "ok": true,
+      "detail": "Synthetic adaptive edge cases resolve to worker plans."
+    },
+    {
+      "id": "unknown-safe",
+      "ok": true,
+      "detail": "Unknown servers remain one in-flight per worker."
+    },
+    {
+      "id": "legacy-disabled",
+      "ok": true,
+      "detail": "Legacy transports are disabled for worker scheduling."
+    },
+    {
+      "id": "affinity-boundaries",
+      "ok": true,
+      "detail": "Every worker plan has required affinity, lock, consent, and degradation boundaries."
+    }
+  ],
+  "warnings": [
+    "unknown-stdio-npx: generated conservative plan; safe probes required before raising concurrency.",
+    "unknown-stdio-npx: consent/review gate remains required before risky execution.",
+    "legacy-sse: consent/review gate remains required before risky execution.",
+    "remote-streamable-http: budget/rate-limit guardrail must be enforced at runtime.",
+    "stateless-remote-http: budget/rate-limit guardrail must be enforced at runtime.",
+    "credential-scoped-api: budget/rate-limit guardrail must be enforced at runtime.",
+    "browser-automation: consent/review gate remains required before risky execution.",
+    "shared-exclusive-desktop: consent/review gate remains required before risky execution.",
+    "oci-unknown: generated conservative plan; safe probes required before raising concurrency.",
+    "oci-unknown: consent/review gate remains required before risky execution."
+  ],
+  "blockers": []
+}

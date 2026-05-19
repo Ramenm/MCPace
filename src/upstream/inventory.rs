@@ -15,8 +15,17 @@ pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
         .collect::<Vec<_>>();
     let callable_stdio_count = servers
         .values()
-        .filter(|server| server_runtime_callable(root_path, server).0)
+        .filter(|server| {
+            server.source_type == "stdio" && server_runtime_callable(root_path, server).0
+        })
         .count();
+    let callable_http_count = servers
+        .values()
+        .filter(|server| {
+            server.source_type == "http" && server_runtime_callable(root_path, server).0
+        })
+        .count();
+    let callable_upstream_count = callable_stdio_count + callable_http_count;
 
     Ok(JsonValue::object([
         ("ok", JsonValue::bool(true)),
@@ -24,11 +33,14 @@ pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
         (
             "summary",
             JsonValue::string(
-                "Use upstream_tools with a server name to list a configured stdio upstream; use upstream_call with server/tool/arguments for one call or upstream_batch for stateful sequences. HTTP upstream fan-out remains inventory-only until an HTTP forwarding adapter is configured.",
+                "Use upstream_tools with a server name to list a configured stdio or plain HTTP upstream; use upstream_call with server/tool/arguments for one call or upstream_batch for stateful sequences. HTTPS remote MCP endpoints and legacy HTTP+SSE endpoints should be connected through a stdio adapter such as mcp-remote or migrated before direct forwarding.",
             ),
         ),
         ("stdioForwardingImplemented", JsonValue::bool(true)),
+        ("plainHttpForwardingImplemented", JsonValue::bool(true)),
         ("callableConfiguredStdioServerCount", JsonValue::number(callable_stdio_count)),
+        ("callableConfiguredHttpServerCount", JsonValue::number(callable_http_count)),
+        ("callableConfiguredUpstreamServerCount", JsonValue::number(callable_upstream_count)),
         ("servers", JsonValue::array(items)),
     ]))
 }
@@ -48,6 +60,11 @@ pub fn surface_manifest(
         json_helpers::value_at_path(&upstream_inventory, &["callableConfiguredStdioServerCount"])
             .and_then(JsonValue::as_i64)
             .unwrap_or(0);
+    let callable_http_count =
+        json_helpers::value_at_path(&upstream_inventory, &["callableConfiguredHttpServerCount"])
+            .and_then(JsonValue::as_i64)
+            .unwrap_or(0);
+    let callable_upstream_count = callable_stdio_count + callable_http_count;
 
     let live_catalog = if include_live_catalog {
         Some(catalog_tools(root_path, None, timeout_ms, refresh)?)
@@ -104,7 +121,8 @@ pub fn surface_manifest(
                     ),
                 ),
                 ("stdioAutoDiscovery", JsonValue::bool(true)),
-                ("httpUpstreamForwardingImplemented", JsonValue::bool(false)),
+                ("httpUpstreamForwardingImplemented", JsonValue::bool(true)),
+                ("httpsUpstreamForwardingImplemented", JsonValue::bool(false)),
             ]),
         ),
         (
@@ -136,6 +154,14 @@ pub fn surface_manifest(
                 (
                     "callableConfiguredStdioServerCount",
                     JsonValue::number(callable_stdio_count),
+                ),
+                (
+                    "callableConfiguredHttpServerCount",
+                    JsonValue::number(callable_http_count),
+                ),
+                (
+                    "callableConfiguredUpstreamServerCount",
+                    JsonValue::number(callable_upstream_count),
                 ),
                 (
                     "liveCatalogIncluded",
@@ -298,7 +324,15 @@ pub fn catalog_tools(
         .filter_map(JsonValue::as_i64)
         .sum::<i64>();
     let (cache_hit_count, cache_miss_count) = catalog_cache_counts(&results);
-    let tools = flatten_catalog_tools(&results);
+    let response_tool_limit = catalog_response_tool_limit(selected.as_deref());
+    let tools = flatten_catalog_tools_with_limit(&results, response_tool_limit);
+    let returned_tool_count = tools.len();
+    let tools_truncated = response_tool_limit
+        .map(|limit| {
+            tool_count.max(0) as usize > returned_tool_count && returned_tool_count >= limit
+        })
+        .unwrap_or(false);
+    let server_views = catalog_server_response_views(&results, response_tool_limit);
 
     Ok(JsonValue::object([
         ("ok", JsonValue::bool(failed_count == 0)),
@@ -314,11 +348,17 @@ pub fn catalog_tools(
         ("skippedCount", JsonValue::number(skipped_count)),
         ("failedCount", JsonValue::number(failed_count)),
         ("toolCount", JsonValue::number(tool_count)),
+        ("returnedToolCount", JsonValue::number(returned_tool_count)),
+        ("toolsTruncated", JsonValue::bool(tools_truncated)),
+        (
+            "toolLimit",
+            response_tool_limit.map(JsonValue::number).unwrap_or(JsonValue::Null),
+        ),
         ("cacheHitCount", JsonValue::number(cache_hit_count)),
         ("cacheMissCount", JsonValue::number(cache_miss_count)),
         ("elapsedMs", JsonValue::number(started.elapsed().as_millis())),
         ("tools", JsonValue::array(tools)),
-        ("servers", JsonValue::array(results)),
+        ("servers", JsonValue::array(server_views)),
     ]))
 }
 
@@ -505,7 +545,12 @@ fn sum_i64_at_path(items: &[JsonValue], path: &[&str]) -> i64 {
         .sum()
 }
 
+#[allow(dead_code)]
 pub(super) fn flatten_catalog_tools(results: &[JsonValue]) -> Vec<JsonValue> {
+    flatten_catalog_tools_with_limit(results, None)
+}
+
+fn flatten_catalog_tools_with_limit(results: &[JsonValue], limit: Option<usize>) -> Vec<JsonValue> {
     let mut flattened = Vec::new();
     for server in results {
         if !json_helpers::bool_at_path(server, &["ok"]).unwrap_or(false) {
@@ -527,6 +572,9 @@ pub(super) fn flatten_catalog_tools(results: &[JsonValue]) -> Vec<JsonValue> {
             let description = json_helpers::string_at_path(tool, &["description"])
                 .unwrap_or("")
                 .to_string();
+            if limit.map(|max| flattened.len() >= max).unwrap_or(false) {
+                return flattened;
+            }
             flattened.push(JsonValue::object([
                 ("server", JsonValue::string(server_name)),
                 ("name", JsonValue::string(tool_name.clone())),
@@ -553,4 +601,64 @@ pub(super) fn flatten_catalog_tools(results: &[JsonValue]) -> Vec<JsonValue> {
         }
     }
     flattened
+}
+
+fn catalog_response_tool_limit(selected: Option<&str>) -> Option<usize> {
+    let configured = env_usize("MCPACE_CATALOG_TOOL_LIMIT")
+        .or_else(|| env_usize("MCPACE_UPSTREAM_CATALOG_TOOL_LIMIT"));
+    if selected.is_some() {
+        configured
+    } else {
+        Some(configured.unwrap_or(2_000).clamp(1, 100_000))
+    }
+}
+
+fn catalog_server_response_views(
+    results: &[JsonValue],
+    response_tool_limit: Option<usize>,
+) -> Vec<JsonValue> {
+    let Some(_) = response_tool_limit else {
+        return results.to_vec();
+    };
+    let per_server_limit = env_usize("MCPACE_CATALOG_SERVER_TOOL_SAMPLE_LIMIT")
+        .unwrap_or(200)
+        .clamp(0, 10_000);
+    results
+        .iter()
+        .map(|server| catalog_server_response_view(server, per_server_limit))
+        .collect()
+}
+
+fn catalog_server_response_view(server: &JsonValue, per_server_limit: usize) -> JsonValue {
+    let JsonValue::Object(mut map) = server.clone() else {
+        return server.clone();
+    };
+    let (returned, total_tool_count) = {
+        let tools = map
+            .get("tools")
+            .and_then(JsonValue::as_array)
+            .unwrap_or(&[]);
+        (
+            tools
+                .iter()
+                .take(per_server_limit)
+                .cloned()
+                .collect::<Vec<_>>(),
+            tools.len(),
+        )
+    };
+    map.insert(
+        "returnedToolCount".to_string(),
+        JsonValue::number(returned.len()),
+    );
+    map.insert(
+        "toolsTruncated".to_string(),
+        JsonValue::bool(returned.len() < total_tool_count),
+    );
+    map.insert("tools".to_string(), JsonValue::array(returned));
+    JsonValue::Object(map)
+}
+
+fn env_usize(name: &str) -> Option<usize> {
+    std::env::var(name).ok()?.trim().parse::<usize>().ok()
 }

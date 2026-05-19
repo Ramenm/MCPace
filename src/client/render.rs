@@ -313,6 +313,35 @@ impl ServerCoordinationPlan {
                 JsonValue::number(self.parallelism_limit),
             ),
             (
+                "parallelSafetyClass",
+                JsonValue::string(self.parallel_safety_class.clone()),
+            ),
+            (
+                "defaultPoolModel",
+                JsonValue::string(self.default_pool_model.clone()),
+            ),
+            (
+                "workerPoolKey",
+                JsonValue::string(self.worker_pool_key.clone()),
+            ),
+            ("maxWorkers", JsonValue::number(self.max_workers)),
+            (
+                "maxInFlightPerWorker",
+                JsonValue::number(self.max_in_flight_per_worker),
+            ),
+            (
+                "lockDomains",
+                JsonValue::array(self.lock_domains.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "transportStatus",
+                JsonValue::string(self.transport_status.clone()),
+            ),
+            (
+                "launcherKind",
+                JsonValue::string(self.launcher_kind.clone()),
+            ),
+            (
                 "schedulerLane",
                 JsonValue::string(self.scheduler_lane.clone()),
             ),
@@ -490,6 +519,19 @@ pub(super) fn write_text_plan(plan: &ClientPlan, stdout: &mut dyn Write) {
             server.state_profile_key.as_deref().unwrap_or("none")
         );
         let _ = writeln!(stdout, "    parallelismLimit={}", server.parallelism_limit);
+        let _ = writeln!(
+            stdout,
+            "    adaptiveProfile={} pool={} workers={} maxInFlightPerWorker={} transportStatus={}",
+            server.parallel_safety_class,
+            server.default_pool_model,
+            server.max_workers,
+            server.max_in_flight_per_worker,
+            server.transport_status
+        );
+        let _ = writeln!(stdout, "    workerPoolKey={}", server.worker_pool_key);
+        if !server.lock_domains.is_empty() {
+            let _ = writeln!(stdout, "    lockDomains={}", server.lock_domains.join(", "));
+        }
         let _ = writeln!(stdout, "    schedulerLane={}", server.scheduler_lane);
         let _ = writeln!(stdout, "    startupStrategy={}", server.startup_strategy);
         let _ = writeln!(stdout, "    requestStrategy={}", server.request_strategy);

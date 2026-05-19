@@ -29,12 +29,12 @@ pub const ENV_UPSTREAM_SESSION_POOL_SHARDS: &str = "MCPACE_UPSTREAM_SESSION_POOL
 const AUTO_HTTP_CONNECTION_MIN: usize = 4;
 const AUTO_HTTP_CONNECTION_MAX: usize = 8;
 const OVERRIDE_HTTP_CONNECTION_MAX: usize = 256;
-const AUTO_UPSTREAM_WORKER_MAX: usize = 4;
+const AUTO_UPSTREAM_WORKER_MAX: usize = 8;
 const OVERRIDE_UPSTREAM_WORKER_MAX: usize = 64;
 const AUTO_UPSTREAM_SESSION_POOL_MIN: usize = 2;
-const AUTO_UPSTREAM_SESSION_POOL_MAX: usize = 2;
+const AUTO_UPSTREAM_SESSION_POOL_MAX: usize = 8;
 const OVERRIDE_UPSTREAM_SESSION_POOL_MAX: usize = 128;
-const AUTO_UPSTREAM_SESSION_SHARD_MAX: usize = 1;
+const AUTO_UPSTREAM_SESSION_SHARD_MAX: usize = 4;
 const OVERRIDE_UPSTREAM_SESSION_SHARD_MAX: usize = 32;
 
 #[allow(dead_code)]
@@ -223,10 +223,14 @@ mod tests {
         assert!(default_http_connection_limit() >= 4);
         assert_eq!(default_worker_limit(0), 0);
         assert_eq!(default_worker_limit(1), 1);
-        assert!(default_worker_limit(10_000) <= 4);
+        assert!(default_worker_limit(10_000) <= 8);
         assert!(default_upstream_session_pool_limit() >= 2);
         assert!(default_upstream_session_pool_shard_count() >= 1);
-        assert!(default_upstream_session_pool_shard_count() <= 1);
+        assert!(default_upstream_session_pool_limit() <= 8);
+        assert!(default_upstream_session_pool_shard_count() <= 4);
+        assert!(
+            default_upstream_session_pool_shard_count() <= default_upstream_session_pool_limit()
+        );
         assert!(default_http_io_timeout().as_millis() > 0);
         assert!(default_dashboard_overview_cache_ttl().as_millis() > 0);
         assert!(default_dashboard_health_cache_ttl().as_millis() > 0);

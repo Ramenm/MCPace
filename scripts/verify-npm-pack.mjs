@@ -82,6 +82,16 @@ function fileModeIsExecutable(mode) {
   return Number.isInteger(mode) && (mode & 0o111) !== 0;
 }
 
+function vendoredBinaryNeedsExecutableMode(relativePath) {
+  if (typeof relativePath !== 'string') {
+    return false;
+  }
+  const normalized = relativePath.replaceAll('\\', '/');
+  return normalized.startsWith('vendor/')
+    && !normalized.endsWith('.exe')
+    && !normalized.startsWith('vendor/win32-');
+}
+
 function packedFileDetails(packInfo) {
   if (!Array.isArray(packInfo.files)) {
     return [];
@@ -193,7 +203,7 @@ export function verifyNpmPack(options = {}) {
     (relativePath) => !filePathSet.has(relativePath)
   );
   const nonExecutableVendoredBinaryFiles = packedVendoredBinaryFileDetails
-    .filter((entry) => !fileModeIsExecutable(entry?.mode))
+    .filter((entry) => vendoredBinaryNeedsExecutableMode(entry?.path) && !fileModeIsExecutable(entry?.mode))
     .map((entry) => `${entry.path}${Number.isInteger(entry.mode) ? ` (mode ${entry.mode.toString(8)})` : ' (mode missing)'}`);
   const packageVersion = typeof packInfo.version === 'string' ? packInfo.version : null;
   const expectedVersion = deriveProjectVersion();

@@ -10,6 +10,7 @@ The eval suite should catch the failures that matter for this repo:
 - scope jumps that outrun local runtime correctness
 - compatibility claims made from brand names instead of documented surfaces
 - pretty benchmark scores that hide unsupported claims
+- autonomous-agent prompts that encourage unsafe “do everything” execution or unsupported release claims
 
 The suite should reward a truthful answer that says **“not proven yet”** over a polished answer that guesses.
 
@@ -19,6 +20,7 @@ Use `eval/scenario-matrix.json` as the machine-readable source of truth.
 
 Current scenario families are:
 
+- autonomous agent workloop and honest stopping conditions
 - project-state reporting
 - architecture and migration decisions
 - routing and server arbitration

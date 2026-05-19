@@ -1,7 +1,8 @@
 use super::diagnostics::stderr_suffix;
 use super::lease_runtime::runtime_lease_lost_error;
 use super::process_config::{
-    child_process_path, manager_data_path, resolve_command_for_cwd, validate_stdio_cwd,
+    child_process_path, manager_data_path, resolve_command_for_cwd, spawn_program_for_command,
+    validate_stdio_cwd,
 };
 use super::{empty_object, UpstreamServerConfig, UpstreamToolCall, INITIALIZE_ID, METHOD_ID};
 use crate::json::{parse_str, JsonValue};
@@ -29,8 +30,8 @@ pub(super) struct RunningServer {
 impl Drop for RunningServer {
     fn drop(&mut self) {
         let _ = self.stdin.flush();
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        let _ = std::mem::replace(&mut self.stdin, Box::new(std::io::sink()));
+        terminate_child_process(&mut self.child);
     }
 }
 
@@ -196,7 +197,8 @@ pub(super) fn spawn_stdio_server(
         )
     })?;
 
-    let mut command = Command::new(&program);
+    let spawn_program = spawn_program_for_command(command_name, &program);
+    let mut command = Command::new(&spawn_program);
     command.env_clear();
     for (key, value) in default_child_process_environment() {
         command.env(key, value);
@@ -215,6 +217,8 @@ pub(super) fn spawn_stdio_server(
     for (key, value) in &server.env {
         command.env(key, value);
     }
+    #[cfg(unix)]
+    crate::process_detach::configure_unix_process_group(&mut command);
     #[cfg(windows)]
     crate::windows_process::configure_no_window(&mut command);
 
@@ -301,6 +305,10 @@ fn default_child_process_environment() -> BTreeMap<String, String> {
             "LOCALAPPDATA",
             "ProgramFiles",
             "ProgramFiles(x86)",
+            "ProgramData",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "USERNAME",
         ]
     } else {
         &[
@@ -407,4 +415,57 @@ pub(super) fn read_response(
 
 fn format_expected_id(expected_id: i64) -> String {
     format!(" (id {})", expected_id)
+}
+
+fn terminate_child_process(child: &mut Child) {
+    if matches!(child.try_wait(), Ok(Some(_))) {
+        return;
+    }
+
+    #[cfg(windows)]
+    kill_windows_process_tree(child.id());
+    #[cfg(unix)]
+    crate::process_detach::kill_unix_process_group(child.id(), 15);
+
+    let _ = child.kill();
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) | Err(_) => return,
+            Ok(None) if Instant::now() >= deadline => break,
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+        }
+    }
+
+    #[cfg(unix)]
+    crate::process_detach::kill_unix_process_group(child.id(), 9);
+    let _ = child.kill();
+    let force_deadline = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < force_deadline {
+        match child.try_wait() {
+            Ok(Some(_)) | Err(_) => return,
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+        }
+    }
+}
+
+#[cfg(windows)]
+fn kill_windows_process_tree(pid: u32) {
+    let system_root = env::var("SystemRoot").unwrap_or_else(|_| "C:\\Windows".to_string());
+    let taskkill = Path::new(&system_root)
+        .join("System32")
+        .join("taskkill.exe");
+    let program = if taskkill.exists() {
+        taskkill
+    } else {
+        Path::new("taskkill.exe").to_path_buf()
+    };
+    let mut command = Command::new(program);
+    command
+        .args(["/PID", &pid.to_string(), "/T", "/F"])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    crate::windows_process::configure_no_window(&mut command);
+    let _ = command.status();
 }

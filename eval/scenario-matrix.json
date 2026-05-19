@@ -1,6 +1,20 @@
 {
-  "version": "0.5.9",
+  "version": "0.6.5",
   "families": [
+    {
+      "id": "autonomous-agent-workloop",
+      "prevalence": "high",
+      "whyItMatters": "Maintainers issue broad autonomous-agent prompts that combine triage, implementation, verification, critique, and honest stopping conditions.",
+      "seedTypical": [
+        "autonomous-agent-workloop-triage"
+      ],
+      "seedEdge": [],
+      "seedAdversarial": [
+        "endless-autonomy-overpromise"
+      ],
+      "seedHeldOut": [],
+      "runtimeFixtures": []
+    },
     {
       "id": "project-state-reporting",
       "prevalence": "high",
@@ -53,7 +67,8 @@
         "edge-ambiguous-project-roots",
         "edge-no-roots-meta-only",
         "adversarial-double-owner",
-        "adversarial-unknown-policy"
+        "adversarial-unknown-policy",
+        "edge-credential-scope"
       ]
     },
     {

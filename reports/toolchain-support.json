@@ -1,36 +1,33 @@
 {
-  "asOf": "2026-05-02",
+  "version": "0.6.5",
   "node": {
+    "enginesRange": ">=22.0.0",
+    "minimumNpm": "10.0.0",
+    "packageManagerMajor": 11,
     "defaultMajor": 24,
     "supportedLtsMajors": [
       22,
       24
     ],
-    "enginesRange": ">=22.0.0",
     "devEnginesRuntimeRange": "^22.0.0 || ^24.0.0",
-    "minimumNpm": "10.0.0",
     "devEnginesNpmRange": "^10.0.0 || ^11.0.0"
   },
   "packageManager": "npm@11.13.0",
   "rust": {
     "toolchain": "1.95.0",
-    "edition": "2021",
     "profile": "minimal",
     "components": [
       "clippy",
       "rustfmt"
-    ]
+    ],
+    "edition": "2021"
   },
   "githubActions": {
     "checkout": "v6",
     "setupNode": "v6",
-    "rustToolchain": "dtolnay/rust-toolchain@stable",
-    "uploadArtifact": "v7",
-    "downloadArtifact": "v8",
-    "setupNodePackageManagerCache": "disabled"
+    "uploadArtifact": "v7"
   },
   "ci": {
-    "budgetMode": "default PR/push CI runs Ubuntu source checks, Ubuntu Rust quality/lifecycle, and one Windows launcher smoke; expensive hosted platform and Docker lanes require workflow_dispatch full_ci=true or a pull_request label named full-ci; release-dry-run is manual-only",
     "nodeSourceValidationMatrix": [
       {
         "os": "ubuntu-latest",
@@ -41,34 +38,11 @@
         "node": "24"
       }
     ],
-    "packageDryRun": {
-      "os": "ubuntu-latest",
-      "nodeVersionFile": ".nvmrc"
-    },
     "rustHosts": [
-      "ubuntu-latest"
-    ],
-    "defaultWindowsSmoke": [
-      "windows-latest"
-    ],
-    "optionalHostedPlatformHosts": [
+      "ubuntu-latest",
       "windows-latest",
       "macos-latest"
-    ],
-    "optionalDockerProofs": [
-      "launcher-fast-ubuntu-docker",
-      "launcher-e2e-ubuntu-docker",
-      "full-work-ubuntu-docker"
-    ],
-    "fullProofTriggers": [
-      "workflow_dispatch full_ci=true",
-      "pull_request label full-ci",
-      "manual release-dry-run",
-      "v*.*.* release tag"
     ]
-  },
-  "launcher": {
-    "linuxLibcPolicy": "detect glibc explicitly, detect musl explicitly, and fail safe on unknown libc instead of assuming gnu"
   },
   "architecture": {
     "thinModuleRoots": [
@@ -77,13 +51,6 @@
       "lab",
       "server",
       "verify"
-    ],
-    "goal": "keep large command families split into args, loader, model, render, and analysis submodules instead of single large files"
-  },
-  "release": {
-    "archiveBuilderScript": "scripts/archive-release.mjs",
-    "archiveRootPattern": "<project-name>-v<version>-<ddmmyy-hhmmss>",
-    "vendoredBinaryStageScript": "scripts/stage-vendored-binary.mjs",
-    "vendoredBinaryVerifyScript": "scripts/verify-vendored-binary.mjs"
+    ]
   }
 }

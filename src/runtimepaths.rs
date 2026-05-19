@@ -1,7 +1,47 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
 use std::env;
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+static ATOMIC_WRITE_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+pub fn write_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
+    }
+    let temp_path = path.with_extension(format!(
+        "tmp-{}-{}-{}",
+        std::process::id(),
+        unix_time_ms_for_temp_path(),
+        ATOMIC_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
+    ));
+    fs::write(&temp_path, contents)
+        .map_err(|error| format!("failed to write {}: {}", temp_path.display(), error))?;
+    #[cfg(windows)]
+    {
+        let _ = fs::remove_file(path);
+    }
+    fs::rename(&temp_path, path).map_err(|error| {
+        let _ = fs::remove_file(&temp_path);
+        format!(
+            "failed to move {} to {}: {}",
+            temp_path.display(),
+            path.display(),
+            error
+        )
+    })
+}
+
+fn unix_time_ms_for_temp_path() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0)
+}
 
 pub const DEFAULT_LOCAL_HOST: &str = "127.0.0.1";
 pub const DEFAULT_LOCAL_MCP_PORT: u16 = 39022;
@@ -169,6 +209,17 @@ pub fn runtime_dir(state_root: &Path) -> PathBuf {
 
 pub fn ensure_runtime_dir(state_root: &Path) -> Result<PathBuf, String> {
     let path = runtime_dir(state_root);
+    std::fs::create_dir_all(&path)
+        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
+    Ok(path)
+}
+
+pub fn tool_list_cache_dir(state_root: &Path) -> PathBuf {
+    runtime_dir(state_root).join("tool-list-cache")
+}
+
+pub fn ensure_tool_list_cache_dir(state_root: &Path) -> Result<PathBuf, String> {
+    let path = tool_list_cache_dir(state_root);
     std::fs::create_dir_all(&path)
         .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
     Ok(path)

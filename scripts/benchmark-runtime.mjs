@@ -10,6 +10,7 @@ function parseArgs(argv) {
     requests: 50,
     concurrency: 8,
     timeoutMs: 5_000,
+    keepAlive: true,
     json: false
   };
   for (let index = 0; index < argv.length; index += 1) {
@@ -32,6 +33,8 @@ function parseArgs(argv) {
       args.concurrency = parsePositiveInteger(readValue(), '--concurrency');
     } else if (arg === '--timeout-ms') {
       args.timeoutMs = parsePositiveInteger(readValue(), '--timeout-ms');
+    } else if (arg === '--no-keep-alive') {
+      args.keepAlive = false;
     } else if (arg === '--json') {
       args.json = true;
     } else if (arg === '--help' || arg === '-h') {
@@ -62,7 +65,7 @@ function percentile(sortedValues, percentileValue) {
   return sortedValues[Math.max(0, Math.min(sortedValues.length - 1, index))];
 }
 
-function requestOnce(targetUrl, timeoutMs) {
+function requestOnce(targetUrl, timeoutMs, agent, keepAlive) {
   const startedAt = performance.now();
   const transport = targetUrl.protocol === 'https:' ? https : http;
   return new Promise((resolve) => {
@@ -71,8 +74,9 @@ function requestOnce(targetUrl, timeoutMs) {
       {
         method: 'GET',
         timeout: timeoutMs,
+        agent,
         headers: {
-          Connection: 'close',
+          Connection: keepAlive ? 'keep-alive' : 'close',
           'User-Agent': 'mcpace-runtime-benchmark/1'
         }
       },
@@ -98,8 +102,14 @@ function requestOnce(targetUrl, timeoutMs) {
   });
 }
 
-async function benchmarkPath(baseUrl, path, requests, concurrency, timeoutMs) {
+async function benchmarkPath(baseUrl, path, requests, concurrency, timeoutMs, keepAlive) {
   const targetUrl = new URL(path, baseUrl);
+  const Agent = targetUrl.protocol === 'https:' ? https.Agent : http.Agent;
+  const agent = new Agent({
+    keepAlive,
+    maxSockets: Math.max(1, concurrency),
+    maxFreeSockets: Math.max(1, concurrency),
+  });
   let launched = 0;
   let failureCount = 0;
   const latencies = [];
@@ -113,7 +123,7 @@ async function benchmarkPath(baseUrl, path, requests, concurrency, timeoutMs) {
       if (current >= requests) {
         return;
       }
-      const result = await requestOnce(targetUrl, timeoutMs);
+      const result = await requestOnce(targetUrl, timeoutMs, agent, keepAlive);
       latencies.push(result.latencyMs);
       if (result.statusCode !== undefined) {
         statusCounts.set(result.statusCode, (statusCounts.get(result.statusCode) || 0) + 1);
@@ -128,7 +138,11 @@ async function benchmarkPath(baseUrl, path, requests, concurrency, timeoutMs) {
 
   const workerCount = Math.min(concurrency, requests);
   const startedAt = performance.now();
-  await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  try {
+    await Promise.all(Array.from({ length: workerCount }, () => worker()));
+  } finally {
+    agent.destroy();
+  }
   const durationMs = performance.now() - startedAt;
   latencies.sort((left, right) => left - right);
   const sum = latencies.reduce((total, value) => total + value, 0);
@@ -138,6 +152,8 @@ async function benchmarkPath(baseUrl, path, requests, concurrency, timeoutMs) {
     url: targetUrl.toString(),
     requests,
     concurrency: workerCount,
+    keepAlive,
+    connectionMode: keepAlive ? 'keep-alive' : 'close',
     durationMs: Number(durationMs.toFixed(2)),
     throughputPerSecond: Number((requests / Math.max(durationMs / 1000, 0.001)).toFixed(2)),
     failureCount,
@@ -162,6 +178,7 @@ Options:
   --requests 50                    Requests per path
   --concurrency 8                  Concurrent requests per path
   --timeout-ms 5000                Per-request timeout
+  --no-keep-alive                  Disable HTTP agent keep-alive and measure connection churn
   --json                           Print machine-readable JSON
 `);
 }
@@ -175,7 +192,7 @@ async function main() {
   const startedAt = new Date().toISOString();
   const results = [];
   for (const path of args.paths) {
-    results.push(await benchmarkPath(args.url, path, args.requests, args.concurrency, args.timeoutMs));
+    results.push(await benchmarkPath(args.url, path, args.requests, args.concurrency, args.timeoutMs, args.keepAlive));
   }
   const report = {
     ok: results.every((result) => result.failureCount === 0),
@@ -184,6 +201,8 @@ async function main() {
     requestCountPerPath: args.requests,
     configuredConcurrency: args.concurrency,
     timeoutMs: args.timeoutMs,
+    keepAlive: args.keepAlive,
+    connectionMode: args.keepAlive ? 'keep-alive' : 'close',
     results
   };
 

@@ -50,3 +50,7 @@ The current goal is stricter:
 - split metrics over one vanity number
 - held-out cases that are not part of day-to-day tuning
 - honest abstention over confident guessing
+
+### 4. Autonomous-agent workloop evals
+
+The seed set now includes raw maintainer prompts that ask the assistant to recover state, choose a reversible next step, execute, verify, and report facts separately from inferences and blockers. These cases prevent the agent from treating broad execution requests as generic planning or from turning “do everything” pressure into unsafe random-server execution or release overclaims.

@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.npmPack.v1",
-  "generatedAt": "2026-05-11T12:02:53.980Z",
+  "generatedAt": "2026-05-19T12:29:00.663Z",
   "status": "pass",
   "workspace": "@mcpace/cli",
   "command": "npm pack --workspace @mcpace/cli --json --dry-run",
@@ -19,11 +19,11 @@
     "vendor/win32-x64-msvc/mcpace.exe"
   ],
   "packageName": "@mcpace/cli",
-  "packageVersion": "0.5.9",
-  "expectedVersion": "0.5.9",
-  "packFilename": "mcpace-cli-0.5.9.tgz",
+  "packageVersion": "0.6.5",
+  "expectedVersion": "0.6.5",
+  "packFilename": "mcpace-cli-0.6.5.tgz",
   "entryCount": 10,
-  "unpackedSize": 3303694,
+  "unpackedSize": 3325484,
   "files": [
     "bin/mcpace.js",
     "lib/platform.js",
@@ -45,7 +45,7 @@
     {
       "path": "lib/platform.js",
       "mode": 420,
-      "size": 2972
+      "size": 3258
     },
     {
       "path": "lib/resolve-binary.js",
@@ -85,7 +85,7 @@
     {
       "path": "vendor/win32-x64-msvc/mcpace.exe",
       "mode": 420,
-      "size": 1495040
+      "size": 1516544
     }
   ],
   "missingFiles": [],
@@ -102,7 +102,7 @@
     {
       "path": "vendor/win32-x64-msvc/mcpace.exe",
       "mode": 420,
-      "size": 1495040
+      "size": 1516544
     }
   ],
   "missingVendoredBinaryFiles": [],

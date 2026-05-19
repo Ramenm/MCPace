@@ -241,7 +241,7 @@ fn seed_json_if_missing(
         fs::create_dir_all(parent)
             .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
     }
-    fs::write(path, value.to_pretty_string())
+    runtimepaths::write_text_atomic(path, &value.to_pretty_string())
         .map_err(|error| format!("failed to write {}: {}", path.display(), error))?;
     created_paths.push(path.display().to_string());
     Ok(())

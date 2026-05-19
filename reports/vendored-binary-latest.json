@@ -1,27 +1,27 @@
 {
   "schema": "mcpace.vendoredBinary.v1",
-  "generatedAt": "2026-05-04T13:19:17.924Z",
+  "generatedAt": "2026-05-19T12:41:54.390Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "pass",
   "targetKey": "win32-x64-msvc",
   "binaryName": "mcpace.exe",
   "binaryPath": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe",
-  "expectedVersion": "0.5.9",
+  "expectedVersion": "0.6.5",
   "checks": [
     "vendored binary version",
     "vendored binary help",
     "vendored binary verify doctor",
     "vendored binary verify readiness"
   ],
-  "versionOutput": "0.5.9",
-  "binaryVersion": "0.5.9",
+  "versionOutput": "0.6.5",
+  "binaryVersion": "0.6.5",
   "versionCommand": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe version",
   "helpMentionsMcpace": true,
   "helpCommand": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe help",
-  "helpSample": "MCPace Rust-only local MCP hub\n\nImplemented now:\n  version\n  doctor [--json] [--root <path>]\n  setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--skip-client-install] [--install-service|--install-autostart] [--no-enable]\n  service install|status|uninstall|print [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]\n  dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]\n  serve [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]\n  serve start|stop|status [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]\n  local HTTP defaults: max connections=8, IO timeout=30000ms, max body=1048576 bytes, overview cache=1500ms, health cache=1000ms\n  init [--json] [--root <path>]",
+  "helpSample": "MCPace Rust-only local MCP hub\n\nImplemented now:\n  version\n  doctor [--json] [--root <path>]\n  setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--skip-client-install] [--install-service|--install-autostart] [--no-enable]\n  service install|status|uninstall|print [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]\n  dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]\n  serve [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]\n  serve start|restart|stop|status [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]\n  local HTTP defaults: max connections=8, IO timeout=30000ms, max body=1048576 bytes, overview cache=1500ms, health cache=1000ms\n  init [--json] [--root <path>]",
   "doctorCommand": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe verify doctor --json",
   "doctorSummary": {
     "configFound": true,

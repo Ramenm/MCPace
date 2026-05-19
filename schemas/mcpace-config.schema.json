@@ -116,18 +116,23 @@
         }
       }
     },
-    "mcpPresets": {
+    "autoProfile": {
       "type": "object",
       "additionalProperties": true,
       "properties": {
-        "includePaths": {
+        "description": {
+          "type": "string"
+        },
+        "defaultUnknownPolicy": {
+          "type": "string"
+        },
+        "probeCalls": {
           "type": "array",
           "items": {
-            "type": "string",
-            "minLength": 1
+            "type": "string"
           }
         },
-        "description": {
+        "stateRules": {
           "type": "string"
         }
       }

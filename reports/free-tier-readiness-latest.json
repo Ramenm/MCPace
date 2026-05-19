@@ -1,9 +1,9 @@
 {
   "schema": "mcpace.freeTierReadiness.v1",
-  "generatedAt": "2026-05-04T09:51:27.599Z",
+  "generatedAt": "2026-05-19T13:15:03.509Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "ready",
   "summary": {
@@ -37,7 +37,7 @@
     {
       "id": "github-workflows-optional",
       "status": "pass",
-      "evidence": "6 workflows present; local scripts remain source of truth.",
+      "evidence": "7 workflows present; local scripts remain source of truth.",
       "nextAction": "Keep workflows optional mirrors of local scripts.",
       "severity": "required"
     },

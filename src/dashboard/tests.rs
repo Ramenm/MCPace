@@ -160,6 +160,7 @@ fn test_config(
         metrics: super::HttpRuntimeMetrics::default(),
         surface,
         upstream_session_pools: super::new_upstream_session_pools(),
+        auth_token: None,
     }
 }
 
@@ -635,7 +636,7 @@ fn dashboard_serves_root_and_overview() {
         let mut stderr = Vec::new();
         serve_listener(
             listener,
-            test_config(server_root, Some(3), super::ServeSurface::Dashboard),
+            test_config(server_root, Some(4), super::ServeSurface::Dashboard),
             &mut stderr,
         )
     });
@@ -651,6 +652,19 @@ fn dashboard_serves_root_and_overview() {
     stream.read_to_string(&mut root_response).unwrap();
     assert!(root_response.contains("MCPace dashboard"));
     assert!(root_response.contains("/api/overview"));
+
+    let mut favicon_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "GET /favicon.ico HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        addr
+    )
+    .unwrap();
+    stream.read_to_string(&mut favicon_response).unwrap();
+    assert!(favicon_response.contains("HTTP/1.1 200 OK"));
+    assert!(favicon_response.contains("image/svg+xml"));
+    assert!(favicon_response.contains("<svg"));
 
     let mut api_response = String::new();
     let mut stream = TcpStream::connect(addr).unwrap();

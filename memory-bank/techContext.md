@@ -1,7 +1,7 @@
 # Tech Context
 
-- Rust package: `mcpace`, version `0.5.9`, edition `2021`, license `Apache-2.0`.
-- Node workspace package: `mcpace-workspace`, version `0.5.9`, private workspace.
+- Rust package: `mcpace`, version `0.6.0`, edition `2021`, license `Apache-2.0`.
+- Node workspace package: `mcpace-workspace`, version `0.6.0`, private workspace.
 - Current source checks use Node contract tests, `cargo fmt`, and source audit.
 - Full Cargo check/test/build require crates.io dependency access or a populated Cargo cache.
 - Streamable HTTP and stdio MCP are the relevant transports; remote HTTP upstream forwarding is not yet implemented as callable fan-out.
@@ -22,10 +22,10 @@
 
 ## v0.5.9 notes
 
-- Preset catalog loader: `src/mcp_presets.rs`.
-- Packaged preset data: `presets/mcp-servers.json`.
-- Preset rendering: `src/server/preset_render.rs`.
-- Config/schema surface: `mcpace.config.json` and `schemas/mcpace-config.schema.json` `mcpPresets.includePaths`.
+- Auto-install planner: `src/mcp_autoinstall.rs`.
+- No packaged upstream-server catalog is shipped by default.
+- Install command wrapper: `src/server/install.rs`.
+- Config/schema surface: `mcpace.config.json` and `schemas/mcpace-config.schema.json` `autoProfile`.
 - Cargo exists in this environment, but `cargo check --all-targets --locked` is blocked by crates.io DNS/dependency access.
 
 ## v0.5.9 install/readiness technical notes

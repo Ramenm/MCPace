@@ -398,6 +398,69 @@ pub(super) fn render_add_result(
     0
 }
 
+pub(super) fn render_install_result(
+    result: &crate::mcp_autoinstall::McpAutoInstallResult,
+    json_output: bool,
+    stdout: &mut dyn Write,
+) -> i32 {
+    if json_output {
+        let _ = writeln!(stdout, "{}", result.to_json_value().to_pretty_string());
+        return 0;
+    }
+
+    let _ = writeln!(
+        stdout,
+        "MCP server auto-install {}: {} ({}, launcher={})",
+        result.write.action, result.write.name, result.plan.method, result.plan.launcher
+    );
+    let _ = writeln!(stdout, "  source: {}", result.write.path);
+    if let Some(package) = &result.plan.package {
+        let _ = writeln!(stdout, "  package: {}", package);
+    }
+    if let Some(command) = &result.plan.command {
+        let _ = writeln!(stdout, "  command: {}", command);
+    }
+    if let Some(url) = &result.plan.url {
+        let _ = writeln!(stdout, "  url: {}", url);
+    }
+    let _ = writeln!(
+        stdout,
+        "  args={} env={} headers={} existedBefore={} dryRun={}",
+        result.write.args_count,
+        result.write.env_count,
+        result.write.header_count,
+        yes_no(result.write.existed_before),
+        yes_no(result.write.dry_run)
+    );
+    if !result.plan.assumptions.is_empty() {
+        let _ = writeln!(
+            stdout,
+            "  assumptions: {}",
+            result.plan.assumptions.join(" | ")
+        );
+    }
+    if result.write.dry_run {
+        let _ = writeln!(
+            stdout,
+            "  no files written; rerun without --dry-run to apply"
+        );
+    } else if result.write.server_type == "stdio" {
+        let _ = writeln!(
+            stdout,
+            "  next: mcpace server test {} --refresh",
+            result.write.normalized_name
+        );
+        let _ = writeln!(
+            stdout,
+            "  then: mcpace server capabilities {} --json",
+            result.write.normalized_name
+        );
+    } else {
+        let _ = writeln!(stdout, "  next: mcpace server sources --json");
+    }
+    0
+}
+
 pub(super) fn render_toggle_result(
     result: &McpServerToggleResult,
     json_output: bool,

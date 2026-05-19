@@ -76,7 +76,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "server",
-        description: "Grouped server inspection and useful MCP preset install command.",
+        description: "Grouped server inspection and automatic MCP package/URL install command.",
         aliases: &["servers", "capabilities", "server-capabilities", "mcp"],
         implemented: true,
     },
@@ -128,6 +128,13 @@ pub const COMMANDS: &[CommandSpec] = &[
         name: "connect",
         description: "Show client-first wiring guidance, endpoint details, and next commands.",
         aliases: &["guide", "next", "onboard"],
+        implemented: true,
+    },
+    CommandSpec {
+        name: "cleanup",
+        description:
+            "Safely inspect or remove disposable cache, logs, and ephemeral runtime markers.",
+        aliases: &["clean", "prune"],
         implemented: true,
     },
     CommandSpec {

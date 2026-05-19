@@ -1,0 +1,110 @@
+{
+  "schema": "mcpace.overheadAudit.v1",
+  "status": "pass",
+  "generatedAt": "2026-05-19T12:36:05.699Z",
+  "project": "mcpace",
+  "version": "0.6.5",
+  "fileSizes": {
+    "src/dashboard/index.html": 38896,
+    "packages/npm/cli/bin/mcpace.js": 734,
+    "packages/npm/cli/lib/platform.js": 3258,
+    "packages/npm/cli/lib/resolve-binary.js": 4688,
+    "packages/npm/cli/lib/runtime.js": 905,
+    "packages/npm/cli/lib/targets.js": 4543,
+    "scripts/playwright-dashboard-e2e.mjs": 16022,
+    "tests/e2e/dashboard.playwright.spec.mjs": 8796,
+    "tests/e2e/dashboard.parallel.playwright.spec.mjs": 9587
+  },
+  "packageFootprint": {
+    "rootDependencyCount": 0,
+    "cliRuntimeDependencyCount": 0,
+    "optionalPlatformDependencyCount": 6,
+    "cliSourceBytes": 14128,
+    "vendoredBinaryBytes": 3303408
+  },
+  "resolveBinaryOverhead": {
+    "status": "measured",
+    "runs": 250,
+    "measuredRuns": 250,
+    "failures": 0,
+    "medianUs": 98.2,
+    "p95Us": 153.4,
+    "maxUs": 345,
+    "reason": null
+  },
+  "launcherOverhead": {
+    "status": "measured",
+    "reason": null,
+    "binaryPath": "C:\\Users\\rmatv\\Projects\\mcpace\\target\\release\\mcpace.exe",
+    "runs": 7,
+    "directMedianMs": 20.13,
+    "directP95Ms": 44.03,
+    "launcherMedianMs": 69.21,
+    "launcherP95Ms": 81.33,
+    "explicitLauncherMedianMs": 71.09,
+    "explicitLauncherP95Ms": 96.06,
+    "deltaMs": 49.08,
+    "explicitDeltaMs": 50.96,
+    "directFailures": 0,
+    "launcherFailures": 0,
+    "explicitLauncherFailures": 0,
+    "recommendation": "Launcher overhead is small on this host."
+  },
+  "checks": [
+    {
+      "id": "root-workspace-has-no-runtime-or-dev-dependency-bloat",
+      "ok": true,
+      "evidence": "0 dependencies/devDependencies in root package.json"
+    },
+    {
+      "id": "npm-cli-has-no-runtime-dependencies",
+      "ok": true,
+      "evidence": "0 dependencies in packages/npm/cli/package.json"
+    },
+    {
+      "id": "optional-platform-dependencies-only",
+      "ok": true,
+      "evidence": "@mcpace/cli-darwin-arm64, @mcpace/cli-darwin-x64, @mcpace/cli-linux-arm64-gnu, @mcpace/cli-linux-x64-gnu, @mcpace/cli-win32-arm64-msvc, @mcpace/cli-win32-x64-msvc"
+    },
+    {
+      "id": "playwright-is-test-only-temp-install",
+      "ok": true,
+      "evidence": "Playwright is not a runtime dependency and release manifest excludes node_modules"
+    },
+    {
+      "id": "dashboard-source-footprint-under-100kb",
+      "ok": true,
+      "evidence": "38896 bytes"
+    },
+    {
+      "id": "npm-launcher-source-footprint-under-20kb",
+      "ok": true,
+      "evidence": "14128 bytes"
+    },
+    {
+      "id": "launcher-overhead-measured-or-blocked-explicitly",
+      "ok": true,
+      "evidence": "median delta 49.08ms"
+    },
+    {
+      "id": "resolve-binary-in-process-overhead-under-5ms-p95",
+      "ok": true,
+      "evidence": "p95 153.4µs over 250 runs"
+    },
+    {
+      "id": "launcher-overhead-not-severe-on-this-host",
+      "ok": true,
+      "evidence": "launcher median 69.21ms, delta 49.08ms"
+    },
+    {
+      "id": "bounded-top-k-helper-shared",
+      "ok": true,
+      "evidence": "Large tool-scale simulations use a shared bounded top-k helper instead of per-match full candidate sorting."
+    },
+    {
+      "id": "overhead-classifier-shared-policy",
+      "ok": true,
+      "evidence": "Overhead benchmark/stress share the same signal policy library as package survey/profiling."
+    }
+  ]
+}

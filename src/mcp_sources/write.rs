@@ -6,6 +6,7 @@ use super::write_helpers::{
 use super::{load_mcp_server_registry, normalize_server_name, DEFAULT_SETTINGS_DIR};
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::runtimepaths;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -164,9 +165,11 @@ pub fn write_mcp_server_entry(
         ));
     };
 
-    let existed_before = servers
+    let existing_key = servers
         .keys()
-        .any(|key| normalize_server_name(key) == normalized_name);
+        .find(|key| normalize_server_name(key) == normalized_name)
+        .cloned();
+    let existed_before = existing_key.is_some();
     if existed_before && !options.force {
         return Err(format!(
             "server '{}' already exists in {}; rerun with --force to replace it",
@@ -200,6 +203,11 @@ pub fn write_mcp_server_entry(
         return Ok(result);
     }
 
+    if let Some(existing_key) = existing_key {
+        if existing_key != display_name {
+            servers.remove(&existing_key);
+        }
+    }
     servers.insert(display_name, entry);
     if let Some(parent) = target_path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
@@ -212,13 +220,7 @@ pub fn write_mcp_server_entry(
     }
     let mut serialized = root_value.to_pretty_string();
     serialized.push('\n');
-    std::fs::write(&target_path, serialized).map_err(|error| {
-        format!(
-            "failed to write MCP settings source '{}': {}",
-            target_path.display(),
-            error
-        )
-    })?;
+    runtimepaths::write_text_atomic(&target_path, &serialized)?;
     Ok(result)
 }
 
@@ -312,13 +314,7 @@ pub fn remove_mcp_server_entry(
     if !options.dry_run {
         let mut serialized = root_value.to_pretty_string();
         serialized.push('\n');
-        std::fs::write(&target_path, serialized).map_err(|error| {
-            format!(
-                "failed to write MCP settings source '{}': {}",
-                target_path.display(),
-                error
-            )
-        })?;
+        runtimepaths::write_text_atomic(&target_path, &serialized)?;
     }
 
     Ok(McpServerRemoveResult {
@@ -425,13 +421,7 @@ pub fn set_mcp_server_enabled(
     if !options.dry_run {
         let mut serialized = root_value.to_pretty_string();
         serialized.push('\n');
-        std::fs::write(&target_path, serialized).map_err(|error| {
-            format!(
-                "failed to write MCP settings source '{}': {}",
-                target_path.display(),
-                error
-            )
-        })?;
+        runtimepaths::write_text_atomic(&target_path, &serialized)?;
     }
 
     let action = if options.enabled { "enable" } else { "disable" }.to_string();

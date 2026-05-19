@@ -1,5 +1,9 @@
 name: linux-auto
 
+# Local CI is the default cost-control gate for this repository:
+#   npm run ci:local:linux
+# GitHub-hosted Linux proof lanes stay manual-only to avoid paid Actions
+# minutes on normal private-repo pushes/PRs.
 on:
   workflow_dispatch:
     inputs:
@@ -8,16 +12,6 @@ on:
         required: false
         default: false
         type: boolean
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-  push:
-    branches:
-      - main
-      - master
 
 permissions:
   contents: read

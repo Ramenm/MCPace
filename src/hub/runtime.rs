@@ -296,26 +296,7 @@ pub(super) fn append_log(
 }
 
 pub(super) fn write_atomic(path: &Path, contents: String) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
-    }
-    let temp_path = path.with_extension(format!("tmp-{}-{}", std::process::id(), now_ms()));
-    fs::write(&temp_path, contents)
-        .map_err(|error| format!("failed to write {}: {}", temp_path.display(), error))?;
-    #[cfg(windows)]
-    {
-        let _ = fs::remove_file(path);
-    }
-    fs::rename(&temp_path, path).map_err(|error| {
-        format!(
-            "failed to move {} to {}: {}",
-            temp_path.display(),
-            path.display(),
-            error
-        )
-    })?;
-    Ok(())
+    runtimepaths::write_text_atomic(path, &contents)
 }
 
 pub(super) fn acquire_runtime_lock(

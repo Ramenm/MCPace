@@ -1,10 +1,9 @@
 mod add;
 mod args;
 mod import;
+mod install;
 mod loader;
 mod model;
-mod preset_render;
-mod presets;
 mod query;
 mod remove;
 mod render;
@@ -53,14 +52,8 @@ pub fn run(
     if action == "add" {
         return add::run(&parsed, default_root, stdout, stderr);
     }
-    if action == "presets" {
-        return presets::run(&parsed, default_root, stdout, stderr);
-    }
     if action == "install" {
-        return presets::install(&parsed, default_root, stdout, stderr);
-    }
-    if action == "starter" {
-        return presets::starter(&parsed, default_root, stdout, stderr);
+        return install::run(&parsed, default_root, stdout, stderr);
     }
     if action == "remove" {
         return remove::run(&parsed, default_root, stdout, stderr);

@@ -14,6 +14,23 @@ const DEFAULT_MAX_AUTO_JOBS = 4;
 const DEFAULT_MAX_CAPTURE_BYTES = 512 * 1024;
 const NODE_MAJOR = Number.parseInt(process.versions.node.split('.')[0], 10);
 const SUPPORTS_TEST_FORCE_EXIT = Number.isSafeInteger(NODE_MAJOR) && NODE_MAJOR >= 20;
+const ISOLATED_TEST_FILE_BASENAMES = new Set([
+  'dashboard-chaos-contract.test.js',
+  'lifecycle-blast-radius-contract.test.js',
+  'mcp-install-scenarios-contract.test.js',
+  'performance-smoke-contract.test.js',
+  'product-practice-contract.test.js',
+  'publish-npm-artifacts-contract.test.js',
+  'rust-quality-contract.test.js',
+  'stage-vendored-binary.test.js',
+  'system-lifecycle-contract.test.js',
+  'tool-exposure-call-safety-contract.test.js',
+  'tool-message-integrity-contract.test.js',
+  'tool-scale-contract.test.js',
+  'upstream-failsafe-contract.test.js',
+  'verify-npm-pack.test.js',
+  'verify-vendored-binary.test.js',
+]);
 
 function positiveInt(value, label) {
   if (!/^\d+$/.test(String(value || ''))) throw new Error(`${label} must be a positive integer`);
@@ -133,7 +150,24 @@ function applyFilters(files, options) {
 
 function chunk(files, size) {
   const chunks = [];
-  for (let i = 0; i < files.length; i += size) chunks.push(files.slice(i, i + size));
+  let current = [];
+  const flushCurrent = () => {
+    if (current.length) {
+      chunks.push(current);
+      current = [];
+    }
+  };
+
+  for (const file of files) {
+    if (ISOLATED_TEST_FILE_BASENAMES.has(path.basename(file))) {
+      flushCurrent();
+      chunks.push([file]);
+      continue;
+    }
+    current.push(file);
+    if (current.length >= size) flushCurrent();
+  }
+  flushCurrent();
   return chunks;
 }
 
@@ -171,6 +205,8 @@ function summarize(text, maxLines = 40) {
   return ['…', ...lines.slice(-maxLines)].join('\n');
 }
 
+
+
 function runTestFile(file, options) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
@@ -205,6 +241,8 @@ function runTestFile(file, options) {
       clearTimeout(timer);
       if (heartbeat) clearInterval(heartbeat);
       if (forceResolveTimer) clearTimeout(forceResolveTimer);
+      try { child.stdout?.destroy(); } catch { /* ignore */ }
+      try { child.stderr?.destroy(); } catch { /* ignore */ }
       resolve({
         file,
         status: status.ok ? 'pass' : timedOut ? 'timeout' : 'fail',

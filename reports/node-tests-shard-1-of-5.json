@@ -1,0 +1,216 @@
+{
+  "schema": "mcpace.nodeTestFiles.v1",
+  "generatedAt": "2026-05-17T15:23:26.568Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "status": "pass",
+  "total": 57,
+  "selected": 12,
+  "batchSize": 8,
+  "batchCount": 8,
+  "shard": {
+    "index": 1,
+    "total": 5
+  },
+  "completedBatches": 8,
+  "completed": 12,
+  "passed": 12,
+  "results": [
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/adaptive-parallelism-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/fixtures-contract.test.js"
+      ],
+      "file": "tests/node/adaptive-parallelism-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 824,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: legacy transports are recognized as legacy and not folded into stable Streamable HTTP\nok 2 - legacy transports are recognized as legacy and not folded into stable Streamable HTTP\n  ---\n  duration_ms: 1.237264\n  type: 'test'\n  ...\n# Subtest: client routing exposes adaptive pool identity and conservative probe-gated fallback\nok 3 - client routing exposes adaptive pool identity and conservative probe-gated fallback\n  ---\n  duration_ms: 3.842837\n  type: 'test'\n  ...\n# Subtest: adaptive edge-case matrix covers scheduler failure modes\nok 4 - adaptive edge-case matrix covers scheduler failure modes\n  ---\n  duration_ms: 116.824413\n  type: 'test'\n  ...\n# Subtest: adaptive worker plan materializes scheduler decisions with locks and degradation\nok 5 - adaptive worker plan materializes scheduler decisions with locks and degradation\n  ---\n  duration_ms: 231.305883\n  type: 'test'\n  ...\n# Subtest: adaptive schemas and architecture docs are present\nok 6 - adaptive schemas and architecture docs are present\n  ---\n  duration_ms: 1.956571\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 719.896157",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/adaptive-parallelism-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/fixtures-contract.test.js"
+      ],
+      "file": "tests/node/build-release-artifacts.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 401,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: build-release-artifacts bundles an archive, verification report, checksums, and manifest\nok 1 - build-release-artifacts bundles an archive, verification report, checksums, and manifest\n  ---\n  duration_ms: 85.968146\n  type: 'test'\n  ...\n# Subtest: build-release-artifacts rejects existing inputs when report/archive names drift\nok 2 - build-release-artifacts rejects existing inputs when report/archive names drift\n  ---\n  duration_ms: 7.290075\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 259.928157",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/adaptive-parallelism-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/fixtures-contract.test.js"
+      ],
+      "file": "tests/node/defect-gates-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 475,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: defect gates encode bug intake, triage, and regression-proof requirements\nok 1 - defect gates encode bug intake, triage, and regression-proof requirements\n  ---\n  duration_ms: 192.826445\n  type: 'test'\n  ...\n# Subtest: package script exposes defect gates for CI and local maintainer runs\nok 2 - package script exposes defect gates for CI and local maintainer runs\n  ---\n  duration_ms: 2.134342\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 364.897547",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 1,
+      "files": [
+        "tests/node/adaptive-parallelism-contract.test.js",
+        "tests/node/build-release-artifacts.test.js",
+        "tests/node/defect-gates-contract.test.js",
+        "tests/node/fixtures-contract.test.js"
+      ],
+      "file": "tests/node/fixtures-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 373,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: runtime lab fixtures parse and separate typical, edge, adversarial, and held-out cases\nok 2 - runtime lab fixtures parse and separate typical, edge, adversarial, and held-out cases\n  ---\n  duration_ms: 9.774863\n  type: 'test'\n  ...\n# Subtest: runtime fixtures keep cloud and tools-only client surfaces explicit\nok 3 - runtime fixtures keep cloud and tools-only client surfaces explicit\n  ---\n  duration_ms: 6.323069\n  type: 'test'\n  ...\n# Subtest: windows desktop MCP is not bundled or enabled by default\nok 4 - windows desktop MCP is not bundled or enabled by default\n  ---\n  duration_ms: 2.275128\n  type: 'test'\n  ...\n# Subtest: stateful reference MCP policies are user-supplied rather than bundled\nok 5 - stateful reference MCP policies are user-supplied rather than bundled\n  ---\n  duration_ms: 0.777125\n  type: 'test'\n  ...\n# Subtest: default distribution does not enable or bundle upstream MCP servers\nok 6 - default distribution does not enable or bundle upstream MCP servers\n  ---\n  duration_ms: 1.888955\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 225.439788",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 2,
+      "files": [
+        "tests/node/lifecycle-blast-radius-contract.test.js"
+      ],
+      "file": "tests/node/lifecycle-blast-radius-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 590,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: lifecycle blast-radius smoke is wired into package scripts and release evidence\nok 1 - lifecycle blast-radius smoke is wired into package scripts and release evidence\n  ---\n  duration_ms: 2.673266\n  type: 'test'\n  ...\n# Subtest: source hardening prevents corrupt fragments and normalized duplicate force-replace drift\nok 2 - source hardening prevents corrupt fragments and normalized duplicate force-replace drift\n  ---\n  duration_ms: 1.082948\n  type: 'test'\n  ...\n# Subtest: lifecycle blast-radius smoke can execute against the vendored binary\nok 3 - lifecycle blast-radius smoke can execute against the vendored binary\n  ---\n  duration_ms: 350.500671\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 488.828045",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 3,
+      "files": [
+        "tests/node/mcp-install-scenarios-contract.test.js"
+      ],
+      "file": "tests/node/mcp-install-scenarios-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 235,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: MCP install scenario smoke is a first-class verification command\nok 1 - MCP install scenario smoke is a first-class verification command\n  ---\n  duration_ms: 1.552572\n  type: 'test'\n  ...\n# Subtest: MCP install scenario evidence covers domain ownership, cost, transport, and scale boundaries\nok 2 - MCP install scenario evidence covers domain ownership, cost, transport, and scale boundaries\n  ---\n  duration_ms: 0.320779\n  type: 'test'\n  ...\n# Subtest: latest MCP install scenario report is included in release evidence allowlist\nok 3 - latest MCP install scenario report is included in release evidence allowlist\n  ---\n  duration_ms: 0.318714\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 138.997784",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 4,
+      "files": [
+        "tests/node/preset-policy-contract.test.js"
+      ],
+      "file": "tests/node/preset-policy-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 240,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: starter MCP presets carry explicit reviewable policies\nok 1 - starter MCP presets carry explicit reviewable policies\n  ---\n  duration_ms: 3.215195\n  type: 'test'\n  ...\n# Subtest: stateful/problematic preset policies are conservative by default\nok 2 - stateful/problematic preset policies are conservative by default\n  ---\n  duration_ms: 0.279297\n  type: 'test'\n  ...\n# Subtest: preset install writes a policy overlay next to mcp_settings registration\nok 3 - preset install writes a policy overlay next to mcp_settings registration\n  ---\n  duration_ms: 0.382665\n  type: 'test'\n  ...\n# Subtest: generic source inference keeps unknown servers conservative while recognizing known risky families\nok 4 - generic source inference keeps unknown servers conservative while recognizing known risky families\n  ---\n  duration_ms: 0.341588\n  type: 'test'\n  ...\n# Subtest: dashboard exposes minimal Activity and Policy Review surfaces\nok 5 - dashboard exposes minimal Activity and Policy Review surfaces\n  ---\n  duration_ms: 0.313343\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 140.853629",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 5,
+      "files": [
+        "tests/node/publish-npm-artifacts-contract.test.js"
+      ],
+      "file": "tests/node/publish-npm-artifacts-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 262,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: publish npm artifact runner uses exact npm exec package without global install when configured\nok 1 - publish npm artifact runner uses exact npm exec package without global install when configured\n  ---\n  duration_ms: 31.171369\n  type: 'test'\n  ...\n# Subtest: publish npm artifact runner falls back to normal npm command when exact package is not configured\nok 2 - publish npm artifact runner falls back to normal npm command when exact package is not configured\n  ---\n  duration_ms: 0.994372\n  type: 'test'\n  ...\n# Subtest: publish npm artifact runner keeps Windows shell invocation deterministic\nok 3 - publish npm artifact runner keeps Windows shell invocation deterministic\n  ---\n  duration_ms: 0.94943\n  type: 'test'\n  ...\n1..3\n# tests 3\n# suites 0\n# pass 3\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 163.036712",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 6,
+      "files": [
+        "tests/node/runtime-lifecycle-contract.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/runtime-lifecycle-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 248,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: runtime lifecycle contract documents config/state/cache/restart/reinstall semantics\nok 1 - runtime lifecycle contract documents config/state/cache/restart/reinstall semantics\n  ---\n  duration_ms: 3.058267\n  type: 'test'\n  ...\n# Subtest: durable config mutation paths use atomic write helper\nok 2 - durable config mutation paths use atomic write helper\n  ---\n  duration_ms: 1.909363\n  type: 'test'\n  ...\n# Subtest: tool-list disk cache is versioned and invalidated by MCPace/protocol version\nok 3 - tool-list disk cache is versioned and invalidated by MCPace/protocol version\n  ---\n  duration_ms: 0.917598\n  type: 'test'\n  ...\n# Subtest: runtime sessions and caches have explicit process-local or ttl boundaries\nok 4 - runtime sessions and caches have explicit process-local or ttl boundaries\n  ---\n  duration_ms: 4.406039\n  type: 'test'\n  ...\n1..4\n# tests 4\n# suites 0\n# pass 4\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 145.454102",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 6,
+      "files": [
+        "tests/node/runtime-lifecycle-contract.test.js",
+        "tests/node/security-contract.test.js"
+      ],
+      "file": "tests/node/security-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 263,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "…\n  ...\n# Subtest: security posture documentation covers MCP stderr redaction and explicit env allowlisting\nok 2 - security posture documentation covers MCP stderr redaction and explicit env allowlisting\n  ---\n  duration_ms: 1.330245\n  type: 'test'\n  ...\n# Subtest: HTTP MCP route validates standard header/body agreement when clients send MCP headers\nok 3 - HTTP MCP route validates standard header/body agreement when clients send MCP headers\n  ---\n  duration_ms: 6.418752\n  type: 'test'\n  ...\n# Subtest: child process test helpers do not pass registry credentials or sandbox secrets by default\nok 4 - child process test helpers do not pass registry credentials or sandbox secrets by default\n  ---\n  duration_ms: 0.468956\n  type: 'test'\n  ...\n# Subtest: source proof child-process runners use sanitized environment helpers\nok 5 - source proof child-process runners use sanitized environment helpers\n  ---\n  duration_ms: 2.431941\n  type: 'test'\n  ...\n# Subtest: HTTP MCP session ids are visible-ASCII bounded, generated from OS randomness, and backed by a stateful store\nok 6 - HTTP MCP session ids are visible-ASCII bounded, generated from OS randomness, and backed by a stateful store\n  ---\n  duration_ms: 3.74721\n  type: 'test'\n  ...\n1..6\n# tests 6\n# suites 0\n# pass 6\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 156.684117",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 7,
+      "files": [
+        "tests/node/tool-exposure-call-safety-contract.test.js"
+      ],
+      "file": "tests/node/tool-exposure-call-safety-contract.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 357,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "…\n# (Use `node --trace-warnings ...` to show where the warning was created)\n# Subtest: tool exposure defaults are broker-first and safe-projection-first\nok 1 - tool exposure defaults are broker-first and safe-projection-first\n  ---\n  duration_ms: 3.983225\n  type: 'test'\n  ...\n# Subtest: brokered calls fail closed unless requested tool is currently advertised\nok 2 - brokered calls fail closed unless requested tool is currently advertised\n  ---\n  duration_ms: 1.27975\n  type: 'test'\n  ...\n# Subtest: tool metadata injection is a first-class advisory risk signal\nok 3 - tool metadata injection is a first-class advisory risk signal\n  ---\n  duration_ms: 0.461255\n  type: 'test'\n  ...\n# Subtest: user-facing tool surfaces expose unknown-tool override only as an explicit opt-in\nok 4 - user-facing tool surfaces expose unknown-tool override only as an explicit opt-in\n  ---\n  duration_ms: 1.386454\n  type: 'test'\n  ...\n# Subtest: tool exposure safety audit is wired as a repeatable gate\nok 5 - tool exposure safety audit is wired as a repeatable gate\n  ---\n  duration_ms: 115.247184\n  type: 'test'\n  ...\n1..5\n# tests 5\n# suites 0\n# pass 5\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 258.05745",
+      "stderrSummary": ""
+    },
+    {
+      "batch": 8,
+      "files": [
+        "tests/node/verify-release-checksums.test.js"
+      ],
+      "file": "tests/node/verify-release-checksums.test.js",
+      "status": "pass",
+      "code": 0,
+      "signal": null,
+      "durationMs": 263,
+      "timeoutMs": 45000,
+      "error": null,
+      "stdoutSummary": "TAP version 13\n# Subtest: release checksum verifier accepts release-upload paths for downloaded npm tarballs\nok 1 - release checksum verifier accepts release-upload paths for downloaded npm tarballs\n  ---\n  duration_ms: 24.011056\n  type: 'test'\n  ...\n# Subtest: release checksum verifier rejects tampered or uncovered npm tarballs\nok 2 - release checksum verifier rejects tampered or uncovered npm tarballs\n  ---\n  duration_ms: 15.12474\n  type: 'test'\n  ...\n1..2\n# tests 2\n# suites 0\n# pass 2\n# fail 0\n# cancelled 0\n# skipped 0\n# todo 0\n# duration_ms 171.451309",
+      "stderrSummary": ""
+    }
+  ]
+}

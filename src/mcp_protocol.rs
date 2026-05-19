@@ -13,6 +13,7 @@ pub const ERROR_PARSE: i64 = -32700;
 pub const ERROR_INVALID_REQUEST: i64 = -32600;
 pub const ERROR_METHOD_NOT_FOUND: i64 = -32601;
 pub const ERROR_INVALID_PARAMS: i64 = -32602;
+pub const ERROR_INTERNAL: i64 = -32603;
 pub const ERROR_HEADER_MISMATCH: i64 = -32001;
 pub const ERROR_NOT_INITIALIZED: i64 = -32002;
 
@@ -66,6 +67,77 @@ pub fn error(id: JsonValue, code: i64, message: &str, data: Option<JsonValue>) -
 
 pub fn empty_object() -> JsonValue {
     JsonValue::Object(BTreeMap::new())
+}
+
+pub fn validate_request_envelope(message: &JsonValue) -> Result<(), String> {
+    let object = message
+        .as_object()
+        .ok_or_else(|| "JSON-RPC message must be an object".to_string())?;
+
+    match object.get("jsonrpc").and_then(JsonValue::as_str) {
+        Some(JSONRPC_VERSION) => {}
+        Some(value) => {
+            return Err(format!(
+                "JSON-RPC request must declare jsonrpc \"2.0\"; got '{}'",
+                value
+            ));
+        }
+        None => {
+            return Err("JSON-RPC request must declare jsonrpc \"2.0\"".to_string());
+        }
+    }
+
+    match object.get("method") {
+        Some(JsonValue::String(value)) if !value.trim().is_empty() => {}
+        Some(JsonValue::String(_)) => return Err("JSON-RPC method must be non-empty".to_string()),
+        Some(_) => return Err("JSON-RPC method must be a string".to_string()),
+        None => return Err("JSON-RPC request requires a method".to_string()),
+    }
+
+    if let Some(params) = object.get("params") {
+        match params {
+            JsonValue::Object(_) | JsonValue::Array(_) | JsonValue::Null => {}
+            _ => {
+                return Err(
+                    "JSON-RPC params must be an object, array, or null when present".to_string(),
+                )
+            }
+        }
+    }
+
+    if let Some(id) = object.get("id") {
+        match id {
+            JsonValue::String(_) | JsonValue::Number(_) | JsonValue::Null => {}
+            _ => {
+                return Err("JSON-RPC id must be a string, number, or null when present".to_string())
+            }
+        }
+    }
+
+    Ok(())
+}
+
+pub fn params_arguments_object_or_empty(
+    message: &JsonValue,
+    method_label: &str,
+) -> Result<JsonValue, String> {
+    match json_helpers::value_at_path(message, &["params", "arguments"]) {
+        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(
+            message,
+            &["params", "arguments"],
+        )
+        .cloned()
+        .expect("checked above")),
+        Some(JsonValue::Null) | None => Ok(empty_object()),
+        Some(_) => Err(format!(
+            "{} arguments must be a JSON object when present",
+            method_label
+        )),
+    }
+}
+
+pub fn tool_call_arguments_or_empty(message: &JsonValue) -> Result<JsonValue, String> {
+    params_arguments_object_or_empty(message, "tools/call")
 }
 
 #[cfg(test)]

@@ -33,7 +33,7 @@ const SPECIFIC = [
 ];
 
 function parseArgs(argv) {
-  const args = { config: null, apply: false, json: false, backup: true };
+  const args = { config: null, apply: false, json: false, backup: true, help: false };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '--apply') args.apply = true;
@@ -41,11 +41,12 @@ function parseArgs(argv) {
     else if (arg === '--no-backup') args.backup = false;
     else if (arg === '--config') args.config = argv[++i];
     else if (arg === '--help' || arg === '-h') {
-      console.log(`Usage: node scripts/mcpace-config-hardener.mjs --config FILE [--apply] [--json]\n\nAdds env_vars names for npx/uvx upstreams and safer Serena timeout/project defaults.\nIt never writes secret values, only variable names.`);
-      process.exit(0);
+      args.help = true;
+      return args;
     } else if (!args.config) args.config = arg;
     else throw new Error(`Unknown argument: ${arg}`);
   }
+  if (args.help) return args;
   if (!args.config) {
     args.config = path.join(os.homedir(), '.mcpace', 'mcp_settings.d', 'restored-from-mcpace-history-72d64b0.json');
   }
@@ -146,6 +147,10 @@ function hardenServer(name, server) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    console.log(`Usage: node scripts/mcpace-config-hardener.mjs --config FILE [--apply] [--json]\n\nAdds env_vars names for npx/uvx upstreams and safer Serena timeout/project defaults.\nIt never writes secret values, only variable names.`);
+    return;
+  }
   const raw = fs.readFileSync(args.config, 'utf8');
   const data = JSON.parse(raw);
   if (!data.mcpServers || typeof data.mcpServers !== 'object') data.mcpServers = {};

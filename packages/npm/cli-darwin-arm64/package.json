@@ -1,6 +1,6 @@
 {
   "name": "@mcpace/cli-darwin-arm64",
-  "version": "0.5.9",
+  "version": "0.6.5",
   "description": "Platform-specific MCPace native binary for darwin-arm64.",
   "license": "Apache-2.0",
   "os": [

@@ -1,0 +1,70 @@
+{
+  "generatedAt": "2026-05-19T12:19:47.312Z",
+  "url": "http://127.0.0.1:57372/mcp",
+  "healthUrl": "http://127.0.0.1:57372/healthz",
+  "summary": {
+    "status": "pass",
+    "counts": {
+      "pass": 5
+    }
+  },
+  "checks": [
+    {
+      "id": "healthz",
+      "status": "pass",
+      "summary": "healthz returned 200",
+      "detail": "{\n  \"cache\": {\n    \"ageMs\": 697,\n    \"bypassed\": false,\n    \"hit\": true,\n    \"stale\": false,\n    \"ttlMs\": 1000\n  },\n  \"generatedAtMs\": 1779193186605,\n  \"ok\": true,\n  \"readiness\": {\n    \"activeProfile\": \"manual\",\n    \"clientConfigWarnings\": [],\n    \"configVersion\": \"0.6.5\",\n    \"containerToolingReady\": true,\n    \"effectiveEnabledServerCount\": 16,\n    \"missingProfileCommands\": [],\n    \"missingProfileSourceEnablement\": [],\n    \"missingRequiredCommands\": [],\n    \"missingRequiredSourceEnablement\": [],\n    \"missingRuntimePrerequisites\": [],\n    \"npmSurfaceReady\": true,\n    \"profileEnabledServerCount\": 16,\n    \"profileSelectionSource\": \"legacy-settings\",\n    \"readyForReadOnlyOps\": true,\n    \"readyForRuntimeOps\": true,\n    \"requiredServerCount\": 0,\n    \"requiredSourceEnabledCount\": 0,\n    \"rootPath\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\Projects\\\\mcpace\",\n    \"runtimePrerequisitesReady\": true,\n    \"rustSourceReady\": true,\n    \"serverCount\": 24,\n    \"sourceEnabledServerCount\": 16\n  },\n  \"runtime\": {\n    \"",
+      "meta": {
+        "statusCode": 200
+      }
+    },
+    {
+      "id": "mcp.initialize",
+      "status": "pass",
+      "summary": "initialize returned protocolVersion",
+      "detail": "{\n  \"id\": 1,\n  \"jsonrpc\": \"2.0\",\n  \"result\": {\n    \"capabilities\": {\n      \"prompts\": {\n        \"listChanged\": false\n      },\n      \"resources\": {\n        \"listChanged\": false,\n        \"subscribe\": false\n      },\n      \"tools\": {\n        \"listChanged\": false\n      }\n    },\n    \"instructions\": \"MCPace is a dynamic MCP adapter for many clients and many upstream servers. It infers client capabilities from initialize, keeps startup tools/list small by default, discovers configured upstream stdio/plain HTTP servers through live MCP methods when requested, and can opt into native projected upstream tools only when the catalog fits the token budget and projection safety allows them. Use adapter_profile for the current routing plan, upstream_search for concise discovery, projected u_<server>_<tool>_<hash> names when projection is enabled, and upstream_call/upstream_batch for brokered routing with known-tool and policy validation.\",\n    \"protocolVersion\": \"2025-11-25\",\n    \"serverInfo\": {\n      \"name\": \"mcpace\",\n      \"version\": \"0.6.5\"\n    }\n  }\n}",
+      "meta": {
+        "statusCode": 200,
+        "sessionId": "mcpace-00ece7488e0a7a2cd2860dac94c8af50"
+      }
+    },
+    {
+      "id": "mcp.initialized",
+      "status": "pass",
+      "summary": "initialized notification accepted",
+      "detail": "",
+      "meta": {
+        "statusCode": 202,
+        "sessionIdSent": true
+      }
+    },
+    {
+      "id": "mcp.get-boundary",
+      "status": "pass",
+      "summary": "GET boundary returned 405",
+      "detail": "",
+      "meta": {
+        "statusCode": 405
+      }
+    },
+    {
+      "id": "mcp.tools-list",
+      "status": "pass",
+      "summary": "tools/list includes adapter_profile",
+      "detail": "{\n  \"id\": 2,\n  \"jsonrpc\": \"2.0\",\n  \"result\": {\n    \"tools\": [\n      {\n        \"annotations\": {\n          \"destructiveHint\": false,\n          \"idempotentHint\": true,\n          \"openWorldHint\": false,\n          \"readOnlyHint\": true\n        },\n        \"description\": \"Infer current client/protocol/transport and server coordination profile dynamically\",\n        \"inputSchema\": {\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"includeLiveCatalog\": {\n              \"description\": \"When true, include a live upstream catalog/projection sample. Defaults to false.\",\n              \"type\": \"boolean\"\n            },\n            \"refresh\": {\n              \"description\": \"Bypass the short successful upstream tools/list cache.\",\n              \"type\": \"boolean\"\n            },\n            \"timeoutMs\": {\n              \"description\": \"Optional live upstream catalog timeout in milliseconds.\",\n              \"type\": \"integer\"\n            }\n          },\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"name\": \"adapter_profile\",\n        \"title\": \"Infer current client/protocol/transport and server coordination profile dynamically\"\n      }\n,      {\n        \"annotations\": {\n          \"destructiveHint\": false,\n          \"idempotentHint\": true,\n          \"openWorldHint\": true,\n          \"readOnlyHint\": true\n        },\n        \"description\": \"Plan upstream call routing, batching, serialization, and parallel-safe lanes dynamically\",\n        \"inputSchema\": {\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"calls\": {\n              \"description\": \"Optional calls to plan. Each item may be [server, tool, arguments], {server, name/tool, arguments}, an upstream_search result, or an upstream_call object.\",\n              \"items\": {\n                \"oneOf\": [\n                  {\n                    \"maxItems\": 3,\n                    \"minItems\": 2,\n                    \"type\": \"array\"\n                  }\n,                  {\n                    \"type\": \"object\"\n                  }\n,                  {\n                    \"type\": \"string\"\n                  }\n                ]\n              },\n              \"type\": \"array\"\n            },\n            \"includeLiveCatalog\": {\n              \"description\": \"When true, include live upstream catalog context in the route plan.\",\n              \"type\": \"boolean\"\n            },\n            \"refresh\": {\n              \"description\": \"Bypass the short tools/list cache when includeLiveCatalog=true.\",\n              \"type\": \"boolean\"\n            },\n            \"timeoutMs\": {\n              \"description\": \"Optional live upstream catalog timeout in milliseconds.\",\n              \"type\": \"integer\"\n            }\n          },\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"name\": \"adapter_route\",\n        \"title\": \"Plan upstream call routing, batching, serialization, and parallel-safe lanes dynamically\"\n      }\n,      {\n        \"annotations\": {\n          \"destructiveHint\": false,\n          \"idempotentHint\": true,\n          \"openWorldHint\": true,\n          \"readOnlyHint\": true\n        },\n        \"description\": \"Search upstream tools without exposing every upstream schema as a top-level tool\",\n        \"inputSchema\": {\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"includeSchema\": {\n              \"description\": \"When true, include compact input schemas in search results.\",\n              \"type\": \"boolean\"\n            },\n            \"limit\": {\n              \"description\": \"Maximum results to return, clamped to 1..100.\",\n              \"type\": \"integer\"\n            },\n            \"query\": {\n              \"description\": \"Optional keyword query over server, tool name, title, and description.\",\n              \"type\": \"string\"\n            },\n            \"refresh\": {\n              \"description\": \"Bypass the short tools/list cache before searching.\",\n              \"type\": \"boolean\"\n            },\n            \"server\": {\n              \"description\": \"Optional configured upstream server name to search inside.\",\n              \"type\": \"string\"\n            },\n            \"timeoutMs\": {\n              \"description\": \"Optional per-server catalog timeout from 1000 to 300000 ms.\",\n              \"type\": \"integer\"\n            }\n          },\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"name\": \"upstream_search\",\n        \"title\": \"Search upstream tools without exposing every upstream schema as a top-level tool\"\n      }\n,      {\n        \"annotations\": {\n          \"destructiveHint\": false,\n          \"idempotentHint\": true,\n          \"openWorldHint\": false,\n          \"readOnlyHint\": true\n        },\n        \"description\": \"Explain exact native MCPace tools versus configured upstream MCP tools\",\n        \"inputSchema\": {\n          \"additionalProperties\": false,\n          \"properties\": {\n            \"includeLiveCatalog\": {\n              \"description\": \"When true, launch/probe configured callable upstreams and include the live upstream_catalog output.\",\n              \"type\": \"boolean\"\n            },\n            \"refresh\": {\n              \"description\": \"Bypass the short tools/list cache when includeLiveCatalog=true.\",\n              \"type\": \"boolean\"\n            },\n            \"timeoutMs\": {\n              \"description\": \"Optional per-server catalog timeout from 1000 to 300000 ms when includeLiveCatalog=true.\",\n              \"type\": \"integer\"\n            }\n          },\n          \"required\": [],\n          \"type\": \"object\"\n        },\n        \"name\": \"surface_manifest\",\n        \"title\": \"Explain exact native MCPace tools versus configured upstream MCP tools\"\n      }\n,      {\n        \"annotations\": {\n          \"destructiveHint\": false,\n          \"idempotentHint\": true,\n          \"openWorldHint\": true,\n          \"readOnlyHint\": true\n        },\n        \"description\": \"List callable tools for one configured stdio upstream MCP server\",\n        \"inputSchema\": {\n          \"additionalPropert",
+      "meta": {
+        "statusCode": 200,
+        "toolNames": [
+          "adapter_profile",
+          "adapter_route",
+          "upstream_search",
+          "surface_manifest",
+          "upstream_tools",
+          "upstream_catalog",
+          "upstream_call",
+          "upstream_batch"
+        ]
+      }
+    }
+  ]
+}

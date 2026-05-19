@@ -150,7 +150,7 @@ Risk: repository contract tests launch child processes. In this sandbox, a plain
 parallel `node --test` run could print passing TAP output and still keep the
 runner alive. That makes local source proof flaky.
 
-Recommendation: run Node source/npm tests through the per-file `scripts/run-node-test-files.mjs` wrapper. The wrapper invokes each file with `node --test --test-force-exit`, favoring deterministic source proof over marginal parallel speed.
+Recommendation: run Node source/npm tests through the per-file `scripts/run-node-test-files.mjs` wrapper. The wrapper invokes each file with `node --test --test-force-exit`; mutation-sensitive files are scheduled in one-file lanes while the runner uses async detached process groups and explicit termination to avoid child/grandchild pipe deadlocks.
 
 ## Additional verification
 

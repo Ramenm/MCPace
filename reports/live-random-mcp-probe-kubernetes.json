@@ -1,0 +1,488 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v3",
+  "mode": "live-download-probe",
+  "generatedAt": "2026-05-17T12:42:21.060Z",
+  "workspace": "/tmp/mcpace-live-mcp-probe-3fTgtb",
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": true,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "install": {
+    "status": "pass",
+    "packages": [
+      "mcp-server-kubernetes@3.6.2"
+    ],
+    "byKind": {
+      "npm": {
+        "kind": "npm",
+        "ok": true,
+        "packages": [
+          "mcp-server-kubernetes@3.6.2"
+        ],
+        "byPackage": {
+          "npm:mcp-server-kubernetes@3.6.2": {
+            "ok": true,
+            "code": 0,
+            "spec": "mcp-server-kubernetes@3.6.2",
+            "ignoreScripts": true,
+            "error": null
+          }
+        },
+        "ignoreScripts": true
+      }
+    },
+    "byPackage": {
+      "npm:mcp-server-kubernetes@3.6.2": {
+        "ok": true,
+        "code": 0,
+        "spec": "mcp-server-kubernetes@3.6.2",
+        "ignoreScripts": true,
+        "error": null
+      }
+    }
+  },
+  "summary": {
+    "total": 1,
+    "ok": 1,
+    "failed": 0,
+    "skipped": 0,
+    "allowedNonOk": [],
+    "unexpectedFailures": [],
+    "totalTools": 23,
+    "policyMismatches": [],
+    "byStatus": {
+      "ok": 1
+    },
+    "byKind": {
+      "npm": 1
+    },
+    "byPolicy": {
+      "cluster-admin-credential-review": 1
+    },
+    "serverSideRequestMethods": {}
+  },
+  "results": [
+    {
+      "id": "kubernetes-flux159",
+      "package": "mcp-server-kubernetes",
+      "version": "3.6.2",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 4610,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "kubernetes",
+          "version": "0.1.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "prompts": {},
+          "resources": {},
+          "tools": {}
+        }
+      },
+      "toolCount": 23,
+      "tools": [
+        {
+          "name": "cleanup",
+          "description": "Cleanup all managed resources",
+          "inputProps": [],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "kubectl_get",
+          "description": "Get or list Kubernetes resources by resource type, name, and optionally namespace",
+          "inputProps": [
+            "resourceType",
+            "name",
+            "namespace",
+            "output",
+            "allNamespaces",
+            "labelSelector",
+            "fieldSelector",
+            "sortBy",
+            "context"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "kubectl_describe",
+          "description": "Describe Kubernetes resources by resource type, name, and optionally namespace",
+          "inputProps": [
+            "resourceType",
+            "name",
+            "namespace",
+            "context",
+            "allNamespaces"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "kubectl_apply",
+          "description": "Apply a Kubernetes YAML manifest from a string or file",
+          "inputProps": [
+            "manifest",
+            "filename",
+            "namespace",
+            "dryRun",
+            "force",
+            "context"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "kubectl_delete",
+          "description": "Delete Kubernetes resources by resource type, name, labels, or from a manifest file",
+          "inputProps": [
+            "resourceType",
+            "name",
+            "namespace",
+            "labelSelector",
+            "manifest",
+            "filename",
+            "allNamespaces",
+            "force",
+            "gracePeriodSeconds",
+            "context"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "kubectl_create",
+          "description": "Create Kubernetes resources using various methods (from file or using subcommands)",
+          "inputProps": [
+            "dryRun",
+            "output",
+            "validate",
+            "manifest",
+            "filename",
+            "resourceType",
+            "name",
+            "namespace",
+            "fromLiteral",
+            "fromFile",
+            "secretType",
+            "serviceType",
+            "tcpPort",
+            "image",
+            "replicas",
+            "port",
+            "schedule",
+            "suspend",
+            "command",
+            "labels",
+            "annotations",
+            "context"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "kubectl_logs",
+          "description": "Get logs from Kubernetes resources like pods, deployments, or jobs",
+          "inputProps": [
+            "resourceType",
+            "name",
+            "namespace",
+            "container",
+            "tail",
+            "since",
+            "sinceTime",
+            "timestamps",
+            "previous",
+            "follow",
+            "labelSelector",
+            "context"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "kubectl_scale",
+          "description": "Scale a Kubernetes deployment",
+          "inputProps": [
+            "name",
+            "namespace",
+            "replicas",
+            "resourceType",
+            "context"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "kubectl_patch",
+          "description": "Update field(s) of a resource using strategic merge patch, JSON merge patch, or JSON patch",
+          "inputProps": [
+            "resourceType",
+            "name",
+            "namespace",
+            "patchType",
+            "patchData",
+            "patchFile",
+            "dryRun",
+            "context"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "kubectl_rollout",
+          "description": "Manage the rollout of a resource (e.g., deployment, daemonset, statefulset)",
+          "inputProps": [
+            "subCommand",
+            "resourceType",
+            "name",
+            "namespace",
+            "revision",
+            "toRevision",
+            "timeout",
+            "watch",
+            "context"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "kubectl_context",
+          "description": "Manage Kubernetes contexts - list, get, or set the current context",
+          "inputProps": [
+            "operation",
+            "name",
+            "showCurrent",
+            "detailed",
+            "output"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "kubectl_reconnect",
+          "description": "Reconnect to the Kubernetes API server by recreating all API clients. Use this after cluster upgrades (e.g., EKS control plane upgrades that rotate ENIs/IPs) to force fresh DNS resolution and new TCP connections.",
+          "inputProps": [],
+          "annotations": {
+            "readOnlyHint": false
+          }
+        },
+        {
+          "name": "explain_resource",
+          "description": "Get documentation for a Kubernetes resource or field",
+          "inputProps": [
+            "resource",
+            "apiVersion",
+            "recursive",
+            "context",
+            "output"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "install_helm_chart",
+          "description": "Install a Helm chart with support for both standard and template-based installation",
+          "inputProps": [
+            "name",
+            "chart",
+            "namespace",
+            "context",
+            "repo",
+            "values",
+            "valuesFile",
+            "useTemplate",
+            "createNamespace"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "upgrade_helm_chart",
+          "description": "Upgrade an existing Helm chart release",
+          "inputProps": [
+            "name",
+            "chart",
+            "namespace",
+            "context",
+            "repo",
+            "values",
+            "valuesFile"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "uninstall_helm_chart",
+          "description": "Uninstall a Helm chart release",
+          "inputProps": [
+            "name",
+            "namespace",
+            "context"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "node_management",
+          "description": "Manage Kubernetes nodes with cordon, drain, and uncordon operations",
+          "inputProps": [
+            "operation",
+            "nodeName",
+            "force",
+            "gracePeriod",
+            "deleteLocalData",
+            "ignoreDaemonsets",
+            "timeout",
+            "dryRun",
+            "confirmDrain"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "port_forward",
+          "description": "Forward a local port to a port on a Kubernetes resource",
+          "inputProps": [
+            "resourceType",
+            "resourceName",
+            "localPort",
+            "targetPort",
+            "namespace"
+          ],
+          "annotations": {
+            "title": "Port Forward"
+          }
+        },
+        {
+          "name": "stop_port_forward",
+          "description": "Stop a port-forward process",
+          "inputProps": [
+            "id"
+          ],
+          "annotations": {
+            "title": "Stop Port Forward"
+          }
+        },
+        {
+          "name": "exec_in_pod",
+          "description": "Execute a command in a Kubernetes pod or container and return the output. Command must be an array of strings where the first element is the executable and remaining elements are arguments. This executes directly without shell interpretatio",
+          "inputProps": [
+            "name",
+            "namespace",
+            "command",
+            "container",
+            "timeout",
+            "context"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "list_api_resources",
+          "description": "List the API resources available in the cluster",
+          "inputProps": [
+            "apiGroup",
+            "namespaced",
+            "context",
+            "verbs",
+            "output"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "kubectl_generic",
+          "description": "Execute any kubectl command with the provided arguments and flags",
+          "inputProps": [
+            "command",
+            "subCommand",
+            "resourceType",
+            "name",
+            "namespace",
+            "outputFormat",
+            "flags",
+            "args",
+            "context"
+          ],
+          "annotations": {
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "ping",
+          "description": "Verify that the counterpart is still responsive and the connection is alive.",
+          "inputProps": [],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ],
+      "riskSignals": [
+        "cluster-control",
+        "shell-or-process",
+        "credentials-or-auth"
+      ],
+      "suggestedPolicy": "cluster-admin-credential-review",
+      "expectedPolicy": "cluster-admin-credential-review",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": [],
+      "errors": [],
+      "stderrSample": "Starting Kubernetes MCP server v0.1.0, handling commands...\nTelemetry: Disabled\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"prompts\":{},\"resources\":{},\"tools\":{}},\"serverInfo\":{\"name\":\"kubernetes\",\"version\":\"0.1.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"cleanup\",\"description\":\"Cleanup all managed resources\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}},\"annotations\":{\"destructiveHint\":true}},{\"name\":\"kubectl_get\",\"description\":\"Get or list Kubernetes resources by resource type, name, and optionally namespace\",\"annotations\":{\"readOnlyHint\":true},\"inputSchema\":{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"description\":\"Type of resource to get (e.g., pods, deployments, services, configmaps, events, etc.)\"},\"name\":{\"type\":\"string\",\"description\":\"Name of the resource (optional - if not provided, lists all resources of the specified type)\"},\"namespace\":{\"type\":\"string\",\"description\":\"Kubernetes namespace\",\"default\":\"default\"},\"output\":{\"type\":\"string\",\"enum\":[\"json\",\"yaml\",\"wide\",\"name\",\"custom\"],\"description\":\"Output format\",\"default\":\"json\"},\"allNamespaces\":{\"type\":\"boolean\",\"description\":\"If true, list resources across all namespaces\",\"default\":false},\"labelSelector\":{\"type\":\"string\",\"description\":\"Filter resources by label selector (e.g. 'app=nginx')\"},\"fieldSelector\":{\"type\":\"string\",\"description\":\"Filter resources by field selector (e.g. 'metadata.name=my-pod')\"},\"sortBy\":{\"type\":\"string\",\"description\":\"Sort events by a field (default: lastTimestamp). Only applicable for events.\"},\"context\":{\"type\":\"string\",\"description\":\"Kubeconfig Context to use for the command (optional - defaults to null)\",\"default\":\"\"}},\"required\":[\"resourceType\"]}},{\"name\":\"kubectl_describe\",\"description\":\"Describe Kubernetes resources by resource type, name, and optionally namespace\",\"annotations\":{\"readOnlyHint\":true},\"inputSchema\":{\"type\":\"object\",\"properties\":{\"resourceType\":{\"type\":\"string\",\"description\":\"Type of resource to describe (e.g., pods, deployments, services, etc.)\"},\"name\":{\"type\":\"string\",\"description\":\"N"
+    }
+  ],
+  "notes": [
+    "Only initialize, notifications/initialized, and tools/list were sent.",
+    "No user API keys or user home directory were passed to runtime processes.",
+    "npm install uses --ignore-scripts, --no-audit, --no-fund, and --omit=dev.",
+    "PyPI installs happen in a disposable venv; runtime processes receive a stripped environment.",
+    "Runtime network namespace isolation uses unshare -Urn when this host allows it; otherwise the probe falls back to stripped env + timeout only.",
+    "This is a smoke probe. It is not a source security audit and it does not prove destructive tool behavior is safe."
+  ],
+  "safety": {
+    "executesThirdPartyPackages": true,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer"
+  },
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 29277,
+  "status": "pass"
+}

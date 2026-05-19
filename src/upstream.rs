@@ -9,9 +9,11 @@ use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 #[cfg(test)]
 use std::sync::{mpsc, Mutex};
+use std::thread;
 use std::time::{Duration, Instant};
 
 mod diagnostics;
+mod http_runtime;
 mod inventory;
 mod lease_runtime;
 mod policy_audit;
@@ -44,6 +46,7 @@ pub use self::session_pool::UpstreamSessionPool;
 use self::diagnostics::stderr_suffix;
 #[cfg(test)]
 use self::diagnostics::DIAGNOSTIC_REDACTION;
+use self::http_runtime::run_http_request;
 #[cfg(test)]
 use self::inventory::{catalog_cache_counts, flatten_catalog_tools};
 #[cfg(test)]
@@ -51,6 +54,8 @@ use self::lease_runtime::{validate_upstream_batch_tool_policy, validate_upstream
 use self::policy_audit::{audit_tool, tool_policy_summaries};
 #[cfg(test)]
 use self::policy_suggestions::report as policy_suggestion_report;
+#[cfg(test)]
+use self::process_config::spawn_program_for_command;
 use self::process_config::{
     expand_template, redact_command, resolve_command_for_cwd, validate_stdio_cwd,
 };
@@ -63,11 +68,10 @@ use self::server_config::{
 };
 use self::source_type::infer_source_type;
 use self::stdio_runtime::run_stdio_request;
-use self::tool_cache::cached_tools_list;
+use self::tool_cache::{cached_tools_list, read_cached_tools, tool_list_cache_key};
 #[cfg(test)]
 use self::tool_cache::{
-    prune_tool_list_cache, read_cached_tools, tool_list_cache_key, write_cached_tools,
-    CachedToolList, ToolListCacheKey, TOOL_LIST_CACHE,
+    prune_tool_list_cache, write_cached_tools, CachedToolList, ToolListCacheKey, TOOL_LIST_CACHE,
 };
 #[cfg(test)]
 use crate::json::parse_str;
@@ -187,14 +191,14 @@ fn ensure_callable_stdio(root_path: &Path, server: &UpstreamServerConfig) -> Res
                 .unwrap_or("server is disabled by source or policy")
         ));
     }
-    if server.source_type != "stdio" {
-        return Err(format!(
-            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio upstreams only; configure a stdio adapter or call runtime_diagnostics for exact status.",
-            server.name, server.source_type
-        ));
-    }
     if let Some(error) = command_error {
         return Err(error);
+    }
+    if server.source_type != "stdio" && server.source_type != "http" {
+        return Err(format!(
+            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio and plain local Streamable HTTP upstreams; configure a stdio adapter or call runtime_diagnostics for exact status.",
+            server.name, server.source_type
+        ));
     }
     Err(format!(
         "upstream server '{}' is not callable through the stdio bridge",
@@ -222,8 +226,63 @@ fn server_runtime_callable(
     if !server.enabled {
         return (false, None, None);
     }
+    if server.source_type == "http" {
+        let Some(url) = server
+            .url
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            return (
+                false,
+                None,
+                Some(format!(
+                    "HTTP upstream server '{}' has no url configured",
+                    server.name
+                )),
+            );
+        };
+        if url.to_ascii_lowercase().starts_with("http://") {
+            return (true, None, None);
+        }
+        if url.to_ascii_lowercase().starts_with("https://") {
+            return (
+                false,
+                None,
+                Some(format!(
+                    "upstream server '{}' uses HTTPS; direct TLS upstream forwarding is not enabled in this build. Use a stdio adapter such as mcp-remote or a local HTTP gateway for now.",
+                    server.name
+                )),
+            );
+        }
+        return (
+            false,
+            None,
+            Some(format!(
+                "HTTP upstream server '{}' url must start with http:// or https://",
+                server.name
+            )),
+        );
+    }
+    if server.source_type == "legacy-sse" {
+        return (
+            false,
+            None,
+            Some(format!(
+                "upstream server '{}' declares the deprecated HTTP+SSE transport. Use a stdio compatibility adapter or migrate the endpoint to Streamable HTTP before direct forwarding.",
+                server.name
+            )),
+        );
+    }
     if server.source_type != "stdio" {
-        return (false, None, None);
+        return (
+            false,
+            None,
+            Some(format!(
+                "upstream server '{}' uses unsupported '{}' transport",
+                server.name, server.source_type
+            )),
+        );
     }
     let Some(command) = server
         .command
@@ -259,6 +318,29 @@ fn server_runtime_callable(
     }
 }
 
+fn upstream_blocked_status(server: &UpstreamServerConfig) -> &'static str {
+    if !server.enabled {
+        return "disabled";
+    }
+    match server.source_type.as_str() {
+        "stdio" => "blocked-command-not-found",
+        "http" => {
+            if server
+                .url
+                .as_deref()
+                .map(|url| url.trim().to_ascii_lowercase().starts_with("https://"))
+                .unwrap_or(false)
+            {
+                "blocked-https-upstream"
+            } else {
+                "blocked-http-upstream"
+            }
+        }
+        "legacy-sse" => "blocked-legacy-sse-upstream",
+        _ => "blocked-unsupported-transport",
+    }
+}
+
 fn catalog_server(
     root_path: &Path,
     server: &UpstreamServerConfig,
@@ -270,13 +352,7 @@ fn catalog_server(
         server_runtime_callable(root_path, server);
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     if !runtime_callable {
-        let status = if !server.enabled {
-            "disabled"
-        } else if server.source_type != "stdio" {
-            "blocked-non-stdio"
-        } else {
-            "blocked-command-not-found"
-        };
+        let status = upstream_blocked_status(server);
         return JsonValue::object([
             ("name", JsonValue::string(&server.name)),
             ("ok", JsonValue::bool(false)),
@@ -422,6 +498,279 @@ fn catalog_server(
     }
 }
 
+pub fn callable_tools_raw_catalog(
+    root_path: &Path,
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> Result<JsonValue, String> {
+    let started = Instant::now();
+    let servers = load_servers(root_path)?;
+    let callable_servers = servers
+        .values()
+        .filter(|server| server_runtime_callable(root_path, server).0)
+        .cloned()
+        .collect::<Vec<_>>();
+    let results = run_server_tasks(
+        root_path,
+        callable_servers,
+        timeout_ms,
+        move |root, server, timeout| catalog_server_raw(root, server, timeout, refresh),
+    );
+    let ok_count = results
+        .iter()
+        .filter(|item| json_helpers::bool_at_path(item, &["ok"]).unwrap_or(false))
+        .count();
+    let failed_count = results.len().saturating_sub(ok_count);
+    let tool_count = results
+        .iter()
+        .filter_map(|item| json_helpers::value_at_path(item, &["toolCount"]))
+        .filter_map(JsonValue::as_i64)
+        .sum::<i64>();
+
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(failed_count == 0)),
+        ("mode", JsonValue::string("raw-callable-tools-catalog")),
+        (
+            "summary",
+            JsonValue::string(
+                "Discovered raw tools/list definitions for runtime-callable upstream MCP servers with bounded parallel workers.",
+            ),
+        ),
+        ("serverCount", JsonValue::number(results.len())),
+        ("okCount", JsonValue::number(ok_count)),
+        ("failedCount", JsonValue::number(failed_count)),
+        ("toolCount", JsonValue::number(tool_count)),
+        ("elapsedMs", JsonValue::number(started.elapsed().as_millis())),
+        ("servers", JsonValue::array(results)),
+    ]))
+}
+
+pub fn callable_tools_raw_catalog_for_servers(
+    root_path: &Path,
+    server_names: &[String],
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> Result<JsonValue, String> {
+    let started = Instant::now();
+    let servers = load_servers(root_path)?;
+    let mut seen = BTreeSet::new();
+    let mut selected_servers = Vec::new();
+
+    for server_name in server_names {
+        let requested = server_name.trim();
+        if requested.is_empty() {
+            continue;
+        }
+        let Some(server) = servers
+            .values()
+            .find(|server| server.name.eq_ignore_ascii_case(requested))
+        else {
+            continue;
+        };
+        let key = server.name.to_ascii_lowercase();
+        if !seen.insert(key) || !server_runtime_callable(root_path, server).0 {
+            continue;
+        }
+        selected_servers.push(server.clone());
+    }
+
+    let results = run_server_tasks(
+        root_path,
+        selected_servers,
+        timeout_ms,
+        move |root, server, timeout| catalog_server_raw(root, server, timeout, refresh),
+    );
+    let ok_count = results
+        .iter()
+        .filter(|item| json_helpers::bool_at_path(item, &["ok"]).unwrap_or(false))
+        .count();
+    let failed_count = results.len().saturating_sub(ok_count);
+    let tool_count = results
+        .iter()
+        .filter_map(|item| json_helpers::value_at_path(item, &["toolCount"]))
+        .filter_map(JsonValue::as_i64)
+        .sum::<i64>();
+
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(failed_count == 0)),
+        (
+            "mode",
+            JsonValue::string("raw-callable-tools-candidate-catalog"),
+        ),
+        (
+            "summary",
+            JsonValue::string(
+                "Discovered raw tools/list definitions only for query-ranked candidate upstream MCP servers, avoiding full upstream fan-out for targeted search.",
+            ),
+        ),
+        ("requestedServerCount", JsonValue::number(server_names.len())),
+        ("serverCount", JsonValue::number(results.len())),
+        ("okCount", JsonValue::number(ok_count)),
+        ("failedCount", JsonValue::number(failed_count)),
+        ("toolCount", JsonValue::number(tool_count)),
+        ("elapsedMs", JsonValue::number(started.elapsed().as_millis())),
+        ("servers", JsonValue::array(results)),
+    ]))
+}
+
+pub fn callable_tools_cached_catalog(root_path: &Path) -> Result<JsonValue, String> {
+    let started = Instant::now();
+    let servers = load_servers(root_path)?;
+    let mut results = Vec::new();
+    let mut ok_count = 0usize;
+    let mut missing_count = 0usize;
+    let mut tool_count = 0usize;
+
+    for server in servers.values() {
+        if !server.enabled || (server.source_type != "stdio" && server.source_type != "http") {
+            continue;
+        }
+        let key = tool_list_cache_key(root_path, server);
+        if let Some(raw_tools) = read_cached_tools(&key) {
+            let count = raw_tools.as_array().map(|items| items.len()).unwrap_or(0);
+            tool_count = tool_count.saturating_add(count);
+            ok_count = ok_count.saturating_add(1);
+            results.push(JsonValue::object([
+                ("name", JsonValue::string(&server.name)),
+                ("ok", JsonValue::bool(true)),
+                ("enabled", JsonValue::bool(server.enabled)),
+                ("sourceType", JsonValue::string(&server.source_type)),
+                ("runtimeCallable", JsonValue::bool(true)),
+                ("status", JsonValue::string("cached-tools")),
+                ("elapsedMs", JsonValue::number(0)),
+                ("cacheHit", JsonValue::bool(true)),
+                (
+                    "cacheTtlMs",
+                    JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
+                ),
+                ("toolCount", JsonValue::number(count)),
+                ("tools", raw_tools),
+            ]));
+        } else {
+            missing_count = missing_count.saturating_add(1);
+            results.push(JsonValue::object([
+                ("name", JsonValue::string(&server.name)),
+                ("ok", JsonValue::bool(false)),
+                ("enabled", JsonValue::bool(server.enabled)),
+                ("sourceType", JsonValue::string(&server.source_type)),
+                ("runtimeCallable", JsonValue::bool(true)),
+                ("status", JsonValue::string("cache-miss")),
+                ("elapsedMs", JsonValue::number(0)),
+                ("cacheHit", JsonValue::bool(false)),
+                (
+                    "cacheTtlMs",
+                    JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
+                ),
+                ("toolCount", JsonValue::number(0)),
+                ("tools", JsonValue::array([])),
+                (
+                    "error",
+                    JsonValue::string(
+                        "no fresh tools/list cache entry; broker fallback remains available",
+                    ),
+                ),
+            ]));
+        }
+    }
+
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(missing_count == 0)),
+        ("mode", JsonValue::string("raw-callable-tools-cache")),
+        (
+            "summary",
+            JsonValue::string(
+                "Read cached raw tools/list definitions for runtime-callable upstream MCP servers without launching upstream processes.",
+            ),
+        ),
+        ("serverCount", JsonValue::number(results.len())),
+        ("okCount", JsonValue::number(ok_count)),
+        ("failedCount", JsonValue::number(missing_count)),
+        ("cacheMissCount", JsonValue::number(missing_count)),
+        ("toolCount", JsonValue::number(tool_count)),
+        ("elapsedMs", JsonValue::number(started.elapsed().as_millis())),
+        ("servers", JsonValue::array(results)),
+    ]))
+}
+
+pub fn warm_tool_list_cache(
+    root_path: &Path,
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> Result<JsonValue, String> {
+    callable_tools_raw_catalog(root_path, timeout_ms, refresh)
+}
+
+pub fn warm_tool_list_cache_background(root_path: PathBuf, timeout_ms: Option<u64>, refresh: bool) {
+    let _ = thread::Builder::new()
+        .name("mcpace-tool-list-cache-warmup".to_string())
+        .spawn(move || {
+            let _ = warm_tool_list_cache(&root_path, timeout_ms, refresh);
+        });
+}
+
+fn catalog_server_raw(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> JsonValue {
+    let started = Instant::now();
+    let effective_timeout = probe_timeout_for(server, timeout_ms);
+
+    match cached_tools_list(root_path, server, effective_timeout, refresh) {
+        Ok((raw_tools, cache_hit)) => {
+            let count = raw_tools.as_array().map(|items| items.len()).unwrap_or(0);
+            JsonValue::object([
+                ("name", JsonValue::string(&server.name)),
+                ("ok", JsonValue::bool(true)),
+                ("enabled", JsonValue::bool(server.enabled)),
+                ("sourceType", JsonValue::string(&server.source_type)),
+                ("runtimeCallable", JsonValue::bool(true)),
+                ("status", JsonValue::string("listed-tools")),
+                (
+                    "timeoutMs",
+                    JsonValue::number(effective_timeout.as_millis()),
+                ),
+                (
+                    "elapsedMs",
+                    JsonValue::number(started.elapsed().as_millis()),
+                ),
+                ("cacheHit", JsonValue::bool(cache_hit)),
+                (
+                    "cacheTtlMs",
+                    JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
+                ),
+                ("toolCount", JsonValue::number(count)),
+                ("tools", raw_tools),
+            ])
+        }
+        Err(error) => JsonValue::object([
+            ("name", JsonValue::string(&server.name)),
+            ("ok", JsonValue::bool(false)),
+            ("enabled", JsonValue::bool(server.enabled)),
+            ("sourceType", JsonValue::string(&server.source_type)),
+            ("runtimeCallable", JsonValue::bool(true)),
+            ("status", JsonValue::string("catalog-failed")),
+            (
+                "timeoutMs",
+                JsonValue::number(effective_timeout.as_millis()),
+            ),
+            (
+                "elapsedMs",
+                JsonValue::number(started.elapsed().as_millis()),
+            ),
+            ("cacheHit", JsonValue::bool(false)),
+            (
+                "cacheTtlMs",
+                JsonValue::number(TOOL_LIST_CACHE_TTL.as_millis()),
+            ),
+            ("toolCount", JsonValue::number(0)),
+            ("tools", JsonValue::array([])),
+            ("error", JsonValue::string(error)),
+        ]),
+    }
+}
+
 fn tool_summary(tool: &JsonValue) -> JsonValue {
     let name = json_helpers::string_at_path(tool, &["name"])
         .unwrap_or("<unnamed>")
@@ -452,13 +801,7 @@ fn probe_server(
         server_runtime_callable(root_path, server);
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     if !runtime_callable {
-        let status = if !server.enabled {
-            "disabled"
-        } else if server.source_type != "stdio" {
-            "blocked-non-stdio"
-        } else {
-            "blocked-command-not-found"
-        };
+        let status = upstream_blocked_status(server);
         return JsonValue::object([
             ("name", JsonValue::string(&server.name)),
             ("ok", JsonValue::bool(false)),
@@ -618,13 +961,7 @@ fn audit_server(
     let effective_timeout = probe_timeout_for(server, timeout_ms);
     let declared_policies = tool_policy_summaries(&server.tool_policies);
     if !runtime_callable {
-        let status = if !server.enabled {
-            "disabled"
-        } else if server.source_type != "stdio" {
-            "blocked-non-stdio"
-        } else {
-            "blocked-command-not-found"
-        };
+        let status = upstream_blocked_status(server);
         return JsonValue::object([
             ("name", JsonValue::string(&server.name)),
             ("ok", JsonValue::bool(false)),
@@ -873,26 +1210,31 @@ fn server_inventory_item(root_path: &Path, server: &UpstreamServerConfig) -> Jso
         server_runtime_callable(root_path, server);
     let status = if !server.enabled {
         "disabled"
+    } else if runtime_callable && server.source_type == "http" {
+        "callable-http"
     } else if runtime_callable {
         "callable-stdio"
-    } else if server.source_type == "http" {
-        "blocked-http-upstream"
-    } else if server.source_type == "stdio" {
-        "blocked-command-not-found"
     } else {
-        "blocked-missing-command"
+        upstream_blocked_status(server)
     };
     let reason = if !server.enabled {
         server
             .disabled_reason
             .clone()
             .unwrap_or_else(|| "server is disabled by source or policy".to_string())
+    } else if runtime_callable && server.source_type == "http" {
+        "enabled plain HTTP server; list with upstream_tools and call with upstream_call"
+            .to_string()
     } else if runtime_callable {
         "enabled stdio server; list with upstream_tools and call with upstream_call".to_string()
     } else if let Some(error) = command_error {
         error
     } else if server.source_type == "http" {
-        "non-stdio HTTP upstream fan-out is not implemented in this stdio bridge".to_string()
+        "HTTP upstream is configured but not callable; use http:// for direct local/plain HTTP or bridge HTTPS through stdio"
+            .to_string()
+    } else if server.source_type == "legacy-sse" {
+        "legacy HTTP+SSE upstreams are not forwarded directly; use a stdio compatibility adapter or migrate to Streamable HTTP"
+            .to_string()
     } else {
         "server does not have a callable stdio command".to_string()
     };

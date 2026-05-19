@@ -19,22 +19,28 @@ The advertised client URL is resolved from `MCPACE_PUBLIC_MCP_URL`, `mcpace.conf
 
 ## Authentication and authorization
 
-Current local endpoint authentication is **НЕ ПОДТВЕРЖДЕНО** in this archive.
-For local mode, the implemented hardening is origin validation, localhost-first
-binding policy, and explicit MCP request validation. Non-loopback bind hosts such
-as `0.0.0.0` are rejected by default and require the explicit
-`--allow-nonlocal-bind` operator escape hatch. Do not treat this as a remote
-authenticated API.
+Loopback local mode does not require authentication by default because it is
+intended for same-host native clients. Operators can require bearer-token
+authentication by setting `MCPACE_HTTP_AUTH_TOKEN`, or by passing
+`--auth-token-env <NAME>` and placing the token in that environment variable.
+When a token is configured, every HTTP request must include
+`Authorization: Bearer <token>` and unauthorized requests receive
+`401 Unauthorized` with `WWW-Authenticate: Bearer realm="mcpace"`.
+
+Non-loopback bind hosts such as `0.0.0.0` are rejected by default. They require
+`--allow-nonlocal-bind` plus bearer-token authentication. The only unauthenticated
+non-loopback mode is the deliberately named `--insecure-nonlocal-bind`, intended
+for short-lived lab use only and not for public or shared networks.
 
 ## Common headers
 
 ### Request headers
 
-- `Host`: when present, must resolve to an exact loopback authority: `127.0.0.1`, `localhost`, or `[::1]`, with an optional numeric port. Host-suffix tricks, userinfo, paths, and non-loopback hosts are rejected.
+- `Host`: required exactly once and must resolve to an exact loopback authority: `127.0.0.1`, `localhost`, or `[::1]`, with an optional numeric port. Missing, duplicate, host-suffix, userinfo, path-bearing, and non-loopback hosts are rejected.
 - `Origin`: optional. Native clients normally omit it. When present, it must be an allowed loopback browser origin such as `http://127.0.0.1:<port>`, `http://localhost:<port>`, or `http://[::1]:<port>`. `null`, `file://`, userinfo, and host-suffix tricks are rejected.
 - `Accept`: required for POST. Must include both `application/json` and
   `text/event-stream`.
-- `Content-Type`: expected to be `application/json` for POST bodies.
+- `Content-Type`: required to be `application/json` for POST bodies. A parameter such as `charset=utf-8` is allowed, but a missing or non-JSON content type is rejected.
 - `MCP-Protocol-Version`: optional in this implementation; unsupported values
   produce `400 Bad Request`.
 - `Mcp-Method`: optional compatibility header in this implementation, but when
@@ -45,6 +51,10 @@ authenticated API.
   present it must match `params.name` for `tools/call` and `prompts/get`, or
   `params.uri` for `resources/read`. A `Mcp-Name` header on methods without a
   name/URI source is rejected.
+- `Content-Length`: at most one header is accepted. Duplicate or unparsable
+  values are rejected before request dispatch.
+- `Transfer-Encoding`: not implemented by this local listener and rejected
+  before request dispatch to avoid ambiguous request-boundary handling.
 
 ### Response headers
 

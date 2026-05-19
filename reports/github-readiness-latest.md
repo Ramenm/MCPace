@@ -1,6 +1,6 @@
 # MCPace GitHub readiness
 
-Project: `mcpace` v`0.5.9`
+Project: `mcpace` v`0.6.5`
 Status: `ready-with-warnings`
 
 ## Summary
@@ -13,7 +13,7 @@ Status: `ready-with-warnings`
 
 | check | required | status | evidence |
 |---|---:|---:|---|
-| file:README.md | yes | pass | public landing page; 196 lines |
+| file:README.md | yes | pass | public landing page; 204 lines |
 | file:LICENSE | yes | pass | license clarity; 109 lines |
 | file:CONTRIBUTING.md | yes | pass | contribution workflow; 110 lines |
 | file:SECURITY.md | yes | pass | private vulnerability reporting; 61 lines |
@@ -29,7 +29,7 @@ Status: `ready-with-warnings`
 | file:docs/github-launch-playbook.md | yes | pass | public launch operating plan; 225 lines |
 | file:docs/runtime-beta-roadmap.md | yes | pass | runtime beta acceptance criteria; 49 lines |
 | file:docs/product-truth-and-beta-gate.md | yes | pass | truth taxonomy and beta/GA gates; 173 lines |
-| workflow:.github/workflows/ci.yml | yes | pass | normal source, Rust, launcher, and hosted proof CI; 311 lines |
+| workflow:.github/workflows/ci.yml | yes | pass | normal source, Rust, launcher, and hosted proof CI; 304 lines |
 | workflow:.github/workflows/release.yml | yes | pass | draft GitHub Release and platform artifact proof; 276 lines |
 | workflow:.github/workflows/publish-npm.yml | yes | pass | npm trusted-publishing lane from release artifacts; 67 lines |
 | workflow:.github/workflows/security.yml | yes | pass | supply-chain security review lanes; 116 lines |

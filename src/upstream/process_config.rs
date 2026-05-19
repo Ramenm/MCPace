@@ -103,3 +103,28 @@ pub(super) fn resolve_command_for_cwd(command: &str, cwd: &Path) -> Result<PathB
 
     which::which(command).map_err(|error| error.to_string())
 }
+
+pub(super) fn spawn_program_for_command(command: &str, resolved: &Path) -> PathBuf {
+    let command = command.trim();
+    let raw = PathBuf::from(command);
+    let looks_path_like = raw.is_absolute() || raw.components().count() > 1;
+    if looks_path_like {
+        return resolved.to_path_buf();
+    }
+
+    #[cfg(windows)]
+    if raw.extension().is_none() {
+        if let Some(extension) = resolved.extension().and_then(|value| value.to_str()) {
+            return PathBuf::from(format!("{}.{}", command, extension.to_ascii_lowercase()));
+        }
+    }
+
+    if raw.extension().is_some() {
+        return raw;
+    }
+
+    resolved
+        .file_name()
+        .map(PathBuf::from)
+        .unwrap_or_else(|| resolved.to_path_buf())
+}

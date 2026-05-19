@@ -1,9 +1,9 @@
 {
   "schema": "mcpace.supplyChainRisk.v1",
-  "generatedAt": "2026-05-04T09:51:26.911Z",
+  "generatedAt": "2026-05-19T13:15:04.287Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "pass-with-warnings",
   "localOnly": true,

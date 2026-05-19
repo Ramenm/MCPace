@@ -60,7 +60,7 @@ pub(super) fn runtime_diagnostics(config: &DashboardConfig) -> Result<JsonValue,
         (
             "summary",
             JsonValue::string(
-                "MCPace HTTP MCP is reachable. This build exposes management tools plus dynamic adapter_profile/upstream_search and explicit stdio upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch; in auto/native exposure mode, upstream tools may also be advertised as projected u_<server>_<tool>_<hash> names when the live catalog fits the token budget.",
+                "MCPace HTTP MCP is reachable. This build exposes management tools plus dynamic adapter_profile/upstream_search and explicit stdio/plain HTTP upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch; in auto/native exposure mode, upstream tools may also be advertised as projected u_<server>_<tool>_<hash> names when the live catalog fits the token budget.",
             ),
         ),
         ("doctor", doctor),
@@ -83,7 +83,7 @@ pub(super) fn runtime_diagnostics(config: &DashboardConfig) -> Result<JsonValue,
                 (
                     "reason",
                     JsonValue::string(
-                        "MCPace forwards resolvable configured stdio upstreams through upstream_tools/upstream_call and uses upstream_batch for stateful multi-call sessions. upstream_catalog lists concise tool descriptions, upstream_probe checks configured servers, upstream_policy_audit compares MCP annotations with declarative toolPolicies, and upstream_policy_suggest generates reviewable policy candidates without hardcoded server names. Non-stdio HTTP upstream fan-out remains explicit blocked diagnostics.",
+                        "MCPace forwards resolvable configured stdio and plain local Streamable HTTP upstreams through upstream_tools/upstream_call and uses upstream_batch for same-server stateful sequences. upstream_catalog lists concise tool descriptions, upstream_probe checks configured servers, upstream_policy_audit compares MCP annotations with declarative toolPolicies, and upstream_policy_suggest generates reviewable policy candidates without hardcoded server names. HTTPS, legacy HTTP+SSE, and custom transports remain explicit blocked diagnostics until bridged or upgraded.",
                     ),
                 ),
             ]),
@@ -151,7 +151,7 @@ fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
     } else if runtime_callable {
         (
             "callable-stdio-bridge",
-            "enabled stdio upstream can be listed with upstream_tools and called with upstream_call",
+            "enabled stdio or plain HTTP upstream can be listed with upstream_tools and called with upstream_call",
         )
     } else if kind == "host-bridge" {
         (

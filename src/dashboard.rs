@@ -56,6 +56,8 @@ struct ParsedArgs {
     max_body_bytes: usize,
     overview_cache_ttl: Duration,
     allow_nonlocal_bind: bool,
+    insecure_nonlocal_bind: bool,
+    auth_token_env: Option<String>,
     error: Option<String>,
 }
 
@@ -72,6 +74,8 @@ impl Default for ParsedArgs {
             max_body_bytes: resources::default_max_http_body_bytes(),
             overview_cache_ttl: resources::default_dashboard_overview_cache_ttl(),
             allow_nonlocal_bind: false,
+            insecure_nonlocal_bind: false,
+            auth_token_env: None,
             error: None,
         }
     }
@@ -185,6 +189,7 @@ struct DashboardConfig {
     metrics: HttpRuntimeMetrics,
     surface: ServeSurface,
     upstream_session_pools: Vec<Mutex<upstream::UpstreamSessionPool>>,
+    auth_token: Option<String>,
 }
 
 #[derive(Clone, Copy)]
@@ -245,13 +250,36 @@ fn run_internal(
         runtimepaths::ServeEndpoint::default()
     };
     let host = parsed.host.clone().unwrap_or_else(|| endpoint.host.clone());
-    if !parsed.allow_nonlocal_bind && !is_loopback_bind_host(&host) {
+    let auth_token = match resolve_http_auth_token(&parsed) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = writeln!(stderr, "{}", error);
+            return 2;
+        }
+    };
+    let non_loopback_bind = !is_loopback_bind_host(&host);
+    if non_loopback_bind && !parsed.allow_nonlocal_bind {
         let _ = writeln!(
             stderr,
             "refusing to bind non-loopback host '{}'; MCPace local HTTP mode is loopback-only unless --allow-nonlocal-bind is set intentionally",
             host
         );
         return 2;
+    }
+    if non_loopback_bind && auth_token.is_none() && !parsed.insecure_nonlocal_bind {
+        let _ = writeln!(
+            stderr,
+            "refusing unauthenticated non-loopback bind '{}'; set MCPACE_HTTP_AUTH_TOKEN or --auth-token-env <NAME>, or pass --insecure-nonlocal-bind for an explicit unauthenticated lab-only bind",
+            host
+        );
+        return 2;
+    }
+    if non_loopback_bind && parsed.insecure_nonlocal_bind {
+        let _ = writeln!(
+            stderr,
+            "warning: non-loopback bind '{}' is unauthenticated because --insecure-nonlocal-bind was provided",
+            host
+        );
     }
     let port = if parsed.port == 0 {
         if matches!(surface, ServeSurface::UnifiedServe) {
@@ -299,6 +327,8 @@ fn run_internal(
     };
     let _ = stdout.flush();
 
+    maybe_start_tool_list_cache_warmup(&root_path, surface);
+
     serve_listener(
         listener,
         DashboardConfig {
@@ -315,9 +345,59 @@ fn run_internal(
             metrics: HttpRuntimeMetrics::default(),
             surface,
             upstream_session_pools: new_upstream_session_pools(),
+            auth_token,
         },
         stderr,
     )
+}
+
+fn resolve_http_auth_token(parsed: &ParsedArgs) -> Result<Option<String>, String> {
+    let env_name = parsed
+        .auth_token_env
+        .as_deref()
+        .unwrap_or("MCPACE_HTTP_AUTH_TOKEN");
+    match std::env::var(env_name) {
+        Ok(value) => {
+            let token = value.trim();
+            if token.is_empty() {
+                if parsed.auth_token_env.is_some() {
+                    Err(format!(
+                        "HTTP auth token environment variable '{}' is empty",
+                        env_name
+                    ))
+                } else {
+                    Ok(None)
+                }
+            } else {
+                Ok(Some(token.to_string()))
+            }
+        }
+        Err(_) if parsed.auth_token_env.is_some() => Err(format!(
+            "HTTP auth token environment variable '{}' is not set",
+            env_name
+        )),
+        Err(_) => Ok(None),
+    }
+}
+
+fn maybe_start_tool_list_cache_warmup(root_path: &Path, surface: ServeSurface) {
+    if !matches!(surface, ServeSurface::UnifiedServe) || !tool_list_cache_warmup_enabled() {
+        return;
+    }
+    let timeout_ms = crate::adapter::ToolExposureOptions::from_env().timeout_ms;
+    upstream::warm_tool_list_cache_background(root_path.to_path_buf(), timeout_ms, true);
+}
+
+fn tool_list_cache_warmup_enabled() -> bool {
+    std::env::var("MCPACE_TOOL_LIST_WARMUP")
+        .ok()
+        .map(|value| {
+            !matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "0" | "false" | "no" | "off" | "disabled"
+            )
+        })
+        .unwrap_or(true)
 }
 
 fn is_loopback_bind_host(host: &str) -> bool {
@@ -450,6 +530,25 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                 parsed.allow_nonlocal_bind = true;
                 index += 1;
             }
+            "--insecure-nonlocal-bind" => {
+                parsed.insecure_nonlocal_bind = true;
+                index += 1;
+            }
+            "--auth-token-env" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some(
+                        "dashboard requires an environment variable name after --auth-token-env"
+                            .to_string(),
+                    );
+                    return parsed;
+                };
+                if value.trim().is_empty() {
+                    parsed.error = Some("dashboard --auth-token-env must not be empty".to_string());
+                    return parsed;
+                }
+                parsed.auth_token_env = Some(value.to_string());
+                index += 2;
+            }
             "-h" | "--help" | "-?" => {
                 parsed.help = true;
                 return parsed;
@@ -467,7 +566,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--allow-nonlocal-bind]"
+        "Usage: mcpace dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--allow-nonlocal-bind] [--auth-token-env <NAME>] [--insecure-nonlocal-bind]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -480,7 +579,7 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(
         stdout,
-        "Non-loopback bind hosts are rejected by default; --allow-nonlocal-bind is an explicit operator escape hatch, not a public auth mode."
+        "Non-loopback bind hosts are rejected by default; --allow-nonlocal-bind also requires MCPACE_HTTP_AUTH_TOKEN, --auth-token-env <NAME>, or explicit --insecure-nonlocal-bind."
     );
     let _ = writeln!(
         stdout,
@@ -720,7 +819,7 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
     let target = parts[1].to_string();
 
     let mut headers = Vec::new();
-    let mut content_length = 0usize;
+    let mut content_length: Option<usize> = None;
     let mut header_bytes = 0usize;
     let mut header_count = 0usize;
     loop {
@@ -767,8 +866,17 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
         if let Some((name, value)) = header.split_once(':') {
             let key = name.trim().to_ascii_lowercase();
             let trimmed = value.trim().to_string();
+            if key == "transfer-encoding" {
+                write_text_response(
+                    &mut stream,
+                    "400 Bad Request",
+                    "text/plain; charset=utf-8",
+                    "Transfer-Encoding is not supported",
+                )?;
+                return Ok(());
+            }
             if key == "content-length" {
-                content_length = match trimmed.parse::<usize>() {
+                let parsed_length = match trimmed.parse::<usize>() {
                     Ok(value) => value,
                     Err(_) => {
                         write_text_response(
@@ -780,11 +888,38 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
                         return Ok(());
                     }
                 };
+                if content_length.is_some() {
+                    write_text_response(
+                        &mut stream,
+                        "400 Bad Request",
+                        "text/plain; charset=utf-8",
+                        "Duplicate Content-Length is not allowed",
+                    )?;
+                    return Ok(());
+                }
+                content_length = Some(parsed_length);
             }
             headers.push((key, trimmed));
         }
     }
 
+    let host_header_count = headers.iter().filter(|(key, _)| key == "host").count();
+    if host_header_count != 1 {
+        let message = if host_header_count == 0 {
+            "Missing Host header"
+        } else {
+            "Duplicate Host headers are not allowed"
+        };
+        write_text_response(
+            &mut stream,
+            "400 Bad Request",
+            "text/plain; charset=utf-8",
+            message,
+        )?;
+        return Ok(());
+    }
+
+    let content_length = content_length.unwrap_or(0);
     if content_length > config.max_body_bytes {
         write_text_response(
             &mut stream,
@@ -839,6 +974,15 @@ fn handle_http_request(
     request: &HttpRequest,
     config: &DashboardConfig,
 ) -> Result<(), String> {
+    if !is_authorized_http_request(request, config) {
+        write_empty_response_with_headers(
+            stream,
+            "401 Unauthorized",
+            &[("WWW-Authenticate", "Bearer realm=\"mcpace\"")],
+        )?;
+        return Ok(());
+    }
+
     let (mcp_path, health_path) = configured_http_paths(config);
     if request.method == "GET"
         && matches_configured_path(
@@ -865,6 +1009,12 @@ fn handle_http_request(
         ("GET", "/") => {
             write_text_response(stream, "200 OK", "text/html; charset=utf-8", DASHBOARD_HTML)?
         }
+        ("GET", "/favicon.ico") => write_text_response(
+            stream,
+            "200 OK",
+            "image/svg+xml; charset=utf-8",
+            DASHBOARD_FAVICON_SVG,
+        )?,
         ("GET", "/status") => {
             let payload = run_json_command(&config.root_path, &["hub", "status", "--json"])?;
             write_json_response(stream, "200 OK", &payload)?;
@@ -936,6 +1086,37 @@ fn handle_http_request(
     Ok(())
 }
 
+fn is_authorized_http_request(request: &HttpRequest, config: &DashboardConfig) -> bool {
+    let Some(expected) = config.auth_token.as_deref() else {
+        return true;
+    };
+    let mut authorization_headers = request
+        .headers
+        .iter()
+        .filter(|(key, _)| key == "authorization");
+    let Some((_, value)) = authorization_headers.next() else {
+        return false;
+    };
+    if authorization_headers.next().is_some() {
+        return false;
+    }
+    let Some(token) = value.trim().strip_prefix("Bearer ") else {
+        return false;
+    };
+    !token.trim().is_empty() && constant_time_eq(token.trim().as_bytes(), expected.as_bytes())
+}
+
+fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
+    let max_len = left.len().max(right.len());
+    let mut diff = left.len() ^ right.len();
+    for index in 0..max_len {
+        let left_byte = left.get(index).copied().unwrap_or(0);
+        let right_byte = right.get(index).copied().unwrap_or(0);
+        diff |= (left_byte ^ right_byte) as usize;
+    }
+    diff == 0
+}
+
 fn configured_http_paths(config: &DashboardConfig) -> (String, String) {
     if matches!(config.surface, ServeSurface::UnifiedServe) {
         let endpoint = runtimepaths::resolve_serve_endpoint(Some(&config.root_path));
@@ -999,6 +1180,7 @@ pub(super) fn run_json_command_vec(
 }
 
 const DASHBOARD_HTML: &str = include_str!("dashboard/index.html");
+const DASHBOARD_FAVICON_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#111827"/><path d="M16 42V22h9l7 10 7-10h9v20h-8V30l-8 11-8-11v12h-8Z" fill="#7dd3fc"/><circle cx="51" cy="13" r="5" fill="#34d399"/></svg>"##;
 
 #[cfg(test)]
 mod tests;

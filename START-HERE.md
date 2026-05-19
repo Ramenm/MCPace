@@ -39,9 +39,8 @@ First user path:
 
 ```bash
 mcpace connect
-mcpace server presets
-mcpace server starter --path . --dry-run
-mcpace server starter --path .
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
 mcpace server test filesystem --refresh --json
 mcpace serve
 mcpace client export cursor-local --json

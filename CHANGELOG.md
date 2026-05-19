@@ -22,6 +22,23 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 - Real-client runtime traces through at least one tier-1 local client.
 - Published native binary packages with checksums, attestations, and npm Trusted Publishing proof.
 
+## 0.6.2
+
+- Added `npm run verify:performance`, a source-level performance smoke harness that records HTTP benchmark wiring plus bounded tool-scale, mixed-upstream, and upstream-failsafe simulations.
+- Added `docs/performance-verification.md` and bundled fresh `reports/performance-smoke-latest.*` artifacts in the source archive.
+- Kept release performance claims gated on real Rust host p50/p95/p99 and memory baselines.
+
+## 0.6.1
+
+- Tightened source archive hygiene: generated historical reports are no longer included wholesale in release archives.
+- Added a maintainer operating-mode document for grounded task intake, tech-debt prioritization, eval governance, and cautious high-risk answers.
+- Added a second-pass technical-debt report and kept eval/version metadata aligned with the current source snapshot.
+
+## 0.6.0
+
+- Source package refresh: message-integrity hardening, tool exposure guards, lifecycle/scale/failsafe checks, and clean source archive packaging.
+- Prebuilt binaries are intentionally omitted from this source ZIP; rebuild with the Rust toolchain before publishing platform packages.
+
 ## 0.5.9
 
 ### Current status

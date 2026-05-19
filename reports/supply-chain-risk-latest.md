@@ -1,5 +1,5 @@
 # MCPace local supply-chain risk audit
-Project: `mcpace` v`0.5.9`
+Project: `mcpace` v`0.6.5`
 Status: `pass-with-warnings`
 GitHub paid plan required: `no`
 | check | severity | status | evidence |

@@ -8,10 +8,11 @@ function parseArgs(argv) {
   const args = {
     url: 'http://127.0.0.1:39022/mcp',
     healthUrl: 'http://127.0.0.1:39022/healthz',
-    expectTool: 'hub_status',
+    expectTool: 'adapter_profile',
     checkGet: true,
     json: false,
     write: null,
+    help: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -22,8 +23,8 @@ function parseArgs(argv) {
     else if (arg === '--json') args.json = true;
     else if (arg === '--write') args.write = path.resolve(argv[++i] ?? '');
     else if (arg === '--help' || arg === '-h') {
-      console.log(`Usage: node scripts/mcp-http-smoke.mjs [--url http://127.0.0.1:39022/mcp] [--json]\n\nChecks MCP Streamable HTTP initialize, MCP-Session-Id forwarding, initialized notification, tools/list, and optional GET rejection.`);
-      process.exit(0);
+      args.help = true;
+      return args;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -83,6 +84,10 @@ function add(checks, id, status, summary, detail = '', meta = {}) {
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    console.log(`Usage: node scripts/mcp-http-smoke.mjs [--url http://127.0.0.1:39022/mcp] [--expect-tool adapter_profile] [--json]\n\nChecks MCP Streamable HTTP initialize, MCP-Session-Id forwarding, initialized notification, tools/list, and optional GET rejection.`);
+    return;
+  }
   const checks = [];
   try {
     const health = await request(args.healthUrl, { method: 'GET', timeoutMs: 3000 });

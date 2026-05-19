@@ -57,6 +57,15 @@ test('HTTP MCP route validates standard header/body agreement when clients send 
   assert.match(dashboard, /request_header_string\(Some\(request\), "mcp-name"\)/);
   assert.match(dashboard, /Mcp-Method header/);
   assert.match(dashboard, /Mcp-Name header/);
+  assert.match(dashboard, /content_type_is\(request, "application\/json"\)/);
+  assert.match(dashboard, /Duplicate Content-Length is not allowed/);
+  assert.match(dashboard, /Transfer-Encoding is not supported/);
+  assert.match(dashboard, /Missing Host header/);
+  assert.match(dashboard, /MCPACE_HTTP_AUTH_TOKEN/);
+  assert.match(dashboard, /--auth-token-env/);
+  assert.match(dashboard, /--insecure-nonlocal-bind/);
+  assert.match(dashboard, /WWW-Authenticate/);
+  assert.match(dashboard, /Bearer /);
   assert.match(read('src/mcp_protocol.rs'), /ERROR_HEADER_MISMATCH:\s*i64\s*=\s*-32001/);
   assert.match(dashboard, /mismatched Mcp-Method response/);
   assert.match(dashboard, /mismatched Mcp-Name response/);
@@ -122,7 +131,8 @@ test('HTTP MCP session ids are visible-ASCII bounded, generated from OS randomne
   assert.match(dashboard, /resources::MAX_HTTP_HEADER_LINE_BYTES/);
   assert.match(dashboard, /fn os_random_hex\(/);
   assert.match(dashboard, /getrandom::getrandom/);
-  assert.match(dashboard, /mcpace-fallback-/);
+  assert.match(dashboard, /failed to generate cryptographically secure MCP HTTP session id/);
+  assert.doesNotMatch(dashboard, /mcpace-fallback-/);
   assert.match(dashboard, /struct McpHttpSessionStore/);
   assert.match(dashboard, /create_or_replace\(/);
   assert.match(dashboard, /touch_from_request\(/);

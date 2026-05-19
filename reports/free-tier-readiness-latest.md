@@ -1,6 +1,6 @@
 # MCPace free-tier/local-first readiness
 
-Project: `mcpace` v`0.5.9`
+Project: `mcpace` v`0.6.5`
 Status: `ready`
 Paid GitHub required: `no`
 
@@ -9,7 +9,7 @@ Paid GitHub required: `no`
 | local-first-package-scripts | pass | 9 local/free-tier scripts present. |
 | local-first-docs | pass | Local-first, no-paid-GitHub, and release decision docs are present. |
 | readme-local-first | pass | README explains local source proof and paid GitHub is not required. |
-| github-workflows-optional | pass | 6 workflows present; local scripts remain source of truth. |
+| github-workflows-optional | pass | 7 workflows present; local scripts remain source of truth. |
 | no-long-lived-npm-token-required | pass | No required NPM_TOKEN workflow dependency detected. |
 | trusted-publishing-shape | pass | OIDC/trusted-publishing shape is present or documented. |
 | local-proof-reports-present | pass | 4 local/free-tier reports present. |

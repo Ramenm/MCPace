@@ -1,0 +1,118 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v2",
+  "mode": "live-download-probe",
+  "generatedAt": "2026-05-17T12:05:04.094Z",
+  "workspace": "/tmp/mcpace-live-mcp-probe-baBWyr",
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": true,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "install": {
+    "status": "partial-or-failed",
+    "packages": [
+      "@ui5/mcp-server@0.2.11"
+    ],
+    "byKind": {
+      "npm": {
+        "kind": "npm",
+        "ok": false,
+        "packages": [
+          "@ui5/mcp-server@0.2.11"
+        ],
+        "byPackage": {
+          "npm:@ui5/mcp-server@0.2.11": {
+            "ok": false,
+            "skipped": true,
+            "spec": "@ui5/mcp-server@0.2.11",
+            "error": "large project-devtools dependency tree; kept as policy canary while default live probe stays fast and deterministic"
+          }
+        },
+        "ignoreScripts": true
+      }
+    },
+    "byPackage": {
+      "npm:@ui5/mcp-server@0.2.11": {
+        "ok": false,
+        "skipped": true,
+        "spec": "@ui5/mcp-server@0.2.11",
+        "error": "large project-devtools dependency tree; kept as policy canary while default live probe stays fast and deterministic"
+      }
+    }
+  },
+  "summary": {
+    "total": 1,
+    "ok": 0,
+    "failed": 0,
+    "skipped": 1,
+    "totalTools": 0,
+    "policyMismatches": [],
+    "byStatus": {
+      "skipped-by-policy": 1
+    },
+    "byKind": {
+      "npm": 1
+    },
+    "byPolicy": {
+      "project-devtools-single-writer-review": 1
+    }
+  },
+  "results": [
+    {
+      "id": "ui5",
+      "package": "@ui5/mcp-server",
+      "version": "0.2.11",
+      "kind": "npm",
+      "status": "skipped-by-policy",
+      "elapsedMs": 0,
+      "init": null,
+      "toolCount": 0,
+      "tools": [],
+      "riskSignals": [
+        "install-blocked"
+      ],
+      "suggestedPolicy": "project-devtools-single-writer-review",
+      "expectedPolicy": "project-devtools-single-writer-review",
+      "expectedMatchesSuggested": true,
+      "errors": [
+        {
+          "phase": "install",
+          "error": "large project-devtools dependency tree; kept as policy canary while default live probe stays fast and deterministic"
+        }
+      ],
+      "stderrSample": "",
+      "stdoutSample": ""
+    }
+  ],
+  "notes": [
+    "Only initialize, notifications/initialized, and tools/list were sent.",
+    "No user API keys or user home directory were passed to runtime processes.",
+    "npm install uses --ignore-scripts, --no-audit, --no-fund, and --omit=dev.",
+    "PyPI installs happen in a disposable venv; runtime processes receive a stripped environment.",
+    "Runtime network namespace isolation uses unshare -Urn when this host allows it; otherwise the probe falls back to stripped env + timeout only.",
+    "This is a smoke probe. It is not a source security audit and it does not prove destructive tool behavior is safe."
+  ],
+  "safety": {
+    "executesThirdPartyPackages": true,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer"
+  },
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 217,
+  "status": "blocked"
+}

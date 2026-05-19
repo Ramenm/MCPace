@@ -1,9 +1,9 @@
 {
   "schema": "mcpace.productPractice.v1",
-  "generatedAt": "2026-05-04T13:22:38.659Z",
+  "generatedAt": "2026-05-19T13:15:03.104Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "ready-for-release-candidate-review",
   "canClaim": {
@@ -23,7 +23,7 @@
     {
       "id": "node-syntax",
       "status": "pass",
-      "evidence": "99/99 JS/MJS files checked",
+      "evidence": "162/162 JS/MJS files checked",
       "nextAction": "Run npm run lint:npm."
     },
     {
@@ -47,7 +47,7 @@
     {
       "id": "published-binary-install",
       "status": "pass",
-      "evidence": "reports/vendored-binary-win32-x64-msvc.json: pass",
+      "evidence": "reports/vendored-binary-latest.json: pass",
       "nextAction": "Run npm run verify:vendored-binary after staging a native binary/platform package before claiming published install readiness."
     }
   ],
@@ -56,46 +56,46 @@
       "path": "reports/rust-quality-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T13:22:13.926Z",
-      "ageMs": 24733,
+      "generatedAt": "2026-05-19T12:41:21.601Z",
+      "ageMs": 2021502,
       "maxAgeMs": 21600000,
-      "evidence": "reports/rust-quality-latest.json fresh (0m old, max 6h old)"
+      "evidence": "reports/rust-quality-latest.json fresh (34m old, max 6h old)"
     },
     "bootHarness": {
       "path": "reports/boot-harness-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T12:15:10.311Z",
-      "ageMs": 4048348,
+      "generatedAt": "2026-05-19T12:41:39.816Z",
+      "ageMs": 2003287,
       "maxAgeMs": 21600000,
-      "evidence": "reports/boot-harness-latest.json fresh (67m old, max 6h old)"
+      "evidence": "reports/boot-harness-latest.json fresh (33m old, max 6h old)"
     },
     "runtimeTrace": {
       "path": "reports/runtime-trace-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T13:22:15.068Z",
-      "ageMs": 23591,
+      "generatedAt": "2026-05-19T12:41:21.995Z",
+      "ageMs": 2021108,
       "maxAgeMs": 21600000,
-      "evidence": "reports/runtime-trace-latest.json fresh (0m old, max 6h old)"
+      "evidence": "reports/runtime-trace-latest.json fresh (34m old, max 6h old)"
     },
     "installReadiness": {
       "path": "reports/install-readiness-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T13:22:28.493Z",
-      "ageMs": 10166,
+      "generatedAt": "2026-05-19T13:14:46.683Z",
+      "ageMs": 16420,
       "maxAgeMs": 21600000,
       "evidence": "reports/install-readiness-latest.json fresh (0m old, max 6h old)"
     },
     "vendoredBinary": {
-      "path": "reports/vendored-binary-win32-x64-msvc.json",
+      "path": "reports/vendored-binary-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-04T12:53:15.312Z",
-      "ageMs": 1763347,
+      "generatedAt": "2026-05-19T12:41:54.390Z",
+      "ageMs": 1988713,
       "maxAgeMs": 21600000,
-      "evidence": "reports/vendored-binary-win32-x64-msvc.json fresh (29m old, max 6h old)"
+      "evidence": "reports/vendored-binary-latest.json fresh (33m old, max 6h old)"
     }
   },
   "wrongPracticeRisks": [],

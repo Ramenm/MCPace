@@ -459,7 +459,7 @@ fn write_autostart_script(config: &ServiceConfig) -> Result<(), String> {
         "Option Explicit\r\nDim shell\r\nSet shell = CreateObject(\"WScript.Shell\")\r\nshell.Run \"{}\", 0, False\r\n",
         escape_vbscript_string(&command_line)
     );
-    fs::write(&script_path, script)
+    runtimepaths::write_text_atomic(&script_path, &script)
         .map_err(|error| format!("failed to write {}: {}", script_path.display(), error))
 }
 

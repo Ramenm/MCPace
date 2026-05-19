@@ -213,7 +213,7 @@ npm install -g @mcpace/cli
 mcpace version
 mcpace doctor --json
 mcpace setup --json --host 127.0.0.1 --skip-client-install
-mcpace server presets --json
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run --json
 mcpace server install filesystem --env-var NPM_CONFIG_REGISTRY --env-var NPM_CONFIG_USERCONFIG
 mcpace server test filesystem --refresh --timeout-ms 30000 --json
 ```

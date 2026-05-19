@@ -2,6 +2,7 @@ use super::paths::resolve_under_root;
 use super::{default_mcp_server_fragment_path, normalize_server_name};
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::runtimepaths;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
@@ -171,7 +172,7 @@ pub fn import_mcp_server_entries(
             }
             let mut serialized = target_value.to_pretty_string();
             serialized.push('\n');
-            std::fs::write(target_path, serialized).map_err(|error| {
+            runtimepaths::write_text_atomic(target_path, &serialized).map_err(|error| {
                 format!(
                     "failed to write MCP settings source '{}': {}",
                     target_path.display(),

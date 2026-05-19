@@ -1,0 +1,83 @@
+{
+  "schema": "mcpace.playwrightDashboardE2E.v2",
+  "status": "pass",
+  "generatedAt": "2026-05-19T12:25:13.919Z",
+  "project": "mcpace",
+  "version": "0.6.5",
+  "tool": {
+    "package": "@playwright/test@1.60.0",
+    "chromium": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "command": "temporary npm install @playwright/test@1.60.0 && playwright test --config tests/e2e/playwright.config.mjs --reporter list"
+  },
+  "summary": {
+    "elapsedMs": 12704.79,
+    "installElapsedMs": 1023.15,
+    "exitCode": 0,
+    "reason": null,
+    "stdoutTail": "\nRunning 5 tests using 2 workers\n\n  ok 1 tests\\e2e\\dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-01 (3.0s)\n  ok 2 tests\\e2e\\dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-02 (4.1s)\n  ok 3 tests\\e2e\\dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-03 (1.7s)\n  ok 4 tests\\e2e\\dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-04 (1.7s)\n  ok 5 tests\\e2e\\dashboard.playwright.spec.mjs:139:1 › dashboard stays usable across real Chromium tabs, content reloads, slow APIs, and partial failures (5.2s)\n\n  5 passed (11.1s)\n",
+    "stderrTail": "",
+    "parallelState": {
+      "clientCount": 4,
+      "workerCount": 2,
+      "workerIndexes": [
+        0,
+        1
+      ],
+      "clients": [
+        "client-01",
+        "client-02",
+        "client-03",
+        "client-04"
+      ],
+      "conflicts": [],
+      "maxDurationMs": 1004
+    }
+  },
+  "checks": [
+    {
+      "id": "chromium-executable-found",
+      "ok": true,
+      "evidence": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
+    },
+    {
+      "id": "playwright-package-available-in-temp-prefix",
+      "ok": true,
+      "evidence": "@playwright/test@1.60.0"
+    },
+    {
+      "id": "real-playwright-invoked",
+      "ok": true,
+      "evidence": "Playwright CLI output observed"
+    },
+    {
+      "id": "multiple-tabs-and-network-degradation-covered",
+      "ok": true,
+      "evidence": "tests/e2e/dashboard.playwright.spec.mjs"
+    },
+    {
+      "id": "multi-worker-parallel-configured",
+      "ok": true,
+      "evidence": "tests/e2e/playwright.config.mjs uses configurable workers and fullyParallel"
+    },
+    {
+      "id": "parallel-client-session-spec-covered",
+      "ok": true,
+      "evidence": "tests/e2e/dashboard.parallel.playwright.spec.mjs"
+    },
+    {
+      "id": "parallel-client-sessions-isolated-at-runtime",
+      "ok": true,
+      "evidence": "4 clients across 2 workers; conflicts=0"
+    },
+    {
+      "id": "console-errors-fail-test",
+      "ok": true,
+      "evidence": "browser console errors are captured"
+    },
+    {
+      "id": "playwright-execution-pass",
+      "ok": true,
+      "evidence": "elapsed 12705ms"
+    }
+  ]
+}

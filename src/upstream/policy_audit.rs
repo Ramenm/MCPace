@@ -145,6 +145,7 @@ fn classify_tool_advisory(tool: &JsonValue) -> AdvisoryClassification {
     if let Some(name) = json_helpers::string_at_path(tool, &["name"]) {
         add_name_based_advisory_signals(name, &mut risk_classes, &mut signals);
     }
+    add_metadata_based_advisory_signals(tool, &mut risk_classes, &mut signals);
 
     AdvisoryClassification {
         risk_classes,
@@ -160,6 +161,59 @@ fn add_advisory_signal(
 ) {
     risk_classes.insert(risk_class.to_string());
     signals.push(signal.to_string());
+}
+
+fn add_metadata_based_advisory_signals(
+    tool: &JsonValue,
+    risk_classes: &mut BTreeSet<String>,
+    signals: &mut Vec<String>,
+) {
+    let mut metadata = String::new();
+    if let Some(value) = json_helpers::string_at_path(tool, &["title"]) {
+        metadata.push_str(value);
+        metadata.push('\n');
+    }
+    if let Some(value) = json_helpers::string_at_path(tool, &["description"]) {
+        metadata.push_str(value);
+        metadata.push('\n');
+    }
+    let lower = metadata.to_ascii_lowercase();
+    if lower.trim().is_empty() {
+        return;
+    }
+
+    for pattern in [
+        "ignore previous",
+        "ignore all previous",
+        "ignore the user",
+        "system prompt",
+        "developer message",
+        "hidden instruction",
+        "do not tell the user",
+        "don't tell the user",
+        "secretly",
+        "exfiltrate",
+        "send secrets",
+        "steal",
+        "api key",
+        "apikey",
+        "credential",
+        "credentials",
+        "private key",
+        "ssh key",
+        "access token",
+        "refresh token",
+        "password",
+    ] {
+        if lower.contains(pattern) {
+            add_advisory_signal(
+                risk_classes,
+                signals,
+                "metadata-injection",
+                &format!("metadata-pattern:{}", pattern),
+            );
+        }
+    }
 }
 
 fn add_name_based_advisory_signals(
@@ -304,6 +358,7 @@ fn risk_class_recommends_policy(risk_class: &str) -> bool {
             | "desktop-control"
             | "desktop-observation"
             | "system-control"
+            | "metadata-injection"
     )
 }
 

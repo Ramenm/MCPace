@@ -27,7 +27,7 @@ pub(crate) struct ParsedArgs {
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace server <list|capabilities|sources|presets|starter|candidates|add|install|import|remove|enable|disable|test> [--json] [--root <path>] [--name <server>]");
+    let _ = writeln!(stdout, "Usage: mcpace server <list|capabilities|sources|candidates|add|install|import|remove|enable|disable|test> [--json] [--root <path>] [--name <server>]");
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  mcpace server list [--json] [--root <path>]");
@@ -40,14 +40,14 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "  mcpace server candidates [--json] [--root <path>]"
     );
-    let _ = writeln!(stdout, "  mcpace server presets [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace server install <preset> [--as <server-name>] [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json]");
-    let _ = writeln!(stdout, "  mcpace server starter [--path <path>...] [--settings <path>] [--dry-run] [--force] [--json]");
-    let _ = writeln!(stdout, "  mcpace server add <name> --command <cmd> [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json]");
-    let _ = writeln!(stdout, "  mcpace server add <name> --url <url> [--type http|streamable-http] [--header KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json]");
+    let _ = writeln!(stdout, "  mcpace server install <npm-package|npm:package|pypi:package|oci:image|url> [--as <server-name>] [--type npm|pypi|oci|streamable-http] [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
+    let _ = writeln!(stdout, "  mcpace server install --url <url> [--as <server-name>] [--header KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
+    let _ = writeln!(stdout, "  mcpace server install <name> --command <cmd> [--arg <arg>...] [--path <path>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
+    let _ = writeln!(stdout, "  mcpace server add <name> --command <cmd> [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
+    let _ = writeln!(stdout, "  mcpace server add <name> --url <url> [--type http|streamable-http] [--header KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
     let _ = writeln!(
         stdout,
-        "  mcpace server import --from <mcp-settings.json> [--settings <target.json>] [--dry-run] [--force] [--json]"
+        "  mcpace server import --from <mcp-settings.json> [--settings <target.json>] [--dry-run] [--force] [--disabled] [--json]"
     );
     let _ = writeln!(
         stdout,
@@ -66,7 +66,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         "  mcpace server test [<name>|--name <server>] [--timeout-ms <ms>] [--refresh] [--json] [--root <path>]"
     );
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "server presets lists editable useful-MCP starter presets, server install/starter writes useful MCP fragments without memorizing package args, server add writes custom fragments under mcp_settings.d/ by default, server import copies existing mcpServers blocks into MCPace fragments, server enable/disable flips the entry without deleting it, server remove deletes the entry from the source where it was found, and server test performs live stdio initialize/tools-list smoke probes without editing JSON by hand.");
+    let _ = writeln!(stdout, "server install derives a reviewable MCP settings fragment from a package spec, URL, or command; server add writes fully custom fragments under mcp_settings.d/ by default; server import copies existing mcpServers blocks into MCPace fragments; server enable/disable flips the entry without deleting it; server remove deletes the entry from the source where it was found; and server test performs live stdio initialize/tools-list smoke probes without editing JSON by hand.");
 }
 
 pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
@@ -76,8 +76,8 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
     while index < args.len() {
         let token = normalize_flag(&args[index]);
         match token.as_str() {
-            "list" | "capabilities" | "sources" | "presets" | "starter" | "candidates" | "add"
-            | "install" | "import" | "remove" | "enable" | "disable" | "test" => {
+            "list" | "capabilities" | "sources" | "candidates" | "add" | "install" | "import"
+            | "remove" | "enable" | "disable" | "test" => {
                 if parsed.action.is_some() {
                     parsed.error = Some("server accepts only one action".to_string());
                     return parsed;
@@ -116,8 +116,7 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--path" | "-path" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("server install/starter requires a path after --path".to_string());
+                    parsed.error = Some("server install requires a path after --path".to_string());
                     return parsed;
                 };
                 parsed.paths.push(value.to_string());

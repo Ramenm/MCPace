@@ -211,3 +211,7 @@ does not replace host benchmarking. The next runtime proof should measure:
 - The dashboard overview cache is process-local. A future multi-process relay
   should either keep it per worker with tiny TTLs or move aggregation into a
   shared diagnostics service.
+
+## Source-level performance smoke
+
+Run `npm run verify:performance` to exercise the lightweight performance smoke suite. It starts a local mock endpoint for `scripts/benchmark-runtime.mjs`, runs synthetic tool-scale/mixed-upstream/upstream-failsafe pressure, and writes `reports/performance-smoke-latest.json` plus Markdown. Treat it as a regression harness, not as final host performance proof.

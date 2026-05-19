@@ -1,0 +1,232 @@
+{
+  "schema": "mcpace.mcpOverheadStress.v1",
+  "generatedAt": "2026-05-19T12:36:06.785Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "environment": {
+    "node": "v24.15.0",
+    "platform": "win32",
+    "arch": "x64",
+    "cpuCount": 16,
+    "availableParallelism": 16
+  },
+  "scenario": {
+    "servers": 100,
+    "tools": 100000,
+    "operations": 25000,
+    "packageProfiles": 1000,
+    "searchLimit": 25,
+    "projectionBudget": 64,
+    "pageSize": 128,
+    "memoryLimitMiB": 256,
+    "seed": 1835233377
+  },
+  "safety": {
+    "executesThirdPartyPackages": false,
+    "startsMcpServers": false,
+    "callsMcpTools": false,
+    "packageInstallScriptsAllowed": false,
+    "destructiveToolCallsAllowed": false,
+    "userSecretsPassedToRuntime": false,
+    "defaultServerEnablement": false
+  },
+  "optimizations": {
+    "boundedTopKSearch": true,
+    "boundedProjection": true,
+    "knownToolSetValidation": true,
+    "lockDomainScheduling": true,
+    "disabledByDefaultForUnknownPackages": true,
+    "metadataOnlyClassification": true
+  },
+  "toolCatalog": {
+    "elapsedMs": 250.4,
+    "heapDeltaMiB": 7.548,
+    "searchSpaceToolCount": 100000,
+    "knownToolKeyCount": 100000,
+    "matchCount": 73000,
+    "returnedSearchCount": 25,
+    "retainedSearchCandidates": 25,
+    "readOnlyCount": 73000,
+    "mutatingCount": 21000,
+    "brokerOnlyCount": 99488,
+    "projectedCandidateCount": 512,
+    "projectedToolCount": 64,
+    "firstPageCount": 72,
+    "topSearchSample": [
+      {
+        "serverId": "srv-0006-remote-http-readonly",
+        "name": "lookup_docs_0",
+        "qualifiedName": "srv-0006-remote-http-readonly.lookup_docs_0",
+        "readOnly": true,
+        "score": 132,
+        "call": {
+          "tool": "upstream_call",
+          "arguments": {
+            "server": "srv-0006-remote-http-readonly",
+            "tool": "lookup_docs_0"
+          }
+        }
+      },
+      {
+        "serverId": "srv-0006-remote-http-readonly",
+        "name": "lookup_docs_1",
+        "qualifiedName": "srv-0006-remote-http-readonly.lookup_docs_1",
+        "readOnly": true,
+        "score": 132,
+        "call": {
+          "tool": "upstream_call",
+          "arguments": {
+            "server": "srv-0006-remote-http-readonly",
+            "tool": "lookup_docs_1"
+          }
+        }
+      },
+      {
+        "serverId": "srv-0006-remote-http-readonly",
+        "name": "lookup_docs_10",
+        "qualifiedName": "srv-0006-remote-http-readonly.lookup_docs_10",
+        "readOnly": true,
+        "score": 132,
+        "call": {
+          "tool": "upstream_call",
+          "arguments": {
+            "server": "srv-0006-remote-http-readonly",
+            "tool": "lookup_docs_10"
+          }
+        }
+      },
+      {
+        "serverId": "srv-0006-remote-http-readonly",
+        "name": "lookup_docs_100",
+        "qualifiedName": "srv-0006-remote-http-readonly.lookup_docs_100",
+        "readOnly": true,
+        "score": 132,
+        "call": {
+          "tool": "upstream_call",
+          "arguments": {
+            "server": "srv-0006-remote-http-readonly",
+            "tool": "lookup_docs_100"
+          }
+        }
+      },
+      {
+        "serverId": "srv-0006-remote-http-readonly",
+        "name": "lookup_docs_101",
+        "qualifiedName": "srv-0006-remote-http-readonly.lookup_docs_101",
+        "readOnly": true,
+        "score": 132,
+        "call": {
+          "tool": "upstream_call",
+          "arguments": {
+            "server": "srv-0006-remote-http-readonly",
+            "tool": "lookup_docs_101"
+          }
+        }
+      }
+    ]
+  },
+  "lookup": {
+    "lookupCount": 16384,
+    "elapsedMs": 1.83,
+    "knownHits": 8192,
+    "unknownHits": 8192,
+    "unknownForwarded": 0
+  },
+  "scheduler": {
+    "elapsedMs": 118.32,
+    "operations": 25000,
+    "ticks": 3759,
+    "started": 14393,
+    "finished": 14393,
+    "blockedDisabled": 5187,
+    "blockedUnknownTool": 1956,
+    "blockedReviewGate": 3464,
+    "lockDeferrals": 17649,
+    "maxInFlightDeferrals": 0,
+    "wakeups": 17649,
+    "maxActive": 40,
+    "activeAtEnd": 0,
+    "waitingAtEnd": 0,
+    "violations": []
+  },
+  "profileClassification": {
+    "elapsedMs": 6.52,
+    "profiles": 1000,
+    "reviewRequired": 714,
+    "executeDefault": 0,
+    "signalCounts": {
+      "local-utility": 242,
+      "memory-or-context": 442,
+      "network-or-external-api": 391,
+      "cloud-admin": 251,
+      "browser-or-desktop": 223,
+      "database": 229,
+      "git-repository": 226,
+      "network-fetch": 228,
+      "filesystem": 213,
+      "credential-api": 234,
+      "shell-or-process": 221
+    }
+  },
+  "memory": {
+    "heapStartMiB": 5.433,
+    "heapEndMiB": 36.983,
+    "heapDeltaMiB": 31.55
+  },
+  "elapsedMs": 377.95,
+  "checks": [
+    {
+      "id": "no-random-mcp-server-start",
+      "ok": true,
+      "detail": "Stress harness never starts third-party MCP packages and never sends tools/call."
+    },
+    {
+      "id": "catalog-volume",
+      "ok": true,
+      "detail": "100000/100000 synthetic tools indexed."
+    },
+    {
+      "id": "tool-search-top-k-bounded",
+      "ok": true,
+      "detail": "25 retained candidates."
+    },
+    {
+      "id": "projection-bounded",
+      "ok": true,
+      "detail": "projected=64; firstPage=72."
+    },
+    {
+      "id": "known-tool-lookup-fails-closed",
+      "ok": true,
+      "detail": "unknownHits=8192; unknownForwarded=0."
+    },
+    {
+      "id": "scheduler-drains",
+      "ok": true,
+      "detail": "ticks=3759; violations=0."
+    },
+    {
+      "id": "scheduler-blocks-disabled-unknown-review",
+      "ok": true,
+      "detail": "disabled=5187; unknown=1956; review=3464."
+    },
+    {
+      "id": "scheduler-starts-safe-work",
+      "ok": true,
+      "detail": "started=14393; finished=14393."
+    },
+    {
+      "id": "metadata-classification-disabled-by-default",
+      "ok": true,
+      "detail": "1000 metadata profiles classified; executeDefault=0."
+    },
+    {
+      "id": "heap-budget",
+      "ok": true,
+      "detail": "heapDeltaMiB=31.55; budget=256."
+    }
+  ],
+  "status": "pass"
+}

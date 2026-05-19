@@ -81,13 +81,7 @@ pub(super) fn restore_client_install_backup(
                 )
             })?;
         }
-        fs::write(&config_path, contents).map_err(|error| {
-            format!(
-                "failed to restore client config '{}': {}",
-                config_path.display(),
-                error
-            )
-        })?;
+        runtimepaths::write_text_atomic(&config_path, &contents)?;
         wrote_config_file = true;
     } else if config_path.is_file() {
         fs::remove_file(&config_path).map_err(|error| {

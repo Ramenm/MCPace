@@ -1,13 +1,20 @@
 use super::HttpRequest;
 
 pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), String> {
-    if let Some((_, host)) = request.headers.iter().find(|(key, _)| key == "host") {
-        if !is_allowed_local_host(host.trim()) {
-            return Err(format!(
-                "host '{}' is not allowed for local MCPace serve mode",
-                host
-            ));
-        }
+    let mut hosts = request.headers.iter().filter(|(key, _)| key == "host");
+    let Some((_, host)) = hosts.next() else {
+        return Err("missing required Host header for local MCPace serve mode".to_string());
+    };
+    if hosts.next().is_some() {
+        return Err(
+            "multiple Host headers are not allowed for local MCPace serve mode".to_string(),
+        );
+    }
+    if !is_allowed_local_host(host.trim()) {
+        return Err(format!(
+            "host '{}' is not allowed for local MCPace serve mode",
+            host
+        ));
     }
 
     if let Some((_, origin)) = request.headers.iter().find(|(key, _)| key == "origin") {
@@ -97,6 +104,22 @@ pub(super) fn accepts(request: &HttpRequest, media_type: &str) -> bool {
 
 pub(super) fn accepts_streamable_http_post(request: &HttpRequest) -> bool {
     accepts(request, "application/json") && accepts(request, "text/event-stream")
+}
+
+pub(super) fn content_type_is(request: &HttpRequest, media_type: &str) -> bool {
+    request
+        .headers
+        .iter()
+        .filter(|(key, _)| key == "content-type")
+        .any(|(_, value)| {
+            value
+                .trim()
+                .split(';')
+                .next()
+                .unwrap_or_default()
+                .trim()
+                .eq_ignore_ascii_case(media_type)
+        })
 }
 
 pub(super) fn request_header_string(request: Option<&HttpRequest>, key: &str) -> Option<String> {

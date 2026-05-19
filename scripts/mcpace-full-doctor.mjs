@@ -46,6 +46,7 @@ function parseArgs(argv) {
     bin: null,
     config: [],
     serverTimeoutMs: 30_000,
+    help: false,
   };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -58,8 +59,8 @@ function parseArgs(argv) {
     else if (arg === '--markdown') out.markdown = path.resolve(argv[++i] ?? '');
     else if (arg === '--server-timeout-ms') out.serverTimeoutMs = Number(argv[++i] ?? out.serverTimeoutMs);
     else if (arg === '--help' || arg === '-h') {
-      printHelp();
-      process.exit(0);
+      out.help = true;
+      return out;
     } else {
       throw new Error(`Unknown argument: ${arg}`);
     }
@@ -446,6 +447,10 @@ function summarize(checks, strict) {
 
 function main() {
   const args = parseArgs(process.argv.slice(2));
+  if (args.help) {
+    printHelp();
+    return;
+  }
   const state = checkFactory();
   inspectPlatform(state);
   inspectTooling(state);

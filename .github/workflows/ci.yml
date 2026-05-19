@@ -1,5 +1,9 @@
 name: ci
 
+# Local CI is the default cost-control gate for this repository:
+#   npm run ci:local
+# GitHub-hosted runners are opt-in only so private-repo pushes/PRs do not
+# consume paid Actions minutes or fail when account billing is disabled.
 on:
   workflow_dispatch:
     inputs:
@@ -8,17 +12,6 @@ on:
         required: false
         default: false
         type: boolean
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-      - labeled
-  push:
-    branches:
-      - main
-      - master
 
 permissions:
   contents: read

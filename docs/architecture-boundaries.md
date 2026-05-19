@@ -62,7 +62,7 @@ MCPace keeps protocol handling, command orchestration, and runtime state changes
 - Keep command modules usable directly from the CLI before exposing them through MCP.
 - Keep static built-in client target defaults in `src/client_catalog/builtin.rs`; do not mix generated/default catalog data with registry merge behavior.
 - Keep stdio MCP argv parsing in `src/mcp_server/args.rs`; do not mix process CLI parsing with JSON-RPC request handling.
-- Keep useful-MCP preset output in `src/server/preset_render.rs`; do not mix preset catalog rendering back into the generic configured-server renderer.
+- Keep useful-MCP auto-install planning in `src/mcp_autoinstall.rs` and the command wrapper in `src/server/install.rs`; do not mix package discovery or profiling into the generic configured-server renderer.
 
 ## Machine-checked boundaries
 
@@ -85,3 +85,12 @@ The adapter layer is now split into smaller behavior boundaries:
 - `src/adapter/proxy_uri.rs` owns encoded MCPace proxy URIs for upstream resources and templates.
 
 Do not move client-specific branching into this layer unless it is derived from MCP `initialize` capabilities or explicit config. MCPace should stay a broker over a merged MCP settings registry, not a hardcoded map of clients or upstream server catalogs.
+
+## Runtime state and cache lifecycle
+
+The lifecycle contract for durable config, recoverable state, disposable cache, process-local sessions, restart behavior, and reinstall behavior is maintained in [`runtime-state-cache-lifecycle.md`](runtime-state-cache-lifecycle.md). Changes to critical runtime modules must preserve that contract or update it with matching tests.
+
+
+## Lifecycle hardening
+
+See `runtime-state-cache-lifecycle.md` for storage classes and `system-lifecycle-hardening.md` for the full install-to-uninstall hardening contract.

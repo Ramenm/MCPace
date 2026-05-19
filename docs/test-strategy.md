@@ -22,7 +22,7 @@ Run in this repo today:
 - machine-generated verification report contract checks for `scripts/proof-report.mjs`, including verbose-child-output buffer hardening
 - source/architecture audit for deterministic production-code hazards, unsafe/FFI boundary drift, and boundary violations (`npm run audit:source`)
 - optional built-in Node coverage lane for contract tests: `npm run test:node:coverage`
-- source/npm Node tests run with per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs`; the wrapper now uses bounded auto-parallel jobs by default and keeps mutation-sensitive files in a serial lane for deterministic child-process cleanup
+- source/npm Node tests run with per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs`; the wrapper now uses bounded auto-parallel jobs by default and keeps mutation-sensitive files in one-file serial lanes; each file still runs through the async detached process-group runner so nested child processes cannot deadlock the parent test harness
 - Node syntax lint (`npm run lint:npm` / `npm run lint:node`) auto-discovers JS/MJS sources and now checks files with bounded auto-parallel `node --check` workers by default; set `MCPACE_NODE_SYNTAX_JOBS` or pass `--jobs 1` when deterministic serial diagnostics are needed
 
 ## 2. Build checks
@@ -167,3 +167,5 @@ Additional source-quality failure classes now guarded:
 
 - production `panic!`, `todo!`, `unimplemented!`, or explicit architecture-boundary drift slips into source proof;
 - unsafe Rust or FFI declarations appear outside the reviewed process-detach boundary;
+
+- `npm run verify:publish-decision` writes a source-vs-native publication decision without failing local developer loops; use `npm run verify:publish-decision:release` when a release lane must fail closed until native publication gates are green.

@@ -1,0 +1,96 @@
+{
+  "schema": "mcpace.toolMessageIntegrityAudit.v1",
+  "generatedAt": "2026-05-19T13:14:31.237Z",
+  "status": "pass",
+  "summary": {
+    "checks": 17,
+    "failures": 0
+  },
+  "checks": [
+    {
+      "id": "jsonrpc-envelope-validator-exists",
+      "status": "pass",
+      "detail": "A shared JSON-RPC envelope validator exists instead of ad-hoc per-route checks."
+    },
+    {
+      "id": "jsonrpc-version-required",
+      "status": "pass",
+      "detail": "Requests must declare jsonrpc=\"2.0\" before dispatch."
+    },
+    {
+      "id": "jsonrpc-method-type-required",
+      "status": "pass",
+      "detail": "The method field is type-checked and cannot be empty."
+    },
+    {
+      "id": "jsonrpc-id-type-checked",
+      "status": "pass",
+      "detail": "Request IDs are restricted to JSON-RPC-compatible primitive forms."
+    },
+    {
+      "id": "jsonrpc-params-type-checked",
+      "status": "pass",
+      "detail": "Params are rejected when they are scalar values that cannot represent MCP request payloads."
+    },
+    {
+      "id": "stdio-validates-envelope-before-dispatch",
+      "status": "pass",
+      "detail": "stdio MCP server validates JSON-RPC envelope before matching methods."
+    },
+    {
+      "id": "http-validates-envelope-before-dispatch",
+      "status": "pass",
+      "detail": "Streamable HTTP route validates JSON-RPC envelope before dispatch/header contract handling."
+    },
+    {
+      "id": "top-level-tool-arguments-object-stdio",
+      "status": "pass",
+      "detail": "stdio tools/call rejects non-object params.arguments."
+    },
+    {
+      "id": "top-level-tool-arguments-object-http",
+      "status": "pass",
+      "detail": "HTTP tools/call rejects non-object params.arguments."
+    },
+    {
+      "id": "prompt-arguments-object-http",
+      "status": "pass",
+      "detail": "HTTP prompts/get also rejects scalar arguments instead of forwarding malformed payloads."
+    },
+    {
+      "id": "nested-upstream-call-arguments-object-stdio",
+      "status": "pass",
+      "detail": "Brokered stdio upstream_call requires its nested arguments field to be an object."
+    },
+    {
+      "id": "nested-upstream-call-arguments-object-http",
+      "status": "pass",
+      "detail": "Brokered HTTP upstream_call requires its nested arguments field to be an object."
+    },
+    {
+      "id": "batch-tuple-arguments-object-stdio",
+      "status": "pass",
+      "detail": "Tuple batch calls reject scalar second elements."
+    },
+    {
+      "id": "batch-object-arguments-object-stdio",
+      "status": "pass",
+      "detail": "Object-form batch calls reject scalar arguments."
+    },
+    {
+      "id": "batch-tuple-arguments-object-http",
+      "status": "pass",
+      "detail": "HTTP tuple batch calls reject scalar second elements."
+    },
+    {
+      "id": "batch-object-arguments-object-http",
+      "status": "pass",
+      "detail": "HTTP object-form batch calls reject scalar arguments."
+    },
+    {
+      "id": "message-integrity-script-registered",
+      "status": "pass",
+      "detail": "The message-integrity audit is available as an npm verification command."
+    }
+  ]
+}

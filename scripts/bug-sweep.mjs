@@ -214,7 +214,7 @@ function buildReport() {
   if (!sessionStore.includes('MAX_MCP_HTTP_SESSION_ID_BYTES') || !sessionStore.includes('getrandom::getrandom')) {
     checks.push(block('runtime:session-id-bounds-randomness', 'session store must bound ids and use OS randomness', 'Keep session ids bounded, visible ASCII, and generated from OS randomness when possible.'));
   } else {
-    checks.push(pass('runtime:session-id-bounds-randomness', 'Session ids are bounded and generated from OS randomness with fallback diagnostics.'));
+    checks.push(pass('runtime:session-id-bounds-randomness', 'Session ids are bounded and generated from OS randomness without insecure fallback.'));
   }
 
   const reports = scanGeneratedReports();

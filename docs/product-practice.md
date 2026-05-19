@@ -5,7 +5,7 @@ The project should not grow features faster than proof.
 Current allowed claims:
 
 - Source tree and thin npm launcher can be evaluated locally.
-- Useful MCP setup is preset-first and data-driven.
+- Useful MCP setup is automatic package/URL/command based and evidence-driven.
 - Local stdio upstream MCP is the primary callable upstream path.
 - Local runtime trace evidence can be accepted when `reports/runtime-trace-latest.json`
   has status `pass`; the stronger runtime beta claim also requires fresh Rust

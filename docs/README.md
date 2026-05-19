@@ -1,8 +1,8 @@
 # MCPace docs
 
-This packaged copy tracks repo version `0.5.9`.
+This packaged copy tracks repo version `0.6.5`.
 
-MCPace is a Rust-first local MCP hub. It ships with no upstream MCP servers enabled by default and no Rust-hardcoded recommended upstream catalog; useful presets live in editable data files. Use `mcpace connect` as the read-only top-down guide. Configure user-supplied stdio MCP servers with `mcpace server presets`, `mcpace server starter`, `mcpace server install`, `mcpace server import`, `mcpace server add`, `mcpace server test`, `mcpace server enable` / `mcpace server disable`, and `mcpace server remove`, root `mcp_settings.json`, `mcp_settings.d/*.json`, `mcpSettings.includePaths` / `mcpSettings.includeDirs`, or `MCPACE_MCP_SETTINGS` / `MCPACE_MCP_SETTINGS_DIRS`; extend useful presets with `mcpPresets.includePaths` or `MCPACE_MCP_PRESETS`; add `mcpace.config.json` server policy only when you need extra routing, platform, or tool-risk metadata.
+MCPace is a Rust-first local MCP hub. It ships with no upstream MCP servers enabled by default and no Rust-hardcoded recommended upstream catalog. Use `mcpace connect` as the read-only top-down guide. Configure user-supplied MCP servers with `mcpace server install`, `mcpace server import`, `mcpace server add`, `mcpace server test`, `mcpace server enable` / `mcpace server disable`, and `mcpace server remove`, root `mcp_settings.json`, `mcp_settings.d/*.json`, `mcpSettings.includePaths` / `mcpSettings.includeDirs`, or `MCPACE_MCP_SETTINGS` / `MCPACE_MCP_SETTINGS_DIRS`; add `mcpace.config.json` server policy only when you need extra routing, platform, or tool-risk metadata.
 
 Start with:
 
@@ -19,7 +19,7 @@ Start with:
 - `test-strategy.md` and `verification-matrix.md` for checks.
 - `adr/0004-source-only-mcp-env-isolation.md` for the source-only MCP env isolation decision.
 - `adr/0005-ci-cache-and-upstream-diagnostic-redaction.md` for Cargo CI caching and stderr diagnostic redaction.
-- `mcp-http-api-spec.md`, `universal-mcp-connectivity.md`, `security-review-20260501.md`, and `adr/0006`/`0008`/`0009`/`0015`/`0017`/`0018` for the current `/mcp` hardening, configurable ingress, source-registry contract, client-first connect guide, preset-first useful MCP install flow, and `adr/0019-install-readiness-and-boot-harness.md` for the install/readiness harness decision.
+- `mcp-http-api-spec.md`, `universal-mcp-connectivity.md`, `security-review-20260501.md`, and `adr/0006`/`0008`/`0009`/`0015` for the current `/mcp` hardening, configurable ingress, source-registry contract, and client-first connect guide; ADR 0017/0018 are superseded by automatic useful MCP install; `adr/0019-install-readiness-and-boot-harness.md` covers the install/readiness harness decision.
 
 Run this first when wiring a client:
 
@@ -29,7 +29,7 @@ mcpace connect cursor-local --server filesystem
 ```
 
 
-`product-practice.md` describes what not to claim before Rust/runtime proof.
+`product-practice.md` describes what not to claim before Rust/runtime proof. `mcp-overhead-and-optimization.md` is the canonical overhead, optimization, and safety guardrail for the automatic MCP server path; `mcp-overhead-optimization.md` is the focused pressure-audit note. `performance-verification.md`, `multi-client-runtime.md`, `adaptive-mcp-orchestration.md`, and `adaptive-edge-case-coverage.md` define the source-level performance smoke pass and the host-specific proof still required before release performance claims.
 
 Install/readiness artifacts now include `reports/boot-harness-latest.json`, `reports/boot-harness-latest.md`, `reports/install-readiness-latest.json`, and `reports/code-inventory-latest.*`. Use these before claiming an install path is ready.
 
@@ -45,6 +45,10 @@ npm run verify:product-practice
 npm run verify:defect-gates
 npm run verify:bug-sweep
 npm run verify:runtime-trace
+npm run verify:performance
+npm run verify:overhead:quick
+npm run verify:dashboard-chaos
+npm run verify:experience
 npm run verify:rust-quality
 cargo fmt --all -- --check
 cargo check --all-targets --locked
@@ -55,9 +59,8 @@ Client-first source-only upstream example. Start with the read-only guide, then 
 
 ```bash
 mcpace connect
-mcpace server presets
-mcpace server starter --path . --dry-run
-mcpace server starter --path .
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
 mcpace server sources --json
 mcpace server test filesystem --refresh --json
 mcpace client export cursor-local --json
@@ -86,3 +89,26 @@ Manual JSON example:
 Stdio upstream children get a cleared environment plus a small process-launch baseline, MCPace runtime variables, and explicit `env` / local `env_vars` values only. This preserves generic MCP server support without forwarding every parent process secret by default.
 Cache/session fingerprints hash explicit env values so plaintext tokens are not embedded in cache keys.
 Upstream stderr included in errors is bounded and sanitized before display so diagnostics remain useful without intentionally echoing obvious credentials.
+- [Runtime state, cache, restart, and reinstall lifecycle](runtime-state-cache-lifecycle.md) - lifecycle contract for config, state, cache, sessions, restart, and reinstall behavior.
+
+- [System lifecycle hardening](system-lifecycle-hardening.md) - end-to-end install/runtime/restart/reinstall/uninstall and release contract.
+
+- [Tool scale and reuse hardening](tool-scale-and-reuse-hardening.md)
+
+- [Mixed upstream topology hardening](mixed-upstream-topologies.md)
+
+- [Upstream fail-safe hardening](upstream-failsafe-hardening.md)
+
+- [Tool exposure and call safety](tool-exposure-and-call-safety.md)
+
+## Packaged source archive
+
+This ZIP is a clean source archive. It intentionally excludes `.git`, `node_modules`, build outputs, caches, generated reports, and stale prebuilt binaries. Build the Rust binary locally before creating npm/platform release artifacts.
+
+- [Performance verification](performance-verification.md) - source-level performance smoke checks and host-specific runtime proof requirements.
+
+- [Developer operating mode](developer-operating-mode.md) - grounded task intake, multi-track analysis, eval governance, cautious high-risk answers, and side-effect boundaries for maintainer/agent work.
+
+- `mcp-mass-package-survey-and-race-audit.md` for mass MCP package and race-condition pressure tests.
+- [MCP overhead and optimization gates](mcp-overhead-and-optimization.md) for launcher overhead, fixture lifecycle overhead, synthetic 100-server/100k-tool pressure, deep decomposition, and anti-duplication rules.
+- [MCP overhead pressure guardrails](mcp-overhead-optimization.md) for the focused profile/fragment/scheduler pressure audit.

@@ -1,9 +1,9 @@
 {
   "schema": "mcpace.bugSweep.v1",
-  "generatedAt": "2026-05-11T12:04:44.322Z",
+  "generatedAt": "2026-05-19T14:16:33.151Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "pass",
   "summary": {
@@ -25,20 +25,20 @@
       {
         "relative": "reports/product-practice-latest.json",
         "status": "ready-for-release-candidate-review",
-        "generatedAt": "2026-05-04T13:22:38.659Z",
-        "version": "0.5.9"
+        "generatedAt": "2026-05-19T13:15:03.104Z",
+        "version": "0.6.5"
       },
       {
         "relative": "reports/runtime-trace-latest.json",
         "status": "pass",
-        "generatedAt": "2026-05-04T13:22:15.068Z",
-        "version": "0.5.9"
+        "generatedAt": "2026-05-19T12:41:21.995Z",
+        "version": "0.6.5"
       },
       {
         "relative": "reports/rust-quality-latest.json",
         "status": "pass",
-        "generatedAt": "2026-05-04T13:22:13.926Z",
-        "version": "0.5.9"
+        "generatedAt": "2026-05-19T12:41:21.601Z",
+        "version": "0.6.5"
       }
     ]
   },
@@ -124,7 +124,7 @@
       "id": "runtime:session-id-bounds-randomness",
       "severity": "info",
       "status": "pass",
-      "evidence": "Session ids are bounded and generated from OS randomness with fallback diagnostics.",
+      "evidence": "Session ids are bounded and generated from OS randomness without insecure fallback.",
       "nextAction": "Keep this invariant covered while changing nearby code."
     },
     {

@@ -1,0 +1,209 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v3",
+  "mode": "live-download-probe",
+  "generatedAt": "2026-05-17T12:43:45.331Z",
+  "workspace": "/tmp/mcpace-live-mcp-probe-oyHf2t",
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": true,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "install": {
+    "status": "pass",
+    "packages": [
+      "tavily-mcp@0.2.19"
+    ],
+    "byKind": {
+      "npm": {
+        "kind": "npm",
+        "ok": true,
+        "packages": [
+          "tavily-mcp@0.2.19"
+        ],
+        "byPackage": {
+          "npm:tavily-mcp@0.2.19": {
+            "ok": true,
+            "code": 0,
+            "spec": "tavily-mcp@0.2.19",
+            "ignoreScripts": true,
+            "error": null
+          }
+        },
+        "ignoreScripts": true
+      }
+    },
+    "byPackage": {
+      "npm:tavily-mcp@0.2.19": {
+        "ok": true,
+        "code": 0,
+        "spec": "tavily-mcp@0.2.19",
+        "ignoreScripts": true,
+        "error": null
+      }
+    }
+  },
+  "summary": {
+    "total": 1,
+    "ok": 1,
+    "failed": 0,
+    "skipped": 0,
+    "allowedNonOk": [],
+    "unexpectedFailures": [],
+    "totalTools": 5,
+    "policyMismatches": [],
+    "byStatus": {
+      "ok": 1
+    },
+    "byKind": {
+      "npm": 1
+    },
+    "byPolicy": {
+      "credential-scoped-review": 1
+    },
+    "serverSideRequestMethods": {}
+  },
+  "results": [
+    {
+      "id": "tavily",
+      "package": "tavily-mcp",
+      "version": "0.2.19",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 704,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "tavily-mcp",
+          "version": "0.2.19"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {}
+        }
+      },
+      "toolCount": 5,
+      "tools": [
+        {
+          "name": "tavily_search",
+          "description": "Search the web for current information on any topic. Use for news, facts, or data beyond your knowledge cutoff. Returns snippets and source URLs.",
+          "inputProps": [
+            "query",
+            "search_depth",
+            "topic",
+            "time_range",
+            "start_date",
+            "end_date",
+            "max_results",
+            "include_images",
+            "include_image_descriptions",
+            "include_raw_content",
+            "include_domains",
+            "exclude_domains",
+            "country",
+            "include_favicon",
+            "exact_match"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "tavily_extract",
+          "description": "Extract content from URLs. Returns raw page content in markdown or text format.",
+          "inputProps": [
+            "urls",
+            "extract_depth",
+            "include_images",
+            "format",
+            "include_favicon",
+            "query"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "tavily_crawl",
+          "description": "Crawl a website starting from a URL. Extracts content from pages with configurable depth and breadth.",
+          "inputProps": [
+            "url",
+            "max_depth",
+            "max_breadth",
+            "limit",
+            "instructions",
+            "select_paths",
+            "select_domains",
+            "allow_external",
+            "extract_depth",
+            "format",
+            "include_favicon"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "tavily_map",
+          "description": "Map a website's structure. Returns a list of URLs found starting from the base URL.",
+          "inputProps": [
+            "url",
+            "max_depth",
+            "max_breadth",
+            "limit",
+            "instructions",
+            "select_paths",
+            "select_domains",
+            "allow_external"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "tavily_research",
+          "description": "Perform comprehensive research on a given topic or question. Use this tool when you need to gather information from multiple sources to answer a question or complete a task. Returns a detailed response based on the research findings. Rate l",
+          "inputProps": [
+            "input",
+            "model"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "network-or-external-api"
+      ],
+      "suggestedPolicy": "credential-scoped-review",
+      "expectedPolicy": "credential-scoped-review",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": [],
+      "errors": [],
+      "stderrSample": "Tavily MCP server running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"tavily-mcp\",\"version\":\"0.2.19\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"tavily_search\",\"description\":\"Search the web for current information on any topic. Use for news, facts, or data beyond your knowledge cutoff. Returns snippets and source URLs.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"Search query\"},\"search_depth\":{\"type\":\"string\",\"enum\":[\"basic\",\"advanced\",\"fast\",\"ultra-fast\"],\"description\":\"The depth of the search. 'basic' for generic results, 'advanced' for more thorough search, 'fast' for optimized low latency with high relevance, 'ultra-fast' for prioritizing latency above all else\",\"default\":\"basic\"},\"topic\":{\"type\":\"string\",\"enum\":[\"general\"],\"description\":\"The category of the search. This will determine which of our agents will be used for the search\",\"default\":\"general\"},\"time_range\":{\"type\":\"string\",\"description\":\"The time range back from the current date to include in the search results\",\"enum\":[\"day\",\"week\",\"month\",\"year\"]},\"start_date\":{\"type\":\"string\",\"description\":\"Will return all results after the specified start date. Required to be written in the format YYYY-MM-DD.\",\"default\":\"\"},\"end_date\":{\"type\":\"string\",\"description\":\"Will return all results before the specified end date. Required to be written in the format YYYY-MM-DD\",\"default\":\"\"},\"max_results\":{\"type\":\"number\",\"description\":\"The maximum number of search results to return\",\"default\":5,\"minimum\":5,\"maximum\":20},\"include_images\":{\"type\":\"boolean\",\"description\":\"Include a list of query-related images in the response\",\"default\":false},\"include_image_descriptions\":{\"type\":\"boolean\",\"description\":\"Include a list of query-related images and their descriptions in the response\",\"default\":false},\"include_raw_content\":{\"type\":\"boolean\",\"description\":\"Include the cleaned and parsed HTML content of each search result\",\"default\":false},\"include_domains\":"
+    }
+  ],
+  "notes": [
+    "Only initialize, notifications/initialized, and tools/list were sent.",
+    "No user API keys or user home directory were passed to runtime processes.",
+    "npm install uses --ignore-scripts, --no-audit, --no-fund, and --omit=dev.",
+    "PyPI installs happen in a disposable venv; runtime processes receive a stripped environment.",
+    "Runtime network namespace isolation uses unshare -Urn when this host allows it; otherwise the probe falls back to stripped env + timeout only.",
+    "This is a smoke probe. It is not a source security audit and it does not prove destructive tool behavior is safe."
+  ],
+  "safety": {
+    "executesThirdPartyPackages": true,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer"
+  },
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 6410,
+  "status": "pass"
+}

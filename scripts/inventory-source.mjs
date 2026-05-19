@@ -62,7 +62,6 @@ function categoryFor(relativePath) {
   if (relativePath.startsWith('docs/')) return 'docs';
   if (relativePath.startsWith('reports/')) return 'reports';
   if (relativePath.startsWith('memory-bank/')) return 'memory-bank';
-  if (relativePath.startsWith('presets/')) return 'presets';
   if (relativePath.startsWith('schemas/')) return 'schemas';
   if (relativePath.startsWith('eval/')) return 'eval';
   if (relativePath.startsWith('examples/')) return 'examples';
@@ -106,19 +105,21 @@ function collectReleaseManifest() {
     optionalMissing: optionalIncludePaths.filter((relativePath) => !fs.existsSync(path.join(repoRoot, relativePath))),
   };
 }
-function collectPresetSummary() {
-  const catalogPath = path.join(repoRoot, 'presets', 'mcp-servers.json');
-  if (!fs.existsSync(catalogPath)) return { status: 'missing', presetCount: 0, starterPresetCount: 0, ids: [] };
-  try {
-    const catalog = JSON.parse(fs.readFileSync(catalogPath, 'utf8'));
-    const presets = Array.isArray(catalog.presets) ? catalog.presets : [];
-    return { status: 'ok', schema: catalog.$schema || null, version: catalog.version || null, presetCount: presets.length, ids: presets.map((preset) => preset.id).filter(Boolean).sort(), starterPresetCount: Array.isArray(catalog.starter?.presets) ? catalog.starter.presets.length : 0 };
-  } catch (error) {
-    return { status: 'parse-error', error: error instanceof Error ? error.message : String(error), presetCount: 0, starterPresetCount: 0, ids: [] };
-  }
+function collectAutoProfileSummary() {
+  const configPath = path.join(repoRoot, 'mcpace.config.json');
+  const autoInstallPath = path.join(repoRoot, 'src', 'mcp_autoinstall.rs');
+  const staticServerCatalogPath = path.join(repoRoot, 'presets');
+  const config = fs.existsSync(configPath) ? JSON.parse(fs.readFileSync(configPath, 'utf8')) : {};
+  return {
+    status: config.autoProfile && fs.existsSync(autoInstallPath) && !config.mcpPresets && !fs.existsSync(staticServerCatalogPath) ? 'ok' : 'attention',
+    autoProfileConfigured: Boolean(config.autoProfile),
+    autoInstallSource: fs.existsSync(autoInstallPath),
+    packagedStaticServerCatalogPresent: fs.existsSync(staticServerCatalogPath),
+    packagedStaticServerGroupingPresent: false,
+  };
 }
 function collectBootAssets() {
-  const required = ['README.md','docs/README.md','docs/universal-mcp-connectivity.md','docs/mcp-http-api-spec.md','presets/mcp-servers.json','mcp_settings.d/README.md','schemas/mcpace-config.schema.json','reports/summary.md','memory-bank/activeContext.md'];
+  const required = ['README.md','docs/README.md','docs/universal-mcp-connectivity.md','docs/mcp-http-api-spec.md','mcp_settings.d/README.md','schemas/mcpace-config.schema.json','reports/summary.md','memory-bank/activeContext.md'];
   return required.map((relativePath) => ({ relativePath, exists: fs.existsSync(path.join(repoRoot, relativePath)) }));
 }
 export function inventorySource(options = {}) {
@@ -144,18 +145,18 @@ export function inventorySource(options = {}) {
   rustModules.sort((left, right) => right.lines - left.lines || left.path.localeCompare(right.path));
   const versions = collectVersions();
   const releaseManifest = collectReleaseManifest();
-  const presets = collectPresetSummary();
+  const autoProfile = collectAutoProfileSummary();
   const bootAssets = collectBootAssets();
   const missingBootAssets = bootAssets.filter((asset) => !asset.exists).map((asset) => asset.relativePath);
   const warnings = [];
   if (versions.drift.length > 0) warnings.push(`version drift detected in ${versions.drift.length} file(s)`);
   if (releaseManifest.missing.length > 0) warnings.push(`release manifest missing ${releaseManifest.missing.length} required path(s)`);
-  if (presets.status !== 'ok') warnings.push(`preset catalog status is ${presets.status}`);
+  if (autoProfile.status !== 'ok') warnings.push(`auto profile status is ${autoProfile.status}`);
   if (missingBootAssets.length > 0) warnings.push(`missing first-use assets: ${missingBootAssets.join(', ')}`);
   return {
     schema: 'mcpace.sourceInventory.v1', generatedAt: new Date().toISOString(), project: { name: deriveProjectName(), version: versions.expectedVersion },
-    summary: { totalFiles: files.length, textFiles: textFileCount, totalTextLines, rustFiles: files.filter((file) => file.ext === '.rs').length, nodeFiles: files.filter((file) => file.ext === '.js' || file.ext === '.mjs').length, markdownFiles: files.filter((file) => file.ext === '.md').length, jsonFiles: files.filter((file) => file.ext === '.json').length, testFiles: files.filter((file) => file.path.startsWith('tests/') || file.path.includes('/test/')).length, docsFiles: files.filter((file) => file.path.startsWith('docs/')).length, reportsFiles: files.filter((file) => file.path.startsWith('reports/')).length, schemaFiles: files.filter((file) => file.path.startsWith('schemas/')).length, presetCatalogs: presets.status === 'ok' ? 1 : 0 },
-    byExtension, byCategory, largestTextFiles: largestTextFiles.slice(0, topLimit), largestRustModules: rustModules.slice(0, topLimit), versions, releaseManifest, presets,
+    summary: { totalFiles: files.length, textFiles: textFileCount, totalTextLines, rustFiles: files.filter((file) => file.ext === '.rs').length, nodeFiles: files.filter((file) => file.ext === '.js' || file.ext === '.mjs').length, markdownFiles: files.filter((file) => file.ext === '.md').length, jsonFiles: files.filter((file) => file.ext === '.json').length, testFiles: files.filter((file) => file.path.startsWith('tests/') || file.path.includes('/test/')).length, docsFiles: files.filter((file) => file.path.startsWith('docs/')).length, reportsFiles: files.filter((file) => file.path.startsWith('reports/')).length, schemaFiles: files.filter((file) => file.path.startsWith('schemas/')).length, autoProfileConfigured: autoProfile.autoProfileConfigured ? 1 : 0 },
+    byExtension, byCategory, largestTextFiles: largestTextFiles.slice(0, topLimit), largestRustModules: rustModules.slice(0, topLimit), versions, releaseManifest, autoProfile,
     firstUseAssets: { required: bootAssets, missing: missingBootAssets }, ok: warnings.length === 0, warnings,
   };
 }
@@ -171,8 +172,8 @@ export function renderInventoryMarkdown(report) {
   else { lines.push('| name | file | version | expected |','|---|---|---|---|'); for (const entry of report.versions.drift) lines.push(`| ${entry.name} | ${entry.file} | ${entry.version || 'missing'} | ${report.versions.expectedVersion} |`); }
   lines.push('','## Release manifest','');
   lines.push(report.releaseManifest.missing.length === 0 ? 'All required `release-manifest.json` include paths exist.' : `Missing required include paths: ${report.releaseManifest.missing.join(', ')}`);
-  lines.push('','## Presets','',`Preset catalog status: \`${report.presets.status}\`; presets: ${report.presets.presetCount}; starter entries: ${report.presets.starterPresetCount}.`);
-  if (report.presets.ids.length > 0) lines.push(`Preset ids: ${report.presets.ids.map((id) => `\`${id}\``).join(', ')}.`);
+  lines.push('', '## Automatic MCP profiling', '', `Auto profile status: \`${report.autoProfile.status}\`; configured: ${report.autoProfile.autoProfileConfigured ? 'yes' : 'no'}; auto install source: ${report.autoProfile.autoInstallSource ? 'present' : 'missing'}.`);
+  lines.push(`Packaged static upstream catalog present: ${report.autoProfile.packagedStaticServerCatalogPresent ? 'yes' : 'no'}; packaged static grouping present: ${report.autoProfile.packagedStaticServerGroupingPresent ? 'yes' : 'no'}.`);
   if (report.warnings.length > 0) { lines.push('','## Warnings',''); for (const warning of report.warnings) lines.push(`- ${warning}`); }
   return `${lines.join('\n')}\n`;
 }

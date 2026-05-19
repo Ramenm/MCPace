@@ -1,0 +1,512 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v4",
+  "mode": "live-download-probe",
+  "generatedAt": "2026-05-17T13:09:38.761Z",
+  "workspace": "/tmp/mcpace-live-mcp-probe-YpP2n1",
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": true,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "install": {
+    "status": "pass",
+    "packages": [
+      "@modelcontextprotocol/server-filesystem@2026.1.14",
+      "@modelcontextprotocol/server-memory@2026.1.26",
+      "@modelcontextprotocol/server-sequential-thinking@2025.12.18"
+    ],
+    "byKind": {
+      "npm": {
+        "kind": "npm",
+        "ok": true,
+        "packages": [
+          "@modelcontextprotocol/server-filesystem@2026.1.14",
+          "@modelcontextprotocol/server-memory@2026.1.26",
+          "@modelcontextprotocol/server-sequential-thinking@2025.12.18"
+        ],
+        "byPackage": {
+          "npm:@modelcontextprotocol/server-filesystem@2026.1.14": {
+            "ok": true,
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "spec": "@modelcontextprotocol/server-filesystem@2026.1.14",
+            "ignoreScripts": true,
+            "packageManagerEnv": "whitelisted",
+            "error": null
+          },
+          "npm:@modelcontextprotocol/server-memory@2026.1.26": {
+            "ok": true,
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "spec": "@modelcontextprotocol/server-memory@2026.1.26",
+            "ignoreScripts": true,
+            "packageManagerEnv": "whitelisted",
+            "error": null
+          },
+          "npm:@modelcontextprotocol/server-sequential-thinking@2025.12.18": {
+            "ok": true,
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "spec": "@modelcontextprotocol/server-sequential-thinking@2025.12.18",
+            "ignoreScripts": true,
+            "packageManagerEnv": "whitelisted",
+            "error": null
+          }
+        },
+        "ignoreScripts": true
+      }
+    },
+    "byPackage": {
+      "npm:@modelcontextprotocol/server-filesystem@2026.1.14": {
+        "ok": true,
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "spec": "@modelcontextprotocol/server-filesystem@2026.1.14",
+        "ignoreScripts": true,
+        "packageManagerEnv": "whitelisted",
+        "error": null
+      },
+      "npm:@modelcontextprotocol/server-memory@2026.1.26": {
+        "ok": true,
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "spec": "@modelcontextprotocol/server-memory@2026.1.26",
+        "ignoreScripts": true,
+        "packageManagerEnv": "whitelisted",
+        "error": null
+      },
+      "npm:@modelcontextprotocol/server-sequential-thinking@2025.12.18": {
+        "ok": true,
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "spec": "@modelcontextprotocol/server-sequential-thinking@2025.12.18",
+        "ignoreScripts": true,
+        "packageManagerEnv": "whitelisted",
+        "error": null
+      }
+    }
+  },
+  "summary": {
+    "total": 3,
+    "ok": 3,
+    "failed": 0,
+    "skipped": 0,
+    "allowedNonOk": [],
+    "unexpectedFailures": [],
+    "totalTools": 24,
+    "policyMismatches": [],
+    "byStatus": {
+      "ok": 3
+    },
+    "byKind": {
+      "npm": 3
+    },
+    "byPolicy": {
+      "project-filesystem-single-writer": 1,
+      "state-profile-single-session": 2
+    },
+    "serverSideRequestMethods": {
+      "roots/list": 1
+    }
+  },
+  "results": [
+    {
+      "id": "official-filesystem",
+      "package": "@modelcontextprotocol/server-filesystem",
+      "version": "2026.1.14",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 550,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "secure-filesystem-server",
+          "version": "0.2.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 14,
+      "tools": [
+        {
+          "name": "read_file",
+          "description": "Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.",
+          "inputProps": [
+            "path",
+            "tail",
+            "head"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_text_file",
+          "description": "Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the",
+          "inputProps": [
+            "path",
+            "tail",
+            "head"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_media_file",
+          "description": "Read an image or audio file. Returns the base64 encoded data and MIME type. Only works within allowed directories.",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "read_multiple_files",
+          "description": "Read the contents of multiple files simultaneously. This is more efficient than reading files one by one when you need to analyze or compare multiple files. Each file's content is returned with its path as a reference. Failed reads for indi",
+          "inputProps": [
+            "paths"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "write_file",
+          "description": "Create a new file or completely overwrite an existing file with new content. Use with caution as it will overwrite existing files without warning. Handles text content with proper encoding. Only works within allowed directories.",
+          "inputProps": [
+            "path",
+            "content"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": true,
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "edit_file",
+          "description": "Make line-based edits to a text file. Each edit replaces exact line sequences with new content. Returns a git-style diff showing the changes made. Only works within allowed directories.",
+          "inputProps": [
+            "path",
+            "edits",
+            "dryRun"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": false,
+            "destructiveHint": true
+          }
+        },
+        {
+          "name": "create_directory",
+          "description": "Create a new directory or ensure a directory exists. Can create multiple nested directories in one operation. If the directory already exists, this operation will succeed silently. Perfect for setting up directory structures for projects or",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": true,
+            "destructiveHint": false
+          }
+        },
+        {
+          "name": "list_directory",
+          "description": "Get a detailed listing of all files and directories in a specified path. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is essential for understanding directory structure and finding spec",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "list_directory_with_sizes",
+          "description": "Get a detailed listing of all files and directories in a specified path, including sizes. Results clearly distinguish between files and directories with [FILE] and [DIR] prefixes. This tool is useful for understanding directory structure an",
+          "inputProps": [
+            "path",
+            "sortBy"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "directory_tree",
+          "description": "Get a recursive tree view of files and directories as a JSON structure. Each entry includes 'name', 'type' (file/directory), and 'children' for directories. Files have no children array, while directories always have a children array (which",
+          "inputProps": [
+            "path",
+            "excludePatterns"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "move_file",
+          "description": "Move or rename files and directories. Can move files between directories and rename them in a single operation. If the destination exists, the operation will fail. Works across different directories and can be used for simple renaming withi",
+          "inputProps": [
+            "source",
+            "destination"
+          ],
+          "annotations": {
+            "readOnlyHint": false,
+            "idempotentHint": false,
+            "destructiveHint": false
+          }
+        },
+        {
+          "name": "search_files",
+          "description": "Recursively search for files and directories matching a pattern. The patterns should be glob-style patterns that match paths relative to the working directory. Use pattern like '*.ext' to match files in current directory, and '**/*.ext' to ",
+          "inputProps": [
+            "path",
+            "pattern",
+            "excludePatterns"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "get_file_info",
+          "description": "Retrieve detailed metadata about a file or directory. Returns comprehensive information including size, creation time, last modified time, permissions, and type. This tool is perfect for understanding file characteristics without reading th",
+          "inputProps": [
+            "path"
+          ],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        },
+        {
+          "name": "list_allowed_directories",
+          "description": "Returns the list of directories that this server is allowed to access. Subdirectories within these allowed directories are also accessible. Use this to understand which directories and their nested paths are available before trying to acces",
+          "inputProps": [],
+          "annotations": {
+            "readOnlyHint": true
+          }
+        }
+      ],
+      "riskSignals": [
+        "filesystem",
+        "mutable-or-destructive-tools"
+      ],
+      "suggestedPolicy": "project-filesystem-single-writer",
+      "expectedPolicy": "project-filesystem-single-writer",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {
+        "roots/list": 1
+      },
+      "rejectedServerRequests": [],
+      "errors": [],
+      "stderrSample": "Secure MCP Filesystem Server running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"secure-filesystem-server\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"method\":\"roots/list\",\"jsonrpc\":\"2.0\",\"id\":0}\n{\"result\":{\"tools\":[{\"name\":\"read_file\",\"title\":\"Read File (Deprecated)\",\"description\":\"Read the complete contents of a file as text. DEPRECATED: Use read_text_file instead.\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"tail\":{\"description\":\"If provided, returns only the last N lines of the file\",\"type\":\"number\"},\"head\":{\"description\":\"If provided, returns only the first N lines of the file\",\"type\":\"number\"}},\"required\":[\"path\"]},\"annotations\":{\"readOnlyHint\":true},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"content\":{\"type\":\"string\"}},\"required\":[\"content\"],\"additionalProperties\":false}},{\"name\":\"read_text_file\",\"title\":\"Read Text File\",\"description\":\"Read the complete contents of a file from the file system as text. Handles various text encodings and provides detailed error messages if the file cannot be read. Use this tool when you need to examine the contents of a single file. Use the 'head' parameter to read only the first N lines of a file, or the 'tail' parameter to read only the last N lines of a file. Operates on the file as text regardless of extension. Only works within allowed directories.\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\"},\"tail\":{\"description\":\"If provided, returns only the last N lines of the file\",\"type\":\"number\"},\"head\":{\"description\":\"If provided, returns only the first N lines of the file\",\"type\":\"number\"}},\"required\":[\"path\"]},\"annotations\":{\"readOnlyHint\":true},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\""
+    },
+    {
+      "id": "official-memory",
+      "package": "@modelcontextprotocol/server-memory",
+      "version": "2026.1.26",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 495,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "memory-server",
+          "version": "0.6.3"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 9,
+      "tools": [
+        {
+          "name": "create_entities",
+          "description": "Create multiple new entities in the knowledge graph",
+          "inputProps": [
+            "entities"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "create_relations",
+          "description": "Create multiple new relations between entities in the knowledge graph. Relations should be in active voice",
+          "inputProps": [
+            "relations"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "add_observations",
+          "description": "Add new observations to existing entities in the knowledge graph",
+          "inputProps": [
+            "observations"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "delete_entities",
+          "description": "Delete multiple entities and their associated relations from the knowledge graph",
+          "inputProps": [
+            "entityNames"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "delete_observations",
+          "description": "Delete specific observations from entities in the knowledge graph",
+          "inputProps": [
+            "deletions"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "delete_relations",
+          "description": "Delete multiple relations from the knowledge graph",
+          "inputProps": [
+            "relations"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "read_graph",
+          "description": "Read the entire knowledge graph",
+          "inputProps": [],
+          "annotations": null
+        },
+        {
+          "name": "search_nodes",
+          "description": "Search for nodes in the knowledge graph based on a query",
+          "inputProps": [
+            "query"
+          ],
+          "annotations": null
+        },
+        {
+          "name": "open_nodes",
+          "description": "Open specific nodes in the knowledge graph by their names",
+          "inputProps": [
+            "names"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "memory-or-context",
+        "mutable-or-destructive-tools"
+      ],
+      "suggestedPolicy": "state-profile-single-session",
+      "expectedPolicy": "state-profile-single-session",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": [],
+      "errors": [],
+      "stderrSample": "Knowledge Graph MCP Server running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"memory-server\",\"version\":\"0.6.3\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"create_entities\",\"title\":\"Create Entities\",\"description\":\"Create multiple new entities in the knowledge graph\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"]}}},\"required\":[\"entities\"]},\"execution\":{\"taskSupport\":\"forbidden\"},\"outputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"entities\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\",\"description\":\"The name of the entity\"},\"entityType\":{\"type\":\"string\",\"description\":\"The type of the entity\"},\"observations\":{\"type\":\"array\",\"items\":{\"type\":\"string\"},\"description\":\"An array of observation contents associated with the entity\"}},\"required\":[\"name\",\"entityType\",\"observations\"],\"additionalProperties\":false}}},\"required\":[\"entities\"],\"additionalProperties\":false}},{\"name\":\"create_relations\",\"title\":\"Create Relations\",\"description\":\"Create multiple new relations between entities in the knowledge graph. Relations should be in active voice\",\"inputSchema\":{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"relations\":{\"type\":\"array\",\"items\":{\"type\":\"object\",\"properties\":{\"from\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation starts\"},\"to\":{\"type\":\"string\",\"description\":\"The name of the entity where the relation ends\"},\"relationType\":{\"type\":\"string\",\"description\":\"The type of"
+    },
+    {
+      "id": "official-sequential-thinking",
+      "package": "@modelcontextprotocol/server-sequential-thinking",
+      "version": "2025.12.18",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 522,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "sequential-thinking-server",
+          "version": "0.2.0"
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 1,
+      "tools": [
+        {
+          "name": "sequentialthinking",
+          "description": "A detailed tool for dynamic and reflective problem-solving through thoughts.\nThis tool helps analyze problems through a flexible thinking process that can adapt and evolve.\nEach thought can build on, question, or revise previous insights as",
+          "inputProps": [
+            "thought",
+            "nextThoughtNeeded",
+            "thoughtNumber",
+            "totalThoughts",
+            "isRevision",
+            "revisesThought",
+            "branchFromThought",
+            "branchId",
+            "needsMoreThoughts"
+          ],
+          "annotations": null
+        }
+      ],
+      "riskSignals": [
+        "memory-or-context"
+      ],
+      "suggestedPolicy": "state-profile-single-session",
+      "expectedPolicy": "state-profile-single-session",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": [],
+      "errors": [],
+      "stderrSample": "Sequential Thinking MCP Server running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"sequential-thinking-server\",\"version\":\"0.2.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"sequentialthinking\",\"title\":\"Sequential Thinking\",\"description\":\"A detailed tool for dynamic and reflective problem-solving through thoughts.\\nThis tool helps analyze problems through a flexible thinking process that can adapt and evolve.\\nEach thought can build on, question, or revise previous insights as understanding deepens.\\n\\nWhen to use this tool:\\n- Breaking down complex problems into steps\\n- Planning and design with room for revision\\n- Analysis that might need course correction\\n- Problems where the full scope might not be clear initially\\n- Problems that require a multi-step solution\\n- Tasks that need to maintain context over multiple steps\\n- Situations where irrelevant information needs to be filtered out\\n\\nKey features:\\n- You can adjust total_thoughts up or down as you progress\\n- You can question or revise previous thoughts\\n- You can add more thoughts even after reaching what seemed like the end\\n- You can express uncertainty and explore alternative approaches\\n- Not every thought needs to build linearly - you can branch or backtrack\\n- Generates a solution hypothesis\\n- Verifies the hypothesis based on the Chain of Thought steps\\n- Repeats the process until satisfied\\n- Provides a correct answer\\n\\nParameters explained:\\n- thought: Your current thinking step, which can include:\\n  * Regular analytical steps\\n  * Revisions of previous thoughts\\n  * Questions about previous decisions\\n  * Realizations about needing more analysis\\n  * Changes in approach\\n  * Hypothesis generation\\n  * Hypothesis verification\\n- nextThoughtNeeded: True if you need more thinking, even if at what seemed like the end\\n- thoughtNumber: Current number in sequence (can go beyond initial total if needed)\\n- totalThoughts: Current estimate of thoughts needed (can be"
+    }
+  ],
+  "notes": [
+    "Only initialize, notifications/initialized, and tools/list were sent.",
+    "No user API keys or user home directory were passed to runtime processes.",
+    "npm install uses --ignore-scripts, --no-audit, --no-fund, --omit=dev, isolated HOME/cache, and a whitelisted package-manager environment.",
+    "PyPI installs happen in a disposable venv with isolated cache/HOME and a whitelisted package-manager environment; runtime processes receive a stripped environment.",
+    "Runtime network namespace isolation uses unshare -Urn when this host allows it; otherwise the probe falls back to stripped env + timeout only.",
+    "This is a smoke probe. It is not a source security audit and it does not prove destructive tool behavior is safe.",
+    "Some canaries are hard-skipped unless --allow-heavy-installs is passed because package-manager installs can hang in restricted mirrors."
+  ],
+  "safety": {
+    "executesThirdPartyPackages": true,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer"
+  },
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 20636,
+  "status": "pass"
+}

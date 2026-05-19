@@ -1,0 +1,40 @@
+{
+  "status": "pass",
+  "scenario": {
+    "servers": 50,
+    "tools": 200000,
+    "query": "read file search",
+    "searchLimit": 25,
+    "projectionBudget": 64,
+    "projectionCandidateLimit": 512,
+    "pageSize": 128
+  },
+  "results": {
+    "searchSpaceToolCount": 200000,
+    "matchCount": 140000,
+    "returnedSearchCount": 25,
+    "retainedSearchCandidates": 25,
+    "readOnlyCount": 140000,
+    "mutatingCount": 60000,
+    "brokerOnlyCount": 60000,
+    "brokerSampleCount": 64,
+    "projectedCandidateCount": 512,
+    "projectedToolCount": 64,
+    "firstPageCount": 72
+  },
+  "budgets": {
+    "topKSearchBounded": true,
+    "projectionBounded": true,
+    "toolListPageBounded": true,
+    "heapDeltaMiB": 1.6,
+    "memoryLimitMiB": 512
+  },
+  "algorithm": {
+    "boundedTopK": true,
+    "lazyCompactToolMaterialization": true,
+    "materializesFullCatalog": false,
+    "maxRetainedSearchCandidates": 25,
+    "maxProjectedCandidates": 512
+  },
+  "elapsedMs": 316
+}

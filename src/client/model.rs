@@ -83,6 +83,14 @@ pub(super) struct ServerCoordinationPlan {
     pub(super) host_lock_key: Option<String>,
     pub(super) state_profile_key: Option<String>,
     pub(super) parallelism_limit: usize,
+    pub(super) parallel_safety_class: String,
+    pub(super) default_pool_model: String,
+    pub(super) worker_pool_key: String,
+    pub(super) max_workers: usize,
+    pub(super) max_in_flight_per_worker: usize,
+    pub(super) lock_domains: Vec<String>,
+    pub(super) transport_status: String,
+    pub(super) launcher_kind: String,
     pub(super) scheduler_lane: String,
     pub(super) startup_strategy: String,
     pub(super) request_strategy: String,
@@ -91,6 +99,7 @@ pub(super) struct ServerCoordinationPlan {
     pub(super) warnings: Vec<String>,
 }
 
+#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub(super) struct ScopeResolution {
     pub(super) process_partition: String,
@@ -101,6 +110,14 @@ pub(super) struct ScopeResolution {
     pub(super) host_lock_key: Option<String>,
     pub(super) state_profile_key: Option<String>,
     pub(super) parallelism_limit: usize,
+    pub(super) parallel_safety_class: String,
+    pub(super) default_pool_model: String,
+    pub(super) worker_pool_key: String,
+    pub(super) max_workers: usize,
+    pub(super) max_in_flight_per_worker: usize,
+    pub(super) lock_domains: Vec<String>,
+    pub(super) transport_status: String,
+    pub(super) launcher_kind: String,
     pub(super) scheduler_lane: String,
     pub(super) startup_strategy: String,
     pub(super) session_affinity_key: Option<String>,

@@ -18,7 +18,7 @@
 - proof-report child commands use a configurable output buffer (`MCPACE_PROOF_COMMAND_MAX_BUFFER_BYTES`) so verbose source checks do not create false proof failures
 - `scripts/audit-source.mjs` reports zero critical production hazards, verifies explicit protocol/resource architecture boundaries, and keeps unsafe/FFI centralized in reviewed process-detach modules
 - Node coverage can be run with `npm run test:node:coverage` using the built-in `node:test` coverage lane
-- Node source/npm test scripts run serially with per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs` for deterministic child-process cleanup
+- Node source/npm test scripts run through per-file `node --test --test-force-exit` via `scripts/run-node-test-files.mjs`; mutation-sensitive files are isolated into one-file lanes, but still use the async detached process-group runner to avoid spawnSync/grandchild-pipe deadlocks
 - source/release proof child commands use `scripts/lib/safe-child-env.mjs` instead of inheriting the full parent environment
 - `/mcp` rejects conflicting `Mcp-Method` / `Mcp-Name` headers when clients send them
 

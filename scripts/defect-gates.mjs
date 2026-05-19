@@ -192,8 +192,8 @@ function collectChecks() {
       id: 'session-fixation-guard',
       title: 'MCP HTTP initialize generates server-owned session ids',
       file: 'src/dashboard/mcp_http.rs',
-      mustInclude: ['let session_id = http_session::generated_mcp_http_session_id(request, &id, negotiated);'],
-      recommendation: 'Do not register client-supplied Mcp-Session-Id values during initialize; generate a server-owned cryptographically random id.'
+      mustInclude: ['generated_mcp_http_session_id(request, &id, negotiated)', 'failed to generate cryptographically secure MCP HTTP session id'],
+      recommendation: 'Do not register client-supplied Mcp-Session-Id values during initialize; generate a server-owned cryptographically random id and hard-fail when OS entropy is unavailable.'
     },
     {
       id: 'null-origin-rejected',
@@ -206,8 +206,8 @@ function collectChecks() {
       id: 'nonlocal-bind-guard',
       title: 'Local HTTP mode refuses non-loopback bind hosts unless explicitly opted in',
       file: 'src/dashboard.rs',
-      mustInclude: ['--allow-nonlocal-bind', 'refusing to bind non-loopback host', 'is_loopback_bind_host'],
-      recommendation: 'Keep local serve/dashboard loopback-only by default until a real public auth mode exists.'
+      mustInclude: ['--allow-nonlocal-bind', '--insecure-nonlocal-bind', 'MCPACE_HTTP_AUTH_TOKEN', 'WWW-Authenticate', 'is_loopback_bind_host'],
+      recommendation: 'Keep local serve/dashboard loopback-only by default; require bearer-token auth for non-loopback binds unless the operator uses an explicitly insecure lab-only flag.'
     },
     {
       id: 'security-disclosure-path',

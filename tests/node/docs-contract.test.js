@@ -34,6 +34,7 @@ const activeDocs = [
   'docs/runtime-lab.md',
   'docs/runtime-performance.md',
   'docs/performance-decision-log-20260430.md',
+  'docs/performance-verification.md',
   'TODO.md',
   'STATE.md',
   'DECISIONS.md'

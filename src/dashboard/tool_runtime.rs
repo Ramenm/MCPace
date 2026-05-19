@@ -188,9 +188,7 @@ pub(super) fn run_http_tool(
                 .ok_or_else(|| "upstream_call requires a 'server' string".to_string())?;
             let tool = json_helpers::string_at_path(args, &["tool"])
                 .ok_or_else(|| "upstream_call requires a 'tool' string".to_string())?;
-            let arguments = json_helpers::value_at_path(args, &["arguments"])
-                .cloned()
-                .unwrap_or_else(empty_object);
+            let arguments = optional_object_arg(args, "arguments")?;
             let timeout_ms = json_helpers::value_at_path(args, &["timeoutMs"])
                 .and_then(JsonValue::as_i64)
                 .filter(|value| *value > 0)
@@ -259,7 +257,16 @@ fn parse_http_upstream_batch_call(
                 )
             })?
             .to_string();
-        let arguments = items.get(1).cloned().unwrap_or_else(empty_object);
+        let arguments = match items.get(1) {
+            Some(JsonValue::Object(_)) => items[1].clone(),
+            Some(JsonValue::Null) | None => empty_object(),
+            Some(_) => {
+                return Err(format!(
+                    "upstream_batch calls[{}][1] must be a JSON object when present",
+                    index
+                ));
+            }
+        };
         return Ok(upstream::UpstreamToolCall { tool, arguments });
     }
 
@@ -273,10 +280,18 @@ fn parse_http_upstream_batch_call(
             )
         })?
         .to_string();
-    let arguments = json_helpers::value_at_path(raw_call, &["arguments"])
-        .cloned()
-        .unwrap_or_else(empty_object);
+    let arguments = optional_object_arg(raw_call, "arguments")?;
     Ok(upstream::UpstreamToolCall { tool, arguments })
+}
+
+fn optional_object_arg(arguments: &JsonValue, key: &str) -> Result<JsonValue, String> {
+    match json_helpers::value_at_path(arguments, &[key]) {
+        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(arguments, &[key])
+            .cloned()
+            .expect("checked above")),
+        Some(JsonValue::Null) | None => Ok(empty_object()),
+        Some(_) => Err(format!("{} must be a JSON object", key)),
+    }
 }
 
 pub(super) fn http_upstream_lease_context(

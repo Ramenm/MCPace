@@ -1,0 +1,186 @@
+{
+  "schema": "mcpace.liveRandomMcpProbe.v5",
+  "mode": "live-download-probe",
+  "generatedAt": "2026-05-19T08:01:45.421Z",
+  "workspace": "/tmp/mcpace-live-mcp-probe-8Rp9QA",
+  "hostConstraints": {
+    "dockerAvailable": false,
+    "uvAvailable": true,
+    "npmAvailable": true,
+    "unshareUserNetworkAvailable": true,
+    "directPublicDnsLikelyBlocked": true,
+    "packageDownloadsViaConfiguredRegistry": true,
+    "runtimeNetworkIsolation": "unshare -Urn when available, otherwise env-stripped timeout-only",
+    "runtimeEnvStripped": true,
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "packageManagerOutputRedacted": true,
+    "callsPerformed": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
+    ]
+  },
+  "install": {
+    "status": "pass",
+    "packages": [
+      "@upstash/context7-mcp@2.2.5"
+    ],
+    "byKind": {
+      "npm": {
+        "kind": "npm",
+        "ok": true,
+        "packages": [
+          "@upstash/context7-mcp@2.2.5"
+        ],
+        "byPackage": {
+          "npm:@upstash/context7-mcp@2.2.5": {
+            "ok": true,
+            "code": 0,
+            "signal": null,
+            "timedOut": false,
+            "spec": "@upstash/context7-mcp@2.2.5",
+            "ignoreScripts": true,
+            "packageManagerEnv": "whitelisted",
+            "error": null
+          }
+        },
+        "ignoreScripts": true
+      }
+    },
+    "byPackage": {
+      "npm:@upstash/context7-mcp@2.2.5": {
+        "ok": true,
+        "code": 0,
+        "signal": null,
+        "timedOut": false,
+        "spec": "@upstash/context7-mcp@2.2.5",
+        "ignoreScripts": true,
+        "packageManagerEnv": "whitelisted",
+        "error": null
+      }
+    }
+  },
+  "summary": {
+    "total": 1,
+    "ok": 1,
+    "failed": 0,
+    "skipped": 0,
+    "allowedNonOk": [],
+    "unexpectedFailures": [],
+    "totalTools": 2,
+    "policyMismatches": [],
+    "byStatus": {
+      "ok": 1
+    },
+    "byKind": {
+      "npm": 1
+    },
+    "byPolicy": {
+      "network-docs-multi-reader-review": 1
+    },
+    "serverSideRequestMethods": {}
+  },
+  "results": [
+    {
+      "id": "context7",
+      "package": "@upstash/context7-mcp",
+      "version": "2.2.5",
+      "kind": "npm",
+      "status": "ok",
+      "elapsedMs": 934,
+      "init": {
+        "error": null,
+        "serverInfo": {
+          "name": "Context7",
+          "version": "2.2.5",
+          "websiteUrl": "https://context7.com",
+          "description": "Context7 provides up-to-date documentation and code examples for libraries and frameworks.",
+          "icons": [
+            {
+              "src": "https://context7.com/context7-icon-green.png",
+              "mimeType": "image/png"
+            }
+          ]
+        },
+        "protocolVersion": "2025-06-18",
+        "capabilities": {
+          "tools": {
+            "listChanged": true
+          }
+        }
+      },
+      "toolCount": 2,
+      "tools": [
+        {
+          "name": "resolve-library-id",
+          "description": "Resolves a package/product name to a Context7-compatible library ID and returns matching libraries.\n\nYou MUST call this function before 'Query Documentation' tool to obtain a valid Context7-compatible library ID UNLESS the user explicitly p",
+          "inputProps": [
+            "query",
+            "libraryName"
+          ],
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true,
+            "idempotentHint": true
+          }
+        },
+        {
+          "name": "query-docs",
+          "description": "Retrieves and queries up-to-date documentation and code examples from Context7 for any programming library or framework.\n\nYou must call 'Resolve Context7 Library ID' tool first to obtain the exact Context7-compatible library ID required to ",
+          "inputProps": [
+            "libraryId",
+            "query"
+          ],
+          "annotations": {
+            "readOnlyHint": true,
+            "destructiveHint": false,
+            "openWorldHint": true,
+            "idempotentHint": true
+          }
+        }
+      ],
+      "riskSignals": [
+        "network-or-external-api",
+        "open-world-annotation"
+      ],
+      "suggestedPolicy": "network-docs-multi-reader-review",
+      "expectedPolicy": "network-docs-multi-reader-review",
+      "expectedMatchesSuggested": true,
+      "allowedNonOkStatus": true,
+      "serverSideRequests": {},
+      "rejectedServerRequests": [],
+      "droppedJsonRpcMessages": 0,
+      "errors": [],
+      "stderrSample": "Context7 Documentation MCP Server v2.2.5 running on stdio\n",
+      "stdoutSample": "{\"result\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{\"tools\":{\"listChanged\":true}},\"serverInfo\":{\"name\":\"Context7\",\"version\":\"2.2.5\",\"websiteUrl\":\"https://context7.com\",\"description\":\"Context7 provides up-to-date documentation and code examples for libraries and frameworks.\",\"icons\":[{\"src\":\"https://context7.com/context7-icon-green.png\",\"mimeType\":\"image/png\"}]},\"instructions\":\"Use this server to fetch current documentation whenever the user asks about a library, framework, SDK, API, CLI tool, or cloud service -- even well-known ones like React, Next.js, Prisma, Express, Tailwind, Django, or Spring Boot. This includes API syntax, configuration, version migration, library-specific debugging, setup instructions, and CLI tool usage. Use even when you think you know the answer -- your training data may not reflect recent changes. Prefer this over web search for library docs.\\n\\nDo not use for: refactoring, writing scripts from scratch, debugging business logic, code review, or general programming concepts.\"},\"jsonrpc\":\"2.0\",\"id\":1}\n{\"result\":{\"tools\":[{\"name\":\"resolve-library-id\",\"title\":\"Resolve Context7 Library ID\",\"description\":\"Resolves a package/product name to a Context7-compatible library ID and returns matching libraries.\\n\\nYou MUST call this function before 'Query Documentation' tool to obtain a valid Context7-compatible library ID UNLESS the user explicitly provides a library ID in the format '/org/project' or '/org/project/version' in their query.\\n\\nEach result includes:\\n- Library ID: Context7-compatible identifier (format: /org/project)\\n- Name: Library or package name\\n- Description: Short summary\\n- Code Snippets: Number of available code examples\\n- Source Reputation: Authority indicator (High, Medium, Low, or Unknown)\\n- Benchmark Score: Quality indicator (100 is the highest score)\\n- Versions: List of versions if available. Use one of those versions if the user provides a version in their query. The format of the version is /org/project/version."
+    }
+  ],
+  "notes": [
+    "Only initialize, notifications/initialized, and tools/list were sent.",
+    "No user API keys or user home directory were passed to runtime processes.",
+    "npm install uses --ignore-scripts, --no-audit, --no-fund, --omit=dev, isolated HOME/cache, and a whitelisted package-manager environment.",
+    "PyPI installs happen in a disposable venv with isolated cache/HOME and a whitelisted package-manager environment; runtime processes receive a stripped environment.",
+    "Runtime network namespace isolation uses unshare -Urn when this host allows it; otherwise the probe falls back to stripped env + timeout only.",
+    "This is a smoke probe. It is not a source security audit and it does not prove destructive tool behavior is safe.",
+    "Some canaries are hard-skipped unless --allow-heavy-installs is passed because package-manager installs can hang in restricted mirrors."
+  ],
+  "safety": {
+    "executesThirdPartyPackages": true,
+    "destructiveToolCallsAllowed": false,
+    "packageInstallScriptsAllowed": false,
+    "packageManagerEnvWhitelisted": true,
+    "packageManagerHomeIsolated": true,
+    "packageManagerOutputRedacted": true,
+    "packageManagerCredentialsMayBeUsedForMirrors": true,
+    "userSecretsPassedToRuntime": false,
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer"
+  },
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 8688,
+  "status": "pass"
+}

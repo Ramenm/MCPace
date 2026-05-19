@@ -201,6 +201,18 @@ fn build_server_plan(record: &ServerRecord, context: &ResolvedContext) -> Server
     let request = resolve_request_strategy(record, &scope, context);
     let mut warnings = scope.warnings.clone();
     warnings.extend(request.warnings.iter().cloned());
+    if record.transport_status == "legacy-compat" {
+        warnings.push(format!(
+            "{} uses legacy SSE compatibility; MCPace treats it as disabled-for-auto-parallelism and prefers Streamable HTTP or stdio.",
+            record.name
+        ));
+    }
+    if record.parallel_safety_class.starts_with("P0_") {
+        warnings.push(format!(
+            "{} has no evidence-backed parallel profile yet; the adaptive scheduler should start conservative and raise concurrency only after safe probes/runtime evidence.",
+            record.name
+        ));
+    }
     if !server_supports_current_platform(record) {
         warnings.push(format!(
             "{} is not declared for the current platform '{}'; installer/startup logic should skip it unless an override proves compatibility.",
@@ -225,6 +237,14 @@ fn build_server_plan(record: &ServerRecord, context: &ResolvedContext) -> Server
         host_lock_key: scope.host_lock_key,
         state_profile_key: scope.state_profile_key,
         parallelism_limit: request.parallelism_limit,
+        parallel_safety_class: record.parallel_safety_class.clone(),
+        default_pool_model: record.default_pool_model.clone(),
+        worker_pool_key: scope.worker_pool_key,
+        max_workers: record.max_workers,
+        max_in_flight_per_worker: record.max_in_flight_per_worker,
+        lock_domains: record.lock_domains.clone(),
+        transport_status: record.transport_status.clone(),
+        launcher_kind: record.launcher_kind.clone(),
         scheduler_lane: request.scheduler_lane,
         startup_strategy: scope.startup_strategy,
         request_strategy: request.name,
@@ -329,11 +349,20 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         format!("session:{}", sanitize_key(&context.session_lease_id))
     });
 
-    let scheduler_lane = if state_profile_key.is_some() {
+    let worker_pool_key = format!(
+        "pool:{}|model:{}|{}",
+        sanitize_key(&record.name),
+        sanitize_key(&record.default_pool_model),
+        sanitize_key(&process_partition)
+    );
+
+    let scheduler_lane = if record.transport_status == "legacy-compat" {
+        "legacy-disabled".to_string()
+    } else if state_profile_key.is_some() {
         "state-profile-queue".to_string()
     } else if host_lock_key.is_some() {
         "host-lock-queue".to_string()
-    } else if record.routing_group == "settings-only" {
+    } else if record.routing_group == "settings-only" || record.routing_group == "unknown-source" {
         "settings-only-conservative".to_string()
     } else if project_binding_key.is_some() {
         "project-queue".to_string()
@@ -352,6 +381,14 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         host_lock_key,
         state_profile_key,
         parallelism_limit: record.parallelism_limit,
+        parallel_safety_class: record.parallel_safety_class.clone(),
+        default_pool_model: record.default_pool_model.clone(),
+        worker_pool_key,
+        max_workers: record.max_workers,
+        max_in_flight_per_worker: record.max_in_flight_per_worker,
+        lock_domains: record.lock_domains.clone(),
+        transport_status: record.transport_status.clone(),
+        launcher_kind: record.launcher_kind.clone(),
         scheduler_lane,
         startup_strategy: record.startup_strategy.clone(),
         session_affinity_key,
@@ -364,6 +401,22 @@ fn resolve_request_strategy(
     scope: &ScopeResolution,
     context: &ResolvedContext,
 ) -> RequestStrategy {
+    if record.transport_status == "legacy-compat" {
+        return RequestStrategy {
+            name: "legacy-compat-disabled".to_string(),
+            mutex_key: Some(format!(
+                "server:{}|legacy-transport-mutex",
+                sanitize_key(&record.name)
+            )),
+            scheduler_lane: "legacy-disabled".to_string(),
+            parallelism_limit: 0,
+            warnings: vec![format!(
+                "{} is on a legacy SSE compatibility transport; do not auto-parallelize or auto-probe it without an explicit compatibility override.",
+                record.name
+            )],
+        };
+    }
+
     match record.concurrency_policy.as_str() {
         "multi-reader" => {
             if let Some(host_lock_key) = &scope.host_lock_key {
@@ -387,12 +440,27 @@ fn resolve_request_strategy(
                     parallelism_limit: 1,
                     warnings: Vec::new(),
                 }
+            } else if record.parallel_safety_class.starts_with("P0_") {
+                RequestStrategy {
+                    name: "bounded-worker-pool-pending-probe".to_string(),
+                    mutex_key: Some(format!(
+                        "server:{}|worker-inflight:{}",
+                        sanitize_key(&record.name),
+                        sanitize_key(&scope.worker_pool_key)
+                    )),
+                    scheduler_lane: "adaptive-probe-gated-pool".to_string(),
+                    parallelism_limit: record.max_workers.max(1),
+                    warnings: vec![format!(
+                        "{} requested multi-reader behavior but has no positive parallel-safety evidence; MCPace may use multiple isolated workers but must keep maxInFlightPerWorker=1 until probes pass.",
+                        record.name
+                    )],
+                }
             } else {
                 RequestStrategy {
                     name: "parallel-safe".to_string(),
                     mutex_key: None,
                     scheduler_lane: "parallel-pool".to_string(),
-                    parallelism_limit: scope.parallelism_limit,
+                    parallelism_limit: record.max_workers.max(scope.parallelism_limit),
                     warnings: Vec::new(),
                 }
             }
@@ -627,6 +695,9 @@ fn admission_state(record: &ServerRecord) -> String {
 fn resolve_upstream_transport(record: &ServerRecord) -> String {
     if record.source_type == "stdio" || record.kind.contains("stdio") {
         return "stdio".to_string();
+    }
+    if record.source_type == "sse-legacy" || record.source_type == "sse" {
+        return "sse-legacy".to_string();
     }
     if record.source_type == "http"
         || record.source_type == "streamable-http"

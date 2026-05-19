@@ -1,8 +1,8 @@
 # MCPace defect gates
 
-Generated: 2026-05-04T13:21:15.413Z
+Generated: 2026-05-19T14:16:32.674Z
 
-Project: `mcpace` v`0.5.9`
+Project: `mcpace` v`0.6.5`
 
 Status: **pass**
 

@@ -4,11 +4,9 @@ use crate::mcp_protocol as mcp;
 use crate::upstream;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
-
 mod discovery;
 mod profile;
 mod proxy_uri;
-
 pub use self::discovery::{
     adapter_route_plan, get_prompt, list_prompts, list_resource_templates, list_resources,
     read_resource, upstream_search,
@@ -22,9 +20,11 @@ use self::proxy_uri::{
     decode_resource_uri, encode_resource_uri, hex_encode, is_unsupported_method_error,
     maybe_meta_errors,
 };
-
 const DEFAULT_TOOL_BUDGET: usize = 64;
 const DEFAULT_TOOL_TOKEN_BUDGET: usize = 24_000;
+const DEFAULT_PROJECTION_CANDIDATE_MULTIPLIER: usize = 8;
+const DEFAULT_PROJECTION_CANDIDATE_LIMIT_MAX: usize = 8_192;
+const DEFAULT_PROJECTION_BROKER_SAMPLE_LIMIT: usize = 64;
 const DEFAULT_PROJECTED_DESCRIPTION_CHARS: usize = 360;
 const DEFAULT_PROJECTED_SCHEMA_DESCRIPTION_CHARS: usize = 160;
 const DEFAULT_SEARCH_DESCRIPTION_CHARS: usize = 220;
@@ -34,7 +34,6 @@ const PROJECTED_PROMPT_PREFIX: &str = "p";
 const PROJECTED_NAME_MAX: usize = 64;
 const PROXIED_RESOURCE_SCHEME: &str = "mcpace://upstream-resource";
 const PROXIED_TEMPLATE_SCHEME: &str = "mcpace://upstream-resource-template";
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolExposureMode {
     /// Decide from the live upstream catalog: native projection when the catalog fits the budget,
@@ -49,25 +48,21 @@ pub enum ToolExposureMode {
     /// Keep only the essential adapter tools for very strict clients.
     Minimal,
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ProjectionSafety {
     /// Project only tools that look read-only by trusted annotations or conservative names.
     Safe,
-    /// Default: project unguarded tools unless they look mutating/destructive.
+    /// Project unguarded tools unless they look mutating/destructive. This is opt-in.
     Review,
     /// Project every discovered tool and rely on the client/human-in-the-loop for review.
     All,
 }
-
-const DEFAULT_PROJECTED_TOOL_SAFETY: ProjectionSafety = ProjectionSafety::Review;
-
+const DEFAULT_PROJECTED_TOOL_SAFETY: ProjectionSafety = ProjectionSafety::Safe;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct ToolSurfaceOptions {
     pub include_title: bool,
     pub include_annotations: bool,
 }
-
 #[derive(Clone, Debug)]
 pub struct ToolExposureOptions {
     pub mode: ToolExposureMode,
@@ -77,19 +72,16 @@ pub struct ToolExposureOptions {
     pub refresh: bool,
     pub projection_safety: ProjectionSafety,
 }
-
 #[derive(Clone, Debug)]
 pub struct ProjectedToolTarget {
     pub server: String,
     pub tool: String,
 }
-
 #[derive(Clone, Debug)]
 pub struct ProjectedPromptTarget {
     pub server: String,
     pub prompt: String,
 }
-
 #[derive(Clone, Debug)]
 pub struct ProjectedToolSet {
     pub tools: Vec<JsonValue>,
@@ -104,7 +96,6 @@ pub struct ProjectedToolSet {
     pub reason: String,
     pub catalog: JsonValue,
 }
-
 impl ToolSurfaceOptions {
     pub fn current() -> Self {
         Self {
@@ -112,7 +103,6 @@ impl ToolSurfaceOptions {
             include_annotations: true,
         }
     }
-
     pub fn legacy() -> Self {
         Self {
             include_title: false,
@@ -120,7 +110,6 @@ impl ToolSurfaceOptions {
         }
     }
 }
-
 impl ToolExposureOptions {
     pub fn from_env() -> Self {
         Self {
@@ -143,7 +132,6 @@ impl ToolExposureOptions {
                 .unwrap_or(DEFAULT_PROJECTED_TOOL_SAFETY),
         }
     }
-
     pub fn for_call_resolution() -> Self {
         let mut options = Self::from_env();
         // Keep names stable during a session. tools/list may refresh, but direct calls should use
@@ -152,7 +140,6 @@ impl ToolExposureOptions {
         options
     }
 }
-
 pub fn adapter_capabilities() -> JsonValue {
     JsonValue::object([
         (
@@ -172,12 +159,10 @@ pub fn adapter_capabilities() -> JsonValue {
         ),
     ])
 }
-
 pub fn adapter_instructions() -> String {
-    "MCPace is a dynamic MCP adapter for many clients and many upstream servers. It infers client capabilities from initialize, keeps startup tools/list small by default, discovers configured upstream stdio servers through live MCP methods when requested, and can opt into native projected upstream tools when the catalog fits the token budget. Use adapter_profile for the current routing plan, upstream_search for concise discovery, projected u_<server>_<tool>_<hash> names when projection is enabled, and upstream_call/upstream_batch when a client/tool budget requires brokered routing."
+    "MCPace is a dynamic MCP adapter for many clients and many upstream servers. It infers client capabilities from initialize, keeps startup tools/list small by default, discovers configured upstream stdio/plain HTTP servers through live MCP methods when requested, and can opt into native projected upstream tools only when the catalog fits the token budget and projection safety allows them. Use adapter_profile for the current routing plan, upstream_search for concise discovery, projected u_<server>_<tool>_<hash> names when projection is enabled, and upstream_call/upstream_batch for brokered routing with known-tool and policy validation."
         .to_string()
 }
-
 pub fn tool_surface_options_from_initialize(
     initialize_params: Option<&JsonValue>,
 ) -> ToolSurfaceOptions {
@@ -186,7 +171,6 @@ pub fn tool_surface_options_from_initialize(
         .unwrap_or(mcp::CURRENT_PROTOCOL_VERSION);
     tool_surface_options_from_protocol(protocol_version)
 }
-
 pub fn tool_surface_options_from_http_header(protocol_header: Option<&str>) -> ToolSurfaceOptions {
     tool_surface_options_from_protocol(
         protocol_header
@@ -195,7 +179,6 @@ pub fn tool_surface_options_from_http_header(protocol_header: Option<&str>) -> T
             .unwrap_or(mcp::STREAMABLE_HTTP_DEFAULT_PROTOCOL_VERSION),
     )
 }
-
 pub fn tool_surface_options_from_protocol(protocol_version: &str) -> ToolSurfaceOptions {
     match std::env::var("MCPACE_TOOL_SCHEMA_STYLE")
         .ok()
@@ -206,14 +189,12 @@ pub fn tool_surface_options_from_protocol(protocol_version: &str) -> ToolSurface
         Some("native") | Some("current") | Some("modern") => return ToolSurfaceOptions::current(),
         _ => {}
     }
-
     if protocol_rank(protocol_version) >= protocol_rank("2025-03-26") {
         ToolSurfaceOptions::current()
     } else {
         ToolSurfaceOptions::legacy()
     }
 }
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ManagementSurfaceMode {
     /// Adapter/runtime tools that help a model route and execute upstream servers.
@@ -223,7 +204,6 @@ enum ManagementSurfaceMode {
     /// The smallest broker surface for strict or tiny-context clients.
     Minimal,
 }
-
 pub fn visible_tool_names(
     all_tool_names: &[String],
     _initialize_params: Option<&JsonValue>,
@@ -234,7 +214,6 @@ pub fn visible_tool_names(
         .cloned()
         .collect()
 }
-
 pub fn should_keep_management_tool(name: &str) -> bool {
     match management_surface_mode_from_env() {
         ManagementSurfaceMode::Full => true,
@@ -242,7 +221,6 @@ pub fn should_keep_management_tool(name: &str) -> bool {
         ManagementSurfaceMode::Minimal => minimal_management_tool(name),
     }
 }
-
 fn adapter_management_tool(name: &str) -> bool {
     matches!(
         name,
@@ -256,7 +234,6 @@ fn adapter_management_tool(name: &str) -> bool {
             | "upstream_batch"
     )
 }
-
 fn minimal_management_tool(name: &str) -> bool {
     matches!(
         name,
@@ -267,7 +244,6 @@ fn minimal_management_tool(name: &str) -> bool {
             | "upstream_batch"
     )
 }
-
 pub fn tool_list_result(
     root_path: &Path,
     base_tools: Vec<JsonValue>,
@@ -290,12 +266,10 @@ pub fn tool_list_result(
         .collect::<Vec<_>>();
     paginated_tool_list(tools, cursor)
 }
-
 pub fn augment_tool_definitions(root_path: &Path, base_tools: Vec<JsonValue>) -> Vec<JsonValue> {
     let options = ToolExposureOptions::from_env();
     augment_tool_definitions_with_options(root_path, base_tools, &options)
 }
-
 fn augment_tool_definitions_with_options(
     root_path: &Path,
     base_tools: Vec<JsonValue>,
@@ -307,7 +281,6 @@ fn augment_tool_definitions_with_options(
     ) {
         return base_tools;
     }
-
     let reserved = tool_names(&base_tools).into_iter().collect::<BTreeSet<_>>();
     match projected_tool_set(root_path, &reserved, options) {
         Ok(projected) if projected.projection_enabled => {
@@ -318,7 +291,6 @@ fn augment_tool_definitions_with_options(
         _ => base_tools,
     }
 }
-
 pub fn projected_tool_set(
     root_path: &Path,
     reserved_names: &BTreeSet<String>,
@@ -327,7 +299,6 @@ pub fn projected_tool_set(
     let catalog = projection_catalog(root_path, options)?;
     let mut projected_all = Vec::new();
     let mut used_names = reserved_names.clone();
-
     for server in json_helpers::array_at_path(&catalog, &["servers"]).unwrap_or(&[]) {
         if !json_helpers::bool_at_path(server, &["ok"]).unwrap_or(false) {
             continue;
@@ -359,7 +330,6 @@ pub fn projected_tool_set(
             ));
         }
     }
-
     projected_all.sort_by(|left, right| {
         tool_projection_rank(left)
             .cmp(&tool_projection_rank(right))
@@ -369,8 +339,11 @@ pub fn projected_tool_set(
                     .cmp(json_helpers::string_at_path(right, &["name"]).unwrap_or(""))
             })
     });
-
-    let projectable_total = projected_all.len();
+    let projectable_total = json_helpers::value_at_path(&catalog, &["projectableToolCount"])
+        .and_then(JsonValue::as_i64)
+        .filter(|value| *value >= 0)
+        .map(|value| value as usize)
+        .unwrap_or(projected_all.len());
     let raw_total = json_helpers::value_at_path(&catalog, &["rawToolCount"])
         .and_then(JsonValue::as_i64)
         .filter(|value| *value >= 0)
@@ -381,12 +354,13 @@ pub fn projected_tool_set(
         .filter(|value| *value >= 0)
         .map(|value| value as usize)
         .unwrap_or(raw_total.saturating_sub(projectable_total));
+    let catalog_ok = json_helpers::bool_at_path(&catalog, &["ok"]).unwrap_or(false);
     let estimated_total_tokens: usize = projected_all.iter().map(estimate_json_tokens).sum();
     let full_catalog_fits =
         projectable_total <= options.budget && estimated_total_tokens <= options.token_budget;
     let projection_enabled = match options.mode {
         ToolExposureMode::Native | ToolExposureMode::Hybrid => projectable_total > 0,
-        ToolExposureMode::Auto => projectable_total > 0 && full_catalog_fits,
+        ToolExposureMode::Auto => catalog_ok && projectable_total > 0 && full_catalog_fits,
         ToolExposureMode::Broker | ToolExposureMode::Minimal => false,
     };
     let projected = if projection_enabled {
@@ -399,7 +373,6 @@ pub fn projected_tool_set(
     let truncated = projection_enabled
         && (projected_tool_count < projectable_total
             || estimated_projected_tokens < estimated_total_tokens);
-
     Ok(ProjectedToolSet {
         tools: projected,
         raw_upstream_tool_count: raw_total,
@@ -412,17 +385,28 @@ pub fn projected_tool_set(
         projection_enabled,
         reason: projection_reason(
             options,
-            projectable_total,
-            raw_total,
-            broker_only_total,
-            estimated_total_tokens,
-            projection_enabled,
-            truncated,
+            ProjectionReasonMetrics {
+                projectable_total,
+                raw_total,
+                broker_only_total,
+                estimated_total_tokens,
+                catalog_ok,
+                enabled: projection_enabled,
+                truncated,
+            },
         ),
         catalog,
     })
 }
-
+struct ProjectionReasonMetrics {
+    projectable_total: usize,
+    raw_total: usize,
+    broker_only_total: usize,
+    estimated_total_tokens: usize,
+    catalog_ok: bool,
+    enabled: bool,
+    truncated: bool,
+}
 pub fn resolve_projected_tool(
     root_path: &Path,
     projected_name: &str,
@@ -439,7 +423,6 @@ pub fn resolve_projected_tool(
     if !projected.projection_enabled {
         return Ok(None);
     }
-
     for tool in projected.tools {
         if json_helpers::string_at_path(&tool, &["name"]) != Some(projected_name) {
             continue;
@@ -469,64 +452,77 @@ pub fn resolve_projected_tool(
             tool: upstream_tool.to_string(),
         }));
     }
-
     Ok(None)
 }
-
 #[derive(Clone, Debug)]
 struct ProjectionDecision {
     projectable: bool,
     reason: String,
 }
-
 fn projection_catalog(
     root_path: &Path,
     options: &ToolExposureOptions,
 ) -> Result<JsonValue, String> {
-    let server_names = upstream::callable_server_names(root_path)?;
+    let catalog = if matches!(options.mode, ToolExposureMode::Auto) && !options.refresh {
+        upstream::callable_tools_cached_catalog(root_path)?
+    } else {
+        upstream::callable_tools_raw_catalog(root_path, options.timeout_ms, options.refresh)?
+    };
     let mut servers = Vec::new();
     let mut errors = Vec::new();
     let mut raw_tool_count = 0usize;
     let mut projectable_tool_count = 0usize;
     let mut broker_only_tool_count = 0usize;
-
-    for server_name in server_names {
-        match upstream::list_tools(
-            root_path,
-            Some(&server_name),
-            options.timeout_ms,
-            options.refresh,
-        ) {
-            Ok(listing) => {
-                let mut projectable_tools = Vec::new();
-                let mut broker_only_tools = Vec::new();
-                for tool in json_helpers::array_at_path(&listing, &["tools"]).unwrap_or(&[]) {
-                    raw_tool_count = raw_tool_count.saturating_add(1);
-                    let Some(tool_name) = json_helpers::string_at_path(tool, &["name"])
-                        .map(str::trim)
-                        .filter(|value| !value.is_empty())
-                    else {
-                        broker_only_tool_count = broker_only_tool_count.saturating_add(1);
+    let candidate_limit = projection_candidate_limit(options);
+    let broker_sample_limit = projection_broker_sample_limit();
+    let mut stored_projectable_count = 0usize;
+    let mut stored_broker_only_count = 0usize;
+    for listing in json_helpers::array_at_path(&catalog, &["servers"]).unwrap_or(&[]) {
+        let server_name = json_helpers::string_at_path(listing, &["name"])
+            .map(str::to_string)
+            .unwrap_or_else(|| "unknown".to_string());
+        if json_helpers::bool_at_path(listing, &["ok"]).unwrap_or(false) {
+            let mut projectable_tools = Vec::new();
+            let mut broker_only_tools = Vec::new();
+            let mut server_projectable_tool_count = 0usize;
+            let mut server_broker_only_tool_count = 0usize;
+            for tool in json_helpers::array_at_path(listing, &["tools"]).unwrap_or(&[]) {
+                raw_tool_count = raw_tool_count.saturating_add(1);
+                let Some(tool_name) = json_helpers::string_at_path(tool, &["name"])
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                else {
+                    broker_only_tool_count = broker_only_tool_count.saturating_add(1);
+                    server_broker_only_tool_count = server_broker_only_tool_count.saturating_add(1);
+                    if stored_broker_only_count < broker_sample_limit {
                         broker_only_tools.push(JsonValue::object([
                             ("name", JsonValue::string("<unnamed>")),
                             ("reason", JsonValue::string("missing tool name")),
                         ]));
-                        continue;
-                    };
-                    let policy = upstream::tool_policy_info(root_path, &server_name, tool_name)
-                        .unwrap_or_else(|error| {
-                            JsonValue::object([
-                                ("guardRequired", JsonValue::bool(false)),
-                                ("policyLookupError", JsonValue::string(error)),
-                            ])
-                        });
-                    let decision = projection_decision(tool, &policy, options.projection_safety);
-                    let decorated = decorate_projectable_tool(tool, &policy, &decision);
-                    if decision.projectable {
-                        projectable_tool_count = projectable_tool_count.saturating_add(1);
+                        stored_broker_only_count = stored_broker_only_count.saturating_add(1);
+                    }
+                    continue;
+                };
+                let policy = upstream::tool_policy_info(root_path, &server_name, tool_name)
+                    .unwrap_or_else(|error| {
+                        JsonValue::object([
+                            ("guardRequired", JsonValue::bool(false)),
+                            ("policyLookupError", JsonValue::string(error)),
+                        ])
+                    });
+                let decision = projection_decision(tool, &policy, options.projection_safety);
+                let decorated = decorate_projectable_tool(tool, &policy, &decision);
+                if decision.projectable {
+                    projectable_tool_count = projectable_tool_count.saturating_add(1);
+                    server_projectable_tool_count = server_projectable_tool_count.saturating_add(1);
+                    if stored_projectable_count < candidate_limit {
                         projectable_tools.push(decorated);
-                    } else {
-                        broker_only_tool_count = broker_only_tool_count.saturating_add(1);
+                        stored_projectable_count = stored_projectable_count.saturating_add(1);
+                    }
+                } else {
+                    broker_only_tool_count = broker_only_tool_count.saturating_add(1);
+                    server_broker_only_tool_count = server_broker_only_tool_count.saturating_add(1);
+                    if stored_broker_only_count < broker_sample_limit {
                         broker_only_tools.push(compact_broker_only_tool(
                             &server_name,
                             tool_name,
@@ -534,57 +530,75 @@ fn projection_catalog(
                             &policy,
                             &decision.reason,
                         ));
+                        stored_broker_only_count = stored_broker_only_count.saturating_add(1);
                     }
                 }
-                servers.push(JsonValue::object([
-                    ("name", JsonValue::string(&server_name)),
-                    ("ok", JsonValue::bool(true)),
-                    (
-                        "rawToolCount",
-                        JsonValue::number(
-                            json_helpers::array_at_path(&listing, &["tools"])
-                                .map(|items| items.len())
-                                .unwrap_or(0),
-                        ),
-                    ),
-                    (
-                        "projectableToolCount",
-                        JsonValue::number(projectable_tools.len()),
-                    ),
-                    (
-                        "brokerOnlyToolCount",
-                        JsonValue::number(broker_only_tools.len()),
-                    ),
-                    (
-                        "cacheHit",
-                        json_helpers::value_at_path(&listing, &["cacheHit"])
-                            .cloned()
-                            .unwrap_or(JsonValue::Null),
-                    ),
-                    ("projectableTools", JsonValue::array(projectable_tools)),
-                    ("brokerOnlyTools", JsonValue::array(broker_only_tools)),
-                ]));
             }
-            Err(error) => {
-                errors.push(JsonValue::object([
-                    ("server", JsonValue::string(&server_name)),
-                    ("method", JsonValue::string("tools/list")),
-                    ("error", JsonValue::string(&error)),
-                ]));
-                servers.push(JsonValue::object([
-                    ("name", JsonValue::string(server_name)),
-                    ("ok", JsonValue::bool(false)),
-                    ("rawToolCount", JsonValue::number(0)),
-                    ("projectableToolCount", JsonValue::number(0)),
-                    ("brokerOnlyToolCount", JsonValue::number(0)),
-                    ("projectableTools", JsonValue::array([])),
-                    ("brokerOnlyTools", JsonValue::array([])),
-                    ("error", JsonValue::string(error)),
-                ]));
-            }
+            servers.push(JsonValue::object([
+                ("name", JsonValue::string(&server_name)),
+                ("ok", JsonValue::bool(true)),
+                (
+                    "rawToolCount",
+                    JsonValue::number(
+                        json_helpers::array_at_path(listing, &["tools"])
+                            .map(|items| items.len())
+                            .unwrap_or(0),
+                    ),
+                ),
+                (
+                    "projectableToolCount",
+                    JsonValue::number(server_projectable_tool_count),
+                ),
+                (
+                    "brokerOnlyToolCount",
+                    JsonValue::number(server_broker_only_tool_count),
+                ),
+                (
+                    "projectableToolSampleCount",
+                    JsonValue::number(projectable_tools.len()),
+                ),
+                (
+                    "brokerOnlyToolSampleCount",
+                    JsonValue::number(broker_only_tools.len()),
+                ),
+                (
+                    "projectableToolsTruncated",
+                    JsonValue::bool(server_projectable_tool_count > projectable_tools.len()),
+                ),
+                (
+                    "brokerOnlyToolsTruncated",
+                    JsonValue::bool(server_broker_only_tool_count > broker_only_tools.len()),
+                ),
+                (
+                    "cacheHit",
+                    json_helpers::value_at_path(listing, &["cacheHit"])
+                        .cloned()
+                        .unwrap_or(JsonValue::Null),
+                ),
+                ("projectableTools", JsonValue::array(projectable_tools)),
+                ("brokerOnlyTools", JsonValue::array(broker_only_tools)),
+            ]));
+        } else {
+            let error = json_helpers::string_at_path(listing, &["error"])
+                .unwrap_or("tools/list failed")
+                .to_string();
+            errors.push(JsonValue::object([
+                ("server", JsonValue::string(&server_name)),
+                ("method", JsonValue::string("tools/list")),
+                ("error", JsonValue::string(&error)),
+            ]));
+            servers.push(JsonValue::object([
+                ("name", JsonValue::string(server_name)),
+                ("ok", JsonValue::bool(false)),
+                ("rawToolCount", JsonValue::number(0)),
+                ("projectableToolCount", JsonValue::number(0)),
+                ("brokerOnlyToolCount", JsonValue::number(0)),
+                ("projectableTools", JsonValue::array([])),
+                ("brokerOnlyTools", JsonValue::array([])),
+                ("error", JsonValue::string(error)),
+            ]));
         }
     }
-
     Ok(JsonValue::object([
         ("ok", JsonValue::bool(errors.is_empty())),
         ("mode", JsonValue::string("projection-catalog")),
@@ -597,11 +611,36 @@ fn projection_catalog(
         ("rawToolCount", JsonValue::number(raw_tool_count)),
         ("projectableToolCount", JsonValue::number(projectable_tool_count)),
         ("brokerOnlyToolCount", JsonValue::number(broker_only_tool_count)),
+        ("projectableCandidateLimit", JsonValue::number(candidate_limit)),
+        ("projectableCandidateCount", JsonValue::number(stored_projectable_count)),
+        ("brokerOnlySampleLimit", JsonValue::number(broker_sample_limit)),
+        ("brokerOnlySampleCount", JsonValue::number(stored_broker_only_count)),
+        (
+            "projectionCandidatesTruncated",
+            JsonValue::bool(projectable_tool_count > stored_projectable_count),
+        ),
         ("servers", JsonValue::array(servers)),
         maybe_meta_errors(errors),
     ]))
 }
-
+fn projection_candidate_limit(options: &ToolExposureOptions) -> usize {
+    let default = options
+        .budget
+        .saturating_mul(DEFAULT_PROJECTION_CANDIDATE_MULTIPLIER)
+        .max(options.budget)
+        .max(1);
+    env_usize("MCPACE_PROJECTION_CANDIDATE_LIMIT")
+        .unwrap_or(default)
+        .clamp(
+            options.budget.max(1),
+            DEFAULT_PROJECTION_CANDIDATE_LIMIT_MAX,
+        )
+}
+fn projection_broker_sample_limit() -> usize {
+    env_usize("MCPACE_PROJECTION_BROKER_SAMPLE_LIMIT")
+        .unwrap_or(DEFAULT_PROJECTION_BROKER_SAMPLE_LIMIT)
+        .clamp(0, 10_000)
+}
 fn projection_decision(
     tool: &JsonValue,
     policy: &JsonValue,
@@ -615,7 +654,6 @@ fn projection_decision(
     let tool_name = json_helpers::string_at_path(tool, &["name"]).unwrap_or("");
     let conservative_read_signal = conservative_read_only_name_signal(tool_name);
     let mutation_signal = mutating_name_signal(tool_name);
-
     match safety {
         ProjectionSafety::All => ProjectionDecision {
             projectable: true,
@@ -660,7 +698,6 @@ fn projection_decision(
         }
     }
 }
-
 fn decorate_projectable_tool(
     tool: &JsonValue,
     policy: &JsonValue,
@@ -683,7 +720,6 @@ fn decorate_projectable_tool(
     map.insert("_meta".to_string(), JsonValue::Object(meta));
     JsonValue::Object(map)
 }
-
 fn compact_broker_only_tool(
     server_name: &str,
     tool_name: &str,
@@ -729,7 +765,6 @@ fn compact_broker_only_tool(
         ),
     ])
 }
-
 fn conservative_read_only_name_signal(tool_name: &str) -> bool {
     let normalized = normalize(tool_name);
     let mut terms = normalized.split_whitespace();
@@ -752,7 +787,6 @@ fn conservative_read_only_name_signal(tool_name: &str) -> bool {
             | "snapshot"
     )
 }
-
 fn mutating_name_signal(tool_name: &str) -> bool {
     let normalized = normalize(tool_name);
     normalized.split_whitespace().any(|term| {
@@ -785,7 +819,6 @@ fn mutating_name_signal(tool_name: &str) -> bool {
         )
     })
 }
-
 pub fn strip_projected_adapter_arguments(arguments: &JsonValue) -> JsonValue {
     let JsonValue::Object(map) = arguments else {
         return arguments.clone();
@@ -802,7 +835,6 @@ pub fn strip_projected_adapter_arguments(arguments: &JsonValue) -> JsonValue {
     }
     JsonValue::Object(cleaned)
 }
-
 pub fn projected_adapter_control_arguments(arguments: &JsonValue) -> JsonValue {
     let mut controls = BTreeMap::new();
     merge_control_object(
@@ -824,7 +856,6 @@ pub fn projected_adapter_control_arguments(arguments: &JsonValue) -> JsonValue {
     }
     JsonValue::Object(controls)
 }
-
 fn merge_control_object(target: &mut BTreeMap<String, JsonValue>, value: Option<&JsonValue>) {
     let Some(object) = value.and_then(JsonValue::as_object) else {
         return;
@@ -833,11 +864,9 @@ fn merge_control_object(target: &mut BTreeMap<String, JsonValue>, value: Option<
         target.insert(key.clone(), value.clone());
     }
 }
-
 fn legacy_projected_top_level_controls_enabled() -> bool {
     env_bool("MCPACE_PROJECTED_LEGACY_TOP_LEVEL_CONTROLS").unwrap_or(false)
 }
-
 fn projected_adapter_argument_key(key: &str) -> bool {
     matches!(
         key,
@@ -861,9 +890,10 @@ fn projected_adapter_argument_key(key: &str) -> bool {
             | "resultPluginPolicy"
             | "allowArguments"
             | "allowToolRiskClasses"
+            | "allowUnknownTool"
+            | "allowUnknownUpstreamTool"
     )
 }
-
 fn prefixed_description(server: &str, name: &str, description: &str) -> String {
     let trimmed = description.trim();
     if trimmed.is_empty() {
@@ -880,7 +910,6 @@ fn prefixed_description(server: &str, name: &str, description: &str) -> String {
         )
     }
 }
-
 fn unique_projected_name(
     prefix: &str,
     server: &str,
@@ -897,7 +926,6 @@ fn unique_projected_name(
         suffix = suffix.saturating_add(1);
     }
 }
-
 fn projected_safe_name(
     prefix: &str,
     server: &str,
@@ -931,7 +959,6 @@ fn projected_safe_name(
             .to_string()
     }
 }
-
 fn safe_token(value: &str) -> String {
     let mut out = String::new();
     let mut last_was_sep = false;
@@ -952,11 +979,9 @@ fn safe_token(value: &str) -> String {
         trimmed
     }
 }
-
 fn trim_token_edges(value: &str) -> String {
     value.trim_matches('_').to_string()
 }
-
 fn short_hash(value: &str) -> String {
     let mut hash = 0xcbf29ce484222325u64;
     for byte in value.as_bytes() {
@@ -965,11 +990,9 @@ fn short_hash(value: &str) -> String {
     }
     format!("{:016x}", hash).chars().take(10).collect()
 }
-
 fn truncate_ascii(value: &str, max_chars: usize) -> String {
     value.chars().take(max_chars).collect()
 }
-
 fn truncate_chars(value: &str, max_chars: usize) -> String {
     let mut out = String::new();
     for (index, ch) in value.chars().enumerate() {
@@ -981,7 +1004,6 @@ fn truncate_chars(value: &str, max_chars: usize) -> String {
     }
     out
 }
-
 fn normalize(value: &str) -> String {
     value
         .chars()
@@ -994,59 +1016,59 @@ fn normalize(value: &str) -> String {
         })
         .collect::<String>()
 }
-
-fn projection_reason(
-    options: &ToolExposureOptions,
-    projectable_total: usize,
-    raw_total: usize,
-    broker_only_total: usize,
-    estimated_total_tokens: usize,
-    enabled: bool,
-    truncated: bool,
-) -> String {
+fn projection_reason(options: &ToolExposureOptions, metrics: ProjectionReasonMetrics) -> String {
     let safety = projection_safety_name(options.projection_safety);
-    match (options.mode, enabled, truncated) {
-        (ToolExposureMode::Auto, true, false) => format!(
+    let ProjectionReasonMetrics {
+        projectable_total,
+        raw_total,
+        broker_only_total,
+        estimated_total_tokens,
+        catalog_ok,
+        enabled,
+        truncated,
+    } = metrics;
+    match (options.mode, catalog_ok, enabled, truncated) {
+        (ToolExposureMode::Auto, true, true, false) => format!(
             "auto projection enabled because {} projectable upstream tools fit countBudget={} and tokenBudget={}; estimatedTokens={}; rawToolCount={}, brokerOnlyToolCount={}, projectionSafety={}",
             projectable_total, options.budget, options.token_budget, estimated_total_tokens, raw_total, broker_only_total, safety
         ),
-        (ToolExposureMode::Auto, false, _) if raw_total == 0 => {
+        (ToolExposureMode::Auto, false, _, _) => "auto projection disabled because the cached upstream catalog is incomplete or stale; broker tools remain available while refresh/warmup can repopulate the cache".to_string(),
+        (ToolExposureMode::Auto, true, false, _) if raw_total == 0 => {
             "auto projection disabled because no callable upstream tools were discovered".to_string()
         }
-        (ToolExposureMode::Auto, false, _) if projectable_total == 0 => format!(
+        (ToolExposureMode::Auto, true, false, _) if projectable_total == 0 => format!(
             "auto projection disabled because no tools passed projectionSafety={}; rawToolCount={}, brokerOnlyToolCount={}",
             safety, raw_total, broker_only_total
         ),
-        (ToolExposureMode::Auto, false, _) => format!(
+        (ToolExposureMode::Auto, true, false, _) => format!(
             "auto projection disabled because {} projectable upstream tools or ~{} tokens exceed countBudget={} / tokenBudget={}; broker tools remain available; rawToolCount={}, brokerOnlyToolCount={}, projectionSafety={}",
             projectable_total, estimated_total_tokens, options.budget, options.token_budget, raw_total, broker_only_total, safety
         ),
-        (ToolExposureMode::Native, true, true) => format!(
+        (ToolExposureMode::Native, _, true, true) => format!(
             "native projection enabled and truncated from {} projectable tools by countBudget={} / tokenBudget={}; estimatedTokens={}; rawToolCount={}, brokerOnlyToolCount={}, projectionSafety={}",
             projectable_total, options.budget, options.token_budget, estimated_total_tokens, raw_total, broker_only_total, safety
         ),
-        (ToolExposureMode::Native, true, false) => format!(
+        (ToolExposureMode::Native, _, true, false) => format!(
             "native projection enabled for {} projectable upstream tools; estimatedTokens={}; rawToolCount={}, brokerOnlyToolCount={}, projectionSafety={}",
             projectable_total, estimated_total_tokens, raw_total, broker_only_total, safety
         ),
-        (ToolExposureMode::Hybrid, true, true) => format!(
+        (ToolExposureMode::Hybrid, _, true, true) => format!(
             "hybrid projection exposed the highest-ranked prefix of {} projectable tools within countBudget={} / tokenBudget={}; broker search remains available for the rest; rawToolCount={}, brokerOnlyToolCount={}, projectionSafety={}",
             projectable_total, options.budget, options.token_budget, raw_total, broker_only_total, safety
         ),
-        (ToolExposureMode::Hybrid, true, false) => format!(
+        (ToolExposureMode::Hybrid, _, true, false) => format!(
             "hybrid projection exposed all {} projectable tools and keeps broker search available; rawToolCount={}, brokerOnlyToolCount={}, projectionSafety={}",
             projectable_total, raw_total, broker_only_total, safety
         ),
-        (ToolExposureMode::Broker, _, _) => {
+        (ToolExposureMode::Broker, _, _, _) => {
             "broker mode keeps upstream tools behind upstream_search/upstream_call".to_string()
         }
-        (ToolExposureMode::Minimal, _, _) => {
+        (ToolExposureMode::Minimal, _, _, _) => {
             "minimal mode keeps only essential adapter tools".to_string()
         }
         _ => "projection disabled".to_string(),
     }
 }
-
 fn projection_safety_name(safety: ProjectionSafety) -> &'static str {
     match safety {
         ProjectionSafety::Safe => "safe",
@@ -1054,7 +1076,6 @@ fn projection_safety_name(safety: ProjectionSafety) -> &'static str {
         ProjectionSafety::All => "all",
     }
 }
-
 fn parse_projection_safety(value: &str) -> ProjectionSafety {
     match value.trim().to_ascii_lowercase().replace('_', "-").as_str() {
         "all" | "max" | "maximum" | "everything" => ProjectionSafety::All,
@@ -1062,7 +1083,6 @@ fn parse_projection_safety(value: &str) -> ProjectionSafety {
         _ => ProjectionSafety::Review,
     }
 }
-
 fn management_surface_mode_from_env() -> ManagementSurfaceMode {
     if tool_exposure_mode_from_env() == ToolExposureMode::Minimal {
         return ManagementSurfaceMode::Minimal;
@@ -1084,7 +1104,6 @@ fn management_surface_mode_from_env() -> ManagementSurfaceMode {
         _ => ManagementSurfaceMode::Adapter,
     }
 }
-
 fn tool_exposure_mode_from_env() -> ToolExposureMode {
     std::env::var("MCPACE_TOOL_EXPOSURE")
         .or_else(|_| std::env::var("MCPACE_UPSTREAM_TOOL_EXPOSURE"))
@@ -1092,11 +1111,9 @@ fn tool_exposure_mode_from_env() -> ToolExposureMode {
         .map(|value| parse_tool_exposure_mode(&value))
         .unwrap_or_else(default_tool_exposure_mode)
 }
-
 fn default_tool_exposure_mode() -> ToolExposureMode {
     ToolExposureMode::Broker
 }
-
 fn parse_tool_exposure_mode(value: &str) -> ToolExposureMode {
     match value.trim().to_ascii_lowercase().replace('_', "-").as_str() {
         "native" | "project" | "projected" | "direct" => ToolExposureMode::Native,
@@ -1106,7 +1123,6 @@ fn parse_tool_exposure_mode(value: &str) -> ToolExposureMode {
         _ => ToolExposureMode::Auto,
     }
 }
-
 fn management_surface_mode_name(mode: ManagementSurfaceMode) -> &'static str {
     match mode {
         ManagementSurfaceMode::Adapter => "adapter",
@@ -1114,7 +1130,6 @@ fn management_surface_mode_name(mode: ManagementSurfaceMode) -> &'static str {
         ManagementSurfaceMode::Minimal => "minimal",
     }
 }
-
 fn tool_exposure_mode_name(mode: ToolExposureMode) -> &'static str {
     match mode {
         ToolExposureMode::Auto => "auto",
@@ -1124,7 +1139,6 @@ fn tool_exposure_mode_name(mode: ToolExposureMode) -> &'static str {
         ToolExposureMode::Minimal => "minimal",
     }
 }
-
 fn protocol_rank(protocol_version: &str) -> usize {
     match protocol_version {
         "2024-11-05" => 1,
@@ -1134,15 +1148,12 @@ fn protocol_rank(protocol_version: &str) -> usize {
         _ => 4,
     }
 }
-
 fn env_usize(name: &str) -> Option<usize> {
     std::env::var(name).ok()?.trim().parse::<usize>().ok()
 }
-
 fn env_u64(name: &str) -> Option<u64> {
     std::env::var(name).ok()?.trim().parse::<u64>().ok()
 }
-
 fn env_bool(name: &str) -> Option<bool> {
     match std::env::var(name)
         .ok()?
@@ -1155,6 +1166,5 @@ fn env_bool(name: &str) -> Option<bool> {
         _ => None,
     }
 }
-
 #[cfg(test)]
 mod tests;
