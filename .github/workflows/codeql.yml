@@ -1,18 +1,9 @@
 name: codeql
 
+# GitHub-hosted security analysis is kept manual-only while the repository uses
+# local CI to avoid paid private-repo Actions minutes. Re-enable push/PR/schedule
+# triggers only after billing or a trusted self-hosted runner is configured.
 on:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-  push:
-    branches:
-      - main
-      - master
-  schedule:
-    - cron: '37 5 * * 2'
   workflow_dispatch:
 
 permissions:

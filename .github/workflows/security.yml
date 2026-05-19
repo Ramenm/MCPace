@@ -1,19 +1,9 @@
 name: security
 
+# GitHub-hosted security jobs are manual-only while local CI is the default gate
+# and paid private-repo Actions minutes are intentionally avoided.
 on:
   workflow_dispatch:
-  pull_request:
-    types:
-      - opened
-      - synchronize
-      - reopened
-      - ready_for_review
-  push:
-    branches:
-      - main
-      - master
-  schedule:
-    - cron: '31 7 * * 2'
 
 permissions:
   contents: read
