@@ -1,9 +1,9 @@
 name: release-artifacts
 
+# Release artifact builds are manual-only in the no-paid-runner posture. Push tag
+# automation can be restored when GitHub Actions billing or a trusted
+# self-hosted runner is configured.
 on:
-  push:
-    tags:
-      - 'v*.*.*'
   workflow_dispatch:
     inputs:
       create_github_release:

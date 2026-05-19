@@ -35,6 +35,8 @@ $env:MCPACE_SKIP_LOCAL_CI='1'; git push; Remove-Item Env:\MCPACE_SKIP_LOCAL_CI
 
 ## GitHub Actions cost posture
 
-The repository workflows under `.github/workflows/ci.yml` and `.github/workflows/linux-auto.yml` are manual-only (`workflow_dispatch`). This keeps GitHub-hosted runners from starting automatically on private-repo pushes or pull requests.
+The repository workflows under `.github/workflows/` are manual-only (`workflow_dispatch`). This keeps GitHub-hosted runners from starting automatically on private-repo pushes, pull requests, scheduled security scans, or release tags.
+
+Dependabot version-update PR creation is also paused with `open-pull-requests-limit: 0` in `.github/dependabot.yml` so stale dependency PRs do not sit open with obsolete failed checks while hosted CI is disabled. Re-enable Dependabot when either local dependency-update review is scheduled or a trusted CI runner is available.
 
 If a cloud proof is needed later, run the workflow manually after GitHub billing/spending limits are healthy, or move selected jobs to a trusted self-hosted runner and keep secrets locked down.
