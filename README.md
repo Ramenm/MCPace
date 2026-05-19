@@ -136,6 +136,8 @@ During Streamable HTTP `initialize`, MCPace returns `Mcp-Session-Id` and `MCP-Pr
 
 ```bash
 npm test
+npm run ci:local:quick
+npm run ci:local
 npm run verify:toolbox
 npm run verify:local:smoke
 npm run verify:local:source
@@ -170,7 +172,7 @@ cargo build --release --locked
 
 In constrained sandboxes, local Node checks can run with the project npm surface. Full Cargo check/test/build need the pinned Rust toolchain and crates.io dependencies available through the configured network/cache. CI Rust jobs cache Cargo registry/git/target with keys derived from OS, Rust version, target or suite, `Cargo.lock`, and `rust-toolchain.toml`.
 
-MCPace can be proved locally without a paid GitHub plan. Use `npm run verify:local:smoke` during editing, `npm run verify:local:source` before sharing a public source snapshot, and `npm run verify:publish-decision` for the final source-vs-native publication answer. Public GitHub workflows and security checks are extra trust signals, not the only proof path.
+MCPace can be proved locally without a paid GitHub plan. Use `npm run ci:local:quick` as the fast pre-push guard, `npm run ci:local` for the source/package/Rust/secrets parity gate, and `npm run verify:publish-decision` for the final source-vs-native publication answer. The paid-runner GitHub workflows are manual-only by default; see `docs/local-ci.md` for the no-paid-runner CI posture.
 
 ## Read paths and diagnostics
 

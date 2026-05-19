@@ -20,8 +20,12 @@ function parseArgs(argv) {
 function hookBody() {
   return `#!/usr/bin/env sh
 set -eu
-printf '%s\n' '[mcpace hooks] running quick local pre-publish gate before push'
-npm run verify:local-prepublish:quick
+if [ "\${MCPACE_SKIP_LOCAL_CI:-}" = "1" ]; then
+  printf '%s\n' '[mcpace hooks] MCPACE_SKIP_LOCAL_CI=1; skipping local CI pre-push gate'
+  exit 0
+fi
+printf '%s\n' '[mcpace hooks] running quick local CI before push'
+npm run ci:local:quick
 `;
 }
 
@@ -47,7 +51,7 @@ function install(opts = {}) {
   }
   if (fs.existsSync(hookPath) && !opts.force) {
     const current = fs.readFileSync(hookPath, 'utf8');
-    if (current.includes('verify:local-prepublish:quick')) {
+    if (current.includes('ci:local:quick')) {
       report.status = 'pass';
       report.actions.push('pre-push hook already installed');
       return report;
