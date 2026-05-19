@@ -325,3 +325,21 @@ Still not proven here:
 - The vendored native binary inside the archive is still older (`0.6.2`) and must not be used as release proof for `0.6.5`.
 - `npm run verify:local:source` timed out in this sandbox before writing its report; targeted source/orchestration lanes above passed.
 - Live third-party MCP package probes, paid-provider calls, and full live Rust-dashboard HTTP E2E remain live-host tasks.
+## 2026-05-19 MCP overhead pressure pass
+
+Changes:
+- Added `scripts/lib/mcp-evidence-profile.mjs` so adaptive profiling and overhead pressure audits share the same evidence-first state/session classifier instead of duplicating profile logic.
+- Added `scripts/mcp-overhead-pressure-audit.mjs`, `npm run verify:overhead-pressure`, and `npm run benchmark:overhead-pressure`.
+- Wired `verify:overhead-pressure` into `npm run verify:experience`.
+- Added `tests/node/mcp-overhead-pressure-contract.test.js` and `docs/mcp-overhead-optimization.md`.
+- Added `reports/mcp-overhead-pressure-latest.json` and `reports/mcp-overhead-pressure-latest.md` to the archive allowlist.
+
+Evidence in this sandbox:
+- `npm run verify:overhead-pressure`: pass. 10,000 synthetic server profiles averaged under the configured profile budget; 200 settings fragments were scanned; 50,000 scheduler decisions completed with zero route-key invariant violations.
+- `node --test tests/node/mcp-overhead-pressure-contract.test.js`: pass, 2/2.
+- `npm run verify:adaptive-parallelism`: pass after refactoring the classifier into a shared library.
+- `npm run verify:adaptive-worker-plan`: pass after the same refactor.
+
+Limitations:
+- The audit is synthetic and intentionally does not launch random MCP packages or call tools. Live MCP package execution remains explicit opt-in only.
+- Rust quality and native latency still require a host with `cargo`/`rustc` and a rebuilt binary.

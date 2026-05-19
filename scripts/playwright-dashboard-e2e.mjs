@@ -17,7 +17,7 @@ function parseArgs(argv) {
     markdown: 'reports/playwright-dashboard-e2e-latest.md',
     timeoutMs: DEFAULT_TIMEOUT_MS,
     chromium: process.env.MCPACE_PLAYWRIGHT_CHROMIUM || findChromiumExecutable(),
-    npm: process.env.MCPACE_NPM || 'npm',
+    npm: process.env.MCPACE_NPM || (process.platform === 'win32' ? 'npm.cmd' : 'npm'),
     useExistingNodeModules: false,
     help: false,
   };
@@ -91,6 +91,12 @@ function redact(text) {
     .replace(/(api[_-]?key|token|secret|password)=([^\s&]+)/gi, '$1=<redacted>');
 }
 
+function spawnPortable(command, args, options) {
+  if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(command)) {
+    return spawnSync(process.env.ComSpec || 'cmd.exe', ['/d', '/c', 'call', command, ...args], options);
+  }
+  return spawnSync(command, args, options);
+}
 
 function npmInstallEnv(overrides = {}) {
   const env = cleanChildEnv(overrides);
@@ -180,7 +186,7 @@ function installPlaywright(tempRoot, args, remainingTimeoutMs) {
 
   fs.writeFileSync(path.join(tempRoot, 'package.json'), JSON.stringify({ private: true, type: 'module' }, null, 2));
   const started = performance.now();
-  const install = spawnSync(args.npm, ['install', '--no-save', '--no-audit', '--no-fund', PLAYWRIGHT_PACKAGE], {
+  const install = spawnPortable(args.npm, ['install', '--no-save', '--no-audit', '--no-fund', PLAYWRIGHT_PACKAGE], {
     cwd: tempRoot,
     encoding: 'utf8',
     timeout: remainingTimeoutMs,
@@ -245,7 +251,7 @@ function runPlaywright(args) {
     }
 
     const remaining = Math.ceil(Math.max(30_000, args.timeoutMs - (performance.now() - started)));
-    const result = spawnSync(install.cli, [
+    const result = spawnPortable(install.cli, [
       'test',
       '--config', path.join(tempRoot, 'tests', 'e2e', 'playwright.config.mjs'),
       '--reporter', 'list'

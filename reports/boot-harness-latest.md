@@ -1,8 +1,8 @@
 # MCPace boot harness
 
-Generated: 2026-05-04T12:15:10.311Z
+Generated: 2026-05-19T12:41:39.816Z
 
-Project: `mcpace` v`0.5.9`
+Project: `mcpace` v`0.6.5`
 
 Install readiness: **pass**
 

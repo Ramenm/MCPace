@@ -1,6 +1,6 @@
 # MCPace bug sweep
 
-Project: `mcpace` v`0.5.9`
+Project: `mcpace` v`0.6.5`
 Status: **pass**
 
 ## Summary
@@ -24,5 +24,5 @@ Status: **pass**
 | `source:prod-rust-stub-macros` | info | pass | No todo!, unimplemented!, or dbg! macros found in production Rust files. | Keep this invariant covered while changing nearby code. |
 | `runtime:http-origin-host-boundary` | info | pass | Local HTTP boundary validates Host and Origin and explicitly rejects Origin: null by default. | Keep this invariant covered while changing nearby code. |
 | `runtime:server-minted-session-id` | info | pass | Initialize path uses a server-minted session id. | Keep this invariant covered while changing nearby code. |
-| `runtime:session-id-bounds-randomness` | info | pass | Session ids are bounded and generated from OS randomness with fallback diagnostics. | Keep this invariant covered while changing nearby code. |
+| `runtime:session-id-bounds-randomness` | info | pass | Session ids are bounded and generated from OS randomness without insecure fallback. | Keep this invariant covered while changing nearby code. |
 | `reports:runtime-trace-present` | info | pass | runtime trace report is present and passing. | Keep this invariant covered while changing nearby code. |

@@ -1009,6 +1009,12 @@ fn handle_http_request(
         ("GET", "/") => {
             write_text_response(stream, "200 OK", "text/html; charset=utf-8", DASHBOARD_HTML)?
         }
+        ("GET", "/favicon.ico") => write_text_response(
+            stream,
+            "200 OK",
+            "image/svg+xml; charset=utf-8",
+            DASHBOARD_FAVICON_SVG,
+        )?,
         ("GET", "/status") => {
             let payload = run_json_command(&config.root_path, &["hub", "status", "--json"])?;
             write_json_response(stream, "200 OK", &payload)?;
@@ -1174,6 +1180,7 @@ pub(super) fn run_json_command_vec(
 }
 
 const DASHBOARD_HTML: &str = include_str!("dashboard/index.html");
+const DASHBOARD_FAVICON_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#111827"/><path d="M16 42V22h9l7 10 7-10h9v20h-8V30l-8 11-8-11v12h-8Z" fill="#7dd3fc"/><circle cx="51" cy="13" r="5" fill="#34d399"/></svg>"##;
 
 #[cfg(test)]
 mod tests;

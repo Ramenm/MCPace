@@ -1,0 +1,18 @@
+{
+  "schema": "mcpace.nodeSyntaxCheck.v1",
+  "generatedAt": "2026-05-19T10:41:17.210Z",
+  "root": "/mnt/data/mcpace_deep_work/mcpace",
+  "sourceRoots": [
+    "packages/npm/cli",
+    "scripts",
+    "tests/node",
+    "tests/fixtures",
+    "examples"
+  ],
+  "status": "pass",
+  "fileCount": 161,
+  "checkedCount": 161,
+  "failureCount": 0,
+  "jobs": 6,
+  "failures": []
+}

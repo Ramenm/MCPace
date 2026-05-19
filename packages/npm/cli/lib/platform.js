@@ -7,6 +7,7 @@ const PLATFORM_PROBE_TIMEOUT_MS = parseTimeoutEnv(
   'MCPACE_PLATFORM_PROBE_TIMEOUT_MS',
   DEFAULT_PLATFORM_PROBE_TIMEOUT_MS
 );
+const libcProbeCache = new Map();
 
 function parseTimeoutEnv(name, fallback) {
   const parsed = Number.parseInt(process.env[name] || '', 10);
@@ -30,39 +31,45 @@ export function detectLibc(platform = process.platform) {
     return null;
   }
 
+  if (libcProbeCache.has(platform)) {
+    return libcProbeCache.get(platform);
+  }
+
+  let detected = null;
   const report = process.report?.getReport?.();
   if (report?.header?.glibcVersionRuntime) {
-    return 'gnu';
-  }
-  if (Array.isArray(report?.sharedObjects) && report.sharedObjects.some((entry) => /musl/i.test(String(entry)))) {
-    return 'musl';
+    detected = 'gnu';
+  } else if (Array.isArray(report?.sharedObjects) && report.sharedObjects.some((entry) => /musl/i.test(String(entry)))) {
+    detected = 'musl';
+  } else {
+    try {
+      const output = execFileSync('ldd', ['--version'], {
+        encoding: 'utf8',
+        timeout: PLATFORM_PROBE_TIMEOUT_MS,
+        windowsHide: true
+      });
+      if (/musl/i.test(output)) {
+        detected = 'musl';
+      } else if (/glibc|gnu/i.test(output)) {
+        detected = 'gnu';
+      }
+    } catch {
+      // fall through to the filesystem heuristic below
+    }
   }
 
-  try {
-    const output = execFileSync('ldd', ['--version'], {
-      encoding: 'utf8',
-      timeout: PLATFORM_PROBE_TIMEOUT_MS,
-      windowsHide: true
-    });
-    if (/musl/i.test(output)) {
-      return 'musl';
+  if (!detected) {
+    try {
+      if (fs.existsSync('/etc/alpine-release')) {
+        detected = 'musl';
+      }
+    } catch {
+      // ignore filesystem probing errors and report the libc as unknown
     }
-    if (/glibc|gnu/i.test(output)) {
-      return 'gnu';
-    }
-  } catch {
-    // fall through to the filesystem heuristic below
   }
 
-  try {
-    if (fs.existsSync('/etc/alpine-release')) {
-      return 'musl';
-    }
-  } catch {
-    // ignore filesystem probing errors and report the libc as unknown
-  }
-
-  return null;
+  libcProbeCache.set(platform, detected);
+  return detected;
 }
 
 export function currentTargetKey(

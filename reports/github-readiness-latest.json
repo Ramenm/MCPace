@@ -1,9 +1,9 @@
 {
   "schema": "mcpace.githubReadiness.v1",
-  "generatedAt": "2026-05-04T13:21:15.617Z",
+  "generatedAt": "2026-05-19T13:14:32.569Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "ready-with-warnings",
   "summary": {
@@ -27,7 +27,7 @@
       "id": "file:README.md",
       "required": true,
       "status": "pass",
-      "evidence": "public landing page; 196 lines",
+      "evidence": "public landing page; 202 lines",
       "nextAction": "Keep this repo surface maintained as code and docs change."
     },
     {

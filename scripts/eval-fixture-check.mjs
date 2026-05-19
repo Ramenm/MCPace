@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { fileURLToPath } from 'node:url';
 import { repoRoot, readJson } from './lib/project-metadata.mjs';
 
 const DEFAULT_JSON_OUT = path.join('reports', 'eval-fixture-check-latest.json');
@@ -353,7 +354,7 @@ function main() {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {
   try { main(); }
   catch (error) {
     if (process.argv.includes('--json')) {

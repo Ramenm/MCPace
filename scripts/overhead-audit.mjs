@@ -2,12 +2,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { performance } from 'node:perf_hooks';
 import { repoRoot, deriveProjectName, deriveProjectVersion, readJson } from './lib/project-metadata.mjs';
 import { resolveBinary } from '../packages/npm/cli/lib/resolve-binary.js';
 import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
 const DEFAULT_RUNS = 7;
+const DEFAULT_RESOLVE_RUNS = 250;
+
+function monotonicMs() {
+  return Number(process.hrtime.bigint()) / 1_000_000;
+}
 
 function parseArgs(argv) {
   const args = {
@@ -85,7 +89,7 @@ function collectFileSizes() {
 }
 
 function runTimed(command, args, options = {}) {
-  const started = performance.now();
+  const started = monotonicMs();
   const result = spawnSync(command, args, {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -98,7 +102,7 @@ function runTimed(command, args, options = {}) {
     ok: !result.error && result.status === 0,
     status: result.status,
     error: result.error?.message || null,
-    elapsedMs: performance.now() - started,
+    elapsedMs: monotonicMs() - started,
     stdout: String(result.stdout || '').trim().slice(-200),
     stderr: String(result.stderr || '').trim().slice(-200)
   };
@@ -118,47 +122,94 @@ function percentile(values, percentileValue) {
   return sorted[index];
 }
 
+function measureResolveBinaryOverhead(runs = DEFAULT_RESOLVE_RUNS) {
+  const values = [];
+  const failures = [];
+  for (let index = 0; index < runs; index += 1) {
+    const started = monotonicMs();
+    try {
+      resolveBinary();
+      values.push((monotonicMs() - started) * 1000);
+    } catch (error) {
+      failures.push(error?.message || String(error));
+    }
+  }
+  if (values.length === 0) {
+    return { status: 'blocked', runs, failures: failures.length, reason: failures[0] || 'resolveBinary did not return a path' };
+  }
+  return {
+    status: failures.length === 0 ? 'measured' : 'partial',
+    runs,
+    measuredRuns: values.length,
+    failures: failures.length,
+    medianUs: Number(median(values).toFixed(3)),
+    p95Us: Number(percentile(values, 95).toFixed(3)),
+    maxUs: Number(Math.max(...values).toFixed(3)),
+    reason: failures[0] || null
+  };
+}
+
 function measureLauncherOverhead(runs) {
   let binaryPath = null;
   try {
     binaryPath = resolveBinary();
   } catch (error) {
-    return { status: 'blocked', reason: error.message, binaryPath: null, direct: [], launcher: [], deltaMs: null };
+    return { status: 'blocked', reason: error.message, binaryPath: null, direct: [], launcher: [], explicitLauncher: [], deltaMs: null };
   }
 
   const launcher = path.join(repoRoot, 'packages/npm/cli/bin/mcpace.js');
   const direct = [];
   const launcherRuns = [];
+  const explicitLauncherRuns = [];
   for (let index = 0; index < runs; index += 1) {
     direct.push(runTimed(binaryPath, ['--version']));
     launcherRuns.push(runTimed(process.execPath, [launcher, '--version']));
+    explicitLauncherRuns.push(runTimed(process.execPath, [launcher, '--version'], {
+      env: cleanChildEnv({ MCPACE_BINARY_PATH: binaryPath })
+    }));
   }
-  const directElapsed = direct.filter((run) => run.ok).map((run) => run.elapsedMs);
-  const launcherElapsed = launcherRuns.filter((run) => run.ok).map((run) => run.elapsedMs);
-  if (directElapsed.length === 0 || launcherElapsed.length === 0) {
+  const summarize = (entries) => {
+    const elapsed = entries.filter((run) => run.ok).map((run) => run.elapsedMs);
+    if (elapsed.length === 0) return null;
+    return {
+      medianMs: Number(median(elapsed).toFixed(2)),
+      p95Ms: Number(percentile(elapsed, 95).toFixed(2)),
+      failures: entries.length - elapsed.length
+    };
+  };
+  const directSummary = summarize(direct);
+  const launcherSummary = summarize(launcherRuns);
+  const explicitSummary = summarize(explicitLauncherRuns);
+  if (!directSummary || !launcherSummary) {
     return {
       status: 'blocked',
       reason: 'native binary or npm launcher did not execute successfully on this host',
       binaryPath,
       direct,
       launcher: launcherRuns,
+      explicitLauncher: explicitLauncherRuns,
       deltaMs: null
     };
   }
-  const directMedian = median(directElapsed);
-  const launcherMedian = median(launcherElapsed);
   return {
     status: 'measured',
     reason: null,
     binaryPath,
     runs,
-    directMedianMs: Number(directMedian.toFixed(2)),
-    directP95Ms: Number(percentile(directElapsed, 95).toFixed(2)),
-    launcherMedianMs: Number(launcherMedian.toFixed(2)),
-    launcherP95Ms: Number(percentile(launcherElapsed, 95).toFixed(2)),
-    deltaMs: Number((launcherMedian - directMedian).toFixed(2)),
-    directFailures: direct.length - directElapsed.length,
-    launcherFailures: launcherRuns.length - launcherElapsed.length
+    directMedianMs: directSummary.medianMs,
+    directP95Ms: directSummary.p95Ms,
+    launcherMedianMs: launcherSummary.medianMs,
+    launcherP95Ms: launcherSummary.p95Ms,
+    explicitLauncherMedianMs: explicitSummary?.medianMs ?? null,
+    explicitLauncherP95Ms: explicitSummary?.p95Ms ?? null,
+    deltaMs: Number((launcherSummary.medianMs - directSummary.medianMs).toFixed(2)),
+    explicitDeltaMs: explicitSummary ? Number((explicitSummary.medianMs - directSummary.medianMs).toFixed(2)) : null,
+    directFailures: directSummary.failures,
+    launcherFailures: launcherSummary.failures,
+    explicitLauncherFailures: explicitSummary?.failures ?? explicitLauncherRuns.length,
+    recommendation: launcherSummary.medianMs - directSummary.medianMs > 100
+      ? 'Avoid spawning the npm/Node wrapper for per-tool hot paths; keep MCPace as a long-lived hub process and use the native binary path for tight host benchmarks.'
+      : 'Launcher overhead is small on this host.'
   };
 }
 
@@ -168,6 +219,7 @@ function makeReport(args) {
   const manifest = readJson('release-manifest.json');
   const fileSizes = collectFileSizes();
   const launcherOverhead = measureLauncherOverhead(args.runs);
+  const resolveBinaryOverhead = measureResolveBinaryOverhead();
   const rootDeps = [
     ...Object.keys(rootPackage.dependencies || {}),
     ...Object.keys(rootPackage.devDependencies || {})
@@ -212,9 +264,27 @@ function makeReport(args) {
       evidence: launcherOverhead.status === 'measured' ? `median delta ${launcherOverhead.deltaMs}ms` : launcherOverhead.reason
     },
     {
+      id: 'resolve-binary-in-process-overhead-under-5ms-p95',
+      ok: resolveBinaryOverhead.status === 'blocked' || resolveBinaryOverhead.p95Us < 5000,
+      evidence: resolveBinaryOverhead.status === 'blocked' ? resolveBinaryOverhead.reason : `p95 ${resolveBinaryOverhead.p95Us}µs over ${resolveBinaryOverhead.measuredRuns} runs`
+    },
+    {
       id: 'launcher-overhead-not-severe-on-this-host',
       ok: launcherOverhead.status !== 'measured' || (launcherOverhead.deltaMs < 1000 && launcherOverhead.launcherMedianMs < 1500),
       evidence: launcherOverhead.status === 'measured' ? `launcher median ${launcherOverhead.launcherMedianMs}ms, delta ${launcherOverhead.deltaMs}ms` : 'not measured on this host'
+    },
+    {
+      id: 'bounded-top-k-helper-shared',
+      ok: fs.existsSync(path.join(repoRoot, 'scripts/lib/bounded-top-k.mjs'))
+        && fs.readFileSync(path.join(repoRoot, 'scripts/simulate-tool-scale.mjs'), 'utf8').includes('./lib/bounded-top-k.mjs')
+        && fs.readFileSync(path.join(repoRoot, 'scripts/simulate-mixed-upstreams.mjs'), 'utf8').includes('./lib/bounded-top-k.mjs'),
+      evidence: 'Large tool-scale simulations use a shared bounded top-k helper instead of per-match full candidate sorting.'
+    },
+    {
+      id: 'overhead-classifier-shared-policy',
+      ok: fs.readFileSync(path.join(repoRoot, 'scripts/mcp-overhead-benchmark.mjs'), 'utf8').includes('./lib/mcp-signal-policy.mjs')
+        && fs.readFileSync(path.join(repoRoot, 'scripts/mcp-overhead-stress.mjs'), 'utf8').includes('./lib/mcp-signal-policy.mjs'),
+      evidence: 'Overhead benchmark/stress share the same signal policy library as package survey/profiling.'
     }
   ];
   const status = checks.every((check) => check.ok) ? 'pass' : 'fail';
@@ -232,6 +302,7 @@ function makeReport(args) {
       cliSourceBytes: directorySize('packages/npm/cli/lib') + fileSize('packages/npm/cli/bin/mcpace.js'),
       vendoredBinaryBytes: directorySize('packages/npm/cli/vendor')
     },
+    resolveBinaryOverhead,
     launcherOverhead,
     checks
   };
@@ -259,6 +330,8 @@ function renderMarkdown(report) {
 - CLI source bytes: ${report.packageFootprint.cliSourceBytes}
 - Vendored binary bytes: ${report.packageFootprint.vendoredBinaryBytes}
 - Launcher overhead: ${report.launcherOverhead.status === 'measured' ? `${report.launcherOverhead.deltaMs}ms median delta` : report.launcherOverhead.reason}
+- Explicit binary launcher overhead: ${report.launcherOverhead.status === 'measured' ? `${report.launcherOverhead.explicitDeltaMs}ms median delta` : 'not measured'}
+- In-process binary resolution p95: ${report.resolveBinaryOverhead.status === 'measured' ? `${report.resolveBinaryOverhead.p95Us}µs` : report.resolveBinaryOverhead.reason}
 
 ## Checks
 

@@ -448,11 +448,8 @@ fn build_next_steps(
     let mut steps = Vec::new();
 
     if upstream.configured_count == 0 {
-        steps.push("Start with curated useful MCP presets: mcpace server presets".to_string());
-        steps.push(
-            "Preview the conservative local starter: mcpace server starter --path . --dry-run"
-                .to_string(),
-        );
+        steps.push("Install a package-derived MCP server: mcpace server install <npm-package|npm:package|pypi:package> --dry-run".to_string());
+        steps.push("For local filesystem or repo tools, pass explicit scope args/paths and then probe before wiring clients.".to_string());
         steps.push("Or import an existing MCP client config: mcpace server import --from <mcp-settings.json> --dry-run".to_string());
         steps.push(
             "For a fully custom server, use: mcpace server add <name> --command <cmd> --arg <arg>"

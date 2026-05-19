@@ -169,7 +169,7 @@ Stars come from clarity plus trust, not just feature count.
 - A visible demo.
 - Honest status table.
 - Clear safety model.
-- Small useful starter preset.
+- Small useful automatic install examples for package, URL, and local command servers.
 - Zero-surprise config mutation: dry-run, diff, backup, restore.
 - Strong release hygiene.
 - Issues that invite contribution: “good first issue”, “help wanted”, “runtime proof”, “client compatibility”.
@@ -198,7 +198,7 @@ Primary wedge:
 
 Good first issue categories:
 
-- preset metadata and examples;
+- automatic install/profile examples for known upstream server shapes;
 - docs examples for known upstream servers;
 - clearer CLI error messages;
 - compatibility trace fixtures;

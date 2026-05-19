@@ -1,6 +1,6 @@
 # MCPace GitHub health audit
 
-Project: `mcpace` v`0.5.9`
+Project: `mcpace` v`0.6.5`
 Status: `pass`
 Score: `100%`
 

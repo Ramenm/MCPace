@@ -30,9 +30,7 @@ test('rust command coverage reflects the currently implemented launch and instal
     'release build',
     'connect',
     'server import',
-    'server presets',
     'server install',
-    'server starter',
     'server test',
     'server enable',
     'server disable'
@@ -44,7 +42,7 @@ test('rust command coverage reflects the currently implemented launch and instal
   assert.ok(!coverage.plannedCommandGroups.includes('release'));
   assert.match(coverage.implementedReadOnlyNotes.client, /config-writing install/i);
   assert.match(coverage.implementedReadOnlyNotes.connect, /client-first read-only wiring guide/i);
-  assert.match(coverage.implementedReadOnlyNotes.server, /preset listing\/install\/starter/i);
+  assert.match(coverage.implementedReadOnlyNotes.server, /auto install/i);
   assert.match(coverage.implementedReadOnlyNotes.release, /without publishing/i);
   assert.doesNotMatch(coverage.implementedReadOnlyNotes.client, /install\/config-writing export not implemented yet/i);
 });

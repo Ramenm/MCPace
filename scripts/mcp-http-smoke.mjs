@@ -8,7 +8,7 @@ function parseArgs(argv) {
   const args = {
     url: 'http://127.0.0.1:39022/mcp',
     healthUrl: 'http://127.0.0.1:39022/healthz',
-    expectTool: 'hub_status',
+    expectTool: 'adapter_profile',
     checkGet: true,
     json: false,
     write: null,
@@ -85,7 +85,7 @@ function add(checks, id, status, summary, detail = '', meta = {}) {
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   if (args.help) {
-    console.log(`Usage: node scripts/mcp-http-smoke.mjs [--url http://127.0.0.1:39022/mcp] [--json]\n\nChecks MCP Streamable HTTP initialize, MCP-Session-Id forwarding, initialized notification, tools/list, and optional GET rejection.`);
+    console.log(`Usage: node scripts/mcp-http-smoke.mjs [--url http://127.0.0.1:39022/mcp] [--expect-tool adapter_profile] [--json]\n\nChecks MCP Streamable HTTP initialize, MCP-Session-Id forwarding, initialized notification, tools/list, and optional GET rejection.`);
     return;
   }
   const checks = [];

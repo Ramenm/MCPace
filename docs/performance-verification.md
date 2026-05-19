@@ -44,6 +44,38 @@ node scripts/performance-smoke.mjs --max-http-p95-ms <accepted-baseline-plus-mar
 
 Use host-specific thresholds only after they have been reviewed and recorded.
 
+
+## Overhead decomposition
+
+```bash
+npm run verify:mcp-overhead-decomposition
+```
+
+This gate separates hub overhead into measurable buckets: JSON-RPC
+parse/stringify, route lookup, visibility projection, scheduler locking, and
+metadata signal classification. It uses synthetic inventories and previously
+recorded package metadata only; it does not start random MCP servers and does not
+call MCP tools.
+
+The runtime HTTP benchmark now uses keep-alive by default so it measures steady
+request overhead rather than forcing a new TCP connection for every request. To
+measure connection churn explicitly, run:
+
+```bash
+node scripts/benchmark-runtime.mjs --no-keep-alive --json
+```
+
+The optimization invariants are:
+
+- route calls use a prebuilt qualified-name index instead of scanning every
+  visible tool;
+- repeated same client/session/project discovery uses a visibility projection
+  cache that is invalidated on server/tool/config changes;
+- scheduler lock checks stay proportional to the number of locks on the current
+  operation, not to total installed servers;
+- JSON-RPC payload cost is reported separately from process spawn and HTTP
+  connection setup.
+
 ## What still needs real proof
 
 The final performance release gate still needs Rust host evidence:

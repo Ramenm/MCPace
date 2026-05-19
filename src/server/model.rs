@@ -54,6 +54,7 @@ pub(super) struct SourceServerRecord {
     pub(super) source_type: String,
     pub(super) command: String,
     pub(super) url: String,
+    pub(super) args: Vec<String>,
 }
 
 impl ServerRecord {

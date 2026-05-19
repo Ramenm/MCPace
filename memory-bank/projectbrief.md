@@ -19,7 +19,7 @@ Prove one production-like loop before broad claims:
 
 - Do not claim a public cloud relay as a supported product lane.
 - Do not claim broad universal runtime support before proof-tier hosts are verified.
-- Do not enable upstream MCP servers by default. Useful MCP preset catalogs may exist as explicit, reviewable install recipes, but they must not silently install or run servers.
+- Do not enable upstream MCP servers by default. Useful MCP install plans must come from explicit package, URL, OCI, or command specs; they must not silently install or run servers.
 - Do not treat source/archive proof as release, runtime, or publish proof.
 
 ## НЕ ПОДТВЕРЖДЕНО

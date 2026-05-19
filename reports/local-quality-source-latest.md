@@ -9,7 +9,7 @@ Public source snapshot is allowed; native/npm runtime publication still needs fu
 | group | step | required | status | evidence |
 |---|---|---:|---:|---|
 | tooling | toolbox-doctor | no | warn | ready-with-warnings |
-| source | node-syntax | yes | pass | 141 checked |
+| source | node-syntax | yes | pass | 162 checked |
 | source | source-audit | yes | pass | pass |
 | lifecycle | system-lifecycle-audit | yes | pass | pass |
 | runtime-scale | mixed-upstream-topology | yes | pass | pass |
@@ -22,7 +22,7 @@ Public source snapshot is allowed; native/npm runtime publication still needs fu
 | security | supply-chain-risk | no | warn | pass-with-warnings |
 | public-surface | github-health | no | pass | pass |
 | public-surface | github-readiness | no | warn | ready-with-warnings |
-| public-surface | free-tier-readiness | yes | warn | ready-with-warnings |
+| public-surface | free-tier-readiness | yes | pass | ready |
 | package | install-readiness-source | no | pass | ready |
 | tests | repo-node-smoke-tests | yes | pass | pass |
 | tests | npm-cli-tests | yes | pass | pass |
@@ -30,12 +30,10 @@ Public source snapshot is allowed; native/npm runtime publication still needs fu
 | rust | cargo-fmt | yes | pass | exit 0 |
 | package | npm-pack | yes | pass | pass |
 | package | platform-package-manifests | yes | pass | pass |
-| claims | product-practice | no | warn | prove-rust-before-runtime-claims |
+| claims | product-practice | no | pass | ready-for-release-candidate-review |
 
 ## Next actions
 
 - toolbox-doctor: ready-with-warnings
 - supply-chain-risk: pass-with-warnings
 - github-readiness: ready-with-warnings
-- free-tier-readiness: ready-with-warnings
-- product-practice: prove-rust-before-runtime-claims

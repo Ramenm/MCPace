@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "generatedAt": "2026-05-04T09:51:25.588Z",
+  "generatedAt": "2026-05-19T13:14:30.734Z",
   "policy": {
     "critical": [
       "No production Rust todo! or unimplemented! macros.",
@@ -17,18 +17,18 @@
     ]
   },
   "summary": {
-    "files": 227,
-    "rustFiles": 128,
-    "nodeFiles": 99,
-    "productionRustLines": 36680,
-    "testRustLines": 11174,
-    "nodeLines": 14991,
+    "files": 294,
+    "rustFiles": 129,
+    "nodeFiles": 165,
+    "productionRustLines": 48138,
+    "testRustLines": 3606,
+    "nodeLines": 30410,
     "largeModules": 0,
-    "directThreadSpawns": 6,
-    "commandSpawns": 9,
-    "productionUnwraps": 0,
-    "unsafeOperations": 5,
-    "foreignFunctionBlocks": 2
+    "directThreadSpawns": 16,
+    "commandSpawns": 27,
+    "productionUnwraps": 497,
+    "unsafeOperations": 7,
+    "foreignFunctionBlocks": 4
   },
   "architecture": {
     "boundaries": [

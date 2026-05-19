@@ -2,7 +2,7 @@
 
 ## Context
 
-MCPace now has useful BYO MCP onboarding commands and data-driven presets, but install readiness was scattered across source audit, npm pack verification, Rust quality checks, manual inventory reports, and release scripts. That made it easy to overclaim readiness when only part of the source/proof lane had passed.
+MCPace now has useful BYO MCP onboarding commands and evidence-first auto-install/profile behavior, but install readiness was scattered across source audit, npm pack verification, Rust quality checks, manual inventory reports, and release scripts. That made it easy to overclaim readiness when only part of the source/proof lane had passed.
 
 ## Problem / goal
 

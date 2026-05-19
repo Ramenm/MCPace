@@ -1,15 +1,15 @@
 {
   "schema": "mcpace.productPractice.v1",
-  "generatedAt": "2026-05-17T15:34:58.612Z",
+  "generatedAt": "2026-05-19T13:15:03.104Z",
   "project": {
     "name": "mcpace",
     "version": "0.6.5"
   },
-  "status": "prove-rust-before-runtime-claims",
+  "status": "ready-for-release-candidate-review",
   "canClaim": {
     "sourceTreeHealthy": true,
     "sourceThinLauncherInstall": true,
-    "runtimeBeta": false,
+    "runtimeBeta": true,
     "publishedBinaryInstall": true,
     "universalRemoteMcpBroker": false
   },
@@ -23,7 +23,7 @@
     {
       "id": "node-syntax",
       "status": "pass",
-      "evidence": "141/141 JS/MJS files checked",
+      "evidence": "162/162 JS/MJS files checked",
       "nextAction": "Run npm run lint:npm."
     },
     {
@@ -34,8 +34,8 @@
     },
     {
       "id": "rust-build",
-      "status": "blocked",
-      "evidence": "rust quality status is partial",
+      "status": "pass",
+      "evidence": "pass",
       "nextAction": "Run cargo check/test/build on a host with dependency access."
     },
     {
@@ -56,64 +56,60 @@
       "path": "reports/rust-quality-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-17T15:34:23.374Z",
-      "ageMs": 35223,
+      "generatedAt": "2026-05-19T12:41:21.601Z",
+      "ageMs": 2021502,
       "maxAgeMs": 21600000,
-      "evidence": "reports/rust-quality-latest.json fresh (1m old, max 6h old)"
+      "evidence": "reports/rust-quality-latest.json fresh (34m old, max 6h old)"
     },
     "bootHarness": {
       "path": "reports/boot-harness-latest.json",
-      "status": "missing",
-      "fresh": false,
-      "generatedAt": null,
-      "ageMs": null,
+      "status": "fresh",
+      "fresh": true,
+      "generatedAt": "2026-05-19T12:41:39.816Z",
+      "ageMs": 2003287,
       "maxAgeMs": 21600000,
-      "evidence": "missing reports/boot-harness-latest.json"
+      "evidence": "reports/boot-harness-latest.json fresh (33m old, max 6h old)"
     },
     "runtimeTrace": {
       "path": "reports/runtime-trace-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-17T15:29:32.943Z",
-      "ageMs": 325654,
+      "generatedAt": "2026-05-19T12:41:21.995Z",
+      "ageMs": 2021108,
       "maxAgeMs": 21600000,
-      "evidence": "reports/runtime-trace-latest.json fresh (5m old, max 6h old)"
+      "evidence": "reports/runtime-trace-latest.json fresh (34m old, max 6h old)"
     },
     "installReadiness": {
       "path": "reports/install-readiness-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-17T15:32:27.185Z",
-      "ageMs": 151412,
+      "generatedAt": "2026-05-19T13:14:46.683Z",
+      "ageMs": 16420,
       "maxAgeMs": 21600000,
-      "evidence": "reports/install-readiness-latest.json fresh (3m old, max 6h old)"
+      "evidence": "reports/install-readiness-latest.json fresh (0m old, max 6h old)"
     },
     "vendoredBinary": {
       "path": "reports/vendored-binary-latest.json",
       "status": "fresh",
       "fresh": true,
-      "generatedAt": "2026-05-17T15:29:31.915Z",
-      "ageMs": 326682,
+      "generatedAt": "2026-05-19T12:41:54.390Z",
+      "ageMs": 1988713,
       "maxAgeMs": 21600000,
-      "evidence": "reports/vendored-binary-latest.json fresh (5m old, max 6h old)"
+      "evidence": "reports/vendored-binary-latest.json fresh (33m old, max 6h old)"
     }
   },
-  "wrongPracticeRisks": [
-    "Feature accumulation can make the project feel done before the actual broker loop is proven with fresh reports."
-  ],
+  "wrongPracticeRisks": [],
   "proofValidity": {
     "currentHost": {
-      "key": "linux-x64-gnu",
+      "key": "win32-x64-msvc",
       "detected": true,
-      "platform": "linux",
+      "platform": "win32",
       "arch": "x64"
     },
     "maxProofAgeHours": 6,
     "rustQuality": {
-      "usable": false,
-      "reasons": [
-        "rust quality status is partial"
-      ],
+      "usable": true,
+      "reasons": [],
       "maxAgeHours": 6
     },
     "runtimeTrace": {
@@ -121,10 +117,9 @@
       "reasons": []
     },
     "bootHarness": {
-      "usable": false,
-      "reasons": [
-        "missing report"
-      ]
+      "usable": true,
+      "reasons": [],
+      "maxAgeHours": 6
     },
     "installReadiness": {
       "usable": true,
@@ -137,7 +132,5 @@
       "maxAgeHours": 6
     }
   },
-  "nextMoves": [
-    "Run cargo check/test/build on a host with dependency access."
-  ]
+  "nextMoves": []
 }

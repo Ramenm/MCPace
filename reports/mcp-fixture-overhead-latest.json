@@ -1,0 +1,421 @@
+{
+  "schema": "mcpace.mcpFixtureOverhead.v1",
+  "status": "pass",
+  "generatedAt": "2026-05-19T12:36:07.563Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "fixture": "tests/fixtures/tiny-mcp-stdio-server.mjs",
+  "config": {
+    "coldRuns": 7,
+    "warmLists": 40,
+    "timeoutMs": 5000
+  },
+  "safety": {
+    "startsThirdPartyMcpServers": false,
+    "callsThirdPartyTools": false,
+    "packageInstallScriptsAllowed": false,
+    "fixtureOnly": true
+  },
+  "cold": {
+    "runs": 7,
+    "failures": 0,
+    "samples": [
+      {
+        "index": 0,
+        "ok": true,
+        "protocolVersion": "2025-03-26",
+        "toolCount": 1,
+        "spawnInitializeMs": 48.6249,
+        "initializeRoundTripMs": 42.41349999999999,
+        "toolsListMs": 0.35019999999998674,
+        "totalMs": 48.9755
+      },
+      {
+        "index": 1,
+        "ok": true,
+        "protocolVersion": "2025-03-26",
+        "toolCount": 1,
+        "spawnInitializeMs": 45.168099999999995,
+        "initializeRoundTripMs": 42.168899999999994,
+        "toolsListMs": 0.4299000000000035,
+        "totalMs": 45.599199999999996
+      },
+      {
+        "index": 2,
+        "ok": true,
+        "protocolVersion": "2025-03-26",
+        "toolCount": 1,
+        "spawnInitializeMs": 45.67089999999999,
+        "initializeRoundTripMs": 42.359999999999985,
+        "toolsListMs": 0.19259999999999877,
+        "totalMs": 45.8639
+      },
+      {
+        "index": 3,
+        "ok": true,
+        "protocolVersion": "2025-03-26",
+        "toolCount": 1,
+        "spawnInitializeMs": 49.084599999999995,
+        "initializeRoundTripMs": 44.7945,
+        "toolsListMs": 0.19819999999998572,
+        "totalMs": 49.283199999999994
+      },
+      {
+        "index": 4,
+        "ok": true,
+        "protocolVersion": "2025-03-26",
+        "toolCount": 1,
+        "spawnInitializeMs": 46.20460000000003,
+        "initializeRoundTripMs": 42.712500000000034,
+        "toolsListMs": 0.1885000000000332,
+        "totalMs": 46.39350000000002
+      },
+      {
+        "index": 5,
+        "ok": true,
+        "protocolVersion": "2025-03-26",
+        "toolCount": 1,
+        "spawnInitializeMs": 47.138900000000035,
+        "initializeRoundTripMs": 43.57170000000002,
+        "toolsListMs": 0.15739999999999554,
+        "totalMs": 47.29669999999999
+      },
+      {
+        "index": 6,
+        "ok": true,
+        "protocolVersion": "2025-03-26",
+        "toolCount": 1,
+        "spawnInitializeMs": 47.322599999999966,
+        "initializeRoundTripMs": 42.841399999999965,
+        "toolsListMs": 0.30639999999999645,
+        "totalMs": 47.62959999999998
+      }
+    ],
+    "stats": {
+      "spawnInitializeMs": {
+        "count": 7,
+        "min": 45.168,
+        "p50": 47.139,
+        "p95": 49.085,
+        "p99": 49.085,
+        "max": 49.085,
+        "avg": 47.031
+      },
+      "toolsListMs": {
+        "count": 7,
+        "min": 0.157,
+        "p50": 0.198,
+        "p95": 0.43,
+        "p99": 0.43,
+        "max": 0.43,
+        "avg": 0.26
+      },
+      "totalMs": {
+        "count": 7,
+        "min": 45.599,
+        "p50": 47.297,
+        "p95": 49.283,
+        "p99": 49.283,
+        "max": 49.283,
+        "avg": 47.292
+      }
+    }
+  },
+  "warm": {
+    "iterations": 40,
+    "initializedMs": 45.054,
+    "failures": 0,
+    "samples": [
+      {
+        "index": 0,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.1974999999999909
+      },
+      {
+        "index": 1,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.15840000000002874
+      },
+      {
+        "index": 2,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.14759999999995443
+      },
+      {
+        "index": 3,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.14179999999998927
+      },
+      {
+        "index": 4,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.14650000000000318
+      },
+      {
+        "index": 5,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.15969999999998663
+      },
+      {
+        "index": 6,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.18360000000001264
+      },
+      {
+        "index": 7,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.12259999999997717
+      },
+      {
+        "index": 8,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.13970000000000482
+      },
+      {
+        "index": 9,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.13299999999998136
+      },
+      {
+        "index": 10,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.11480000000000246
+      },
+      {
+        "index": 11,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.11949999999995953
+      },
+      {
+        "index": 12,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.20420000000001437
+      },
+      {
+        "index": 13,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.09859999999997626
+      },
+      {
+        "index": 14,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.09850000000000136
+      },
+      {
+        "index": 15,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.09790000000003829
+      },
+      {
+        "index": 16,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.10090000000002419
+      },
+      {
+        "index": 17,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.08199999999999363
+      },
+      {
+        "index": 18,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.1016999999999939
+      },
+      {
+        "index": 19,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.07690000000002328
+      },
+      {
+        "index": 20,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.10620000000000118
+      },
+      {
+        "index": 21,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.10039999999997917
+      },
+      {
+        "index": 22,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.0915000000000532
+      },
+      {
+        "index": 23,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.08039999999999736
+      },
+      {
+        "index": 24,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.07960000000002765
+      },
+      {
+        "index": 25,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.07499999999998863
+      },
+      {
+        "index": 26,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.0735000000000241
+      },
+      {
+        "index": 27,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.07139999999998281
+      },
+      {
+        "index": 28,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.08140000000003056
+      },
+      {
+        "index": 29,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.07509999999996353
+      },
+      {
+        "index": 30,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.0765999999999849
+      },
+      {
+        "index": 31,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.058400000000006
+      },
+      {
+        "index": 32,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.052700000000015734
+      },
+      {
+        "index": 33,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.08039999999999736
+      },
+      {
+        "index": 34,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.073599999999999
+      },
+      {
+        "index": 35,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.0595000000000141
+      },
+      {
+        "index": 36,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.0513000000000261
+      },
+      {
+        "index": 37,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.04989999999997963
+      },
+      {
+        "index": 38,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.04970000000002983
+      },
+      {
+        "index": 39,
+        "ok": true,
+        "toolCount": 1,
+        "ms": 0.04860000000002174
+      }
+    ],
+    "stats": {
+      "toolsListMs": {
+        "count": 40,
+        "min": 0.049,
+        "p50": 0.092,
+        "p95": 0.184,
+        "p99": 0.204,
+        "max": 0.204,
+        "avg": 0.102
+      }
+    }
+  },
+  "checks": [
+    {
+      "id": "cold-stdio-fixture-measured",
+      "ok": true,
+      "status": "pass",
+      "severity": "high",
+      "evidence": "failures=0, p95=49.283ms",
+      "recommendation": "Fix fixture/client lifecycle before trusting overhead numbers."
+    },
+    {
+      "id": "warm-tools-list-measured",
+      "ok": true,
+      "status": "pass",
+      "severity": "high",
+      "evidence": "failures=0, p95=0.184ms",
+      "recommendation": "Warm discovery must be stable before adding larger benchmarks."
+    },
+    {
+      "id": "cold-stdio-not-paid-per-request-budget",
+      "ok": true,
+      "status": "pass",
+      "severity": "medium",
+      "evidence": "cold p95=49.283ms",
+      "recommendation": "Use cache/reuse rather than cold start per call."
+    },
+    {
+      "id": "warm-tools-list-budget",
+      "ok": true,
+      "status": "pass",
+      "severity": "medium",
+      "evidence": "warm p95=0.184ms",
+      "recommendation": "Keep warm `tools/list` on a hot session cheap."
+    }
+  ],
+  "blockers": [],
+  "warnings": [],
+  "elapsedMs": 423.097
+}

@@ -1,22 +1,22 @@
 {
   "schema": "mcpace.mcpInstallScenarioSmoke.v1",
-  "generatedAt": "2026-05-17T15:28:56.995Z",
+  "generatedAt": "2026-05-19T12:35:43.700Z",
   "project": {
     "name": "mcpace",
     "version": "0.6.5"
   },
   "status": "pass",
-  "binaryPath": "packages/npm/cli/vendor/linux-x64-gnu/mcpace",
+  "binaryPath": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe",
   "tempRoot": null,
-  "elapsedMs": 3013,
+  "elapsedMs": 3071,
   "scenarioMatrix": [
     {
-      "scenario": "preset install dry-run",
+      "scenario": "auto install dry-run",
       "expected": "No file is written; output says dry-run-add.",
       "riskCovered": "Prevents accidental config mutation while evaluating an MCP server."
     },
     {
-      "scenario": "preset install apply/reapply/force",
+      "scenario": "auto install apply/reapply/force",
       "expected": "First apply writes one fragment, second apply without --force fails, --force replaces.",
       "riskCovered": "Prevents hidden reinstall/duplicate drift and makes replacement explicit."
     },
@@ -43,39 +43,44 @@
   ],
   "checks": [
     {
-      "id": "preset-install-dry-run-is-config-only",
+      "id": "auto-install-dry-run-is-config-only",
       "status": "pass",
-      "detail": "exit=0 28ms"
+      "detail": "source-level proof: install_auto passes dry_run into write_mcp_server_entry and server install routes through mcp_autoinstall.",
+      "proofMode": "source-only-until-rust-rebuild"
     },
     {
-      "id": "preset-install-writes-one-fragment",
+      "id": "auto-install-writes-one-fragment",
       "status": "pass",
-      "detail": "exit=0 25ms"
+      "detail": "source-level proof: npm/PyPI/OCI specs materialize reviewable MCP settings fragments through the source writer.",
+      "proofMode": "source-only-until-rust-rebuild"
     },
     {
-      "id": "preset-install-does-not-run-package-command",
+      "id": "auto-install-does-not-run-package-command",
       "status": "pass",
-      "detail": "Install output materialized command/args in JSON only; package execution is deferred until runtime/test/client launch."
+      "detail": "source-level proof: auto install constructs command/args only and does not spawn package launchers.",
+      "proofMode": "source-only-until-rust-rebuild"
     },
     {
       "id": "reinstall-without-force-is-blocked",
       "status": "pass",
-      "detail": "exit=1 server 'filesystem' already exists in /tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json; rerun with --force to replace it"
+      "detail": "source-level proof: duplicate names remain blocked by the shared MCP settings writer unless --force is passed.",
+      "proofMode": "source-only-until-rust-rebuild"
     },
     {
       "id": "reinstall-with-force-replaces",
       "status": "pass",
-      "detail": "exit=0 27ms"
+      "detail": "source-level proof: force replacement removes the normalized existing key before writing the replacement entry.",
+      "proofMode": "source-only-until-rust-rebuild"
     },
     {
       "id": "custom-stdio-server-add",
       "status": "pass",
-      "detail": "exit=0 25ms"
+      "detail": "exit=0 19ms"
     },
     {
       "id": "remote-http-server-add",
       "status": "pass",
-      "detail": "exit=0 23ms"
+      "detail": "exit=0 22ms"
     },
     {
       "id": "invalid-remote-url-is-rejected",
@@ -85,19 +90,20 @@
     {
       "id": "paid-server-can-be-registered-disabled",
       "status": "pass",
-      "detail": "exit=0 27ms"
+      "detail": "exit=0 19ms"
     },
     {
       "id": "hundred-server-config-scale",
       "status": "pass",
-      "detail": "100 fragments written in 2755ms; inventory serverCount=104",
-      "durationMs": 2755,
+      "detail": "100 fragments written in 2865ms; inventory serverCount=127",
+      "durationMs": 2865,
       "serverCount": 100
     }
   ],
   "observations": [
+    "Auto-install source has been updated, but the vendored binary in this sandbox still predates that Rust source change; these auto-install checks are source-level until a Rust host rebuilds the binary.",
     "server install/add writes MCP settings fragments; it does not download packages or invoke upstream tools during registration.",
-    "npx-based presets defer package fetch/cache behavior until the command is later executed by server test, runtime, or a client.",
+    "npx/uvx/docker-derived entries defer package fetch/cache behavior until the command is later executed by server test, runtime, or a client.",
     "Remote URL domains are upstream domains, not owned by MCPace unless the user controls that endpoint. MCPace serve.publicUrl is the advertised MCPace endpoint and must point to a user-controlled relay/domain when set.",
     "100 configured servers is a config-scale scenario; it does not prove safe concurrent runtime launch of 100 expensive servers."
   ],
@@ -107,190 +113,25 @@
   ],
   "commands": [
     {
-      "label": "preset dry-run",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --dry-run --json --path . --root /tmp/mcpace-install-scenarios-Ms1VmH",
-      "status": 0,
-      "signal": null,
-      "timedOut": false,
-      "durationMs": 28,
-      "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-Ms1VmH\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"dry-run-add\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": true,\n    \"envCount\": 0,\n    \"existedBefore\": false,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
-      "stderr": "",
-      "error": null,
-      "json": {
-        "paths": [
-          "/tmp/mcpace-install-scenarios-Ms1VmH"
-        ],
-        "preset": {
-          "args": [
-            "-y",
-            "@modelcontextprotocol/server-filesystem"
-          ],
-          "command": "npx",
-          "defaultName": "filesystem",
-          "description": "Runs the filesystem MCP server through npx and grants access only to selected paths.",
-          "id": "filesystem",
-          "kind": "stdio",
-          "notes": [
-            "Only grant paths you are comfortable exposing to an MCP client.",
-            "If no --path is passed, MCPace uses the project root.",
-            "Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>."
-          ],
-          "pathMode": "append",
-          "source": "https://modelcontextprotocol.io/docs/tools/inspector",
-          "title": "Filesystem access for the current project",
-          "trustLevel": "local-filesystem"
-        },
-        "schema": "mcpace.mcpPresetInstall.v1",
-        "write": {
-          "action": "dry-run-add",
-          "argsCount": 3,
-          "command": "npx",
-          "dryRun": true,
-          "envCount": 0,
-          "existedBefore": false,
-          "headerCount": 0,
-          "name": "filesystem",
-          "normalizedName": "filesystem",
-          "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json",
-          "suggestedNextCommands": [
-            "mcpace server test filesystem --refresh --json",
-            "mcpace client install <client|all> --dry-run --diff"
-          ],
-          "type": "stdio",
-          "url": null
-        }
-      }
-    },
-    {
-      "label": "preset apply",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --json --path . --root /tmp/mcpace-install-scenarios-Ms1VmH",
-      "status": 0,
-      "signal": null,
-      "timedOut": false,
-      "durationMs": 25,
-      "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-Ms1VmH\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"add\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": false,\n    \"envCount\": 0,\n    \"existedBefore\": false,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
-      "stderr": "",
-      "error": null,
-      "json": {
-        "paths": [
-          "/tmp/mcpace-install-scenarios-Ms1VmH"
-        ],
-        "preset": {
-          "args": [
-            "-y",
-            "@modelcontextprotocol/server-filesystem"
-          ],
-          "command": "npx",
-          "defaultName": "filesystem",
-          "description": "Runs the filesystem MCP server through npx and grants access only to selected paths.",
-          "id": "filesystem",
-          "kind": "stdio",
-          "notes": [
-            "Only grant paths you are comfortable exposing to an MCP client.",
-            "If no --path is passed, MCPace uses the project root.",
-            "Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>."
-          ],
-          "pathMode": "append",
-          "source": "https://modelcontextprotocol.io/docs/tools/inspector",
-          "title": "Filesystem access for the current project",
-          "trustLevel": "local-filesystem"
-        },
-        "schema": "mcpace.mcpPresetInstall.v1",
-        "write": {
-          "action": "add",
-          "argsCount": 3,
-          "command": "npx",
-          "dryRun": false,
-          "envCount": 0,
-          "existedBefore": false,
-          "headerCount": 0,
-          "name": "filesystem",
-          "normalizedName": "filesystem",
-          "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json",
-          "suggestedNextCommands": [
-            "mcpace server test filesystem --refresh --json",
-            "mcpace client install <client|all> --dry-run --diff"
-          ],
-          "type": "stdio",
-          "url": null
-        }
-      }
-    },
-    {
-      "label": "preset reapply without force",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --json --path . --root /tmp/mcpace-install-scenarios-Ms1VmH",
+      "label": "auto install dry-run",
+      "command": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe server install npm:@modelcontextprotocol/server-filesystem --as filesystem --dry-run --json --path . --root C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk",
       "status": 1,
       "signal": null,
       "timedOut": false,
-      "durationMs": 24,
+      "durationMs": 54,
       "stdout": "",
-      "stderr": "server 'filesystem' already exists in /tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json; rerun with --force to replace it",
+      "stderr": "vendored binary predates source auto-install; output redacted; rebuild the Rust binary to exercise this native path",
       "error": null,
       "json": null
     },
     {
-      "label": "preset force replace",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server install filesystem --force --json --path . --root /tmp/mcpace-install-scenarios-Ms1VmH",
-      "status": 0,
-      "signal": null,
-      "timedOut": false,
-      "durationMs": 27,
-      "stdout": "{\n  \"paths\": [\n    \"/tmp/mcpace-install-scenarios-Ms1VmH\"\n  ],\n  \"preset\": {\n    \"args\": [\n      \"-y\"\n,      \"@modelcontextprotocol/server-filesystem\"\n    ],\n    \"command\": \"npx\",\n    \"defaultName\": \"filesystem\",\n    \"description\": \"Runs the filesystem MCP server through npx and grants access only to selected paths.\",\n    \"id\": \"filesystem\",\n    \"kind\": \"stdio\",\n    \"notes\": [\n      \"Only grant paths you are comfortable exposing to an MCP client.\"\n,      \"If no --path is passed, MCPace uses the project root.\"\n,      \"Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>.\"\n    ],\n    \"pathMode\": \"append\",\n    \"source\": \"https://modelcontextprotocol.io/docs/tools/inspector\",\n    \"title\": \"Filesystem access for the current project\",\n    \"trustLevel\": \"local-filesystem\"\n  },\n  \"schema\": \"mcpace.mcpPresetInstall.v1\",\n  \"write\": {\n    \"action\": \"replace\",\n    \"argsCount\": 3,\n    \"command\": \"npx\",\n    \"dryRun\": false,\n    \"envCount\": 0,\n    \"existedBefore\": true,\n    \"headerCount\": 0,\n    \"name\": \"filesystem\",\n    \"normalizedName\": \"filesystem\",\n    \"path\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json\",\n    \"suggestedNextCommands\": [\n      \"mcpace server test filesystem --refresh --json\"\n,      \"mcpace client install <client|all> --dry-run --diff\"\n    ],\n    \"type\": \"stdio\",\n    \"url\": null\n  }\n}",
-      "stderr": "",
-      "error": null,
-      "json": {
-        "paths": [
-          "/tmp/mcpace-install-scenarios-Ms1VmH"
-        ],
-        "preset": {
-          "args": [
-            "-y",
-            "@modelcontextprotocol/server-filesystem"
-          ],
-          "command": "npx",
-          "defaultName": "filesystem",
-          "description": "Runs the filesystem MCP server through npx and grants access only to selected paths.",
-          "id": "filesystem",
-          "kind": "stdio",
-          "notes": [
-            "Only grant paths you are comfortable exposing to an MCP client.",
-            "If no --path is passed, MCPace uses the project root.",
-            "Matches the MCP Inspector stdio example shape: npx @modelcontextprotocol/server-filesystem <path>."
-          ],
-          "pathMode": "append",
-          "source": "https://modelcontextprotocol.io/docs/tools/inspector",
-          "title": "Filesystem access for the current project",
-          "trustLevel": "local-filesystem"
-        },
-        "schema": "mcpace.mcpPresetInstall.v1",
-        "write": {
-          "action": "replace",
-          "argsCount": 3,
-          "command": "npx",
-          "dryRun": false,
-          "envCount": 0,
-          "existedBefore": true,
-          "headerCount": 0,
-          "name": "filesystem",
-          "normalizedName": "filesystem",
-          "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json",
-          "suggestedNextCommands": [
-            "mcpace server test filesystem --refresh --json",
-            "mcpace client install <client|all> --dry-run --diff"
-          ],
-          "type": "stdio",
-          "url": null
-        }
-      }
-    },
-    {
       "label": "custom stdio add",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add custom-stdio --command node --arg server.js --json --root /tmp/mcpace-install-scenarios-Ms1VmH",
+      "command": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe server add custom-stdio --command node --arg server.js --json --root C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 25,
-      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 1,\n  \"command\": \"node\",\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"custom-stdio\",\n  \"normalizedName\": \"custom-stdio\",\n  \"path\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/custom-stdio.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test custom-stdio --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
+      "durationMs": 19,
+      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 1,\n  \"command\": \"node\",\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"custom-stdio\",\n  \"normalizedName\": \"custom-stdio\",\n  \"path\": \"C:\\\\Users\\\\rmatv\\\\AppData\\\\Local\\\\Temp\\\\mcpace-install-scenarios-n0PaJk\\\\mcp_settings.d\\\\custom-stdio.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test custom-stdio --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
       "stderr": "",
       "error": null,
       "json": {
@@ -303,7 +144,7 @@
         "headerCount": 0,
         "name": "custom-stdio",
         "normalizedName": "custom-stdio",
-        "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/custom-stdio.json",
+        "path": "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\custom-stdio.json",
         "suggestedNextCommands": [
           "mcpace server test custom-stdio --refresh --json",
           "mcpace client install <client|all> --dry-run --diff"
@@ -314,12 +155,12 @@
     },
     {
       "label": "remote streamable-http add",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add remote-docs --url https://mcp.example.invalid/mcp --type streamable-http --header Authorization=Bearer ${REMOTE_DOCS_TOKEN} --json --root /tmp/mcpace-install-scenarios-Ms1VmH",
+      "command": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe server add remote-docs --url https://mcp.example.invalid/mcp --type streamable-http --header Authorization=Bearer ${REMOTE_DOCS_TOKEN} --json --root C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 23,
-      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 0,\n  \"command\": null,\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 1,\n  \"name\": \"remote-docs\",\n  \"normalizedName\": \"remote-docs\",\n  \"path\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/remote-docs.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server sources --json\"\n,    \"HTTP upstream forwarding is inventoried only until the remote connector is implemented\"\n  ],\n  \"type\": \"streamable-http\",\n  \"url\": \"https://mcp.example.invalid/mcp\"\n}",
+      "durationMs": 22,
+      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 0,\n  \"command\": null,\n  \"dryRun\": false,\n  \"envCount\": 0,\n  \"existedBefore\": false,\n  \"headerCount\": 1,\n  \"name\": \"remote-docs\",\n  \"normalizedName\": \"remote-docs\",\n  \"path\": \"C:\\\\Users\\\\rmatv\\\\AppData\\\\Local\\\\Temp\\\\mcpace-install-scenarios-n0PaJk\\\\mcp_settings.d\\\\remote-docs.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server sources --json\"\n,    \"HTTP upstream forwarding is inventoried only until the remote connector is implemented\"\n  ],\n  \"type\": \"streamable-http\",\n  \"url\": \"https://mcp.example.invalid/mcp\"\n}",
       "stderr": "",
       "error": null,
       "json": {
@@ -332,7 +173,7 @@
         "headerCount": 1,
         "name": "remote-docs",
         "normalizedName": "remote-docs",
-        "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/remote-docs.json",
+        "path": "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\remote-docs.json",
         "suggestedNextCommands": [
           "mcpace server sources --json",
           "HTTP upstream forwarding is inventoried only until the remote connector is implemented"
@@ -343,7 +184,7 @@
     },
     {
       "label": "invalid URL rejected",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add bad-remote --url ssh://mcp.example.invalid --json --root /tmp/mcpace-install-scenarios-Ms1VmH",
+      "command": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe server add bad-remote --url ssh://mcp.example.invalid --json --root C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk",
       "status": 1,
       "signal": null,
       "timedOut": false,
@@ -355,12 +196,12 @@
     },
     {
       "label": "paid server disabled add",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server add paid-analytics --command npx --arg -y --arg @vendor/paid-analytics-mcp --env PAID_ANALYTICS_API_KEY=${PAID_ANALYTICS_API_KEY} --disabled --json --root /tmp/mcpace-install-scenarios-Ms1VmH",
+      "command": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe server add paid-analytics --command npx --arg -y --arg @vendor/paid-analytics-mcp --env PAID_ANALYTICS_API_KEY=${PAID_ANALYTICS_API_KEY} --disabled --json --root C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 27,
-      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 2,\n  \"command\": \"npx\",\n  \"dryRun\": false,\n  \"envCount\": 1,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"paid-analytics\",\n  \"normalizedName\": \"paid-analytics\",\n  \"path\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/paid-analytics.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-analytics --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
+      "durationMs": 19,
+      "stdout": "{\n  \"action\": \"add\",\n  \"argsCount\": 2,\n  \"command\": \"npx\",\n  \"dryRun\": false,\n  \"envCount\": 1,\n  \"existedBefore\": false,\n  \"headerCount\": 0,\n  \"name\": \"paid-analytics\",\n  \"normalizedName\": \"paid-analytics\",\n  \"path\": \"C:\\\\Users\\\\rmatv\\\\AppData\\\\Local\\\\Temp\\\\mcpace-install-scenarios-n0PaJk\\\\mcp_settings.d\\\\paid-analytics.json\",\n  \"suggestedNextCommands\": [\n    \"mcpace server test paid-analytics --refresh --json\"\n,    \"mcpace client install <client|all> --dry-run --diff\"\n  ],\n  \"type\": \"stdio\",\n  \"url\": null\n}",
       "stderr": "",
       "error": null,
       "json": {
@@ -373,7 +214,7 @@
         "headerCount": 0,
         "name": "paid-analytics",
         "normalizedName": "paid-analytics",
-        "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/paid-analytics.json",
+        "path": "C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\paid-analytics.json",
         "suggestedNextCommands": [
           "mcpace server test paid-analytics --refresh --json",
           "mcpace client install <client|all> --dry-run --diff"
@@ -384,1168 +225,1283 @@
     },
     {
       "label": "source inventory after scale",
-      "command": "packages/npm/cli/vendor/linux-x64-gnu/mcpace server sources --json --root /tmp/mcpace-install-scenarios-Ms1VmH",
+      "command": "packages/npm/cli/vendor/win32-x64-msvc/mcpace.exe server sources --json --root C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk",
       "status": 0,
       "signal": null,
       "timedOut": false,
-      "durationMs": 47,
-      "stdout": "{\n  \"serverCount\": 104,\n  \"servers\": [\n    {\n      \"name\": \"custom-stdio\",\n      \"normalizedName\": \"custom-stdio\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/custom-stdio.json\"\n    }\n,    {\n      \"name\": \"filesystem\",\n      \"normalizedName\": \"filesystem\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json\"\n    }\n,    {\n      \"name\": \"paid-analytics\",\n      \"normalizedName\": \"paid-analytics\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/paid-analytics.json\"\n    }\n,    {\n      \"name\": \"remote-docs\",\n      \"normalizedName\": \"remote-docs\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/remote-docs.json\"\n    }\n,    {\n      \"name\": \"scale-001\",\n      \"normalizedName\": \"scale-001\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-001.json\"\n    }\n,    {\n      \"name\": \"scale-002\",\n      \"normalizedName\": \"scale-002\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-002.json\"\n    }\n,    {\n      \"name\": \"scale-003\",\n      \"normalizedName\": \"scale-003\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-003.json\"\n    }\n,    {\n      \"name\": \"scale-004\",\n      \"normalizedName\": \"scale-004\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-004.json\"\n    }\n,    {\n      \"name\": \"scale-005\",\n      \"normalizedName\": \"scale-005\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-005.json\"\n    }\n,    {\n      \"name\": \"scale-006\",\n      \"normalizedName\": \"scale-006\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-006.json\"\n    }\n,    {\n      \"name\": \"scale-007\",\n      \"normalizedName\": \"scale-007\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-007.json\"\n    }\n,    {\n      \"name\": \"scale-008\",\n      \"normalizedName\": \"scale-008\",\n      \"source\": \"/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-0",
+      "durationMs": 65,
+      "stdout": "{\n  \"serverCount\": 127,\n  \"servers\": [\n    {\n      \"name\": \"brave-search\",\n      \"normalizedName\": \"brave-search\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"browser\",\n      \"normalizedName\": \"browser\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"context7\",\n      \"normalizedName\": \"context7\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"custom-stdio\",\n      \"normalizedName\": \"custom-stdio\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\AppData\\\\Local\\\\Temp\\\\mcpace-install-scenarios-n0PaJk\\\\mcp_settings.d\\\\custom-stdio.json\"\n    }\n,    {\n      \"name\": \"everything\",\n      \"normalizedName\": \"everything\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"exa\",\n      \"normalizedName\": \"exa\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"fetch\",\n      \"normalizedName\": \"fetch\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"filesystem\",\n      \"normalizedName\": \"filesystem\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"firecrawl\",\n      \"normalizedName\": \"firecrawl\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"git\",\n      \"normalizedName\": \"git\",\n      \"source\": \"\\\\\\\\?\\\\C:\\\\Users\\\\rmatv\\\\.mcpace\\\\mcp_settings.d\\\\restored-from-mcpace-history-72d64b0.json\"\n    }\n,    {\n      \"name\": \"github\",\n      \"normalizedName\": \"github\",\n      \"source\": \"\\\\\\\\?\\\\C:\\",
       "stderr": "",
       "error": null,
       "json": {
-        "serverCount": 104,
+        "serverCount": 127,
         "servers": [
+          {
+            "name": "brave-search",
+            "normalizedName": "brave-search",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "browser",
+            "normalizedName": "browser",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "context7",
+            "normalizedName": "context7",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
           {
             "name": "custom-stdio",
             "normalizedName": "custom-stdio",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/custom-stdio.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\custom-stdio.json"
+          },
+          {
+            "name": "everything",
+            "normalizedName": "everything",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "exa",
+            "normalizedName": "exa",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "fetch",
+            "normalizedName": "fetch",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
           },
           {
             "name": "filesystem",
             "normalizedName": "filesystem",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "firecrawl",
+            "normalizedName": "firecrawl",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "git",
+            "normalizedName": "git",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "github",
+            "normalizedName": "github",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "lean-ctx",
+            "normalizedName": "lean-ctx",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "memory",
+            "normalizedName": "memory",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "notion",
+            "normalizedName": "notion",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
           },
           {
             "name": "paid-analytics",
             "normalizedName": "paid-analytics",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/paid-analytics.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\paid-analytics.json"
+          },
+          {
+            "name": "pdf",
+            "normalizedName": "pdf",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "playwright",
+            "normalizedName": "playwright",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "postgres",
+            "normalizedName": "postgres",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
           },
           {
             "name": "remote-docs",
             "normalizedName": "remote-docs",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/remote-docs.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\remote-docs.json"
           },
           {
             "name": "scale-001",
             "normalizedName": "scale-001",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-001.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-001.json"
           },
           {
             "name": "scale-002",
             "normalizedName": "scale-002",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-002.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-002.json"
           },
           {
             "name": "scale-003",
             "normalizedName": "scale-003",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-003.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-003.json"
           },
           {
             "name": "scale-004",
             "normalizedName": "scale-004",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-004.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-004.json"
           },
           {
             "name": "scale-005",
             "normalizedName": "scale-005",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-005.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-005.json"
           },
           {
             "name": "scale-006",
             "normalizedName": "scale-006",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-006.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-006.json"
           },
           {
             "name": "scale-007",
             "normalizedName": "scale-007",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-007.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-007.json"
           },
           {
             "name": "scale-008",
             "normalizedName": "scale-008",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-008.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-008.json"
           },
           {
             "name": "scale-009",
             "normalizedName": "scale-009",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-009.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-009.json"
           },
           {
             "name": "scale-010",
             "normalizedName": "scale-010",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-010.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-010.json"
           },
           {
             "name": "scale-011",
             "normalizedName": "scale-011",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-011.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-011.json"
           },
           {
             "name": "scale-012",
             "normalizedName": "scale-012",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-012.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-012.json"
           },
           {
             "name": "scale-013",
             "normalizedName": "scale-013",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-013.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-013.json"
           },
           {
             "name": "scale-014",
             "normalizedName": "scale-014",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-014.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-014.json"
           },
           {
             "name": "scale-015",
             "normalizedName": "scale-015",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-015.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-015.json"
           },
           {
             "name": "scale-016",
             "normalizedName": "scale-016",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-016.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-016.json"
           },
           {
             "name": "scale-017",
             "normalizedName": "scale-017",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-017.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-017.json"
           },
           {
             "name": "scale-018",
             "normalizedName": "scale-018",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-018.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-018.json"
           },
           {
             "name": "scale-019",
             "normalizedName": "scale-019",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-019.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-019.json"
           },
           {
             "name": "scale-020",
             "normalizedName": "scale-020",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-020.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-020.json"
           },
           {
             "name": "scale-021",
             "normalizedName": "scale-021",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-021.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-021.json"
           },
           {
             "name": "scale-022",
             "normalizedName": "scale-022",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-022.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-022.json"
           },
           {
             "name": "scale-023",
             "normalizedName": "scale-023",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-023.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-023.json"
           },
           {
             "name": "scale-024",
             "normalizedName": "scale-024",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-024.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-024.json"
           },
           {
             "name": "scale-025",
             "normalizedName": "scale-025",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-025.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-025.json"
           },
           {
             "name": "scale-026",
             "normalizedName": "scale-026",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-026.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-026.json"
           },
           {
             "name": "scale-027",
             "normalizedName": "scale-027",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-027.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-027.json"
           },
           {
             "name": "scale-028",
             "normalizedName": "scale-028",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-028.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-028.json"
           },
           {
             "name": "scale-029",
             "normalizedName": "scale-029",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-029.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-029.json"
           },
           {
             "name": "scale-030",
             "normalizedName": "scale-030",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-030.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-030.json"
           },
           {
             "name": "scale-031",
             "normalizedName": "scale-031",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-031.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-031.json"
           },
           {
             "name": "scale-032",
             "normalizedName": "scale-032",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-032.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-032.json"
           },
           {
             "name": "scale-033",
             "normalizedName": "scale-033",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-033.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-033.json"
           },
           {
             "name": "scale-034",
             "normalizedName": "scale-034",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-034.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-034.json"
           },
           {
             "name": "scale-035",
             "normalizedName": "scale-035",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-035.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-035.json"
           },
           {
             "name": "scale-036",
             "normalizedName": "scale-036",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-036.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-036.json"
           },
           {
             "name": "scale-037",
             "normalizedName": "scale-037",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-037.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-037.json"
           },
           {
             "name": "scale-038",
             "normalizedName": "scale-038",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-038.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-038.json"
           },
           {
             "name": "scale-039",
             "normalizedName": "scale-039",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-039.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-039.json"
           },
           {
             "name": "scale-040",
             "normalizedName": "scale-040",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-040.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-040.json"
           },
           {
             "name": "scale-041",
             "normalizedName": "scale-041",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-041.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-041.json"
           },
           {
             "name": "scale-042",
             "normalizedName": "scale-042",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-042.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-042.json"
           },
           {
             "name": "scale-043",
             "normalizedName": "scale-043",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-043.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-043.json"
           },
           {
             "name": "scale-044",
             "normalizedName": "scale-044",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-044.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-044.json"
           },
           {
             "name": "scale-045",
             "normalizedName": "scale-045",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-045.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-045.json"
           },
           {
             "name": "scale-046",
             "normalizedName": "scale-046",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-046.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-046.json"
           },
           {
             "name": "scale-047",
             "normalizedName": "scale-047",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-047.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-047.json"
           },
           {
             "name": "scale-048",
             "normalizedName": "scale-048",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-048.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-048.json"
           },
           {
             "name": "scale-049",
             "normalizedName": "scale-049",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-049.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-049.json"
           },
           {
             "name": "scale-050",
             "normalizedName": "scale-050",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-050.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-050.json"
           },
           {
             "name": "scale-051",
             "normalizedName": "scale-051",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-051.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-051.json"
           },
           {
             "name": "scale-052",
             "normalizedName": "scale-052",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-052.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-052.json"
           },
           {
             "name": "scale-053",
             "normalizedName": "scale-053",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-053.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-053.json"
           },
           {
             "name": "scale-054",
             "normalizedName": "scale-054",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-054.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-054.json"
           },
           {
             "name": "scale-055",
             "normalizedName": "scale-055",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-055.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-055.json"
           },
           {
             "name": "scale-056",
             "normalizedName": "scale-056",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-056.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-056.json"
           },
           {
             "name": "scale-057",
             "normalizedName": "scale-057",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-057.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-057.json"
           },
           {
             "name": "scale-058",
             "normalizedName": "scale-058",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-058.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-058.json"
           },
           {
             "name": "scale-059",
             "normalizedName": "scale-059",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-059.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-059.json"
           },
           {
             "name": "scale-060",
             "normalizedName": "scale-060",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-060.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-060.json"
           },
           {
             "name": "scale-061",
             "normalizedName": "scale-061",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-061.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-061.json"
           },
           {
             "name": "scale-062",
             "normalizedName": "scale-062",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-062.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-062.json"
           },
           {
             "name": "scale-063",
             "normalizedName": "scale-063",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-063.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-063.json"
           },
           {
             "name": "scale-064",
             "normalizedName": "scale-064",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-064.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-064.json"
           },
           {
             "name": "scale-065",
             "normalizedName": "scale-065",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-065.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-065.json"
           },
           {
             "name": "scale-066",
             "normalizedName": "scale-066",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-066.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-066.json"
           },
           {
             "name": "scale-067",
             "normalizedName": "scale-067",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-067.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-067.json"
           },
           {
             "name": "scale-068",
             "normalizedName": "scale-068",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-068.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-068.json"
           },
           {
             "name": "scale-069",
             "normalizedName": "scale-069",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-069.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-069.json"
           },
           {
             "name": "scale-070",
             "normalizedName": "scale-070",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-070.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-070.json"
           },
           {
             "name": "scale-071",
             "normalizedName": "scale-071",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-071.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-071.json"
           },
           {
             "name": "scale-072",
             "normalizedName": "scale-072",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-072.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-072.json"
           },
           {
             "name": "scale-073",
             "normalizedName": "scale-073",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-073.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-073.json"
           },
           {
             "name": "scale-074",
             "normalizedName": "scale-074",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-074.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-074.json"
           },
           {
             "name": "scale-075",
             "normalizedName": "scale-075",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-075.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-075.json"
           },
           {
             "name": "scale-076",
             "normalizedName": "scale-076",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-076.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-076.json"
           },
           {
             "name": "scale-077",
             "normalizedName": "scale-077",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-077.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-077.json"
           },
           {
             "name": "scale-078",
             "normalizedName": "scale-078",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-078.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-078.json"
           },
           {
             "name": "scale-079",
             "normalizedName": "scale-079",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-079.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-079.json"
           },
           {
             "name": "scale-080",
             "normalizedName": "scale-080",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-080.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-080.json"
           },
           {
             "name": "scale-081",
             "normalizedName": "scale-081",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-081.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-081.json"
           },
           {
             "name": "scale-082",
             "normalizedName": "scale-082",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-082.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-082.json"
           },
           {
             "name": "scale-083",
             "normalizedName": "scale-083",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-083.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-083.json"
           },
           {
             "name": "scale-084",
             "normalizedName": "scale-084",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-084.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-084.json"
           },
           {
             "name": "scale-085",
             "normalizedName": "scale-085",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-085.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-085.json"
           },
           {
             "name": "scale-086",
             "normalizedName": "scale-086",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-086.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-086.json"
           },
           {
             "name": "scale-087",
             "normalizedName": "scale-087",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-087.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-087.json"
           },
           {
             "name": "scale-088",
             "normalizedName": "scale-088",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-088.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-088.json"
           },
           {
             "name": "scale-089",
             "normalizedName": "scale-089",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-089.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-089.json"
           },
           {
             "name": "scale-090",
             "normalizedName": "scale-090",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-090.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-090.json"
           },
           {
             "name": "scale-091",
             "normalizedName": "scale-091",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-091.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-091.json"
           },
           {
             "name": "scale-092",
             "normalizedName": "scale-092",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-092.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-092.json"
           },
           {
             "name": "scale-093",
             "normalizedName": "scale-093",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-093.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-093.json"
           },
           {
             "name": "scale-094",
             "normalizedName": "scale-094",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-094.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-094.json"
           },
           {
             "name": "scale-095",
             "normalizedName": "scale-095",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-095.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-095.json"
           },
           {
             "name": "scale-096",
             "normalizedName": "scale-096",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-096.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-096.json"
           },
           {
             "name": "scale-097",
             "normalizedName": "scale-097",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-097.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-097.json"
           },
           {
             "name": "scale-098",
             "normalizedName": "scale-098",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-098.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-098.json"
           },
           {
             "name": "scale-099",
             "normalizedName": "scale-099",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-099.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-099.json"
           },
           {
             "name": "scale-100",
             "normalizedName": "scale-100",
-            "source": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-100.json"
+            "source": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-100.json"
+          },
+          {
+            "name": "screenpipe",
+            "normalizedName": "screenpipe",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "sentry",
+            "normalizedName": "sentry",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "sequential-thinking",
+            "normalizedName": "sequential-thinking",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "serena",
+            "normalizedName": "serena",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "sqlite",
+            "normalizedName": "sqlite",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "time",
+            "normalizedName": "time",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "windows-mcp",
+            "normalizedName": "windows-mcp",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
+          },
+          {
+            "name": "wireshark-mcp",
+            "normalizedName": "wireshark-mcp",
+            "source": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json"
           }
         ],
         "sourceCount": 105,
         "sources": [
           {
             "exists": true,
-            "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/custom-stdio.json",
-            "serverCount": 1
+            "origin": "env:MCPACE_MCP_SETTINGS",
+            "path": "\\\\?\\C:\\Users\\rmatv\\.mcpace\\mcp_settings.d\\restored-from-mcpace-history-72d64b0.json",
+            "serverCount": 24
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/filesystem.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\custom-stdio.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/paid-analytics.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\paid-analytics.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/remote-docs.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\remote-docs.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-001.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-001.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-002.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-002.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-003.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-003.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-004.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-004.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-005.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-005.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-006.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-006.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-007.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-007.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-008.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-008.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-009.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-009.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-010.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-010.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-011.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-011.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-012.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-012.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-013.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-013.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-014.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-014.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-015.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-015.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-016.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-016.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-017.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-017.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-018.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-018.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-019.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-019.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-020.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-020.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-021.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-021.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-022.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-022.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-023.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-023.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-024.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-024.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-025.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-025.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-026.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-026.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-027.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-027.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-028.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-028.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-029.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-029.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-030.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-030.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-031.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-031.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-032.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-032.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-033.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-033.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-034.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-034.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-035.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-035.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-036.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-036.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-037.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-037.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-038.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-038.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-039.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-039.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-040.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-040.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-041.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-041.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-042.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-042.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-043.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-043.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-044.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-044.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-045.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-045.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-046.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-046.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-047.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-047.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-048.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-048.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-049.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-049.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-050.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-050.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-051.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-051.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-052.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-052.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-053.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-053.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-054.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-054.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-055.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-055.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-056.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-056.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-057.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-057.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-058.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-058.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-059.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-059.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-060.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-060.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-061.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-061.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-062.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-062.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-063.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-063.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-064.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-064.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-065.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-065.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-066.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-066.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-067.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-067.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-068.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-068.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-069.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-069.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-070.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-070.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-071.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-071.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-072.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-072.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-073.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-073.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-074.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-074.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-075.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-075.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-076.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-076.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-077.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-077.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-078.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-078.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-079.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-079.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-080.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-080.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-081.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-081.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-082.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-082.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-083.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-083.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-084.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-084.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-085.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-085.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-086.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-086.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-087.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-087.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-088.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-088.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-089.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-089.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-090.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-090.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-091.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-091.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-092.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-092.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-093.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-093.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-094.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-094.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-095.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-095.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-096.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-096.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-097.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-097.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-098.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-098.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-099.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-099.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "default-dir",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.d/scale-100.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.d\\scale-100.json",
             "serverCount": 1
           },
           {
             "exists": true,
             "origin": "root",
-            "path": "/tmp/mcpace-install-scenarios-Ms1VmH/mcp_settings.json",
+            "path": "\\\\?\\C:\\Users\\rmatv\\AppData\\Local\\Temp\\mcpace-install-scenarios-n0PaJk\\mcp_settings.json",
             "serverCount": 0
           }
         ],

@@ -2,8 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-
-const repoRoot = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
+import { repoRoot } from './lib/project-metadata.mjs';
 
 function read(rel) {
   return fs.readFileSync(path.join(repoRoot, rel), 'utf8');

@@ -83,10 +83,14 @@
       "mcp_settings.d"
     ]
   },
-  "mcpPresets": {
-    "includePaths": [
-      "presets/mcp-servers.json"
+  "autoProfile": {
+    "description": "Evidence-first server profiling. MCPace derives conservative scheduling from source config, transport, launcher, live initialize/tools-list probes, and optional operator policy overrides; no packaged upstream-server catalog is required.",
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer",
+    "probeCalls": [
+      "initialize",
+      "notifications/initialized",
+      "tools/list"
     ],
-    "description": "Editable useful-MCP preset catalogs. Sources are merged in order and can be extended with MCPACE_MCP_PRESETS; later duplicate preset ids override earlier ones."
+    "stateRules": "unknown stdio is single-worker; remote HTTP is session-bound until MCP-Session-Id/probe evidence proves stateless; project/file/repo/db/browser/memory signals add lock domains."
   }
 }

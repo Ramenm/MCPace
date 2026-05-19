@@ -268,25 +268,25 @@ test('client catalog built-in defaults stay isolated from registry loading behav
 
 
 
-test('server preset rendering stays outside the generic server list/capability renderer', () => {
+test('server auto-install rendering stays explicit and separate from source profiling', () => {
   const server = read('src/server.rs');
-  const presets = read('src/server/presets.rs');
+  const install = read('src/server/install.rs');
   const render = read('src/server/render.rs');
-  const presetRender = read('src/server/preset_render.rs');
+  const autoInstall = read('src/mcp_autoinstall.rs');
 
-  assert.match(server, /mod preset_render/);
-  assert.match(presets, /use super::preset_render/);
+  assert.match(server, /mod install/);
+  assert.match(server, /install::run/);
+  assert.doesNotMatch(server, /mod preset_render/);
+  assert.match(install, /mcp_autoinstall::install_auto/);
+  assert.match(render, /render_install_result/);
   assert.doesNotMatch(render, /render_preset_catalog/);
-  assert.doesNotMatch(render, /Useful MCP presets/);
-  assert.match(presetRender, /pub\(super\) fn render_preset_catalog/);
-  assert.match(presetRender, /pub\(super\) fn render_preset_install_result/);
-  assert.match(presetRender, /pub\(super\) fn render_starter_result/);
-  assert.match(presetRender, /repository-flag/);
+  assert.match(autoInstall, /build_auto_install_plan/);
+  assert.match(autoInstall, /statefulness is inferred later from source hints and live MCP probes/);
 
   const renderLines = render.trimEnd().split(/\r?\n/).length;
-  const presetRenderLines = presetRender.trimEnd().split(/\r?\n/).length;
-  assert.ok(renderLines < 450, `src/server/render.rs should stay a generic server renderer; got ${renderLines}`);
-  assert.ok(presetRenderLines < 180, `src/server/preset_render.rs should stay a focused preset renderer; got ${presetRenderLines}`);
+  const installLines = install.trimEnd().split(/\r?\n/).length;
+  assert.ok(renderLines < 520, `src/server/render.rs should stay focused; got ${renderLines}`);
+  assert.ok(installLines < 120, `src/server/install.rs should stay a focused command wrapper; got ${installLines}`);
 });
 
 test('client list rendering stays split from install and export mutation paths', () => {

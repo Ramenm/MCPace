@@ -28,14 +28,13 @@ From a user/client point of view, the shortest safe path is:
 
 ```bash
 mcpace connect
-mcpace server presets
-mcpace server starter --path . --dry-run
-mcpace server starter --path .
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
 mcpace server test filesystem --refresh --json
 mcpace client install cursor-local --dry-run --diff
 ```
 
-Use `mcpace connect [client] --server <name>` whenever you are unsure what to do next. It is read-only and reports the resolved MCPace endpoint, selected client target, upstream MCP source inventory, readiness blockers, and exact next commands. Use `server starter` for the smallest useful local setup, `server presets` to inspect editable preset data, `server import` when you already have a client or project MCP config, `server add` for a fully custom BYO stdio MCP server, `server test` before wiring a client, and `client export` / `client install` only after the upstream smoke is clear.
+Use `mcpace connect [client] --server <name>` whenever you are unsure what to do next. It is read-only and reports the resolved MCPace endpoint, selected client target, upstream MCP source inventory, readiness blockers, and exact next commands. Use `server install` for package/URL/command-derived entries, `server import` when you already have a client or project MCP config, `server add` for a fully custom BYO stdio MCP server, `server test` before wiring a client, and `client export` / `client install` only after the upstream smoke is clear.
 
 ## Configure any upstream MCP server
 
@@ -54,20 +53,20 @@ mcpace connect cursor-local --server filesystem
 
 It resolves the configured MCPace endpoint, selected client target, upstream source inventory, readiness blockers, and exact next commands.
 
-The easiest server-management path is now preset-first:
+The easiest server-management path is now evidence-first and package-spec based:
 
 ```bash
-mcpace server presets
-mcpace server install filesystem --path . --dry-run
-mcpace server install filesystem --path .
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
 mcpace server sources --json
 mcpace server test filesystem --refresh
+mcpace server capabilities --name filesystem --json
 mcpace server disable filesystem --dry-run
 mcpace server enable filesystem --dry-run
 mcpace server remove filesystem --dry-run
 ```
 
-`server presets` reads the merged preset catalog from `mcpace.config.json` `mcpPresets.includePaths` plus `MCPACE_MCP_PRESETS`; the packaged default is `presets/mcp-servers.json`. Useful starter servers are data-driven and editable instead of compiled into Rust code. `server starter` installs the conservative default starter pack; today that is only `filesystem` with an explicit allowed path. `server install <preset>` writes a single-server JSON fragment under `mcp_settings.d/` using preset data, while `server add` remains the fully custom escape hatch. `server test` runs a live stdio `tools/list` smoke against the configured server, `server disable` / `server enable` pause and resume a server without deleting the entry, and `server remove` deletes the matching entry from the source file where MCPace found it. Use `--dry-run` to preview, `--force` to replace an existing fragment, `--settings <path>` to target a specific source file, and `--url <url> --type streamable-http` to inventory a remote HTTP MCP server for the future HTTP-upstream lane. URL entries are limited to `http://` or `https://` endpoints so future remote forwarding does not inherit arbitrary URI schemes.
+`server install` derives a reviewable MCP settings fragment from a package spec, URL, or command. It does not need a packaged upstream catalog. For npm packages it writes an `npx -y <package>` stdio entry, for PyPI packages it writes a `uvx <package>` entry, for OCI specs it writes a `docker run --rm <image>` entry, and for URLs it writes a Streamable HTTP entry. The adaptive profile then starts conservative from source evidence: transport, launcher, package/args, command/url, optional policy hints, and later live `initialize`/`tools/list` probes. Remote Streamable HTTP is treated as session-bound unless explicit stateless evidence exists. Use `--dry-run` to preview, `--force` to replace an existing fragment, `--settings <path>` to target a specific source file, and `--url <url> --type streamable-http` to inventory a remote HTTP MCP server.
 
 You can still add user-supplied servers explicitly in JSON. MCPace accepts ordinary stdio-style MCP entries without also requiring a hardcoded server declaration in `mcpace.config.json`:
 
@@ -181,9 +180,9 @@ Runtime HTTP controls remain explicit: `--max-connections`, `--io-timeout-ms`, `
 
 
 - `mcpace client plan --json` shows the client plan.
-- `mcpace server presets` lists editable useful MCP starter presets.
-- `mcpace server starter --path .` installs the conservative local developer starter pack.
-- `mcpace server install filesystem --path .` installs a useful preset without memorizing package args; `context7`, `git`, and `playwright` are opt-in presets for docs, repository context, and browser automation.
+- `mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .` writes a package-derived MCP settings fragment without a packaged upstream catalog.
+- `mcpace server install pypi:mcp-server-time --as time --dry-run` previews a PyPI/uvx server entry.
+- `mcpace server install --url https://example.com/mcp --as remote-docs --dry-run` previews a remote Streamable HTTP entry, conservatively session-bound until probes prove otherwise.
 - `mcpace server add <name> --command <cmd> [--arg <arg>...]` writes a fully custom per-server MCP settings fragment.
 - `mcpace server enable|disable <name> [--dry-run]` pauses or resumes a server entry without deleting JSON.
 - `mcpace server remove <name> [--dry-run]` removes a server entry from the source file where it was found.
@@ -198,3 +197,5 @@ Runtime HTTP controls remain explicit: `--max-connections`, `--io-timeout-ms`, `
 ## Not implemented yet
 
 Network publication, HTTP upstream fan-out from the stdio bridge, cloud relay support as a product lane, and enterprise/team policy management are not implemented yet. Keep those claims out of product docs until they have proof artifacts.
+- `npm run verify:mcp-overhead-profile` measures MCP-specific cold/warm discovery, tool-index, projection, and scheduler overhead without starting random third-party MCP servers.
+- `npm run verify:mcp-fixture-overhead` measures actual local MCP stdio cold/warm lifecycle overhead against the deterministic fixture server.

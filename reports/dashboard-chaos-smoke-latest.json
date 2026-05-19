@@ -1,33 +1,33 @@
 {
   "schema": "mcpace.dashboardChaosSmoke.v1",
-  "generatedAt": "2026-05-17T15:29:10.510Z",
+  "generatedAt": "2026-05-19T12:36:03.830Z",
   "project": {
     "name": "mcpace",
     "version": "0.6.5"
   },
   "status": "pass",
   "environment": {
-    "node": "v22.16.0",
-    "platform": "linux",
+    "node": "v24.15.0",
+    "platform": "win32",
     "arch": "x64",
-    "cpuCount": 56,
-    "availableParallelism": 56
+    "cpuCount": 16,
+    "availableParallelism": 16
   },
   "scenario": {
     "tabs": 6,
     "eventsPerTab": 120,
     "servers": 150,
     "clients": 24,
-    "maxElapsedMs": 15000,
+    "maxElapsedMs": 25000,
     "maxOperationMs": 120,
     "maxRenderMs": 90
   },
   "summary": {
-    "elapsedMs": 9755.42,
+    "elapsedMs": 17875.53,
     "totalOperations": 720,
-    "maxOperationMs": 31.34,
-    "avgOperationMs": 13.52,
-    "maxRenderMs": 3.83,
+    "maxOperationMs": 48.3,
+    "avgOperationMs": 24.79,
+    "maxRenderMs": 1.82,
     "renderCount": 81,
     "fetchCount": 953,
     "abortedFetches": 154,
@@ -77,17 +77,17 @@
     {
       "id": "chaos-elapsed-budget",
       "ok": true,
-      "detail": "elapsedMs=9755.42; budget=15000"
+      "detail": "elapsedMs=17875.53; budget=25000"
     },
     {
       "id": "operation-latency-budget",
       "ok": true,
-      "detail": "maxOperationMs=31.34; budget=120"
+      "detail": "maxOperationMs=48.3; budget=120"
     },
     {
       "id": "render-latency-budget",
       "ok": true,
-      "detail": "maxRenderMs=3.83; budget=90"
+      "detail": "maxRenderMs=1.82; budget=90"
     },
     {
       "id": "all-tabs-rendered-server-list",
@@ -119,7 +119,7 @@
       "scheduledTimers": 1,
       "consoleMessages": 0,
       "refreshMode": "auto · 15s",
-      "runtimeSummary": "Hub running · 150 configured servers · generated 5/17/2026, 3:29:10 PM",
+      "runtimeSummary": "Hub running · 150 configured servers · generated 19.05.2026, 15:36:03",
       "serverListLength": 20116,
       "warningListLength": 54
     },
@@ -131,7 +131,7 @@
       "scheduledTimers": 1,
       "consoleMessages": 0,
       "refreshMode": "paused · hidden tab",
-      "runtimeSummary": "Hub stopped-ready · 150 configured servers · generated 5/17/2026, 3:29:10 PM",
+      "runtimeSummary": "Hub stopped-ready · 150 configured servers · generated 19.05.2026, 15:36:03",
       "serverListLength": 49535,
       "warningListLength": 54
     },
@@ -143,7 +143,7 @@
       "scheduledTimers": 1,
       "consoleMessages": 0,
       "refreshMode": "paused · hidden tab",
-      "runtimeSummary": "Hub stopped-ready · 150 configured servers · generated 5/17/2026, 3:29:10 PM",
+      "runtimeSummary": "Hub stopped-ready · 150 configured servers · generated 19.05.2026, 15:36:03",
       "serverListLength": 66079,
       "warningListLength": 54
     },
@@ -155,7 +155,7 @@
       "scheduledTimers": 1,
       "consoleMessages": 0,
       "refreshMode": "auto · 15s",
-      "runtimeSummary": "Hub running · 150 configured servers · generated 5/17/2026, 3:29:10 PM",
+      "runtimeSummary": "Hub running · 150 configured servers · generated 19.05.2026, 15:36:03",
       "serverListLength": 20116,
       "warningListLength": 54
     },
@@ -167,7 +167,7 @@
       "scheduledTimers": 1,
       "consoleMessages": 0,
       "refreshMode": "auto · 15s",
-      "runtimeSummary": "Hub running · 150 configured servers · generated 5/17/2026, 3:29:10 PM",
+      "runtimeSummary": "Hub running · 150 configured servers · generated 19.05.2026, 15:36:03",
       "serverListLength": 14738,
       "warningListLength": 54
     },
@@ -179,7 +179,7 @@
       "scheduledTimers": 1,
       "consoleMessages": 0,
       "refreshMode": "auto · 15s",
-      "runtimeSummary": "Hub running · 150 configured servers · generated 5/17/2026, 3:29:10 PM",
+      "runtimeSummary": "Hub running · 150 configured servers · generated 19.05.2026, 15:36:03",
       "serverListLength": 66079,
       "warningListLength": 54
     }

@@ -2,7 +2,7 @@
 
 Status: **pass**
 Version: 0.6.5
-Generated at: 2026-05-17T15:29:17.182Z
+Generated at: 2026-05-19T12:36:11.906Z
 
 ## Coverage
 
@@ -24,4 +24,3 @@ Generated at: 2026-05-17T15:29:17.182Z
 ## Interpretation
 
 This is an offline structural and governance check. It does not call an LLM provider, does not score model output, and does not prove production traffic quality. Use it before provider-backed evals so schema, splits, grounding paths, and guardrails are not silently broken.
-

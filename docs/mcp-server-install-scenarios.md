@@ -4,7 +4,7 @@ This document defines what MCPace means by "installing" an MCP server and which 
 
 ## Facts from the current implementation
 
-- `mcpace server install <preset>` and `mcpace server add ...` register an MCP server by writing an MCP settings fragment under `mcp_settings.d/` by default.
+- `mcpace server install <npm-package|npm:package|pypi:package|oci:image|url>` and `mcpace server add ...` register an MCP server by writing an MCP settings fragment under `mcp_settings.d/` by default.
 - Registration does not download an npm/PyPI package, start a process, call a remote endpoint, or invoke a tool.
 - Runtime execution is deferred until `mcpace server test`, a connected MCP client, or the MCPace runtime actually launches the configured command or connects to the configured URL.
 - Re-running an install with the same normalized server name is blocked unless `--force` is provided.
@@ -42,8 +42,8 @@ Not owned by MCPace:
 
 | Scenario | What MCPace should do | What MCPace must not claim |
 |---|---|---|
-| Install a stdio preset | Write command/args into a fragment. | It has downloaded or verified the package. |
-| Reinstall the same preset | Fail without `--force`; replace with `--force`. | It has updated global packages. |
+| Install a stdio package spec | Write command/args into a fragment. | It has downloaded or verified the package. |
+| Reinstall the same server name | Fail without `--force`; replace with `--force`. | It has updated global packages. |
 | Add a remote HTTP server | Store URL and optional headers. | The remote domain is owned or trusted by MCPace. |
 | Add paid/expensive server | Prefer disabled registration until reviewed. | Tool calls are free or bounded. |
 | Configure 100 servers | Keep config inventory deterministic and bounded. | All 100 can safely run concurrently. |

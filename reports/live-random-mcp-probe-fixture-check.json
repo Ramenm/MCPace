@@ -7,7 +7,7 @@
     "version": "0.6.5"
   },
   "status": "pass",
-  "elapsedMs": 2,
+  "elapsedMs": 1,
   "summary": {
     "total": 12,
     "ok": 10,
@@ -1492,6 +1492,6 @@
     "Canaries that need credentials or have large/flaky dependency trees are represented as startup-error or skipped-by-policy rather than being force-enabled by default.",
     "This is smoke evidence, not a source-code security audit of third-party packages."
   ],
-  "fixture": "eval/fixtures/live-random-mcp-probe-sample.json",
+  "fixture": "eval\\fixtures\\live-random-mcp-probe-sample.json",
   "sourceSchema": "mcpace.liveRandomMcpProbe.v5"
 }

@@ -61,7 +61,10 @@ test('runtime benchmark helper is wired into package scripts and documents opera
   const readme = read('README.md');
 
   assert.equal(packageJson.scripts['benchmark:runtime'], 'node scripts/benchmark-runtime.mjs');
-  assert.equal(packageJson.scripts['verify:performance'], 'node scripts/performance-smoke.mjs --json --write reports/performance-smoke-latest.json --markdown reports/performance-smoke-latest.md');
+  assert.match(packageJson.scripts['verify:performance'], /performance-smoke\.mjs --json --write reports\/performance-smoke-latest\.json --markdown reports\/performance-smoke-latest\.md/);
+  assert.match(packageJson.scripts['verify:experience'], /verify:overhead:quick/);
+  assert.match(packageJson.scripts['verify:overhead:deep'], /verify:mcp-overhead-profile/);
+  assert.match(packageJson.scripts['verify:overhead:full'], /verify:overhead:deep/);
   assert.equal(packageJson.scripts['lint:npm'], 'node scripts/check-node-syntax.mjs --json');
   assert.equal(fs.existsSync(path.join(repoRoot, 'scripts/benchmark-runtime.mjs')), true);
   assert.match(benchmarkScript, /--url/);

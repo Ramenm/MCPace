@@ -545,6 +545,74 @@ pub fn callable_tools_raw_catalog(
     ]))
 }
 
+pub fn callable_tools_raw_catalog_for_servers(
+    root_path: &Path,
+    server_names: &[String],
+    timeout_ms: Option<u64>,
+    refresh: bool,
+) -> Result<JsonValue, String> {
+    let started = Instant::now();
+    let servers = load_servers(root_path)?;
+    let mut seen = BTreeSet::new();
+    let mut selected_servers = Vec::new();
+
+    for server_name in server_names {
+        let requested = server_name.trim();
+        if requested.is_empty() {
+            continue;
+        }
+        let Some(server) = servers
+            .values()
+            .find(|server| server.name.eq_ignore_ascii_case(requested))
+        else {
+            continue;
+        };
+        let key = server.name.to_ascii_lowercase();
+        if !seen.insert(key) || !server_runtime_callable(root_path, server).0 {
+            continue;
+        }
+        selected_servers.push(server.clone());
+    }
+
+    let results = run_server_tasks(
+        root_path,
+        selected_servers,
+        timeout_ms,
+        move |root, server, timeout| catalog_server_raw(root, server, timeout, refresh),
+    );
+    let ok_count = results
+        .iter()
+        .filter(|item| json_helpers::bool_at_path(item, &["ok"]).unwrap_or(false))
+        .count();
+    let failed_count = results.len().saturating_sub(ok_count);
+    let tool_count = results
+        .iter()
+        .filter_map(|item| json_helpers::value_at_path(item, &["toolCount"]))
+        .filter_map(JsonValue::as_i64)
+        .sum::<i64>();
+
+    Ok(JsonValue::object([
+        ("ok", JsonValue::bool(failed_count == 0)),
+        (
+            "mode",
+            JsonValue::string("raw-callable-tools-candidate-catalog"),
+        ),
+        (
+            "summary",
+            JsonValue::string(
+                "Discovered raw tools/list definitions only for query-ranked candidate upstream MCP servers, avoiding full upstream fan-out for targeted search.",
+            ),
+        ),
+        ("requestedServerCount", JsonValue::number(server_names.len())),
+        ("serverCount", JsonValue::number(results.len())),
+        ("okCount", JsonValue::number(ok_count)),
+        ("failedCount", JsonValue::number(failed_count)),
+        ("toolCount", JsonValue::number(tool_count)),
+        ("elapsedMs", JsonValue::number(started.elapsed().as_millis())),
+        ("servers", JsonValue::array(results)),
+    ]))
+}
+
 pub fn callable_tools_cached_catalog(root_path: &Path) -> Result<JsonValue, String> {
     let started = Instant::now();
     let servers = load_servers(root_path)?;

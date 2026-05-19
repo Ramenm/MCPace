@@ -14,7 +14,7 @@ pub mod init;
 pub mod json;
 pub mod json_helpers;
 pub mod lab;
-pub(crate) mod mcp_presets;
+pub(crate) mod mcp_autoinstall;
 pub mod mcp_protocol;
 pub mod mcp_server;
 pub(crate) mod mcp_sources;

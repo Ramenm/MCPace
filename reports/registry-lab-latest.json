@@ -1,14 +1,14 @@
 {
   "schema": "mcpace.registryLab.v2",
   "version": "0.6.5",
-  "generatedAt": "2026-05-17T15:29:16.260Z",
+  "generatedAt": "2026-05-19T12:36:11.178Z",
   "status": "pass",
   "mode": "fixture-metadata-only",
   "source": {
     "type": "fixture",
-    "path": "eval/fixtures/registry-sample.json"
+    "path": "eval\\fixtures\\registry-sample.json"
   },
-  "elapsedMs": 5,
+  "elapsedMs": 2,
   "safety": {
     "executesThirdPartyPackages": false,
     "contactsRegistryOnlyInLiveMode": false,

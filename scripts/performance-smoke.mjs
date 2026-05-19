@@ -7,8 +7,7 @@ import process from 'node:process';
 import { spawn, spawnSync } from 'node:child_process';
 import { performance } from 'node:perf_hooks';
 import { cleanChildEnv } from './lib/safe-child-env.mjs';
-
-const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
+import { repoRoot } from './lib/project-metadata.mjs';
 
 function parseArgs(argv) {
   const args = {

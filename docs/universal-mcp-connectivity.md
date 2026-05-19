@@ -153,33 +153,15 @@ The report resolves the configured MCPace endpoint, selected client target, merg
 
 This is not a replacement for runtime proof. The next runtime gate is still a real client trace through `/mcp` and a callable stdio upstream.
 
-## v0.5.6 preset-first native install pass
+## v0.6.x automatic useful MCP install pass
 
-Useful MCP onboarding is now data-driven rather than package-name hardcoded in Rust. `presets/mcp-servers.json` defines editable starter presets, `mcpace server presets` lists them, `mcpace server install <preset>` materializes one fragment, and `mcpace server starter` installs the conservative local developer starter pack.
-
-The current starter pack only installs `filesystem` with explicit allowed paths. `playwright` is present as an opt-in preset but is intentionally not part of the default starter pack because browser automation has a broader trust surface.
+Useful MCP onboarding is now package/URL/command-derived instead of static-catalog-first. MCPace does not ship a packaged upstream-server catalog by default. `mcpace server install` derives a reviewable settings fragment from what the user provides:
 
 ```bash
-mcpace server presets
-mcpace server install filesystem --path . --dry-run
-mcpace server starter --path .
-mcpace server test filesystem --refresh --json
+mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run
+mcpace server install pypi:mcp-server-git --as git --path . --dry-run
+mcpace server install --url https://example.com/mcp --as remote-docs --dry-run
+mcpace server install custom-local --command node --arg ./server.js --dry-run
 ```
 
-This keeps MCPace native for common users without turning the Rust source into a compiled catalog of third-party packages. External registry/search integration remains future work; the official MCP Registry is a metadata/API layer, so MCPace should consume it through a dedicated discovery/import lane rather than hardcoding an ever-growing list of servers.
-
-
-## v0.5.9 source-simplification and preset catalog pass
-
-The useful-MCP onboarding layer now uses a merged preset catalog instead of a single fixed data file path. MCPace loads preset catalog paths from `mcpace.config.json` `mcpPresets.includePaths`, falls back to `presets/mcp-servers.json`, and extends/overrides entries with `MCPACE_MCP_PRESETS`. Later duplicate preset ids override earlier entries and are reported as warnings in `mcpace server presets --json`.
-
-The packaged catalog now covers four opt-in useful presets:
-
-```bash
-mcpace server install filesystem --path . --dry-run
-mcpace server install context7 --dry-run
-mcpace server install git --path . --dry-run
-mcpace server install playwright --arg --headless --dry-run
-```
-
-`server starter` stays conservative and installs only `filesystem`; network documentation lookup, git repository context, and browser automation remain explicit opt-ins. Preset rendering was also moved from the generic server renderer into `src/server/preset_render.rs`, keeping `src/server/render.rs` focused on server list/capability/test/toggle output.
+After registration, `mcpace server test <name> --refresh --json` collects live stdio initialize/tools-list evidence. The adaptive profile remains conservative until source evidence, safe probes, and optional operator policy hints justify a faster lane. Browser/desktop, shell/process, memory/context, filesystem, git, database, credential/API, and remote HTTP servers are separated by detected evidence and lock domains rather than by a static packaged grouping file.

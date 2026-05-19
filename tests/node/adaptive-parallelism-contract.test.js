@@ -19,11 +19,15 @@ test('adaptive parallelism audit passes and emits evidence-backed profiles', () 
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const report = JSON.parse(result.stdout);
   assert.equal(report.status, 'pass');
-  assert.ok(report.summary.profileCount >= 4);
-  assert.ok(report.summary.edgeCaseCount >= 10);
+  assert.ok(report.summary.profileCount >= 0);
+  assert.ok(report.summary.edgeCaseCount >= 13);
+  assert.equal(report.summary.staticCatalogPresent, false);
+  assert.ok(report.summary.statefulCount >= 1);
+  assert.ok(report.summary.statelessCount >= 1);
   assert.ok(report.checks.every((check) => check.ok), JSON.stringify(report.checks, null, 2));
-  const filesystem = report.profiles.find((profile) => profile.serverId === 'filesystem');
-  assert.ok(filesystem, 'filesystem preset should be classified');
+  assert.ok(report.checks.some((check) => check.id === 'no-packaged-upstream-catalog'));
+  const filesystem = report.edgeCases.find((edgeCase) => edgeCase.id === 'project-filesystem-write')?.actual;
+  assert.ok(filesystem, 'filesystem edge case should be classified automatically');
   assert.equal(filesystem.parallelSafetyClass, 'P3_project_safe');
   assert.equal(filesystem.defaultPoolModel, 'project-pool');
   assert.equal(filesystem.maxInFlightPerWorker, 1);
@@ -59,12 +63,15 @@ test('adaptive edge-case matrix covers scheduler failure modes', () => {
     'unknown-stdio-npx',
     'legacy-sse',
     'remote-streamable-http',
+    'stateless-remote-http',
     'credential-scoped-api',
     'project-filesystem-write',
     'repo-git-write',
     'browser-automation',
     'shared-exclusive-desktop',
     'readonly-stdio-candidate',
+    'stateful-memory',
+    'local-database',
     'oci-unknown',
   ]) {
     assert.ok(byId.has(id), `${id} should be in the adaptive edge-case matrix`);
@@ -73,6 +80,11 @@ test('adaptive edge-case matrix covers scheduler failure modes', () => {
   assert.equal(byId.get('unknown-stdio-npx').actual.maxInFlightPerWorker, 1);
   assert.equal(byId.get('legacy-sse').actual.defaultPoolModel, 'legacy-disabled');
   assert.equal(byId.get('remote-streamable-http').actual.defaultPoolModel, 'remote-http-session-pool');
+  assert.equal(byId.get('remote-streamable-http').actual.parallelSafetyClass, 'P2_session_safe');
+  assert.equal(byId.get('stateless-remote-http').actual.parallelSafetyClass, 'P4_stateless_remote_candidate');
+  assert.equal(byId.get('stateful-memory').actual.defaultPoolModel, 'singleton');
+  assert.equal(byId.get('stateful-memory').actual.parallelSafetyClass, 'P2_session_safe');
+  assert.equal(byId.get('local-database').actual.defaultPoolModel, 'project-pool');
   assert.equal(byId.get('browser-automation').actual.parallelSafetyClass, 'PX_forbidden_browser_until_context_isolated');
 });
 
@@ -82,7 +94,7 @@ test('adaptive worker plan materializes scheduler decisions with locks and degra
   assert.equal(result.status, 0, result.stderr || result.stdout);
   const report = JSON.parse(result.stdout);
   assert.equal(report.status, 'pass');
-  assert.ok(report.summary.runtimePlanCount >= 4);
+  assert.ok(report.summary.runtimePlanCount >= 0);
   assert.ok(report.summary.edgePlanCount >= 10);
   assert.ok(report.checks.every((check) => check.ok), JSON.stringify(report.checks, null, 2));
   const byId = new Map(report.plans.map((plan) => [plan.serverId, plan]));
@@ -114,7 +126,9 @@ test('adaptive schemas and architecture docs are present', () => {
   assert.match(doc, /Legacy SSE/);
   assert.match(doc, /maxInFlightPerWorker=1/);
   assert.match(doc, /Safe probes must not/);
+  assert.doesNotMatch(doc, /mcp-server-taxonomy\.json/);
   const edgeDoc = fs.readFileSync(path.join(root, 'docs/adaptive-edge-case-coverage.md'), 'utf8');
   assert.match(edgeDoc, /Unknown stdio package/);
   assert.match(edgeDoc, /Browser automation/);
+  assert.match(edgeDoc, /Explicit stateless Streamable HTTP remote/);
 });

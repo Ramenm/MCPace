@@ -58,9 +58,7 @@ Bridge-only commands: `0`
 - `server remove`
 - `server sources`
 - `server test`
-- `server starter`
 - `server install`
-- `server presets`
 - `server candidates`
 - `verify doctor`
 - `verify readiness`
@@ -83,7 +81,7 @@ Bridge-only commands: `0`
 | `projects` | scan/mutation not implemented yet |
 | `release` | local release artifact/proof bundle wrapper only; builds artifacts and checksums without publishing to npm or GitHub |
 | `serve` | public one-port localhost HTTP surface with start/stop/status lifecycle commands |
-| `server` | list, capabilities, source inventory, data-driven preset listing/install/starter, candidate delegation, BYO MCP fragment creation/import with dry-run/force support, enable/disable toggles, removal, and live stdio smoke tests |
+| `server` | list, capabilities, source inventory, data-driven auto install/import/add/test, candidate delegation, BYO MCP fragment creation/import with dry-run/force support, enable/disable toggles, removal, and live stdio smoke tests |
 | `service` | user-level autostart install/status/uninstall/print via the auto-launch crate; uses the current executable path instead of requiring mcpace in PATH |
 | `setup` | one-command local bootstrap that starts serve, installs supported local client config entries, verifies readiness, and smokes /healthz plus /mcp |
 | `stdio-shim` | bootstrap-only proof surface; normalizes context and ensures hub up but does not forward live MCP stdio traffic |

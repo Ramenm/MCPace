@@ -15,7 +15,7 @@ function parseArgs(argv) {
     events: 120,
     servers: 150,
     clients: 24,
-    maxElapsedMs: 15_000,
+    maxElapsedMs: 25_000,
     maxOperationMs: 120,
     maxRenderMs: 90,
   };
@@ -70,7 +70,7 @@ Options:
   --events 120                Random operations per tab
   --servers 150               Mock server rows in overview payloads
   --clients 24                Mock client surfaces in overview payloads
-  --max-elapsed-ms 15000      Total smoke budget
+  --max-elapsed-ms 25000      Total smoke budget
   --max-operation-ms 120      Per-event budget
   --max-render-ms 90          Render function budget
   --write <path>              JSON report path

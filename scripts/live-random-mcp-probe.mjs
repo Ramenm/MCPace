@@ -787,7 +787,7 @@ function detectToolRiskSignals(server, tools, stderr, stdout) {
   if (/everything/.test(packageHint)) signals.add('protocol-fixture');
   if (/filesystem|file[-_ ]?system/.test(packageHint) || /\b(read|write|move|edit|list)_?(file|directory|directories)\b/.test(joinedNames)) signals.add('filesystem');
   if (/\bgit\b|repository|worktree/.test(packageHint) || /\bgit_|commit|branch|diff|repository/.test(joinedNames)) signals.add('git-repository');
-  if (/postgres|sqlite|database|db\b|sql\b/.test(packageHint) || /query|schema|table|database|sqlite|postgres/.test(joinedNames)) signals.add('database');
+  if (/postgres|sqlite|database|db\b|sql\b/.test(packageHint) || /sqlite|postgres|database|sql|db_path|db-path|table|schema/.test(joinedNames)) signals.add('database');
   if (/chrome|devtools|browser|playwright|puppeteer/.test(packageHint) || /\b(click|navigate|screenshot|page|tab|hover|fill|upload_file|evaluate)\b/.test(joinedNames)) signals.add('browser-or-desktop');
   if (/memory|sequential-thinking|context-store/.test(packageHint) || /entity|relation|observation|knowledge|thinking|thought/.test(joinedNames)) signals.add('memory-or-context');
   if (/time|timezone/.test(packageHint) || /timezone|current_time|convert_time|get_current_time/.test(joinedNames)) signals.add('local-utility');
@@ -806,7 +806,14 @@ function detectToolRiskSignals(server, tools, stderr, stdout) {
   if (/delete|remove|write|update|create|patch|upload|close|click|drag|fill|navigate|commit|merge|apply|execute|run/.test(joinedNames) || annotations.some((ann) => ann.destructiveHint === true || ann.readOnlyHint === false)) signals.add('mutable-or-destructive-tools');
   if (annotations.some((ann) => ann.openWorldHint === true)) signals.add('open-world-annotation');
   if (/ignore (all )?(previous|prior) instructions|system prompt|developer message|exfiltrate|leak secret|prompt injection/.test(joinedAll)) signals.add('prompt-injection-surface');
-  if (/api[_-]?key|token|auth|credential|required but not set|unauthorized|missing.*token|bearer|oauth/i.test(joinedAll) || /brave|apify|notion|sentry|slack|github|railway|hubspot|google-maps|tavily|azure|evm/.test(packageHint)) signals.add('credentials-or-auth');
+  if (/api[_-]?key|\btoken\b|credential|required but not set|unauthorized|missing.*token|bearer|oauth|auth[_-]?token|authentication|authorization/i.test(joinedAll) || /brave|apify|notion|sentry|slack|github|railway|hubspot|google-maps|tavily|azure|evm/.test(packageHint)) signals.add('credentials-or-auth');
+  if (/context7/.test(packageHint)) {
+    signals.delete('database');
+    signals.delete('credentials-or-auth');
+  }
+  if (signals.has('memory-or-context') && !signals.has('credentials-or-auth') && !signals.has('network-or-external-api') && !signals.has('cloud-admin')) {
+    signals.delete('identity-admin');
+  }
   if (!signals.size) signals.add('unknown-side-effects');
   return [...signals];
 }
@@ -815,6 +822,7 @@ function suggestRuntimePolicy(server, risks) {
   const has = (risk) => risks.includes(risk);
   if (has('protocol-fixture')) return 'test-fixture-disabled';
   if (server.pkg.includes('context7')) return 'network-docs-multi-reader-review';
+  if (has('memory-or-context') && !has('credentials-or-auth') && !has('network-or-external-api')) return 'state-profile-single-session';
   if (has('identity-admin')) return 'identity-admin-credential-review';
   if (has('cloud-admin')) return 'cloud-admin-credential-review';
   if (has('blockchain-wallet')) return 'blockchain-wallet-review';

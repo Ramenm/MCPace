@@ -1,9 +1,9 @@
 {
   "schema": "mcpace.defectGates.v1",
-  "generatedAt": "2026-05-04T13:21:15.413Z",
+  "generatedAt": "2026-05-19T13:14:31.302Z",
   "project": {
     "name": "mcpace",
-    "version": "0.5.9"
+    "version": "0.6.5"
   },
   "status": "pass",
   "summary": {

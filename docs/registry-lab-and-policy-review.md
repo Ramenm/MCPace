@@ -52,7 +52,7 @@ Planned next lane. Allowed actions are only `initialize` and `tools/list`. The l
 
 ### C. Policy audit
 
-Compare registry metadata, package manager identity, transport, tool names, tool descriptions, annotations, server-side requests during discovery, credential requirements, prompt-injection-looking descriptions, and MCPace preset knowledge. The result is a suggested policy, never automatic trust.
+Compare registry metadata, package manager identity, transport, tool names, tool descriptions, annotations, server-side requests during discovery, credential requirements, prompt-injection-looking descriptions, and MCPace operator policy hints. The result is a suggested policy, never automatic trust.
 
 ### D. Concurrency torture
 
@@ -83,7 +83,7 @@ The UI must label unknown servers as untrusted and show the current policy in hu
 A release cannot claim safe random-server support unless all of these pass:
 
 - source tests and version-drift checks are green;
-- preset installs write explicit server policy overlays;
+- auto installs write explicit server fragments and later policy/probe evidence;
 - unknown registry/server entries remain conservative;
 - cloud, cluster, blockchain/wallet, command-runner, OpenAPI bridge, payment/financial, identity-admin, secrets-manager, and messaging/email entries remain disabled/review-gated by default;
 - registry lab report is regenerated for the release version;

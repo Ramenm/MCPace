@@ -38,8 +38,10 @@ test('source inventory produces a deterministic first-use and release manifest r
   assert.ok(report.largestRustModules.some((entry) => entry.path.startsWith('src/')));
   assert.equal(report.versions.drift.length, 0);
   assert.equal(report.releaseManifest.missing.length, 0);
-  assert.equal(report.presets.status, 'ok');
-  assert.ok(report.presets.ids.includes('filesystem'));
+  assert.equal(report.autoProfile.status, 'ok');
+  assert.equal(report.autoProfile.autoProfileConfigured, true);
+  assert.equal(report.autoProfile.packagedStaticServerCatalogPresent, false);
+  assert.equal(report.autoProfile.packagedStaticServerGroupingPresent, false);
 
   assert.equal(JSON.parse(fs.readFileSync(jsonPath, 'utf8')).schema, 'mcpace.sourceInventory.v1');
   assert.match(fs.readFileSync(mdPath, 'utf8'), /MCPace source inventory/);

@@ -30,7 +30,7 @@ test('lifecycle blast-radius smoke is wired into package scripts and release evi
   assert.match(script, /paid-server-registers-disabled-without-output-secret-leak/);
   assert.match(script, /server-remove-dry-run-does-not-delete/);
   assert.match(script, /source-corrupt-settings-fragment-isolated/);
-  assert.match(script, /supply-chain-unpinned-launchers-are-documented-risk/);
+  assert.match(script, /supply-chain-package-launchers-are-documented-risk/);
   assert.match(docs, /registered but disabled/i);
   assert.match(docs, /Owned by MCPace/);
   assert.match(docs, /Not owned by MCPace/);

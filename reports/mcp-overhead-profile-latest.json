@@ -1,0 +1,311 @@
+{
+  "schema": "mcpace.mcpOverheadProfile.v1",
+  "status": "pass",
+  "generatedAt": "2026-05-19T12:36:16.797Z",
+  "project": {
+    "name": "mcpace",
+    "version": "0.6.5"
+  },
+  "elapsedMs": 246.009,
+  "config": {
+    "runs": 25,
+    "iterations": 20000,
+    "servers": 100,
+    "tools": 100000,
+    "clients": 16,
+    "sessions": 64,
+    "operations": 50000,
+    "packages": 100,
+    "toolsPerServer": null,
+    "memoryLimitMiB": 256
+  },
+  "safety": {
+    "startsMcpServers": false,
+    "callsMcpTools": false,
+    "executesThirdPartyPackages": false,
+    "packageInstallScriptsAllowed": false,
+    "userSecretsPassedToRuntime": false,
+    "benchmarkType": "synthetic-hub-hot-path"
+  },
+  "metrics": {
+    "route": {
+      "label": "json-rpc-parse-route-serialize",
+      "unit": "microseconds-per-operation",
+      "p50Us": 1.128,
+      "p95Us": 2.124,
+      "maxUs": 2.256,
+      "minUs": 1.007,
+      "samples": 25,
+      "operationCount": 20000,
+      "checksum": 1682
+    },
+    "sessionShard": {
+      "label": "session-shard-key",
+      "unit": "microseconds-per-operation",
+      "p50Us": 0.494,
+      "p95Us": 1.197,
+      "maxUs": 1.288,
+      "minUs": 0.319,
+      "samples": 25,
+      "operationCount": 20000,
+      "checksum": 0
+    },
+    "lockAdmission": {
+      "label": "lock-admission-release",
+      "unit": "microseconds-per-operation",
+      "p50Us": 0.435,
+      "p95Us": 0.881,
+      "maxUs": 1.18,
+      "minUs": 0.265,
+      "samples": 25,
+      "operationCount": 50000,
+      "checksum": 92,
+      "stats": {
+        "admitted": 45845,
+        "blockedDisabled": 1725,
+        "blockedReview": 2430,
+        "blockedConflict": 0,
+        "conflictsPrevented": 0
+      },
+      "activeLocksAtEnd": 0
+    },
+    "toolIndex": {
+      "build": {
+        "label": "tool-index-build",
+        "toolCount": 100000,
+        "serverCount": 100,
+        "elapsedMs": 84.657,
+        "heapDeltaMiB": 44.859,
+        "buildUsPerTool": 0.847,
+        "searchTermCount": 810
+      },
+      "exactLookup": {
+        "label": "tool-index-exact-lookup",
+        "unit": "microseconds-per-operation",
+        "p50Us": 0.13,
+        "p95Us": 0.45,
+        "maxUs": 0.51,
+        "minUs": 0.039,
+        "samples": 25,
+        "operationCount": 20000,
+        "checksum": 98
+      },
+      "search": {
+        "label": "tool-index-readonly-search-projection",
+        "unit": "milliseconds-per-query",
+        "queryCount": 25,
+        "p50Ms": 1.705,
+        "p95Ms": 9.808,
+        "maxMs": 11.315,
+        "checksum": 32,
+        "candidateLimitPerTerm": 5000,
+        "candidateLimitPerQuery": 20000
+      }
+    },
+    "packagePolicy": {
+      "label": "package-metadata-policy-classification",
+      "unit": "microseconds-per-operation",
+      "p50Us": 0.375,
+      "p95Us": 0.751,
+      "maxUs": 3.531,
+      "minUs": 0.31,
+      "samples": 25,
+      "operationCount": 20000,
+      "checksum": 0,
+      "source": "reports/mcp-mass-package-survey-latest.json",
+      "packageCount": 100,
+      "policyCounts": {
+        "state-profile-single-session": 16,
+        "credential-scoped-review": 9,
+        "shared-exclusive-host-lock": 9,
+        "review-required-single-writer": 34,
+        "sensitive-admin-credential-review": 15,
+        "project-filesystem-single-writer": 3,
+        "database-path-single-writer": 3,
+        "disabled-dangerous-command-runner": 1,
+        "network-fetch-review": 9,
+        "project-repo-single-writer": 1
+      }
+    }
+  },
+  "classification": {
+    "label": "package-metadata-policy-classification",
+    "unit": "microseconds-per-operation",
+    "p50Us": 0.375,
+    "p95Us": 0.751,
+    "maxUs": 3.531,
+    "minUs": 0.31,
+    "samples": 25,
+    "operationCount": 20000,
+    "checksum": 0,
+    "source": "reports/mcp-mass-package-survey-latest.json",
+    "packageCount": 100,
+    "policyCounts": {
+      "state-profile-single-session": 16,
+      "credential-scoped-review": 9,
+      "shared-exclusive-host-lock": 9,
+      "review-required-single-writer": 34,
+      "sensitive-admin-credential-review": 15,
+      "project-filesystem-single-writer": 3,
+      "database-path-single-writer": 3,
+      "disabled-dangerous-command-runner": 1,
+      "network-fetch-review": 9,
+      "project-repo-single-writer": 1
+    },
+    "perPackageUs": 0.751
+  },
+  "toolIndex": {
+    "toolCount": 100000,
+    "lookupCount": 20000,
+    "lookupHits": 20000,
+    "build": {
+      "label": "tool-index-build",
+      "toolCount": 100000,
+      "serverCount": 100,
+      "elapsedMs": 84.657,
+      "heapDeltaMiB": 44.859,
+      "buildUsPerTool": 0.847,
+      "searchTermCount": 810
+    },
+    "exactLookup": {
+      "label": "tool-index-exact-lookup",
+      "unit": "microseconds-per-operation",
+      "p50Us": 0.13,
+      "p95Us": 0.45,
+      "maxUs": 0.51,
+      "minUs": 0.039,
+      "samples": 25,
+      "operationCount": 20000,
+      "checksum": 98
+    },
+    "search": {
+      "label": "tool-index-readonly-search-projection",
+      "unit": "milliseconds-per-query",
+      "queryCount": 25,
+      "p50Ms": 1.705,
+      "p95Ms": 9.808,
+      "maxMs": 11.315,
+      "checksum": 32,
+      "candidateLimitPerTerm": 5000,
+      "candidateLimitPerQuery": 20000
+    }
+  },
+  "scheduler": {
+    "started": 45845,
+    "blocked": 4155,
+    "stats": {
+      "admitted": 45845,
+      "blockedDisabled": 1725,
+      "blockedReview": 2430,
+      "blockedConflict": 0,
+      "conflictsPrevented": 0
+    },
+    "p95Us": 0.881,
+    "operationCount": 50000
+  },
+  "summary": {
+    "jsonRpcP95Us": 2.124,
+    "sessionKeyP95Us": 1.197,
+    "lockAdmissionP95Us": 0.881,
+    "toolIndexBuildMs": 84.657,
+    "toolSearchP95Ms": 9.808,
+    "packagePolicyP95Us": 0.751,
+    "blockedDisabled": 1725,
+    "blockedReview": 2430,
+    "admitted": 45845
+  },
+  "checks": [
+    {
+      "id": "json-rpc-routing-overhead-budget",
+      "ok": true,
+      "severity": "high",
+      "evidence": "p95 2.124us",
+      "recommendation": "Keep parse/route/serialize work small and avoid extra JSON passes."
+    },
+    {
+      "id": "session-shard-key-overhead-budget",
+      "ok": true,
+      "severity": "high",
+      "evidence": "p95 1.197us",
+      "recommendation": "Use stable compact keys; do not add heavyweight crypto hashing to the hot path."
+    },
+    {
+      "id": "lock-admission-overhead-budget",
+      "ok": true,
+      "severity": "high",
+      "evidence": "p95 0.881us",
+      "recommendation": "Keep admission O(number of lock keys) and release locks deterministically."
+    },
+    {
+      "id": "lock-admission-leaves-no-active-locks",
+      "ok": true,
+      "severity": "critical",
+      "evidence": "0 active locks remain",
+      "recommendation": "Every admitted operation must release exactly the keys it acquired."
+    },
+    {
+      "id": "disabled-and-review-gates-are-still-hit",
+      "ok": true,
+      "severity": "critical",
+      "evidence": "{\"admitted\":45845,\"blockedDisabled\":1725,\"blockedReview\":2430,\"blockedConflict\":0,\"conflictsPrevented\":0}",
+      "recommendation": "Optimization must not bypass disabled-server or review-required gates."
+    },
+    {
+      "id": "tool-index-build-heap-budget",
+      "ok": true,
+      "severity": "high",
+      "evidence": "44.859MiB for 100000 tools",
+      "recommendation": "Large tool catalogs should remain bounded and projected before model exposure."
+    },
+    {
+      "id": "tool-exact-lookup-overhead-budget",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "p95 0.45us",
+      "recommendation": "Exact call routing should use qualified-name maps rather than linear search."
+    },
+    {
+      "id": "tool-search-projection-overhead-budget",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "p95 9.808ms for 100000 tools",
+      "recommendation": "Search projection should stay top-K and read-only filtered."
+    },
+    {
+      "id": "package-policy-overhead-budget",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "p95 0.751us across 100 package profiles",
+      "recommendation": "Metadata policy classification must stay cheap enough for registry pressure tests."
+    },
+    {
+      "id": "classification-budget",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "p95 0.751us across 100 package profiles",
+      "recommendation": "Compatibility alias for the synthetic overhead contract."
+    },
+    {
+      "id": "tool-index-budget",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "0.847us/tool to build 100000 tools",
+      "recommendation": "Compatibility alias for the synthetic overhead contract."
+    },
+    {
+      "id": "scheduler-budget",
+      "ok": true,
+      "severity": "medium",
+      "evidence": "p95 0.881us",
+      "recommendation": "Compatibility alias for the synthetic overhead contract."
+    }
+  ],
+  "blockers": [],
+  "warnings": [],
+  "recommendations": [
+    "Prefer one long-lived hub process; npm launcher cold-start overhead is acceptable for install/CLI but should not be paid per MCP request.",
+    "Keep unknown and credentialed servers disabled/review-gated; optimizing should never convert registry discovery into execution.",
+    "Expose large tool catalogs through exact qualified-name routing plus top-K read-only projection, not by dumping every discovered tool into every model context.",
+    "Use session/client/project/credential/transport identity as the sharding key for stateful servers; stateless candidates can be widened only after live evidence."
+  ]
+}

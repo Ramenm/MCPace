@@ -66,18 +66,7 @@ function cloneMinimalProject() {
   fs.copyFileSync(path.join(repoRoot, 'mcp_settings.json'), path.join(tempRoot, 'mcp_settings.json'));
   fs.mkdirSync(path.join(tempRoot, 'mcp_settings.d'), { recursive: true });
   fs.writeFileSync(path.join(tempRoot, 'mcp_settings.d', 'README.md'), '# test fragments\n', 'utf8');
-  copyDirectory(path.join(repoRoot, 'presets'), path.join(tempRoot, 'presets'));
   return tempRoot;
-}
-
-function copyDirectory(source, target) {
-  fs.mkdirSync(target, { recursive: true });
-  for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-    const from = path.join(source, entry.name);
-    const to = path.join(target, entry.name);
-    if (entry.isDirectory()) copyDirectory(from, to);
-    else if (entry.isFile()) fs.copyFileSync(from, to);
-  }
 }
 
 function runMcpace(binaryPath, tempRoot, args, options = {}) {
@@ -138,7 +127,7 @@ function assertSourceHardeningChecks(checks) {
   const installDocs = readText('docs/mcp-server-install-scenarios.md');
   const lifecycleDocs = readText('docs/mcp-lifecycle-blast-radius.md');
   const securityDocs = readText('docs/tool-exposure-and-call-safety.md');
-  const presets = readJson('presets/mcp-servers.json');
+  const autoInstallSource = readText('src/mcp_autoinstall.rs');
 
   checks.push(check(
     'source-force-replace-removes-normalized-duplicate-key',
@@ -166,19 +155,12 @@ function assertSourceHardeningChecks(checks) {
     'Tool safety docs treat MCP tools as arbitrary-code/data-access surfaces with explicit consent.',
   ));
 
-  const unpinnedLaunchers = [];
-  for (const preset of presets.presets || []) {
-    if (!['npx', 'uvx', 'docker'].includes(String(preset.command || '').toLowerCase())) continue;
-    const args = Array.isArray(preset.args) ? preset.args : [];
-    const joined = args.join(' ');
-    const pinned = /@\d+\.\d+\.\d+/.test(joined) || /@sha256:/.test(joined) || /--from\s+[^\s]+==\d+\.\d+\.\d+/.test(joined);
-    if (!pinned) unpinnedLaunchers.push({ id: preset.id, command: preset.command, args });
-  }
+  const packageManagerLaunchers = [/npx/.test(autoInstallSource), /uvx/.test(autoInstallSource), /docker/.test(autoInstallSource)].filter(Boolean).length;
   checks.push(check(
-    'supply-chain-unpinned-launchers-are-documented-risk',
-    unpinnedLaunchers.length > 0 && /unpinned|package manager|cache miss|typosquat/i.test(lifecycleDocs),
-    `${unpinnedLaunchers.length} launcher presets are unpinned; docs must explicitly call out package-manager risk.`,
-    { unpinnedLaunchers },
+    'supply-chain-package-launchers-are-documented-risk',
+    packageManagerLaunchers >= 2 && /unpinned|package manager|cache miss|typosquat/i.test(lifecycleDocs),
+    `${packageManagerLaunchers} automatic install launchers are present; docs must explicitly call out package-manager risk.`,
+    { packageManagerLaunchers },
   ));
 }
 

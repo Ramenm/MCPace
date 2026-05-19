@@ -58,7 +58,7 @@ body:
       label: Reproduction
       description: Exact commands or client steps. Include a minimal config when possible.
       placeholder: |
-        1. mcpace server starter --path .
+        1. mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
         2. mcpace serve --port 39022
         3. client connects to http://127.0.0.1:39022/mcp
         4. send tools/list or upstream_call with ...

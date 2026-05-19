@@ -18,7 +18,7 @@ test('MCP install scenario smoke is a first-class verification command', () => {
     packageJson.scripts['benchmark:mcp-install-scenarios'],
     'node scripts/mcp-install-scenario-smoke.mjs --json --no-write --servers 100'
   );
-  assert.match(scenarioScript, /preset-install-dry-run-is-config-only/);
+  assert.match(scenarioScript, /auto-install-dry-run-is-config-only/);
   assert.match(scenarioScript, /reinstall-without-force-is-blocked/);
   assert.match(scenarioScript, /hundred-server-config-scale/);
   assert.match(scenarioScript, /paid-server-can-be-registered-disabled/);
@@ -39,7 +39,7 @@ test('latest MCP install scenario report is included in release evidence allowli
   assert.equal(latestReport.schema, 'mcpace.mcpInstallScenarioSmoke.v1');
   assert.equal(latestReport.status, 'pass');
   const ids = latestReport.checks.map((check) => check.id);
-  assert.ok(ids.includes('preset-install-dry-run-is-config-only'));
+  assert.ok(ids.includes('auto-install-dry-run-is-config-only'));
   assert.ok(ids.includes('reinstall-without-force-is-blocked'));
   assert.ok(ids.includes('remote-http-server-add'));
   assert.ok(ids.includes('paid-server-can-be-registered-disabled'));

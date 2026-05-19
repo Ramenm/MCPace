@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { performance } from 'node:perf_hooks';
+import { insertTopK } from './lib/bounded-top-k.mjs';
+import { repoRoot } from './lib/project-metadata.mjs';
 
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -24,7 +26,6 @@ const numberArg = (name, fallback) => {
   return Math.floor(value);
 };
 
-const repoRoot = path.resolve(new URL('..', import.meta.url).pathname);
 const servers = numberArg('servers', 50);
 const tools = numberArg('tools', 200_000);
 const searchLimit = Math.max(1, Math.min(numberArg('search-limit', 25), 100));
@@ -34,6 +35,9 @@ const query = String(args.get('query') ?? 'read file search');
 const json = args.has('json');
 const writePath = args.get('write') ? path.resolve(repoRoot, String(args.get('write'))) : null;
 const memoryLimitMiB = numberArg('memory-limit-mib', 512);
+
+const READONLY_FAMILIES = ['read', 'file', 'search', 'docs'];
+const MUTATING_FAMILIES = ['write', 'delete', 'update'];
 
 const toolsPerServerBase = Math.floor(tools / Math.max(1, servers));
 const remainder = tools % Math.max(1, servers);
@@ -57,16 +61,24 @@ for (let serverIndex = 0; serverIndex < servers; serverIndex += 1) {
   const serverName = `srv-${String(serverIndex).padStart(2, '0')}`;
   const count = toolsPerServerBase + (serverIndex < remainder ? 1 : 0);
   for (let toolIndex = 0; toolIndex < count; toolIndex += 1) {
-    const tool = syntheticTool(serverName, serverIndex, toolIndex);
     searchSpaceToolCount += 1;
-    const score = scoreTool(tool, terms);
+    const readOnly = toolIndex % 10 < 7;
+    const family = readOnly ? READONLY_FAMILIES[toolIndex % READONLY_FAMILIES.length] : MUTATING_FAMILIES[toolIndex % MUTATING_FAMILIES.length];
+    const name = `${family}_${serverIndex}_${toolIndex}`;
+    const qualifiedName = `${serverName}.${name}`;
+    const title = `${family} tool ${toolIndex}`;
+    const description = `${readOnly ? 'read-only discovery' : 'mutating state'} tool ${toolIndex} on ${serverName}`;
+    const score = scoreToolFields({ server: serverName, name, qualifiedName, title, description }, terms);
     if (terms.length === 0 || score > 0) {
       matchCount += 1;
-      insertTopK(topSearch, { score, key: `${tool.server}:${tool.name}`, tool: compactTool(tool, score) }, Math.max(2, searchLimit));
+      insertTopK(topSearch, {
+        score,
+        key: qualifiedName,
+        tool: compactToolFields(serverName, name, qualifiedName, description, score),
+      }, Math.max(2, searchLimit));
     }
 
-    const projectable = isProjectable(tool);
-    if (projectable) {
+    if (readOnly) {
       readOnlyCount += 1;
       if (projectedCandidateCount < projectionCandidateLimit) {
         projectedCandidateCount += 1;
@@ -74,7 +86,7 @@ for (let serverIndex = 0; serverIndex < servers; serverIndex += 1) {
     } else {
       brokerOnlyCount += 1;
       if (brokerSampleCount < brokerSampleLimit) brokerSampleCount += 1;
-      if (tool.mutating) mutatingCount += 1;
+      mutatingCount += 1;
     }
   }
 }
@@ -123,6 +135,13 @@ const report = {
     heapDeltaMiB,
     memoryLimitMiB,
   },
+  algorithm: {
+    boundedTopK: true,
+    lazyCompactToolMaterialization: true,
+    materializesFullCatalog: false,
+    maxRetainedSearchCandidates: Math.max(2, searchLimit),
+    maxProjectedCandidates: projectionCandidateLimit,
+  },
   elapsedMs,
 };
 
@@ -137,62 +156,33 @@ if (json) {
 }
 if (!pass) process.exitCode = 1;
 
-function syntheticTool(server, serverIndex, toolIndex) {
-  const readOnly = toolIndex % 10 < 7;
-  const family = readOnly ? ['read', 'file', 'search', 'docs'][toolIndex % 4] : ['write', 'delete', 'update'][toolIndex % 3];
-  return {
-    server,
-    name: `${family}_${serverIndex}_${toolIndex}`,
-    qualifiedName: `${server}.${family}_${serverIndex}_${toolIndex}`,
-    title: `${family} tool ${toolIndex}`,
-    description: `${readOnly ? 'Read-only discovery' : 'Mutating state'} tool ${toolIndex} on ${server}`,
-    readOnly,
-    mutating: !readOnly,
-  };
-}
-
 function normalize(value) {
   return String(value).toLowerCase().replace(/[^a-z0-9_.-]+/g, ' ');
 }
 
-function scoreTool(tool, terms) {
+function scoreToolFields(tool, terms) {
   if (terms.length === 0) return 1;
-  const server = normalize(tool.server);
-  const name = normalize(tool.name);
-  const qualified = normalize(tool.qualifiedName);
-  const title = normalize(tool.title);
-  const description = normalize(tool.description);
-  const all = `${server} ${name} ${qualified} ${title} ${description}`;
+  const all = `${tool.server} ${tool.name} ${tool.qualifiedName} ${tool.title} ${tool.description}`;
   let total = 0;
   for (const term of terms) {
-    if (name === term || qualified === term) total += 80;
-    if (name.includes(term)) total += 40;
-    if (qualified.includes(term)) total += 30;
-    if (title.includes(term)) total += 20;
-    if (description.includes(term)) total += 10;
-    if (server.includes(term)) total += 5;
+    if (tool.name === term || tool.qualifiedName === term) total += 80;
+    if (tool.name.includes(term)) total += 40;
+    if (tool.qualifiedName.includes(term)) total += 30;
+    if (tool.title.includes(term)) total += 20;
+    if (tool.description.includes(term)) total += 10;
+    if (tool.server.includes(term)) total += 5;
     if (all.includes(term)) total += 1;
   }
   return total;
 }
 
-function compactTool(tool, score) {
+function compactToolFields(server, name, qualifiedName, description, score) {
   return {
-    server: tool.server,
-    name: tool.name,
-    qualifiedName: tool.qualifiedName,
-    description: tool.description.slice(0, 220),
+    server,
+    name,
+    qualifiedName,
+    description: description.slice(0, 220),
     score,
-    call: { tool: 'upstream_call', arguments: { server: tool.server, tool: tool.name } },
+    call: { tool: 'upstream_call', arguments: { server, tool: name } },
   };
-}
-
-function insertTopK(items, item, limit) {
-  items.push(item);
-  items.sort((left, right) => right.score - left.score || left.key.localeCompare(right.key));
-  if (items.length > limit) items.length = limit;
-}
-
-function isProjectable(tool) {
-  return tool.readOnly && !tool.mutating;
 }

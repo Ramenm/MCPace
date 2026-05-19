@@ -1,20 +1,20 @@
 {
   "schema": "mcpace.playwrightDashboardE2E.v2",
   "status": "pass",
-  "generatedAt": "2026-05-16T14:00:05.602Z",
+  "generatedAt": "2026-05-19T12:25:13.919Z",
   "project": "mcpace",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "tool": {
     "package": "@playwright/test@1.60.0",
-    "chromium": "/usr/bin/chromium",
+    "chromium": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
     "command": "temporary npm install @playwright/test@1.60.0 && playwright test --config tests/e2e/playwright.config.mjs --reporter list"
   },
   "summary": {
-    "elapsedMs": 23636.28,
-    "installElapsedMs": 4086.09,
+    "elapsedMs": 12704.79,
+    "installElapsedMs": 1023.15,
     "exitCode": 0,
     "reason": null,
-    "stdoutTail": "\nRunning 5 tests using 2 workers\n\n  ✓  1 tests/e2e/dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-01 (4.8s)\n  ✓  2 tests/e2e/dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-02 (5.6s)\n  ✓  3 tests/e2e/dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-03 (3.2s)\n  ✓  4 tests/e2e/dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-04 (5.0s)\n  ✓  5 tests/e2e/dashboard.playwright.spec.mjs:139:1 › dashboard stays usable across real Chromium tabs, content reloads, slow APIs, and partial failures (7.2s)\n\n  5 passed (18.2s)\n",
+    "stdoutTail": "\nRunning 5 tests using 2 workers\n\n  ok 1 tests\\e2e\\dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-01 (3.0s)\n  ok 2 tests\\e2e\\dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-02 (4.1s)\n  ok 3 tests\\e2e\\dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-03 (1.7s)\n  ok 4 tests\\e2e\\dashboard.parallel.playwright.spec.mjs:142:3 › isolates already-started dashboard session for client-04 (1.7s)\n  ok 5 tests\\e2e\\dashboard.playwright.spec.mjs:139:1 › dashboard stays usable across real Chromium tabs, content reloads, slow APIs, and partial failures (5.2s)\n\n  5 passed (11.1s)\n",
     "stderrTail": "",
     "parallelState": {
       "clientCount": 4,
@@ -30,14 +30,14 @@
         "client-04"
       ],
       "conflicts": [],
-      "maxDurationMs": 4189
+      "maxDurationMs": 1004
     }
   },
   "checks": [
     {
       "id": "chromium-executable-found",
       "ok": true,
-      "evidence": "/usr/bin/chromium"
+      "evidence": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe"
     },
     {
       "id": "playwright-package-available-in-temp-prefix",
@@ -77,7 +77,7 @@
     {
       "id": "playwright-execution-pass",
       "ok": true,
-      "evidence": "elapsed 23636ms"
+      "evidence": "elapsed 12705ms"
     }
   ]
 }

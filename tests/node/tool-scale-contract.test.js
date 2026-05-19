@@ -40,7 +40,8 @@ test('upstream search avoids all-tools flatten and keeps bounded top-k candidate
   assert.match(searchBody, /upstream::callable_tools_raw_catalog/);
   assert.match(searchBody, /scan_search_listing/);
   assert.match(discovery, /fn insert_scored_tool_bounded/);
-  assert.match(discovery, /scored\.truncate\(keep_limit\)/);
+  assert.match(discovery, /scored\.insert\(position, item\)/);
+  assert.match(discovery, /scored\.pop\(\)/);
 });
 
 test('all-server catalog and projection diagnostics have bounded response surfaces', () => {
@@ -85,4 +86,8 @@ test('tool scale simulator validates 50-server six-figure tool scenarios', () =>
   assert.ok(report.results.retainedSearchCandidates <= 25);
   assert.ok(report.results.projectedToolCount <= 64);
   assert.ok(report.results.firstPageCount <= 128);
+  assert.equal(report.algorithm.boundedTopK, true);
+  assert.equal(report.algorithm.lazyCompactToolMaterialization, true);
+  assert.equal(report.algorithm.materializesFullCatalog, false);
+  assert.match(read('scripts/simulate-tool-scale.mjs'), /\.\/lib\/bounded-top-k\.mjs/);
 });

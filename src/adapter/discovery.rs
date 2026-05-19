@@ -12,6 +12,9 @@ use crate::upstream;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
+const DEFAULT_UPSTREAM_SEARCH_SERVER_LIMIT: usize = 6;
+const DEFAULT_UPSTREAM_SEARCH_MIN_SERVER_SCORE: usize = 40;
+
 pub fn upstream_search(
     root_path: &Path,
     server_name: Option<&str>,
@@ -30,8 +33,15 @@ pub fn upstream_search(
     let mut total_matches = 0usize;
     let mut catalog_ok = true;
     let mut errors = Vec::new();
+    let mut search_strategy = "live-catalog-all".to_string();
+    let mut candidate_server_count = 0usize;
+    let mut candidate_server_limit = JsonValue::Null;
+    let mut min_candidate_server_score = JsonValue::Null;
+    let mut searched_servers = Vec::new();
 
     if let Some(server) = selected_server {
+        search_strategy = "selected-server".to_string();
+        searched_servers.push(server.to_string());
         let listing = upstream::list_tools(root_path, Some(server), timeout_ms, refresh)?;
         scan_search_listing(
             server,
@@ -43,32 +53,73 @@ pub fn upstream_search(
             &mut total_matches,
             &mut scored,
         );
+    } else if !terms.is_empty() && !env_bool("MCPACE_UPSTREAM_SEARCH_EXHAUSTIVE").unwrap_or(false) {
+        let limit = upstream_search_server_limit();
+        let min_score = upstream_search_min_server_score();
+        candidate_server_limit = JsonValue::number(limit);
+        min_candidate_server_score = JsonValue::number(min_score);
+        match ranked_upstream_search_servers(root_path, &terms, limit, min_score) {
+            Ok((ranked_count, candidate_servers)) if !candidate_servers.is_empty() => {
+                candidate_server_count = ranked_count;
+                search_strategy = "query-ranked-candidate-catalog".to_string();
+                let catalog = upstream::callable_tools_raw_catalog_for_servers(
+                    root_path,
+                    &candidate_servers,
+                    timeout_ms,
+                    refresh,
+                )?;
+                catalog_ok = json_helpers::bool_at_path(&catalog, &["ok"]).unwrap_or(false);
+                scan_search_catalog(
+                    &catalog,
+                    &terms,
+                    include_schema,
+                    keep_limit,
+                    &mut search_space_tool_count,
+                    &mut total_matches,
+                    &mut scored,
+                    &mut searched_servers,
+                    &mut errors,
+                );
+            }
+            Ok((ranked_count, _)) => {
+                candidate_server_count = ranked_count;
+                search_strategy = "query-ranked-no-candidates".to_string();
+            }
+            Err(error) => {
+                errors.push(JsonValue::object([
+                    ("server", JsonValue::string("*")),
+                    ("method", JsonValue::string("server-candidate-ranking")),
+                    ("error", JsonValue::string(error)),
+                ]));
+                let catalog = upstream::callable_tools_raw_catalog(root_path, timeout_ms, refresh)?;
+                catalog_ok = json_helpers::bool_at_path(&catalog, &["ok"]).unwrap_or(false);
+                scan_search_catalog(
+                    &catalog,
+                    &terms,
+                    include_schema,
+                    keep_limit,
+                    &mut search_space_tool_count,
+                    &mut total_matches,
+                    &mut scored,
+                    &mut searched_servers,
+                    &mut errors,
+                );
+            }
+        }
     } else {
         let catalog = upstream::callable_tools_raw_catalog(root_path, timeout_ms, refresh)?;
         catalog_ok = json_helpers::bool_at_path(&catalog, &["ok"]).unwrap_or(false);
-        for listing in json_helpers::array_at_path(&catalog, &["servers"]).unwrap_or(&[]) {
-            let server = json_helpers::string_at_path(listing, &["name"]).unwrap_or("unknown");
-            if !json_helpers::bool_at_path(listing, &["ok"]).unwrap_or(false) {
-                if let Some(error) = json_helpers::string_at_path(listing, &["error"]) {
-                    errors.push(JsonValue::object([
-                        ("server", JsonValue::string(server)),
-                        ("method", JsonValue::string("tools/list")),
-                        ("error", JsonValue::string(error)),
-                    ]));
-                }
-                continue;
-            }
-            scan_search_listing(
-                server,
-                listing,
-                &terms,
-                include_schema,
-                keep_limit,
-                &mut search_space_tool_count,
-                &mut total_matches,
-                &mut scored,
-            );
-        }
+        scan_search_catalog(
+            &catalog,
+            &terms,
+            include_schema,
+            keep_limit,
+            &mut search_space_tool_count,
+            &mut total_matches,
+            &mut scored,
+            &mut searched_servers,
+            &mut errors,
+        );
     }
 
     let selected = selected_search_result(&scored, !terms.is_empty());
@@ -83,7 +134,7 @@ pub fn upstream_search(
         ("mode", JsonValue::string("upstream-search")),
         (
             "summary",
-            JsonValue::string("Searched live configured upstream MCP tool catalogs with bounded top-k selection and returned compact ready-to-call results. Use each call object with upstream_call, or use a projected u_<server>_<tool>_<hash> name when it appears in tools/list."),
+            JsonValue::string("Searched configured upstream MCP tool catalogs with bounded top-k selection and returned compact ready-to-call results. Query searches first rank candidate servers from local metadata to avoid full live upstream fan-out; set MCPACE_UPSTREAM_SEARCH_EXHAUSTIVE=true for exhaustive discovery. Use each call object with upstream_call, or use a projected u_<server>_<tool>_<hash> name when it appears in tools/list."),
         ),
         (
             "query",
@@ -98,6 +149,27 @@ pub fn upstream_search(
                 .unwrap_or(JsonValue::Null),
         ),
         ("limit", JsonValue::number(limit)),
+        ("searchStrategy", JsonValue::string(search_strategy)),
+        (
+            "candidateServerLimit",
+            candidate_server_limit,
+        ),
+        (
+            "minCandidateServerScore",
+            min_candidate_server_score,
+        ),
+        (
+            "candidateServerCount",
+            JsonValue::number(candidate_server_count),
+        ),
+        (
+            "searchedServerCount",
+            JsonValue::number(searched_servers.len()),
+        ),
+        (
+            "searchedServers",
+            JsonValue::array(searched_servers.into_iter().map(JsonValue::string)),
+        ),
         ("searchSpaceToolCount", JsonValue::number(search_space_tool_count)),
         ("matchCount", JsonValue::number(total_matches)),
         ("resultCount", JsonValue::number(results.len())),
@@ -109,6 +181,44 @@ pub fn upstream_search(
 }
 
 type ScoredSearchTool = (usize, String, JsonValue);
+
+#[allow(clippy::too_many_arguments)]
+fn scan_search_catalog(
+    catalog: &JsonValue,
+    terms: &[String],
+    include_schema: bool,
+    keep_limit: usize,
+    search_space_tool_count: &mut usize,
+    total_matches: &mut usize,
+    scored: &mut Vec<ScoredSearchTool>,
+    searched_servers: &mut Vec<String>,
+    errors: &mut Vec<JsonValue>,
+) {
+    for listing in json_helpers::array_at_path(catalog, &["servers"]).unwrap_or(&[]) {
+        let server = json_helpers::string_at_path(listing, &["name"]).unwrap_or("unknown");
+        searched_servers.push(server.to_string());
+        if !json_helpers::bool_at_path(listing, &["ok"]).unwrap_or(false) {
+            if let Some(error) = json_helpers::string_at_path(listing, &["error"]) {
+                errors.push(JsonValue::object([
+                    ("server", JsonValue::string(server)),
+                    ("method", JsonValue::string("tools/list")),
+                    ("error", JsonValue::string(error)),
+                ]));
+            }
+            continue;
+        }
+        scan_search_listing(
+            server,
+            listing,
+            terms,
+            include_schema,
+            keep_limit,
+            search_space_tool_count,
+            total_matches,
+            scored,
+        );
+    }
+}
 
 #[allow(clippy::too_many_arguments)]
 fn scan_search_listing(
@@ -195,10 +305,21 @@ fn insert_scored_tool_bounded(
     item: ScoredSearchTool,
     keep_limit: usize,
 ) {
-    scored.push(item);
-    scored.sort_by_key(|(score, key, _)| (std::cmp::Reverse(*score), key.clone()));
+    if keep_limit == 0 {
+        return;
+    }
+    let position = scored
+        .iter()
+        .position(|(score, key, _)| {
+            item.0 > *score || (item.0 == *score && item.1.as_str() < key.as_str())
+        })
+        .unwrap_or(scored.len());
+    if position >= keep_limit {
+        return;
+    }
+    scored.insert(position, item);
     if scored.len() > keep_limit {
-        scored.truncate(keep_limit);
+        scored.pop();
     }
 }
 
@@ -1061,6 +1182,182 @@ fn rewrite_resource_contents(server_name: &str, result: JsonValue) -> JsonValue 
     JsonValue::object([("contents", JsonValue::array(rewritten))])
 }
 
+fn upstream_search_server_limit() -> usize {
+    env_usize("MCPACE_UPSTREAM_SEARCH_SERVER_LIMIT")
+        .unwrap_or(DEFAULT_UPSTREAM_SEARCH_SERVER_LIMIT)
+        .clamp(1, 128)
+}
+
+fn upstream_search_min_server_score() -> usize {
+    env_usize("MCPACE_UPSTREAM_SEARCH_MIN_SERVER_SCORE")
+        .unwrap_or(DEFAULT_UPSTREAM_SEARCH_MIN_SERVER_SCORE)
+        .clamp(0, 1000)
+}
+
+fn ranked_upstream_search_servers(
+    root_path: &Path,
+    terms: &[String],
+    limit: usize,
+    min_score: usize,
+) -> Result<(usize, Vec<String>), String> {
+    let records = load_server_records(root_path)?;
+    let mut scored = Vec::new();
+    let mut seen = BTreeSet::new();
+
+    for record in &records {
+        if !record.effective_enabled || !record.source_enabled {
+            continue;
+        }
+        let score = score_server_record_for_search(record, terms);
+        if score < min_score {
+            continue;
+        }
+        let name = record.name.trim();
+        if name.is_empty() || !seen.insert(name.to_ascii_lowercase()) {
+            continue;
+        }
+        scored.push((score, name.to_string()));
+    }
+
+    scored.sort_by(|left, right| {
+        right.0.cmp(&left.0).then_with(|| {
+            left.1
+                .to_ascii_lowercase()
+                .cmp(&right.1.to_ascii_lowercase())
+        })
+    });
+    let ranked_count = scored.len();
+    Ok((
+        ranked_count,
+        scored
+            .into_iter()
+            .take(limit)
+            .map(|(_, name)| name)
+            .collect(),
+    ))
+}
+
+fn score_server_record_for_search(record: &ServerRecord, terms: &[String]) -> usize {
+    let metadata = format!(
+        "{} {} {} {} {} {} {} {} {} {} {} {} {} {}",
+        record.kind,
+        record.source_type,
+        record.source_command,
+        record.source_url,
+        record.transport_preference,
+        record.supported_transports.join(" "),
+        record.required_commands.join(" "),
+        record.launcher_kind,
+        record.routing_group,
+        record.scope_class,
+        record.state_binding,
+        record
+            .tool_policies
+            .iter()
+            .map(JsonValue::to_compact_string)
+            .collect::<Vec<_>>()
+            .join(" "),
+        record.installer_target,
+        record.installer_package
+    );
+    score_search_server_fields(&record.name, &metadata, terms)
+}
+
+fn score_search_server_fields(name: &str, metadata: &str, terms: &[String]) -> usize {
+    if terms.is_empty() {
+        return 0;
+    }
+    let name = normalize(name);
+    let metadata = normalize(metadata);
+    let haystack = format!("{} {}", name, metadata);
+    let mut score = 0usize;
+
+    for term in terms {
+        if name == *term {
+            score += 120;
+        }
+        if name.contains(term) {
+            score += 60;
+        }
+        if metadata.contains(term) {
+            score += 12;
+        }
+        if haystack.contains(term) {
+            score += 2;
+        }
+    }
+
+    score + capability_affinity_score(&name, &haystack, terms)
+}
+
+fn capability_affinity_score(name: &str, haystack: &str, terms: &[String]) -> usize {
+    let wants_browser = any_term_matches(
+        terms,
+        &[
+            "browser",
+            "page",
+            "tab",
+            "click",
+            "navigate",
+            "screenshot",
+            "dom",
+            "javascript",
+            "localhost",
+            "playwright",
+            "chrome",
+            "url",
+        ],
+    );
+    if wants_browser
+        && (name.contains("browser")
+            || name.contains("playwright")
+            || haystack.contains("browser")
+            || haystack.contains("playwright")
+            || haystack.contains("chrome")
+            || haystack.contains("cdp"))
+    {
+        return 90;
+    }
+
+    let wants_git = any_term_matches(
+        terms,
+        &[
+            "git", "repo", "branch", "commit", "pull", "push", "issue", "pr",
+        ],
+    );
+    if wants_git
+        && (name.contains("git")
+            || name.contains("github")
+            || haystack.contains("git")
+            || haystack.contains("github"))
+    {
+        return 60;
+    }
+
+    let wants_docs = any_term_matches(
+        terms,
+        &["docs", "documentation", "reference", "library", "package"],
+    );
+    if wants_docs
+        && (name.contains("docs")
+            || name.contains("context")
+            || haystack.contains("docs")
+            || haystack.contains("documentation"))
+    {
+        return 50;
+    }
+
+    0
+}
+
+fn any_term_matches(terms: &[String], needles: &[&str]) -> bool {
+    terms.iter().any(|term| {
+        needles
+            .iter()
+            .any(|needle| term == needle || (needle.len() >= 4 && term.contains(needle)))
+    })
+}
+
 fn search_terms(query: &str) -> Vec<String> {
     normalize(query)
         .split_whitespace()
@@ -1397,4 +1694,46 @@ fn should_drop_schema_key(key: &str) -> bool {
         key,
         "$comment" | "examples" | "example" | "markdownDescription" | "x-docs" | "x-examples"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        score_search_server_fields, search_terms, DEFAULT_UPSTREAM_SEARCH_MIN_SERVER_SCORE,
+    };
+
+    #[test]
+    fn browser_action_terms_rank_browser_servers() {
+        let terms = search_terms("click screenshot localhost");
+        let browser_score = score_search_server_fields("browser", "stdio chrome cdp", &terms);
+        let playwright_score =
+            score_search_server_fields("playwright", "stdio browser automation", &terms);
+        let filesystem_score = score_search_server_fields("filesystem", "stdio file read", &terms);
+
+        assert!(browser_score > filesystem_score);
+        assert!(playwright_score > filesystem_score);
+        assert!(browser_score >= 90);
+    }
+
+    #[test]
+    fn unrelated_terms_do_not_force_browser_candidates() {
+        let terms = search_terms("database table query");
+        let browser_score = score_search_server_fields("browser", "stdio chrome cdp", &terms);
+        let sqlite_score =
+            score_search_server_fields("sqlite", "stdio database table query", &terms);
+
+        assert_eq!(browser_score, 0);
+        assert!(sqlite_score > browser_score);
+    }
+
+    #[test]
+    fn weak_metadata_matches_stay_below_candidate_threshold() {
+        let terms = search_terms("totally unknown quantum banana spaceship");
+        let weak_score = score_search_server_fields("everything", "unknown stdio server", &terms);
+        let browser_score = score_search_server_fields("browser", "stdio chrome cdp", &terms);
+
+        assert!(weak_score > 0);
+        assert!(weak_score < DEFAULT_UPSTREAM_SEARCH_MIN_SERVER_SCORE);
+        assert_eq!(browser_score, 0);
+    }
 }

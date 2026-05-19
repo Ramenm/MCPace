@@ -217,12 +217,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  profile [show] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  projects [list] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  candidates [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server presets [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server install <preset> [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--json] [--root <path>] [--dry-run] [--force]");
-    let _ = writeln!(
-        stdout,
-        "  server starter [--path <path>...] [--json] [--root <path>] [--dry-run] [--force]"
-    );
+    let _ = writeln!(stdout, "  server install <npm-package|npm:package|pypi:package|oci:image|url> [--as <server-name>] [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--json] [--root <path>] [--dry-run] [--force]");
     let _ = writeln!(
         stdout,
         "  connect [<client>] [--server <name>] [--json] [--root <path>]"
@@ -259,9 +254,7 @@ fn write_help(stdout: &mut dyn Write) {
         "  server capabilities [--json] [--root <path>] [--name <server>]"
     );
     let _ = writeln!(stdout, "  server sources [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server presets [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server install <preset> [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server starter [--path <path>...] [--settings <path>] [--dry-run] [--force] [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  server install <npm-package|npm:package|pypi:package|oci:image|url> [--as <server-name>] [--type npm|pypi|oci|streamable-http] [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  server test [<name>|--name <server>] [--timeout-ms <ms>] [--refresh] [--json] [--root <path>]");
     let _ = writeln!(stdout, "  server candidates [--json] [--root <path>]");
     let _ = writeln!(stdout, "  server add <name> --command <cmd> [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json]");
@@ -283,7 +276,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "doctor/profile/projects/candidates/connect/client-plan/lab/server/verify have native Rust read paths; connect gives a client-first read-only wiring guide across endpoint, client target, upstream sources, readiness blockers, and exact next commands; server sources inventories every MCP settings source, server presets/install/starter add useful MCPs without memorizing package args, server add writes per-server fragments under mcp_settings.d/, server import copies existing mcpServers blocks into MCPace fragments, server enable/disable toggles a BYO MCP entry without deleting it, server remove deletes stale BYO MCP entries without manual JSON editing, and server test probes configured upstreams before clients use them; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes the configured health plus MCP paths in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/restart/stop/status lifecycle commands, dashboard provides the same local web control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, cleanup removes only disposable cache/log/ephemeral runtime files while preserving durable config and backups, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and release build now wraps the local artifact/proof bundle without publishing.",
+        "doctor/profile/projects/candidates/connect/client-plan/lab/server/verify have native Rust read paths; connect gives a client-first read-only wiring guide across endpoint, client target, upstream sources, readiness blockers, and exact next commands; server sources inventories every MCP settings source, server install derives useful MCP entries from package specs, URLs, or commands without a packaged upstream catalog, server add writes per-server fragments under mcp_settings.d/, server import copies existing mcpServers blocks into MCPace fragments, server enable/disable toggles a BYO MCP entry without deleting it, server remove deletes stale BYO MCP entries without manual JSON editing, and server test probes configured upstreams before clients use them; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes the configured health plus MCP paths in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/restart/stop/status lifecycle commands, dashboard provides the same local web control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, cleanup removes only disposable cache/log/ephemeral runtime files while preserving durable config and backups, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and release build now wraps the local artifact/proof bundle without publishing.",
         runtimepaths::default_local_mcp_url(),
         client_install_support_summary()
     );

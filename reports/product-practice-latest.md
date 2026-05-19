@@ -1,7 +1,7 @@
 # MCPace product-practice harness
 
 Project: `mcpace` v`0.6.5`
-Status: `prove-rust-before-runtime-claims`
+Status: `ready-for-release-candidate-review`
 
 ## Claims
 
@@ -9,13 +9,13 @@ Status: `prove-rust-before-runtime-claims`
 |---|---:|
 | sourceTreeHealthy | yes |
 | sourceThinLauncherInstall | yes |
-| runtimeBeta | no |
+| runtimeBeta | yes |
 | publishedBinaryInstall | yes |
 | universalRemoteMcpBroker | no |
 
 ## Proof validity
 
-Current host: `linux-x64-gnu`
+Current host: `win32-x64-msvc`
 Max report age: `6h`
 
 ## Gates
@@ -23,16 +23,12 @@ Max report age: `6h`
 | gate | status | evidence |
 |---|---:|---|
 | source-inventory | pass | inventory ok |
-| node-syntax | pass | 141/141 JS/MJS files checked |
+| node-syntax | pass | 162/162 JS/MJS files checked |
 | lint-hardcode | pass | node scripts/check-node-syntax.mjs --json |
-| rust-build | blocked | rust quality status is partial |
+| rust-build | pass | pass |
 | runtime-trace | pass | usable |
 | published-binary-install | pass | reports/vendored-binary-latest.json: pass |
 
-## Wrong-practice risks
-
-- Feature accumulation can make the project feel done before the actual broker loop is proven with fresh reports.
-
 ## Next moves
 
-- Run cargo check/test/build on a host with dependency access.
+- None.

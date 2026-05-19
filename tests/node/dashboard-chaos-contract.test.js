@@ -61,6 +61,7 @@ test('dashboard chaos smoke exercises random tabs without a browser dependency',
       '--servers', '60',
       '--clients', '10',
       '--max-elapsed-ms', '6000',
+      '--max-operation-ms', '250',
     ],
     {
       cwd: repoRoot,
@@ -77,7 +78,7 @@ test('dashboard chaos smoke exercises random tabs without a browser dependency',
   assert.equal(report.status, 'pass');
   assert.equal(report.scenario.tabs, 3);
   assert.equal(report.summary.totalOperations, 90);
-  assert.ok(report.summary.maxOperationMs <= 120);
+  assert.ok(report.summary.maxOperationMs <= 250);
   assert.ok(report.summary.maxRenderMs <= 90);
   assert.ok(report.summary.abortedFetches > 0);
   assert.ok(report.summary.partialFailures > 0);

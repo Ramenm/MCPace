@@ -1,314 +1,215 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { profileFrom } from './lib/mcp-evidence-profile.mjs';
 
-function argValue(flag, fallback = undefined) {
-  const index = process.argv.indexOf(flag);
-  return index >= 0 ? process.argv[index + 1] : fallback;
+const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+function parseArgs(argv) {
+  const args = {
+    root: repoRoot,
+    json: false,
+    write: join(repoRoot, 'reports', 'adaptive-parallelism-latest.json'),
+    markdown: join(repoRoot, 'reports', 'adaptive-parallelism-latest.md'),
+    includeEdgeCases: true,
+  };
+  for (let i = 0; i < argv.length; i += 1) {
+    const token = argv[i];
+    if (token === '--root') args.root = resolve(argv[++i] || '.');
+    else if (token === '--json') args.json = true;
+    else if (token === '--write') args.write = resolve(argv[++i] || '');
+    else if (token === '--markdown') args.markdown = resolve(argv[++i] || '');
+    else if (token === '--no-write') {
+      args.write = null;
+      args.markdown = null;
+    } else if (token === '--no-edge-cases') args.includeEdgeCases = false;
+    else if (token === '--help' || token === '-h') args.help = true;
+    else throw new Error(`unknown adaptive-parallelism-audit argument: ${token}`);
+  }
+  return args;
 }
-function has(flag) {
-  return process.argv.includes(flag);
+
+function printHelp() {
+  console.log(`Usage: node scripts/adaptive-parallelism-audit.mjs [--json] [--no-write] [--write FILE] [--markdown FILE]\n\nAudits evidence-first MCP server profiling without a packaged upstream-server catalog.`);
 }
-function readJson(path, fallback) {
+
+function readJson(file, fallback = null) {
   try {
-    return JSON.parse(readFileSync(path, 'utf8'));
-  } catch {
-    return fallback;
+    if (!existsSync(file)) return fallback;
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    return { __error: String(error?.message || error) };
   }
 }
-function writeMarkdown(path, report) {
+
+function loadConfiguredServers(root) {
+  const config = readJson(join(root, 'mcpace.config.json'), {}) || {};
+  const out = [];
+  const addFromObject = (obj, source) => {
+    if (!obj || typeof obj !== 'object') return;
+    const servers = obj.mcpServers || obj.servers || {};
+    if (!servers || typeof servers !== 'object') return;
+    for (const [name, value] of Object.entries(servers)) {
+      if (!value || typeof value !== 'object') continue;
+      out.push({ ...value, serverId: name, name, source });
+    }
+  };
+  addFromObject(readJson(join(root, 'mcp_settings.json'), {}), 'mcp_settings.json');
+  const defaultDir = join(root, 'mcp_settings.d');
+  if (existsSync(defaultDir)) {
+    for (const entry of readdirSync(defaultDir).sort()) {
+      const file = join(defaultDir, entry);
+      if (entry.endsWith('.json') && statSync(file).isFile()) addFromObject(readJson(file, {}), `mcp_settings.d/${entry}`);
+    }
+  }
+  for (const [name, value] of Object.entries(config.servers || {})) out.push({ ...value, serverId: name, name, source: 'mcpace.config.json' });
+  return out;
+}
+
+function edgeCases() {
+  return [
+    { id: 'unknown-stdio-npx', raw: { serverId: 'unknown-stdio-npx', transport: 'stdio', launcher: 'npx', command: 'npx', args: ['-y', '@vendor/random-mcp'] }, expected: { parallelSafetyClass: 'P0_unknown_stdio', defaultPoolModel: 'process-pool', maxInFlightPerWorker: 1 }, rationale: 'Unknown stdio remains one in-flight until probes and policy evidence exist.' },
+    { id: 'legacy-sse', raw: { serverId: 'legacy-sse', transport: 'sse-legacy', url: 'http://127.0.0.1:9000/sse' }, expected: { parallelSafetyClass: 'PX_legacy_compat', defaultPoolModel: 'legacy-disabled', maxWorkers: 0 }, rationale: 'Legacy SSE is not treated as modern Streamable HTTP scheduling.' },
+    { id: 'remote-streamable-http', raw: { serverId: 'remote-streamable-http', transport: 'streamable-http', url: 'https://mcp.example.com/mcp' }, expected: { parallelSafetyClass: 'P2_session_safe', defaultPoolModel: 'remote-http-session-pool' }, rationale: 'Remote HTTP is session-bound until MCP-Session-Id/probe evidence proves otherwise.' },
+    { id: 'stateless-remote-http', raw: { serverId: 'stateless-remote-http', transport: 'streamable-http', url: 'https://docs.example.com/mcp', policy: { stateless: true, concurrencyPolicy: 'multi-reader', stateBinding: 'none', parallelismLimit: 8 } }, expected: { parallelSafetyClass: 'P4_stateless_remote_candidate', defaultPoolModel: 'remote-http-shared-pool' }, rationale: 'Only explicit stateless evidence raises remote HTTP to broad fan-out.' },
+    { id: 'credential-scoped-api', raw: { serverId: 'credential-scoped-api', transport: 'stdio', command: 'node', args: ['slack-mcp', '--token', '$SLACK_TOKEN'] }, expected: { parallelSafetyClass: 'P2_session_safe', defaultPoolModel: 'credential-session-pool' }, rationale: 'Credential/API surfaces need profile or tenant affinity.' },
+    { id: 'project-filesystem-write', raw: { serverId: 'project-filesystem-write', transport: 'stdio', command: 'npx', args: ['@modelcontextprotocol/server-filesystem', '.'] }, expected: { parallelSafetyClass: 'P3_project_safe', defaultPoolModel: 'project-pool' }, rationale: 'Filesystem tools lock project/file domains.' },
+    { id: 'repo-git-write', raw: { serverId: 'repo-git-write', transport: 'stdio', command: 'uvx', args: ['mcp-server-git', '--repository', '.'] }, expected: { parallelSafetyClass: 'P3_project_safe', defaultPoolModel: 'project-pool' }, rationale: 'Git tools lock repo/project domains.' },
+    { id: 'browser-automation', raw: { serverId: 'browser-automation', transport: 'stdio', command: 'npx', args: ['@playwright/mcp'] }, expected: { parallelSafetyClass: 'PX_forbidden_browser_until_context_isolated', defaultPoolModel: 'session-pool' }, rationale: 'Browser automation cannot fan out without browser-context isolation.' },
+    { id: 'shared-exclusive-desktop', raw: { serverId: 'shared-exclusive-desktop', transport: 'stdio', command: 'desktop-control-mcp', args: ['--profile', 'default'] }, expected: { parallelSafetyClass: 'PX_forbidden_browser_until_context_isolated', defaultPoolModel: 'session-pool' }, rationale: 'Desktop/profile control is shared-exclusive.' },
+    { id: 'readonly-stdio-candidate', raw: { serverId: 'readonly-stdio-candidate', transport: 'stdio', command: 'uvx', args: ['mcp-server-time'], policy: { stateless: true, concurrencyPolicy: 'multi-reader', stateBinding: 'none' } }, expected: { parallelSafetyClass: 'P1_readonly_candidate', defaultPoolModel: 'process-pool' }, rationale: 'Small local utilities can become multi-reader after explicit read-only evidence.' },
+    { id: 'stateful-memory', raw: { serverId: 'stateful-memory', transport: 'stdio', command: 'npx', args: ['@modelcontextprotocol/server-memory'] }, expected: { parallelSafetyClass: 'P2_session_safe', defaultPoolModel: 'singleton' }, rationale: 'Memory/context stores are session/profile stateful.' },
+    { id: 'local-database', raw: { serverId: 'local-database', transport: 'stdio', command: 'uvx', args: ['mcp-server-sqlite', '--db-path', './data.db'] }, expected: { parallelSafetyClass: 'P3_project_safe', defaultPoolModel: 'project-pool' }, rationale: 'Local databases lock database/project domains.' },
+    { id: 'oci-unknown', raw: { serverId: 'oci-unknown', transport: 'stdio', launcher: 'oci', command: 'docker', args: ['run', '--rm', 'vendor/mcp:latest'] }, expected: { parallelSafetyClass: 'P0_unknown_stdio', defaultPoolModel: 'process-pool', maxInFlightPerWorker: 1 }, rationale: 'Container images remain unknown until provenance and probes are reviewed.' },
+  ];
+}
+
+function matchesExpected(actual, expected) {
+  for (const [key, value] of Object.entries(expected || {})) {
+    if (actual[key] !== value) return false;
+  }
+  return true;
+}
+
+function renderMarkdown(report) {
   const lines = [];
-  lines.push('# Adaptive parallelism audit');
+  lines.push('# Adaptive MCP parallelism audit');
   lines.push('');
-  lines.push(`Status: **${report.status}**`);
   lines.push(`Generated: ${report.generatedAt}`);
+  lines.push(`Status: **${report.status}**`);
   lines.push('');
-  lines.push('## Summary');
+  lines.push(`Configured profiles: ${report.summary.profileCount}; edge cases: ${report.summary.edgeCaseCount}; static catalogs present: ${report.summary.staticCatalogPresent ? 'yes' : 'no'}.`);
   lines.push('');
-  lines.push(`- Profiles inspected: ${report.summary.profileCount}`);
-  lines.push(`- Edge-case fixtures: ${report.summary.edgeCaseCount}`);
-  lines.push(`- Stable/default profiles: ${report.summary.stableCount}`);
-  lines.push(`- Conservative/unknown profiles: ${report.summary.conservativeCount}`);
-  lines.push(`- Legacy compatibility profiles: ${report.summary.legacyCount}`);
-  lines.push(`- Blockers: ${report.blockers.length}`);
-  lines.push(`- Warnings: ${report.warnings.length}`);
+  lines.push('## Profiles');
   lines.push('');
-  lines.push('## Runtime/config profiles');
-  lines.push('');
-  lines.push('| Server | Source | Transport | Launcher | Safety class | Pool | Workers | In-flight/worker | Lock domains |');
-  lines.push('|---|---|---|---|---|---|---:|---:|---|');
+  lines.push('| Server | Source | Transport | Launcher | Safety | Pool | Workers | Locks | Stateless |');
+  lines.push('|---|---|---|---|---|---|---:|---|---:|');
   for (const profile of report.profiles) {
-    lines.push(`| ${profile.serverId} | ${profile.source} | ${profile.transport} | ${profile.launcher} | ${profile.parallelSafetyClass} | ${profile.defaultPoolModel} | ${profile.maxWorkers} | ${profile.maxInFlightPerWorker} | ${profile.lockDomains.join(', ') || 'none'} |`);
+    lines.push(`| ${profile.serverId} | ${profile.source} | ${profile.transport} | ${profile.launcher} | ${profile.parallelSafetyClass} | ${profile.defaultPoolModel} | ${profile.maxWorkers} | ${(profile.lockDomains || []).join(', ') || 'none'} | ${profile.stateless ? 'yes' : 'no'} |`);
   }
+  if (!report.profiles.length) lines.push('| none | empty by default | - | - | - | - | 0 | - | - |');
   lines.push('');
-  lines.push('## Edge-case matrix');
+  lines.push('## Edge cases');
   lines.push('');
-  lines.push('| Case | Expected | Actual | Status | Rationale |');
-  lines.push('|---|---|---|---|---|');
-  for (const edgeCase of report.edgeCases) {
-    const expected = `${edgeCase.expected.parallelSafetyClass}/${edgeCase.expected.defaultPoolModel}/${edgeCase.expected.maxInFlightPerWorker}`;
-    const actual = `${edgeCase.actual.parallelSafetyClass}/${edgeCase.actual.defaultPoolModel}/${edgeCase.actual.maxInFlightPerWorker}`;
-    lines.push(`| ${edgeCase.id} | ${expected} | ${actual} | ${edgeCase.ok ? 'PASS' : 'FAIL'} | ${edgeCase.rationale} |`);
-  }
+  for (const edge of report.edgeCases) lines.push(`- ${edge.ok ? 'PASS' : 'FAIL'} ${edge.id}: ${edge.rationale}`);
   lines.push('');
   lines.push('## Checks');
   lines.push('');
-  for (const check of report.checks) {
-    lines.push(`- ${check.ok ? 'PASS' : 'FAIL'} ${check.id}: ${check.detail}`);
-  }
+  for (const check of report.checks) lines.push(`- ${check.ok ? 'PASS' : 'FAIL'} ${check.id}: ${check.detail}`);
   if (report.blockers.length) {
     lines.push('');
     lines.push('## Blockers');
+    lines.push('');
     for (const blocker of report.blockers) lines.push(`- ${blocker}`);
   }
   if (report.warnings.length) {
     lines.push('');
     lines.push('## Warnings');
+    lines.push('');
     for (const warning of report.warnings) lines.push(`- ${warning}`);
   }
-  writeFileSync(path, `${lines.join('\n')}\n`);
+  lines.push('');
+  return `${lines.join('\n')}\n`;
 }
-function normalizeTransport(kind, url) {
-  const raw = String(kind || '').trim().toLowerCase();
-  if (['streamable-http', 'streamablehttp', 'http-stream', 'remote-http', 'remote', 'http'].includes(raw)) return 'streamable-http';
-  if (['sse', 'remote-sse', 'http+sse', 'http-sse', 'legacy-sse'].includes(raw)) return 'sse-legacy';
-  if (['stdio', 'local', 'local-stdio', 'local-command', 'command'].includes(raw)) return 'stdio';
-  if (!raw && url) return 'streamable-http';
-  return raw || 'stdio';
-}
-function launcherFor(command, url, pkg = '') {
-  const c = String(command || '').toLowerCase();
-  const p = String(pkg || '').toLowerCase();
-  if (url) return 'remote-url';
-  if (c.includes('npx') || p.startsWith('npm:')) return 'npx';
-  if (c.includes('uvx') || p.startsWith('pypi:')) return 'uvx';
-  if (c.includes('docker') || p.startsWith('oci:')) return 'oci';
-  if (c.includes('python') || c.includes('node') || c.includes('bash') || c.includes('sh')) return 'local-command';
-  if (!c && !p) return 'unspecified';
-  return 'local-command';
-}
-function classify({ transport, launcher, trustLevel = '', policy = {}, args = [] }) {
-  const stateBinding = String(policy.stateBinding || '').toLowerCase();
-  const scopeClass = String(policy.scopeClass || '').toLowerCase();
-  const concurrencyPolicy = String(policy.concurrencyPolicy || '').toLowerCase();
-  const credentialBinding = String(policy.credentialBinding || '').toLowerCase();
-  const trust = String(trustLevel || '').toLowerCase();
-  const joinedArgs = args.join(' ').toLowerCase();
-  const lockDomains = new Set();
 
-  if (transport === 'sse-legacy') {
-    return profile('PX_legacy_compat', 'legacy-disabled', 0, 0, ['legacy-transport']);
-  }
-  if (trust.includes('browser') || stateBinding.includes('host-desktop') || joinedArgs.includes('playwright')) {
-    return profile('PX_forbidden_browser_until_context_isolated', 'session-pool', 2, 1, ['browser-context', 'session']);
-  }
-  if (scopeClass === 'shared-exclusive' || concurrencyPolicy === 'single-session') {
-    return profile('PX_forbidden', 'singleton', 1, 1, ['session']);
-  }
-  if (credentialBinding && credentialBinding !== 'none') {
-    return profile('P2_session_safe', 'credential-session-pool', 4, 1, [`credential:${credentialBinding}`]);
-  }
-  if (trust.includes('filesystem') || trust.includes('repository') || ['file', 'repo', 'db', 'project'].some((x) => stateBinding.includes(x))) {
-    lockDomains.add(trust.includes('repository') || stateBinding.includes('repo') ? 'repo' : 'project');
-    if (trust.includes('filesystem') || stateBinding.includes('file')) lockDomains.add('file');
-    if (stateBinding.includes('db')) lockDomains.add('db');
-    return profile('P3_project_safe', 'project-pool', 4, 1, [...lockDomains]);
-  }
-  if (trust.includes('network') && transport === 'stdio') {
-    return profile('P1_readonly_candidate', 'process-pool', 4, 1, ['credential-or-provider-budget']);
-  }
-  if (trust.includes('network') || launcher === 'remote-url' || transport === 'streamable-http') {
-    return profile('P4_stateless_remote_candidate', 'remote-http-session-pool', 8, 4, ['credential-or-provider-budget']);
-  }
-  if (concurrencyPolicy === 'multi-reader') {
-    return profile('P1_readonly_candidate', 'process-pool', Math.max(2, Number(policy.parallelismLimit || 4)), 1, ['server']);
-  }
-  if (launcher === 'npx' || launcher === 'uvx' || launcher === 'oci' || launcher === 'local-command') {
-    return profile('P0_unknown_stdio', 'process-pool', 2, 1, ['server']);
-  }
-  return profile('P0_unknown', 'singleton', 1, 1, ['server']);
-
-  function profile(parallelSafetyClass, defaultPoolModel, maxWorkers, maxInFlightPerWorker, locks) {
-    return { parallelSafetyClass, defaultPoolModel, maxWorkers, maxInFlightPerWorker, lockDomains: locks };
-  }
-}
-function fromPreset(preset) {
-  const transport = normalizeTransport(preset.kind, preset.url);
-  const launcher = launcherFor(preset.command, preset.url);
-  return { serverId: preset.id, source: 'preset', transport, launcher, trustLevel: preset.trustLevel, policy: {}, args: preset.args || [] };
-}
-function fromConfigServer(name, value) {
-  const policy = value.policy || {};
-  const installer = value.installer || {};
-  const transport = normalizeTransport(value.transportPreference || value.kind, value.url);
-  const launcher = launcherFor(value.command, value.url, installer.installPackage);
-  return { serverId: name, source: 'config', transport, launcher, trustLevel: value.trustLevel || '', policy, args: value.args || [] };
-}
-function collectMcpSettings(root) {
-  const out = [];
-  const dirs = [join(root, 'mcp_settings.d')];
-  for (const dir of dirs) {
-    if (!existsSync(dir) || !statSync(dir).isDirectory()) continue;
-    for (const file of readdirSync(dir).filter((name) => name.endsWith('.json')).sort()) {
-      const data = readJson(join(dir, file), null);
-      const servers = data?.mcpServers && typeof data.mcpServers === 'object' ? data.mcpServers : data;
-      if (!servers || typeof servers !== 'object') continue;
-      for (const [name, server] of Object.entries(servers)) {
-        if (!server || typeof server !== 'object') continue;
-        out.push({ serverId: name, source: `mcp_settings.d/${file}`, transport: normalizeTransport(server.type, server.url), launcher: launcherFor(server.command, server.url), trustLevel: server.trustLevel || '', policy: server.policy || {}, args: server.args || [] });
-      }
-    }
-  }
-  return out;
-}
-function makeProfile(raw) {
-  const classified = classify(raw);
-  return {
-    serverId: raw.serverId,
-    source: raw.source,
-    transport: raw.transport,
-    launcher: raw.launcher,
-    parallelSafetyClass: classified.parallelSafetyClass,
-    defaultPoolModel: classified.defaultPoolModel,
-    maxWorkers: classified.maxWorkers,
-    maxInFlightPerWorker: classified.maxInFlightPerWorker,
-    lockDomains: classified.lockDomains,
-    evidence: [{ kind: 'static', confidence: 0.45, summary: 'Profile inferred from static config/preset metadata; safe probes and runtime evidence are required before raising trust.' }]
-  };
-}
-function edgeCaseFixtures() {
-  return [
-    {
-      id: 'unknown-stdio-npx',
-      raw: { serverId: 'unknown-stdio-npx', source: 'edge-fixture', transport: 'stdio', launcher: 'npx', trustLevel: '', policy: {}, args: ['-y', '@vendor/random-mcp'] },
-      expected: { parallelSafetyClass: 'P0_unknown_stdio', defaultPoolModel: 'process-pool', maxInFlightPerWorker: 1 },
-      rationale: 'Unknown stdio can scale only through isolated workers; a single worker stays one in-flight until probes pass.'
-    },
-    {
-      id: 'legacy-sse',
-      raw: { serverId: 'legacy-sse', source: 'edge-fixture', transport: 'sse-legacy', launcher: 'remote-url', trustLevel: 'network', policy: {}, args: [] },
-      expected: { parallelSafetyClass: 'PX_legacy_compat', defaultPoolModel: 'legacy-disabled', maxInFlightPerWorker: 0 },
-      rationale: 'Legacy SSE compatibility must not be folded into stable Streamable HTTP scheduling.'
-    },
-    {
-      id: 'remote-streamable-http',
-      raw: { serverId: 'remote-streamable-http', source: 'edge-fixture', transport: 'streamable-http', launcher: 'remote-url', trustLevel: 'network', policy: {}, args: [] },
-      expected: { parallelSafetyClass: 'P4_stateless_remote_candidate', defaultPoolModel: 'remote-http-session-pool', maxInFlightPerWorker: 4 },
-      rationale: 'Remote Streamable HTTP can use session/provider budgets, not local stdio process assumptions.'
-    },
-    {
-      id: 'credential-scoped-api',
-      raw: { serverId: 'credential-scoped-api', source: 'edge-fixture', transport: 'stdio', launcher: 'local-command', trustLevel: 'network', policy: { credentialBinding: 'oauth-subject' }, args: [] },
-      expected: { parallelSafetyClass: 'P2_session_safe', defaultPoolModel: 'credential-session-pool', maxInFlightPerWorker: 1 },
-      rationale: 'Credential identity is a scheduling boundary even when the launcher is local stdio.'
-    },
-    {
-      id: 'project-filesystem-write',
-      raw: { serverId: 'project-filesystem-write', source: 'edge-fixture', transport: 'stdio', launcher: 'npx', trustLevel: 'filesystem', policy: { scopeClass: 'project-local', stateBinding: 'file' }, args: [] },
-      expected: { parallelSafetyClass: 'P3_project_safe', defaultPoolModel: 'project-pool', maxInFlightPerWorker: 1 },
-      rationale: 'Project-local file tools require project/file lock domains; worker concurrency comes from isolation.'
-    },
-    {
-      id: 'repo-git-write',
-      raw: { serverId: 'repo-git-write', source: 'edge-fixture', transport: 'stdio', launcher: 'uvx', trustLevel: 'repository', policy: { scopeClass: 'project-local', stateBinding: 'repo' }, args: [] },
-      expected: { parallelSafetyClass: 'P3_project_safe', defaultPoolModel: 'project-pool', maxInFlightPerWorker: 1 },
-      rationale: 'Git/repository tools can parallelize across repos but must serialize conflicting repo writes.'
-    },
-    {
-      id: 'browser-automation',
-      raw: { serverId: 'browser-automation', source: 'edge-fixture', transport: 'stdio', launcher: 'npx', trustLevel: 'browser', policy: { stateBinding: 'host-desktop' }, args: ['@playwright/mcp'] },
-      expected: { parallelSafetyClass: 'PX_forbidden_browser_until_context_isolated', defaultPoolModel: 'session-pool', maxInFlightPerWorker: 1 },
-      rationale: 'Browser automation needs browser-context/session isolation before parallel scheduling.'
-    },
-    {
-      id: 'shared-exclusive-desktop',
-      raw: { serverId: 'shared-exclusive-desktop', source: 'edge-fixture', transport: 'stdio', launcher: 'local-command', trustLevel: 'desktop', policy: { scopeClass: 'shared-exclusive', concurrencyPolicy: 'single-session' }, args: [] },
-      expected: { parallelSafetyClass: 'PX_forbidden', defaultPoolModel: 'singleton', maxInFlightPerWorker: 1 },
-      rationale: 'Desktop/host-global state stays singleton unless a stronger isolation key is proven.'
-    },
-    {
-      id: 'readonly-stdio-candidate',
-      raw: { serverId: 'readonly-stdio-candidate', source: 'edge-fixture', transport: 'stdio', launcher: 'npx', trustLevel: 'network', policy: { concurrencyPolicy: 'multi-reader' }, args: [] },
-      expected: { parallelSafetyClass: 'P1_readonly_candidate', defaultPoolModel: 'process-pool', maxInFlightPerWorker: 1 },
-      rationale: 'Read-heavy stdio stays one in-flight per worker until safe probes prove higher concurrency.'
-    },
-    {
-      id: 'oci-unknown',
-      raw: { serverId: 'oci-unknown', source: 'edge-fixture', transport: 'stdio', launcher: 'oci', trustLevel: '', policy: {}, args: ['docker', 'run', 'example/mcp'] },
-      expected: { parallelSafetyClass: 'P0_unknown_stdio', defaultPoolModel: 'process-pool', maxInFlightPerWorker: 1 },
-      rationale: 'Container launchers are still untrusted upstream code until classified/probed.'
-    }
+function main() {
+  const args = parseArgs(process.argv.slice(2));
+  if (args.help) return printHelp();
+  const root = args.root;
+  const pkg = readJson(join(root, 'package.json'), {}) || {};
+  const config = readJson(join(root, 'mcpace.config.json'), {}) || {};
+  const configuredServers = loadConfiguredServers(root);
+  const profiles = configuredServers.map((server) => profileFrom(server, server.source || 'settings'));
+  const edgeCases = args.includeEdgeCases
+    ? edgeCasesRaw().map((edge) => {
+        const actual = profileFrom(edge.raw, 'edge-fixture');
+        const ok = matchesExpected(actual, edge.expected);
+        const locksOk = Array.isArray(actual.lockDomains) && actual.lockDomains.length > 0;
+        return { ...edge, actual, ok, locksOk };
+      })
+    : [];
+  const staticCatalogPresent = existsSync(join(root, 'presets')) || Boolean(config.mcpPresets);
+  const checks = [
+    { id: 'no-packaged-upstream-catalog', ok: !staticCatalogPresent, detail: 'Packaged upstream-server catalogs are absent; install/profile behavior is evidence-first.' },
+    { id: 'auto-profile-config', ok: Boolean(config.autoProfile) && !config.mcpPresets, detail: 'mcpace.config.json documents automatic profiling and no longer exposes static server catalogs.' },
+    { id: 'no-bundled-default-upstreams', ok: Object.keys(config.servers || {}).length === 0 && configuredServers.length === 0, detail: 'The project ships with no enabled upstream MCP servers by default.' },
+    { id: 'edge-case-matrix', ok: !args.includeEdgeCases || edgeCases.length >= 13 && edgeCases.every((edge) => edge.ok && edge.locksOk), detail: 'Synthetic state/session/client edge cases classify to expected conservative plans.' },
+    { id: 'unknown-is-conservative', ok: edgeCases.some((edge) => edge.id === 'unknown-stdio-npx' && edge.actual.parallelSafetyClass === 'P0_unknown_stdio' && edge.actual.maxInFlightPerWorker === 1), detail: 'Unknown stdio stays one in-flight and review-gated.' },
+    { id: 'remote-session-default', ok: edgeCases.some((edge) => edge.id === 'remote-streamable-http' && edge.actual.parallelSafetyClass === 'P2_session_safe' && edge.actual.defaultPoolModel === 'remote-http-session-pool'), detail: 'Remote Streamable HTTP remains session-safe until stateless evidence exists.' },
+    { id: 'live-probe-harness', ok: existsSync(join(root, 'scripts', 'live-random-mcp-probe.mjs')), detail: 'Random/live MCP package probe harness exists for package-derived evidence.' },
   ];
+  const blockers = checks.filter((check) => !check.ok).map((check) => `${check.id}: ${check.detail}`);
+  const warnings = [];
+  if (!configuredServers.length) warnings.push('No configured upstream MCP servers in the source snapshot; only synthetic edge cases are profiled here.');
+  for (const profile of profiles) {
+    if (String(profile.parallelSafetyClass).startsWith('P0_')) warnings.push(`${profile.serverId}: unknown source needs probe evidence before concurrency is raised.`);
+    if (String(profile.parallelSafetyClass).startsWith('PX_')) warnings.push(`${profile.serverId}: high-risk source needs explicit isolation before scheduling.`);
+  }
+  const statelessCount = [...profiles, ...edgeCases.map((edge) => edge.actual)].filter((profile) => profile.stateless).length;
+  const statefulCount = [...profiles, ...edgeCases.map((edge) => edge.actual)].filter((profile) => !profile.stateless).length;
+  const report = {
+    schema: 'mcpace.adaptiveParallelismAudit.v2',
+    generatedAt: new Date().toISOString(),
+    root,
+    project: { name: 'mcpace', version: pkg.version || '0.0.0' },
+    summary: {
+      profileCount: profiles.length,
+      edgeCaseCount: edgeCases.length,
+      stableCount: [...profiles, ...edgeCases.map((edge) => edge.actual)].filter((profile) => !String(profile.parallelSafetyClass).startsWith('P0_') && !String(profile.parallelSafetyClass).startsWith('PX_')).length,
+      conservativeCount: [...profiles, ...edgeCases.map((edge) => edge.actual)].filter((profile) => String(profile.parallelSafetyClass).startsWith('P0_')).length,
+      legacyCount: [...profiles, ...edgeCases.map((edge) => edge.actual)].filter((profile) => profile.defaultPoolModel === 'legacy-disabled').length,
+      statefulCount,
+      statelessCount,
+      staticCatalogPresent,
+    },
+    profiles,
+    edgeCases,
+    checks,
+    warnings,
+    blockers,
+    status: blockers.length ? 'blocked' : 'pass',
+  };
+  if (args.write) {
+    mkdirSync(dirname(args.write), { recursive: true });
+    writeFileSync(args.write, `${JSON.stringify(report, null, 2)}\n`);
+  }
+  if (args.markdown) {
+    mkdirSync(dirname(args.markdown), { recursive: true });
+    writeFileSync(args.markdown, renderMarkdown(report));
+  }
+  if (args.json) console.log(JSON.stringify(report, null, 2));
+  else console.log(renderMarkdown(report));
+  if (report.status !== 'pass') process.exitCode = 1;
 }
-function buildEdgeCases() {
-  return edgeCaseFixtures().map((fixture) => {
-    const actual = classify(fixture.raw);
-    const locksOk = Array.isArray(actual.lockDomains) && actual.lockDomains.length > 0;
-    const expectedOk = Object.entries(fixture.expected).every(([key, value]) => actual[key] === value);
-    return { ...fixture, actual, ok: expectedOk && locksOk, locksOk };
-  });
+
+function edgeCasesRaw() {
+  return edgeCases();
 }
-const root = resolve(argValue('--root', process.cwd()));
-const config = readJson(join(root, 'mcpace.config.json'), {});
-const presetCatalog = readJson(join(root, 'presets', 'mcp-servers.json'), { presets: [] });
-const rawProfiles = [];
-for (const [name, value] of Object.entries(config.servers || {})) rawProfiles.push(fromConfigServer(name, value));
-for (const preset of presetCatalog.presets || []) rawProfiles.push(fromPreset(preset));
-rawProfiles.push(...collectMcpSettings(root));
-const profiles = rawProfiles.map(makeProfile);
-const edgeCases = buildEdgeCases();
-const files = {
-  serverModel: readFileSync(join(root, 'src/server/model.rs'), 'utf8'),
-  serverLoader: readFileSync(join(root, 'src/server/loader.rs'), 'utf8'),
-  clientModel: readFileSync(join(root, 'src/client/model.rs'), 'utf8'),
-  clientPlan: readFileSync(join(root, 'src/client/plan.rs'), 'utf8'),
-  docsAdaptive: existsSync(join(root, 'docs/adaptive-mcp-orchestration.md')),
-  docsEdgeCases: existsSync(join(root, 'docs/adaptive-edge-case-coverage.md')),
-  schemaProfile: existsSync(join(root, 'schemas/mcpace-server-profile.schema.json')),
-  schemaWorker: existsSync(join(root, 'schemas/mcpace-worker-plan.schema.json')),
-};
-const checks = [
-  { id: 'server-profile-fields', ok: files.serverModel.includes('parallel_safety_class') && files.serverModel.includes('default_pool_model'), detail: 'ServerRecord exposes adaptive profile fields.' },
-  { id: 'source-type-normalization', ok: files.serverLoader.includes('sse-legacy') && files.serverLoader.includes('streamable-http'), detail: 'Legacy SSE is separated from stable Streamable HTTP.' },
-  { id: 'client-plan-scheduling', ok: files.clientPlan.includes('worker_pool_key') && files.clientPlan.includes('bounded-worker-pool-pending-probe'), detail: 'Client routing plan includes adaptive worker-pool planning and probe-gated fallback.' },
-  { id: 'schema-profile', ok: files.schemaProfile, detail: 'Server profile schema exists.' },
-  { id: 'schema-worker', ok: files.schemaWorker, detail: 'Worker plan schema exists.' },
-  { id: 'docs', ok: files.docsAdaptive, detail: 'Adaptive orchestration architecture doc exists.' },
-  { id: 'edge-case-docs', ok: files.docsEdgeCases, detail: 'Adaptive edge-case coverage doc exists.' },
-  { id: 'no-legacy-default', ok: profiles.concat(edgeCases.map((x) => x.actual)).every((p) => p.transport !== 'sse-legacy' || p.defaultPoolModel === 'legacy-disabled'), detail: 'Legacy transport is never auto-parallelized.' },
-  { id: 'unknown-is-conservative', ok: profiles.concat(edgeCases.map((x) => x.actual)).every((p) => !p.parallelSafetyClass.startsWith('P0_') || p.maxInFlightPerWorker === 1), detail: 'Unknown profiles are maxInFlightPerWorker=1.' },
-  { id: 'edge-case-matrix', ok: edgeCases.every((edgeCase) => edgeCase.ok), detail: 'Synthetic edge-case matrix covers unknown, legacy, remote, credential, project, repo, browser, desktop, readonly, and OCI classifications.' },
-  { id: 'edge-locks-present', ok: edgeCases.every((edgeCase) => edgeCase.locksOk), detail: 'Every edge-case classification carries at least one lock or scheduling domain.' },
-];
-const blockers = checks.filter((c) => !c.ok).map((c) => `${c.id}: ${c.detail}`);
-const warnings = [];
-for (const profile of profiles) {
-  if (profile.parallelSafetyClass.startsWith('P0_')) warnings.push(`${profile.serverId}: unknown profile remains conservative until probes pass.`);
-  if (profile.parallelSafetyClass.startsWith('PX_')) warnings.push(`${profile.serverId}: high-risk/legacy profile requires explicit policy before parallelism.`);
+
+try {
+  main();
+} catch (error) {
+  console.error(error?.stack || String(error));
+  process.exitCode = 1;
 }
-for (const edgeCase of edgeCases) {
-  if (!edgeCase.ok) warnings.push(`${edgeCase.id}: expected ${JSON.stringify(edgeCase.expected)} but got ${JSON.stringify(edgeCase.actual)}.`);
-}
-const report = {
-  status: blockers.length ? 'blocked' : 'pass',
-  generatedAt: new Date().toISOString(),
-  root,
-  summary: {
-    profileCount: profiles.length,
-    edgeCaseCount: edgeCases.length,
-    stableCount: profiles.filter((p) => ['P3_project_safe', 'P4_stateless_remote_candidate', 'P1_readonly_candidate'].includes(p.parallelSafetyClass)).length,
-    conservativeCount: profiles.filter((p) => p.parallelSafetyClass.startsWith('P0_')).length,
-    legacyCount: profiles.filter((p) => p.parallelSafetyClass.includes('legacy')).length,
-  },
-  profiles,
-  edgeCases,
-  checks,
-  warnings,
-  blockers,
-};
-const write = argValue('--write');
-if (write) writeFileSync(write, `${JSON.stringify(report, null, 2)}\n`);
-const markdown = argValue('--markdown');
-if (markdown) writeMarkdown(markdown, report);
-if (has('--json')) console.log(JSON.stringify(report, null, 2));
-if (blockers.length) process.exitCode = 1;

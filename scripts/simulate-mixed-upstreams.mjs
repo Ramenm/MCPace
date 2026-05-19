@@ -4,6 +4,7 @@ import path from 'node:path';
 import process from 'node:process';
 import { performance } from 'node:perf_hooks';
 import { pathToFileURL } from 'node:url';
+import { insertTopK } from './lib/bounded-top-k.mjs';
 
 const DEFAULT_MIX = [
   'stdio-ok',
@@ -94,11 +95,6 @@ function serverKind(index, mix) {
   return mix[index % mix.length];
 }
 
-function insertTopK(items, item, limit) {
-  items.push(item);
-  items.sort((left, right) => right.score - left.score || left.key.localeCompare(right.key));
-  if (items.length > limit) items.length = limit;
-}
 
 function syntheticTool(serverName, serverIndex, toolIndex) {
   const shared = toolIndex % 11 === 0;

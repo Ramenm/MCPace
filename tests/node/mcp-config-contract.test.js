@@ -78,6 +78,10 @@ test('BYO MCP server model is documented and surfaced in the runtime manifest', 
 test('full doctor treats Serena context separately from project root', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-doctor-serena-'));
   try {
+    const appData = path.join(root, 'AppData', 'Roaming');
+    const localAppData = path.join(root, 'AppData', 'Local');
+    fs.mkdirSync(appData, { recursive: true });
+    fs.mkdirSync(localAppData, { recursive: true });
     const config = path.join(root, 'mcp_settings.json');
     fs.writeFileSync(
       config,
@@ -106,7 +110,17 @@ test('full doctor treats Serena context separately from project root', () => {
     const result = spawnSync(
       process.execPath,
       ['scripts/mcpace-full-doctor.mjs', '--root', repoRoot, '--config', config, '--json'],
-      { cwd: repoRoot, encoding: 'utf8', env: cleanChildEnv() }
+      {
+        cwd: repoRoot,
+        encoding: 'utf8',
+        env: cleanChildEnv({
+          HOME: root,
+          USERPROFILE: root,
+          APPDATA: appData,
+          LOCALAPPDATA: localAppData,
+          MCPACE_HOME: root,
+        })
+      }
     );
     assert.equal(result.status, 0, result.stderr || result.stdout);
     const report = JSON.parse(result.stdout);

@@ -91,6 +91,8 @@ fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServe
             .unwrap_or("")
             .trim()
             .to_string();
+        let args =
+            json_helpers::strings_from_array(value.get("args").and_then(JsonValue::as_array));
         let source_type = infer_source_type(&raw_source_type, &command, &url);
         map.insert(
             entry.normalized_name.clone(),
@@ -100,6 +102,7 @@ fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServe
                 source_type,
                 command,
                 url,
+                args,
             },
         );
     }
@@ -159,6 +162,7 @@ fn generic_source_server_record(
             policy.credential_binding,
             &source_record.command,
             &source_record.url,
+            &source_record.args,
             &Vec::new(),
         ),
         default_pool_model: infer_default_pool_model(
@@ -189,15 +193,16 @@ fn generic_source_server_record(
             policy.credential_binding,
             normalized_name,
         ),
-        profile_evidence: profile_evidence_records(
-            &source_type,
-            policy.scope_class,
-            policy.concurrency_policy,
-            policy.state_binding,
-            policy.credential_binding,
-            &source_record.command,
-            &source_record.url,
-        ),
+        profile_evidence: profile_evidence_records(ProfileEvidenceInput {
+            source_type: &source_type,
+            scope_class: policy.scope_class,
+            concurrency_policy: policy.concurrency_policy,
+            state_binding: policy.state_binding,
+            credential_binding: policy.credential_binding,
+            command: &source_record.command,
+            url: &source_record.url,
+            args: &source_record.args,
+        }),
         conflict_domain,
         project_root_mode: policy.project_root_mode.to_string(),
         worktree_binding: policy.worktree_binding.to_string(),
@@ -224,17 +229,36 @@ fn infer_generic_source_policy(
     source_record: &SourceServerRecord,
     source_type: &str,
 ) -> GenericSourcePolicy {
-    let haystack = format!(
-        "{} {} {} {}",
-        normalized_name, source_record.name, source_record.command, source_record.url
-    )
-    .to_ascii_lowercase();
+    let signals = source_signals(
+        normalized_name,
+        &source_record.name,
+        &source_record.command,
+        &source_record.url,
+        &source_record.args,
+    );
+    let remote = source_type == "streamable-http"
+        || source_type == "http"
+        || !source_record.url.trim().is_empty();
 
-    if haystack.contains("playwright")
-        || haystack.contains("puppeteer")
-        || haystack.contains("browser")
-        || haystack.contains("desktop")
-    {
+    if remote {
+        return GenericSourcePolicy {
+            scope_class: "credential-scoped",
+            concurrency_policy: "single-writer",
+            state_binding: "remote-session",
+            credential_binding: "remote-origin-or-credential",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "remote-mcp",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "optional",
+            host_lock: "none",
+            startup_strategy: "lazy-shared",
+            routing_group: "remote-mcp",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("browser-or-desktop") {
         return GenericSourcePolicy {
             scope_class: "shared-exclusive",
             concurrency_policy: "single-session",
@@ -252,72 +276,25 @@ fn infer_generic_source_policy(
         };
     }
 
-    if haystack.contains("git") || haystack.contains("repository") || haystack.contains("worktree")
-    {
+    if signals.contains("shell-or-process") {
         return GenericSourcePolicy {
-            scope_class: "project-local",
-            concurrency_policy: "single-writer",
-            state_binding: "repo",
-            credential_binding: "git-config",
+            scope_class: "shared-exclusive",
+            concurrency_policy: "single-session",
+            state_binding: "host-session",
+            credential_binding: "source-config",
             parallelism_limit: 1,
-            conflict_domain_prefix: "git-repository",
-            project_root_mode: "required",
-            worktree_binding: "repository-root",
-            state_profile_mode: "none",
-            host_lock: "none",
-            startup_strategy: "lazy-per-project",
-            routing_group: "project-git",
-            discovery_requires_lease: true,
-        };
-    }
-
-    if haystack.contains("filesystem")
-        || haystack.contains("server-filesystem")
-        || haystack.contains("file-system")
-    {
-        return GenericSourcePolicy {
-            scope_class: "project-local",
-            concurrency_policy: "isolated-per-project",
-            state_binding: "file",
-            credential_binding: "none",
-            parallelism_limit: 1,
-            conflict_domain_prefix: "project-filesystem",
-            project_root_mode: "required",
-            worktree_binding: "project-root",
-            state_profile_mode: "none",
-            host_lock: "none",
-            startup_strategy: "lazy-per-project",
-            routing_group: "project-filesystem",
-            discovery_requires_lease: true,
-        };
-    }
-
-    if haystack.contains("context7")
-        || haystack.contains("docs")
-        || haystack.contains("documentation")
-    {
-        return GenericSourcePolicy {
-            scope_class: "credential-scoped",
-            concurrency_policy: "multi-reader",
-            state_binding: "none",
-            credential_binding: "api-key-or-anonymous",
-            parallelism_limit: 4,
-            conflict_domain_prefix: "network-docs",
-            project_root_mode: "none",
+            conflict_domain_prefix: "host-process",
+            project_root_mode: "optional",
             worktree_binding: "none",
-            state_profile_mode: "none",
-            host_lock: "none",
-            startup_strategy: "lazy-shared",
-            routing_group: "network-docs",
-            discovery_requires_lease: false,
+            state_profile_mode: "required",
+            host_lock: "host-session",
+            startup_strategy: "singleton-host",
+            routing_group: "dangerous-process",
+            discovery_requires_lease: true,
         };
     }
 
-    if haystack.contains("memory")
-        || haystack.contains("sequential-thinking")
-        || haystack.contains("context-store")
-        || haystack.contains("stateful")
-    {
+    if signals.contains("memory-or-context") {
         return GenericSourcePolicy {
             scope_class: "state-profile",
             concurrency_policy: "single-session",
@@ -335,44 +312,283 @@ fn infer_generic_source_policy(
         };
     }
 
-    let remote = source_type == "streamable-http"
-        || source_type == "http"
-        || !source_record.url.trim().is_empty();
+    if signals.contains("git-repository") {
+        return GenericSourcePolicy {
+            scope_class: "project-local",
+            concurrency_policy: "single-writer",
+            state_binding: "repo",
+            credential_binding: "git-config",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "git-repository",
+            project_root_mode: "required",
+            worktree_binding: "repository-root",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-per-project",
+            routing_group: "project-git",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("database") {
+        return GenericSourcePolicy {
+            scope_class: "project-local",
+            concurrency_policy: "single-writer",
+            state_binding: "db",
+            credential_binding: if signals.contains("credentials-or-auth") {
+                "database-connection"
+            } else {
+                "none"
+            },
+            parallelism_limit: 1,
+            conflict_domain_prefix: "database",
+            project_root_mode: "required",
+            worktree_binding: "project-root",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-per-project",
+            routing_group: "project-database",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("filesystem") {
+        return GenericSourcePolicy {
+            scope_class: "project-local",
+            concurrency_policy: "isolated-per-project",
+            state_binding: "file",
+            credential_binding: "none",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "project-filesystem",
+            project_root_mode: "required",
+            worktree_binding: "project-root",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-per-project",
+            routing_group: "project-filesystem",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("cloud-admin")
+        || signals.contains("identity-admin")
+        || signals.contains("cluster-control")
+        || signals.contains("secrets-manager")
+        || signals.contains("payments-financial")
+        || signals.contains("blockchain-wallet")
+        || signals.contains("credentials-or-auth")
+        || signals.contains("network-or-external-api")
+    {
+        return GenericSourcePolicy {
+            scope_class: "credential-scoped",
+            concurrency_policy: "single-writer",
+            state_binding: "identity-tenant",
+            credential_binding: "credential-profile",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "credential-provider",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "optional",
+            host_lock: "none",
+            startup_strategy: "lazy-per-profile",
+            routing_group: "credential-provider",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("network-fetch") {
+        return GenericSourcePolicy {
+            scope_class: "credential-scoped",
+            concurrency_policy: "multi-reader",
+            state_binding: "none",
+            credential_binding: "provider-budget",
+            parallelism_limit: 2,
+            conflict_domain_prefix: "network-fetch",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-shared",
+            routing_group: "network-fetch",
+            discovery_requires_lease: false,
+        };
+    }
+
+    if signals.contains("local-utility") || signals.contains("readonly-tools") {
+        return GenericSourcePolicy {
+            scope_class: "stateless-local",
+            concurrency_policy: "multi-reader",
+            state_binding: "none",
+            credential_binding: "none",
+            parallelism_limit: 4,
+            conflict_domain_prefix: "stateless-local",
+            project_root_mode: "none",
+            worktree_binding: "none",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-shared",
+            routing_group: "stateless-local",
+            discovery_requires_lease: false,
+        };
+    }
+
     GenericSourcePolicy {
-        scope_class: if remote {
-            "credential-scoped"
-        } else {
-            "configured-source"
-        },
+        scope_class: "configured-source",
         concurrency_policy: "single-writer",
-        state_binding: if remote {
-            "remote-session"
-        } else {
-            "runtime-source"
-        },
-        credential_binding: if remote {
-            "remote-origin-or-credential"
-        } else {
-            "source-config"
-        },
+        state_binding: "runtime-source",
+        credential_binding: "source-config",
         parallelism_limit: 1,
-        conflict_domain_prefix: if remote {
-            "remote-mcp"
-        } else {
-            "settings-only"
-        },
+        conflict_domain_prefix: "settings-source",
         project_root_mode: "optional",
         worktree_binding: "none",
-        state_profile_mode: if remote { "optional" } else { "none" },
+        state_profile_mode: "none",
         host_lock: "none",
         startup_strategy: "lazy-shared",
-        routing_group: if remote {
-            "remote-mcp"
-        } else {
-            "settings-only"
-        },
+        routing_group: "unknown-source",
         discovery_requires_lease: true,
     }
+}
+
+fn source_signals(
+    normalized_name: &str,
+    display_name: &str,
+    command: &str,
+    url: &str,
+    args: &[String],
+) -> BTreeSet<String> {
+    let haystack = format!(
+        "{} {} {} {} {}",
+        normalized_name,
+        display_name,
+        command,
+        url,
+        args.join(" ")
+    )
+    .to_ascii_lowercase();
+    let mut signals = BTreeSet::new();
+    if haystack.contains("filesystem")
+        || haystack.contains("file-system")
+        || haystack.contains("server-filesystem")
+        || haystack.contains("read_file")
+        || haystack.contains("write_file")
+    {
+        signals.insert("filesystem".to_string());
+    }
+    if haystack.contains("git") || haystack.contains("repository") || haystack.contains("worktree")
+    {
+        signals.insert("git-repository".to_string());
+    }
+    if haystack.contains("sqlite")
+        || haystack.contains("postgres")
+        || haystack.contains("database")
+        || haystack.contains("sql")
+        || haystack.contains("db-path")
+    {
+        signals.insert("database".to_string());
+    }
+    if haystack.contains("playwright")
+        || haystack.contains("puppeteer")
+        || haystack.contains("chrome")
+        || haystack.contains("browser")
+        || haystack.contains("desktop")
+    {
+        signals.insert("browser-or-desktop".to_string());
+    }
+    if haystack.contains("memory")
+        || haystack.contains("sequential-thinking")
+        || haystack.contains("context-store")
+        || haystack.contains("knowledge")
+        || haystack.contains("thinking")
+    {
+        signals.insert("memory-or-context".to_string());
+    }
+    if haystack.contains("time") || haystack.contains("timezone") || haystack.contains("calculator")
+    {
+        signals.insert("local-utility".to_string());
+    }
+    if haystack.contains("fetch")
+        || haystack.contains("http")
+        || haystack.contains("url")
+        || haystack.contains("web")
+    {
+        signals.insert("network-fetch".to_string());
+    }
+    if haystack.contains("context7")
+        || haystack.contains("docs")
+        || haystack.contains("documentation")
+        || haystack.contains("github")
+        || haystack.contains("notion")
+        || haystack.contains("sentry")
+        || haystack.contains("slack")
+        || haystack.contains("maps")
+        || haystack.contains("api")
+    {
+        signals.insert("network-or-external-api".to_string());
+    }
+    if haystack.contains("azure")
+        || haystack.contains("aws")
+        || haystack.contains("gcp")
+        || haystack.contains("cloudflare")
+        || haystack.contains("terraform")
+        || haystack.contains("pulumi")
+    {
+        signals.insert("cloud-admin".to_string());
+    }
+    if haystack.contains("kubernetes") || haystack.contains("k8s") || haystack.contains("kubectl") {
+        signals.insert("cluster-control".to_string());
+    }
+    if haystack.contains("okta")
+        || haystack.contains("auth0")
+        || haystack.contains("entra")
+        || haystack.contains("active directory")
+        || haystack.contains("identity")
+        || haystack.contains("scim")
+    {
+        signals.insert("identity-admin".to_string());
+    }
+    if haystack.contains("vault")
+        || haystack.contains("secret manager")
+        || haystack.contains("1password")
+        || haystack.contains("bitwarden")
+        || haystack.contains("keychain")
+    {
+        signals.insert("secrets-manager".to_string());
+    }
+    if haystack.contains("stripe")
+        || haystack.contains("paypal")
+        || haystack.contains("billing")
+        || haystack.contains("payment")
+    {
+        signals.insert("payments-financial".to_string());
+    }
+    if haystack.contains("wallet")
+        || haystack.contains("ethereum")
+        || haystack.contains("blockchain")
+        || haystack.contains("web3")
+    {
+        signals.insert("blockchain-wallet".to_string());
+    }
+    if haystack.contains("token")
+        || haystack.contains("api_key")
+        || haystack.contains("apikey")
+        || haystack.contains("auth")
+        || haystack.contains("oauth")
+        || haystack.contains("bearer")
+    {
+        signals.insert("credentials-or-auth".to_string());
+    }
+    if haystack.contains("shell")
+        || haystack.contains("terminal")
+        || haystack.contains("exec")
+        || haystack.contains("command-runner")
+        || haystack.contains("code-runner")
+    {
+        signals.insert("shell-or-process".to_string());
+    }
+    if signals.is_empty() {
+        signals.insert("unknown-side-effects".to_string());
+    }
+    signals
 }
 
 fn infer_source_type(raw_source_type: &str, command: &str, url: &str) -> String {
@@ -488,6 +704,9 @@ fn normalize_server_record(
     let source_url = source_record
         .map(|record| record.url.clone())
         .unwrap_or_default();
+    let source_args = source_record
+        .map(|record| record.args.clone())
+        .unwrap_or_default();
     let kind = object
         .get("kind")
         .and_then(JsonValue::as_str)
@@ -519,6 +738,7 @@ fn normalize_server_record(
         &credential_binding,
         &source_command,
         &source_url,
+        &source_args,
         &tool_policies,
     );
     let default_pool_model = infer_default_pool_model(
@@ -541,15 +761,16 @@ fn normalize_server_record(
         &credential_binding,
         name,
     );
-    let profile_evidence = profile_evidence_records(
-        &source_type,
-        &scope_class,
-        &concurrency_policy,
-        &state_binding,
-        &credential_binding,
-        &source_command,
-        &source_url,
-    );
+    let profile_evidence = profile_evidence_records(ProfileEvidenceInput {
+        source_type: &source_type,
+        scope_class: &scope_class,
+        concurrency_policy: &concurrency_policy,
+        state_binding: &state_binding,
+        credential_binding: &credential_binding,
+        command: &source_command,
+        url: &source_url,
+        args: &source_args,
+    });
 
     Some(ServerRecord {
         name: name.to_string(),
@@ -706,25 +927,46 @@ fn infer_parallel_safety_class(
     credential_binding: &str,
     command: &str,
     url: &str,
+    args: &[String],
     tool_policies: &[JsonValue],
 ) -> String {
+    let signals = source_signals("", "", command, url, args);
     if source_type == "sse-legacy" || source_type == "sse" {
         return "PX_legacy_compat".to_string();
     }
     if scope_class == "shared-exclusive"
         || state_binding == "host-desktop"
-        || concurrency_policy == "single-session"
+        || signals.contains("browser-or-desktop")
+        || signals.contains("shell-or-process")
     {
         return "PX_forbidden".to_string();
-    }
-    if !credential_binding.trim().is_empty() && credential_binding != "none" {
-        return "P2_session_safe".to_string();
     }
     if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
         return "P3_project_safe".to_string();
     }
+    if policy_is_explicit_stateless(concurrency_policy, state_binding) {
+        if source_type == "streamable-http" || source_type == "http" || !url.trim().is_empty() {
+            return "P4_stateless_remote_candidate".to_string();
+        }
+        return "P1_readonly_candidate".to_string();
+    }
+    if !credential_binding.trim().is_empty() && credential_binding != "none" {
+        return "P2_session_safe".to_string();
+    }
+    if concurrency_policy == "single-session" || signals.contains("memory-or-context") {
+        return "P2_session_safe".to_string();
+    }
     if source_type == "streamable-http" || source_type == "http" || !url.trim().is_empty() {
-        return "P4_stateless_remote_candidate".to_string();
+        return "P2_session_safe".to_string();
+    }
+    if signals.contains("filesystem")
+        || signals.contains("git-repository")
+        || signals.contains("database")
+    {
+        return "P3_project_safe".to_string();
+    }
+    if signals.contains("network-fetch") || signals.contains("local-utility") {
+        return "P1_readonly_candidate".to_string();
     }
     if concurrency_policy == "multi-reader" {
         return "P1_readonly_candidate".to_string();
@@ -736,6 +978,14 @@ fn infer_parallel_safety_class(
         return "P0_unknown_stdio".to_string();
     }
     "P0_unknown".to_string()
+}
+
+fn policy_is_explicit_stateless(concurrency_policy: &str, state_binding: &str) -> bool {
+    let state_binding = state_binding.trim();
+    (concurrency_policy == "multi-reader"
+        || concurrency_policy == "read-only"
+        || concurrency_policy == "readonly")
+        && (state_binding == "none" || state_binding == "stateless")
 }
 
 fn policy_mentions_readonly(value: &JsonValue) -> bool {
@@ -768,14 +1018,17 @@ fn infer_default_pool_model(
     {
         return "singleton".to_string();
     }
-    if !credential_binding.trim().is_empty() && credential_binding != "none" {
-        return "credential-session-pool".to_string();
-    }
     if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
         return "project-pool".to_string();
     }
+    if policy_is_explicit_stateless(concurrency_policy, state_binding) && source_type == "stdio" {
+        return "process-pool".to_string();
+    }
     if source_type == "streamable-http" || source_type == "http" {
         return "remote-http-session-pool".to_string();
+    }
+    if !credential_binding.trim().is_empty() && credential_binding != "none" {
+        return "credential-session-pool".to_string();
     }
     if source_type == "stdio" {
         return "process-pool".to_string();
@@ -829,6 +1082,9 @@ fn infer_lock_domains(
         "db" | "db-file-path" => domains.push("db".to_string()),
         "host-desktop" => domains.push("browser-or-desktop-session".to_string()),
         "host-session" => domains.push("host-session".to_string()),
+        "remote-session" => domains.push("transport-session".to_string()),
+        "context-store" | "memory" => domains.push("context-store".to_string()),
+        "identity-tenant" | "tenant" => domains.push("tenant".to_string()),
         _ => {}
     }
     if concurrency_policy == "single-session" {
@@ -842,16 +1098,21 @@ fn infer_lock_domains(
     domains
 }
 
-fn profile_evidence_records(
-    source_type: &str,
-    scope_class: &str,
-    concurrency_policy: &str,
-    state_binding: &str,
-    credential_binding: &str,
-    command: &str,
-    url: &str,
-) -> Vec<JsonValue> {
+struct ProfileEvidenceInput<'a> {
+    source_type: &'a str,
+    scope_class: &'a str,
+    concurrency_policy: &'a str,
+    state_binding: &'a str,
+    credential_binding: &'a str,
+    command: &'a str,
+    url: &'a str,
+    args: &'a [String],
+}
+
+fn profile_evidence_records(input: ProfileEvidenceInput<'_>) -> Vec<JsonValue> {
     let mut records = Vec::new();
+    let signals = source_signals("", "", input.command, input.url, input.args);
+    let signal_values: Vec<JsonValue> = signals.iter().cloned().map(JsonValue::string).collect();
     records.push(JsonValue::object([
         ("kind", JsonValue::string("static")),
         ("confidence", JsonValue::number(0.45)),
@@ -862,17 +1123,31 @@ fn profile_evidence_records(
         (
             "data",
             JsonValue::object([
-                ("sourceType", JsonValue::string(source_type.to_string())),
-                ("scopeClass", JsonValue::string(scope_class.to_string())),
-                ("concurrencyPolicy", JsonValue::string(concurrency_policy.to_string())),
-                ("stateBinding", JsonValue::string(state_binding.to_string())),
-                ("credentialBinding", JsonValue::string(credential_binding.to_string())),
-                ("hasCommand", JsonValue::bool(!command.trim().is_empty())),
-                ("hasUrl", JsonValue::bool(!url.trim().is_empty())),
+                ("sourceType", JsonValue::string(input.source_type.to_string())),
+                ("scopeClass", JsonValue::string(input.scope_class.to_string())),
+                (
+                    "concurrencyPolicy",
+                    JsonValue::string(input.concurrency_policy.to_string()),
+                ),
+                (
+                    "stateBinding",
+                    JsonValue::string(input.state_binding.to_string()),
+                ),
+                (
+                    "credentialBinding",
+                    JsonValue::string(input.credential_binding.to_string()),
+                ),
+                (
+                    "hasCommand",
+                    JsonValue::bool(!input.command.trim().is_empty()),
+                ),
+                ("hasUrl", JsonValue::bool(!input.url.trim().is_empty())),
+                ("argCount", JsonValue::number(input.args.len())),
+                ("sourceSignals", JsonValue::array(signal_values)),
             ]),
         ),
     ]));
-    if source_type == "sse-legacy" || source_type == "sse" {
+    if input.source_type == "sse-legacy" || input.source_type == "sse" {
         records.push(JsonValue::object([
             ("kind", JsonValue::string("policy")),
             ("confidence", JsonValue::number(1)),

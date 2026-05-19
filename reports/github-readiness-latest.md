@@ -1,6 +1,6 @@
 # MCPace GitHub readiness
 
-Project: `mcpace` v`0.5.9`
+Project: `mcpace` v`0.6.5`
 Status: `ready-with-warnings`
 
 ## Summary
@@ -13,7 +13,7 @@ Status: `ready-with-warnings`
 
 | check | required | status | evidence |
 |---|---:|---:|---|
-| file:README.md | yes | pass | public landing page; 196 lines |
+| file:README.md | yes | pass | public landing page; 202 lines |
 | file:LICENSE | yes | pass | license clarity; 109 lines |
 | file:CONTRIBUTING.md | yes | pass | contribution workflow; 110 lines |
 | file:SECURITY.md | yes | pass | private vulnerability reporting; 61 lines |

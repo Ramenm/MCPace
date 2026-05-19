@@ -1,6 +1,6 @@
 # Dashboard chaos smoke report
 
-Generated: 2026-05-17T15:29:10.510Z
+Generated: 2026-05-19T12:36:03.830Z
 Project: mcpace 0.6.5
 Status: **pass**
 
@@ -14,9 +14,9 @@ Status: **pass**
 
 - Tabs: 6
 - Total operations: 720
-- Elapsed: 9755.42 ms
-- Max operation: 31.34 ms
-- Max render: 3.83 ms
+- Elapsed: 17875.53 ms
+- Max operation: 48.3 ms
+- Max render: 1.82 ms
 - Fetches: 953
 - Aborted overlapping fetches: 154
 - Partial failures contained: 14
@@ -33,9 +33,9 @@ Status: **pass**
 | partial-logs-failure-does-not-kill-overview | pass | logs failure is degraded, not fatal |
 | dashboard-test-hook-present | pass | smoke can exercise runtime functions without a browser dependency |
 | refresh-mode-visible | pass | operator can see refresh/backoff state |
-| chaos-elapsed-budget | pass | elapsedMs=9755.42; budget=15000 |
-| operation-latency-budget | pass | maxOperationMs=31.34; budget=120 |
-| render-latency-budget | pass | maxRenderMs=3.83; budget=90 |
+| chaos-elapsed-budget | pass | elapsedMs=17875.53; budget=25000 |
+| operation-latency-budget | pass | maxOperationMs=48.3; budget=120 |
+| render-latency-budget | pass | maxRenderMs=1.82; budget=90 |
 | all-tabs-rendered-server-list | pass | tabs=6 |
 | all-tabs-kept-one-auto-timer | pass | tab1:1, tab2:1, tab3:1, tab4:1, tab5:1, tab6:1 |
 | overlap-aborts-observed | pass | aborted=154 |

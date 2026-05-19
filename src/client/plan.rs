@@ -362,7 +362,7 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         "state-profile-queue".to_string()
     } else if host_lock_key.is_some() {
         "host-lock-queue".to_string()
-    } else if record.routing_group == "settings-only" {
+    } else if record.routing_group == "settings-only" || record.routing_group == "unknown-source" {
         "settings-only-conservative".to_string()
     } else if project_binding_key.is_some() {
         "project-queue".to_string()

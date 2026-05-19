@@ -1,9 +1,9 @@
 # MCP Registry Lab Report
 
-Schema: `mcpace.registryLab.v2`  
-Status: **pass**  
-Mode: `fixture-metadata-only`  
-Generated: 2026-05-17T15:29:16.260Z
+Schema: `mcpace.registryLab.v2`
+Status: **pass**
+Mode: `fixture-metadata-only`
+Generated: 2026-05-19T12:36:11.178Z
 
 This report is metadata-only. It does **not** install, launch, or call arbitrary third-party MCP servers.
 

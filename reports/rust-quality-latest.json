@@ -1,16 +1,16 @@
 {
-  "ok": false,
-  "status": "partial",
-  "generatedAt": "2026-05-17T15:34:23.374334Z",
+  "ok": true,
+  "status": "pass",
+  "generatedAt": "2026-05-19T12:41:21.601Z",
   "project": {
     "name": "mcpace",
     "version": "0.6.5"
   },
-  "durationMs": null,
+  "durationMs": 105834,
   "toolchain": {
     "cargoAvailable": true,
-    "cargoVersion": "cargo 1.85.0 (d73d2caf9 2024-12-31)",
-    "rustcVersion": "rustc 1.85.0 (4d91de4e4 2025-02-17)",
+    "cargoVersion": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
+    "rustcVersion": "rustc 1.95.0 (59807616e 2026-04-14)",
     "rustupToolchain": null
   },
   "policy": {
@@ -19,7 +19,6 @@
       "check",
       "clippy",
       "rust-tests",
-      "debug-build",
       "release-build"
     ],
     "checkArgs": [
@@ -37,7 +36,7 @@
       "--release",
       "--locked"
     ],
-    "testsProfile": "suite-isolated-full",
+    "testsProfile": "full",
     "defaultTimeoutMs": 600000
   },
   "lanes": [
@@ -48,9 +47,10 @@
       "ok": true,
       "code": 0,
       "signal": null,
-      "durationMs": null,
-      "timeoutMs": null,
-      "stdoutSummary": "see reports/rust-host-mirror-proof-20260517.json",
+      "durationMs": 959,
+      "timeoutMs": 600000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "",
       "stderrSummary": "",
       "error": null
     },
@@ -61,10 +61,11 @@
       "ok": true,
       "code": 0,
       "signal": null,
-      "durationMs": null,
-      "timeoutMs": null,
-      "stdoutSummary": "see reports/rust-host-mirror-proof-20260517.json",
-      "stderrSummary": "",
+      "durationMs": 1277,
+      "timeoutMs": 600000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "",
+      "stderrSummary": "    Checking mcpace v0.6.5 (C:\\Users\\rmatv\\Projects\\mcpace)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.18s",
       "error": null
     },
     {
@@ -74,63 +75,40 @@
       "ok": true,
       "code": 0,
       "signal": null,
-      "durationMs": null,
-      "timeoutMs": null,
-      "stdoutSummary": "see reports/rust-host-mirror-proof-20260517.json",
-      "stderrSummary": "",
+      "durationMs": 5188,
+      "timeoutMs": 600000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "",
+      "stderrSummary": "    Checking mcpace v0.6.5 (C:\\Users\\rmatv\\Projects\\mcpace)\n    Finished `dev` profile [unoptimized + debuginfo] target(s) in 4.93s",
       "error": null
     },
     {
       "name": "rust-tests",
-      "command": "node scripts/run-rust-tests.mjs --json --profile full",
+      "command": "C:\\Program Files\\nodejs\\node.exe scripts/run-rust-tests.mjs --json --profile full",
       "status": "pass",
       "ok": true,
       "code": 0,
       "signal": null,
-      "durationMs": null,
-      "timeoutMs": null,
-      "stdoutSummary": "see reports/rust-host-mirror-proof-20260517.json",
-      "stderrSummary": "",
-      "error": null
-    },
-    {
-      "name": "debug-build",
-      "command": "cargo build --locked --bin mcpace -j1",
-      "status": "pass",
-      "ok": true,
-      "code": 0,
-      "signal": null,
-      "durationMs": null,
-      "timeoutMs": null,
-      "stdoutSummary": "see reports/rust-host-mirror-proof-20260517.json",
-      "stderrSummary": "",
+      "durationMs": 66125,
+      "timeoutMs": 600000,
+      "maxBufferBytes": 16777216,
+      "stdoutSummary": "      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"timedOut\": false,\n      \"durationMs\": 14785,\n      \"stdoutBytes\": 8672,\n      \"stderrBytes\": 215\n    },\n    {\n      \"name\": \"doc\",\n      \"status\": \"pass\",\n      \"code\": 0,\n      \"signal\": null,\n      \"timedOut\": false,\n      \"durationMs\": 596,\n      \"stdoutBytes\": 113,\n      \"stderrBytes\": 93\n    }\n  ]\n}",
+      "stderrSummary": "test upstream::tests::relative_stdio_command_paths_resolve_against_configured_cwd ... ok\ntest upstream::tests::server_fingerprint_does_not_embed_secret_env_values ... ok\ntest upstream::tests::server_runtime_callable_blocks_missing_cwd_before_spawn ... ok\ntest upstream::tests::stderr_suffix_bounds_diagnostic_line_count_and_length ... ok\ntest upstream::tests::stderr_suffix_redacts_sensitive_diagnostics_without_removing_context ... ok\ntest upstream::tests::stdio_request_cleanup_terminates_windows_descendant_processes ... ok\ntest upstream::tests::surface_manifest_is_explicit_about_wrapper_projection ... ok\ntest upstream::tests::tool_list_cache_key_tracks_settings_metadata ... ok\ntest upstream::tests::tool_list_cache_persists_to_disk_and_invalidates_when_settings_change ... ok\ntest upstream::tests::tool_list_cache_prunes_oldest_entries_to_bound_memory ... ok\ntest upstream::tests::tool_list_cache_returns_fresh_entries_and_drops_stale_entries ... ok\ntest upstream::tests::tool_policy_audit_flags_unprotected_mutating_tools_without_enforcing_heuristics ... ok\ntest upstream::tests::tool_policy_audit_reports_declarative_policy_coverage ... ok\ntest upstream::tests::tool_summary_uses_upstream_name_title_and_description ... ok\ntest result: ok. 99 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.06s\n[mcpace rust-test] doc: cargo test --doc --locked -- --test-threads=1\n    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s\n   Doc-tests mcpace\nrunning 0 tests\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
       "error": null
     },
     {
       "name": "release-build",
       "command": "cargo build --release --locked",
-      "status": "blocked",
-      "ok": false,
-      "code": null,
-      "signal": "timeout",
-      "durationMs": null,
-      "timeoutMs": null,
+      "status": "pass",
+      "ok": true,
+      "code": 0,
+      "signal": null,
+      "durationMs": 31861,
+      "timeoutMs": 600000,
+      "maxBufferBytes": 16777216,
       "stdoutSummary": "",
-      "stderrSummary": "optimized release/LTO build was killed by constrained tool runtime",
-      "error": "release build proof unavailable in this environment"
+      "stderrSummary": "   Compiling mcpace v0.6.5 (C:\\Users\\rmatv\\Projects\\mcpace)\n    Finished `release` profile [optimized] target(s) in 31.78s",
+      "error": null
     }
-  ],
-  "sourceProof": {
-    "status": "pass",
-    "rustHostMirrorProof": "reports/rust-host-mirror-proof-20260517.json",
-    "testedSuites": {
-      "lib": "100 passed",
-      "integration": "81 passed",
-      "doc": "0 doc tests"
-    }
-  },
-  "releaseProof": {
-    "status": "blocked",
-    "reason": "optimized release build not proven in this constrained environment"
-  }
+  ]
 }
