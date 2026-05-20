@@ -1,203 +1,44 @@
 # MCPace
 
-MCPace is a Rust-first local MCP hub: a single local MCP hub for many clients. It exposes one local MCPace endpoint and brokers user-chosen upstream MCP servers with no bundled upstream MCP servers enabled or recommended by default. The repository tracks the MCP 2025-11-25 baseline.
+One MCP endpoint for all your AI clients.
 
-`serve` is the product. `hub` is internal/operator-facing lifecycle machinery. The default runtime profile is `manual`, so `mcp_settings.json.mcpServers`, `mcpace.config.json.servers`, and the packaged candidate catalog start empty.
-
-## Why MCPace exists
-
-MCP clients often ask users to wire the same upstream servers one app at a time. MCPace is meant to make that workflow local-first, repeatable, and inspectable:
-
-- one localhost MCP URL that clients can point at;
-- BYO upstream MCP servers instead of a hidden bundled catalog;
-- dry-run/diff/backup-oriented client config changes;
-- upstream smoke tests before client wiring;
-- clear diagnostics before a client touches an upstream server;
-- proof-first release claims, so docs say what is really working and what is still preview.
-
-## Current status
-
-MCPace is best described today as a **local-first MCP control plane with a connectable runtime preview**. Current promise: One local MCPace endpoint and generic MCP brokering/diagnostics with no bundled upstream MCP servers enabled or recommended by default. The source/control-plane surface is strong, stdio upstream smoke paths are implemented, and an in-process Streamable HTTP session store is now present in source. Fresh release-binary runtime proof, real-client traces, HTTP/Streamable HTTP upstream fan-out, and published native install proof are still explicit roadmap gates. See `ROADMAP.md`, `START-HERE.md`, `docs/github-launch-playbook.md`, and `docs/product-truth-and-beta-gate.md` before making stronger public claims.
-
-## First working path
-
-For the top-level proof order, read `START-HERE.md` and `docs/product-practice.md`. For bug intake, reproduction, root-cause, regression-proof standards, and maintainer debugging, read `docs/bug-lifecycle.md`, `docs/bug-hunting-and-fix-playbook.md`, and `docs/maintainer-debugging-guide.md`. For public repository polish, launch sequencing, and star-friendly GitHub readiness, read `ROADMAP.md` and `docs/github-launch-playbook.md`. For offline-first verification that does not depend on paid GitHub features, read `docs/offline-quality-and-publish-gates.md`, `docs/local-quality-without-paid-github.md`, `docs/release-decision-runbook.md`, and `docs/tooling-stack.md`.
-
-
-From a user/client point of view, the shortest safe path is:
-
-```bash
-mcpace connect
-mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run
-mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
-mcpace server test filesystem --refresh --json
-mcpace client install cursor-local --dry-run --diff
-```
-
-Use `mcpace connect [client] --server <name>` whenever you are unsure what to do next. It is read-only and reports the resolved MCPace endpoint, selected client target, upstream MCP source inventory, readiness blockers, and exact next commands. Use `server install` for package/URL/command-derived entries, `server import` when you already have a client or project MCP config, `server add` for a fully custom BYO stdio MCP server, `server test` before wiring a client, and `client export` / `client install` only after the upstream smoke is clear.
-
-## Configure any upstream MCP server
-
-The product model is **Bring Your Own MCP servers (BYO MCP)**: MCPace ships the
-hub/adapter, not a bundled upstream-server catalog. Other users do not need a
-new MCPace build when they choose different servers. They install whatever
-upstream MCP packages or binaries they trust, then add those entries to their
-own `mcp_settings.json`, per-server fragments in `mcp_settings.d/*.json`, additional files/directories listed in `mcpace.config.json` `mcpSettings.includePaths` / `mcpSettings.includeDirs`, files listed in `MCPACE_MCP_SETTINGS`, or directories listed in `MCPACE_MCP_SETTINGS_DIRS`.
-
-The easiest top-down command is the read-only wiring guide:
-
-```bash
-mcpace connect --json
-mcpace connect cursor-local --server filesystem
-```
-
-It resolves the configured MCPace endpoint, selected client target, upstream source inventory, readiness blockers, and exact next commands.
-
-The easiest server-management path is now evidence-first and package-spec based:
-
-```bash
-mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run
-mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
-mcpace server sources --json
-mcpace server test filesystem --refresh
-mcpace server capabilities --name filesystem --json
-mcpace server disable filesystem --dry-run
-mcpace server enable filesystem --dry-run
-mcpace server remove filesystem --dry-run
-```
-
-`server install` derives a reviewable MCP settings fragment from a package spec, URL, or command. It does not need a packaged upstream catalog. For npm packages it writes an `npx -y <package>` stdio entry, for PyPI packages it writes a `uvx <package>` entry, for OCI specs it writes a `docker run --rm <image>` entry, and for URLs it writes a Streamable HTTP entry. The adaptive profile then starts conservative from source evidence: transport, launcher, package/args, command/url, optional policy hints, and later live `initialize`/`tools/list` probes. Remote Streamable HTTP is treated as session-bound unless explicit stateless evidence exists. Use `--dry-run` to preview, `--force` to replace an existing fragment, `--settings <path>` to target a specific source file, and `--url <url> --type streamable-http` to inventory a remote HTTP MCP server.
-
-You can still add user-supplied servers explicitly in JSON. MCPace accepts ordinary stdio-style MCP entries without also requiring a hardcoded server declaration in `mcpace.config.json`:
-
-```json
-{
-  "mcpServers": {
-    "my-server": {
-      "command": "node",
-      "args": ["path/to/server.js"],
-      "env": {
-        "EXPLICIT_VAR": "value"
-      },
-      "env_vars": ["TOKEN_FROM_PARENT_ENV"],
-      "cwd": "/absolute/or/project-specific/path"
-    }
-  }
-}
-```
-
-`enabled` defaults to `true` for user-supplied entries. `type` can be omitted for stdio commands; MCPace infers `stdio` from `command` and HTTP-like transport from `url`. Add a matching entry in `mcpace.config.json` only when you want optional policy metadata such as routing class, concurrency, platform gating, required commands, or tool risk gates.
-
-Portability contract for other users:
-
-- packaged `mcp_settings.json.mcpServers`, `mcpace.config.json.servers`, and
-  `server-candidates.json` stay empty;
-- new server names are discovered from root `mcp_settings.json`, configured
-  `mcpSettings.includePaths`, `mcpSettings.includeDirs`, `mcp_settings.d/*.json`,
-  `MCPACE_MCP_SETTINGS`, or `MCPACE_MCP_SETTINGS_DIRS` at runtime, without
-  recompiling MCPace;
-- `mcpace server list --json`, `upstream_probe`, `upstream_catalog`,
-  `upstream_tools`, `upstream_call`, and `upstream_batch` operate on those
-  configured names;
-- MCPace does not silently install arbitrary upstream packages. Preset installs write reviewable MCP settings fragments; runtime package execution remains explicit through commands such as `npx -y ...`, and `server test` surfaces failures before clients use the server.
-
-Stdio upstream processes do not inherit the full MCPace parent environment. MCPace clears the child environment, adds a small process-launch baseline, then applies explicit `env` values and allowlisted local `env_vars` values. `env_vars` accepts either string names or local object entries such as `{ "name": "TOKEN", "source": "local" }`. Add secrets explicitly; do not rely on accidental parent-env inheritance.
-Runtime cache fingerprints include env variable names and hashed values only, not plaintext secret values.
-When upstream startup, timeout, or JSON-RPC errors include stderr, MCPace keeps bounded diagnostic context but redacts likely tokens, passwords, credentials, API keys, private keys, Authorization values, and bearer tokens before surfacing the error.
-
-HTTP/Streamable HTTP entries are inventoried and reported, but the current stdio bridge only forwards callable stdio upstreams. HTTP upstream fan-out remains blocked; it is not implemented yet and stays blocked honestly in diagnostics until implemented. The local `/mcp` endpoint now keeps a bounded in-process Streamable HTTP session store: `initialize` creates a server-generated session record, subsequent stateful requests must echo a known `Mcp-Session-Id`, and `DELETE /mcp` closes it. Client-supplied session ids on initialize are not trusted. Cross-process persistence and relay-grade auth/session binding remain future work.
-
-## Configure the MCPace endpoint advertised to clients
-
-The compatibility default is still:
+MCPace is a local MCP hub. It gives Cursor, Claude Code, VS Code, Windsurf, Codex, Gemini CLI, Kiro, and other MCP-compatible clients one stable local URL while keeping each client route isolated.
 
 ```text
 http://127.0.0.1:39022/mcp
 ```
 
-For different local ports, tunnels, relays, or cloud/API client surfaces, configure the advertised endpoint instead of editing client templates by hand:
-
-```json
-{
-  "serve": {
-    "host": "127.0.0.1",
-    "port": 39022,
-    "mcpPath": "/mcp",
-    "publicUrl": "https://your-relay.example/mcp"
-  }
-}
-```
-
-Environment overrides are also supported: `MCPACE_SERVE_HOST`, `MCPACE_SERVE_PORT`, `MCPACE_SERVE_PATH`, and `MCPACE_PUBLIC_MCP_URL`. `client install` and `client export` use this resolver, so different clients do not have to share a compiled-in URL.
-
-During Streamable HTTP `initialize`, MCPace returns `Mcp-Session-Id` and `MCP-Protocol-Version` response headers. The source implementation keeps an in-process HTTP session store, requires a known session ID after initialization, rejects missing, unknown, expired, and protocol-mismatched sessions, and lets clients close sessions with `DELETE /mcp`. Upstream lease affinity also recognizes common client/chat/project-root headers so different clients, chats, and workspaces can stay separable. Keep stronger release claims tied to fresh runtime traces and real-client proof.
-
-## Useful commands
+## Install from this source bundle
 
 ```bash
-npm test
-npm run ci:local:quick
-npm run ci:local
-npm run verify:toolbox
-npm run verify:local:smoke
-npm run verify:local:source
-npm run verify:publish-decision
-npm run prove:local-first
-npm run inventory:source
-npm run inventory:project
-npm run verify:boot
-npm run verify:install-readiness
-npm run verify:product-practice
-npm run verify:tooling
-npm run verify:local-prepublish:quick
-npm run verify:local-prepublish
-npm run hooks:install:dry-run
-npm run verify:secrets
-npm run verify:supply-chain
-npm run verify:free-tier
-npm run verify:github-readiness
-npm run verify:defect-gates
-npm run verify:bug-sweep
-npm run verify:runtime-trace
-npm run verify:performance
-npm run verify:dashboard-chaos
-npm run verify:experience
-npm run verify:rust-quality
-npm run benchmark:runtime
-cargo fmt --all -- --check
-cargo check --all-targets --locked
-cargo test --all-targets --locked
-cargo build --release --locked
+cargo install --path .
+mcpace up
 ```
 
-In constrained sandboxes, local Node checks can run with the project npm surface. Full Cargo check/test/build need the pinned Rust toolchain and crates.io dependencies available through the configured network/cache. CI Rust jobs cache Cargo registry/git/target with keys derived from OS, Rust version, target or suite, `Cargo.lock`, and `rust-toolchain.toml`.
+`mcpace up` is home-first: it creates or repairs `~/.mcpace`, imports existing MCP servers from detected local configs, starts the local endpoint, wires detected clients, and runs readiness checks. It does **not** add a filesystem server, memory server, or any other upstream server by default.
 
-MCPace can be proved locally without a paid GitHub plan. Use `npm run ci:local:quick` as the fast pre-push guard, `npm run ci:local` for the source/package/Rust/secrets parity gate, and `npm run verify:publish-decision` for the final source-vs-native publication answer. The paid-runner GitHub workflows are manual-only by default; see `docs/local-ci.md` for the no-paid-runner CI posture.
+## Add or import servers only when you choose
 
-## Read paths and diagnostics
+```bash
+mcpace install npm:@modelcontextprotocol/server-memory --as memory
+mcpace install https://example.com/mcp --as remote
+mcpace install . --as filesystem
+mcpace server import ./mcp.json --dry-run
+```
 
-Performance smoke is available with `npm run verify:performance`. It records local HTTP benchmark wiring plus synthetic tool-scale, mixed-upstream, and upstream-failsafe checks, but it does not replace real Rust host p50/p95/p99 baselines. Dashboard tab/refresh chaos smoke is available with `npm run verify:dashboard-chaos`; it exercises multi-tab refreshes, hidden/visible transitions, stale response cancellation, partial log failures, and large rendered lists without requiring a browser binary. Use `npm run verify:experience` to run both source-level experience gates. See `docs/performance-verification.md` and `docs/dashboard-chaos-verification.md`.
+Server type is inferred from the input: `command` means stdio, URL fields mean remote HTTP, and explicit local paths map to the filesystem server.
 
-Runtime HTTP controls remain explicit: `--max-connections`, `--io-timeout-ms`, `--max-body-bytes`, and `--overview-cache-ms`. When no flag is supplied, bounded environment overrides are also honored: `MCPACE_HTTP_MAX_CONNECTIONS`, `MCPACE_HTTP_IO_TIMEOUT_MS`, `MCPACE_HTTP_MAX_BODY_BYTES`, `MCPACE_DASHBOARD_OVERVIEW_CACHE_MS`, `MCPACE_DASHBOARD_HEALTH_CACHE_MS`, `MCPACE_UPSTREAM_WORKERS`, `MCPACE_UPSTREAM_SESSION_POOL_LIMIT`, and `MCPACE_UPSTREAM_SESSION_POOL_SHARDS`. Serve/dashboard bind to loopback hosts by default; non-loopback bind hosts such as `0.0.0.0` require the explicit `--allow-nonlocal-bind` escape hatch and are not a substitute for a real public auth mode.
+## Why it helps
 
+- One local MCP URL instead of per-client wiring.
+- Existing `mcpServers` and VS Code-style `servers` configs can be reused.
+- Each AI client gets its own isolated upstream session, so clients do not step on each other.
 
-- `mcpace client plan --json` shows the client plan.
-- `mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .` writes a package-derived MCP settings fragment without a packaged upstream catalog.
-- `mcpace server install pypi:mcp-server-time --as time --dry-run` previews a PyPI/uvx server entry.
-- `mcpace server install --url https://example.com/mcp --as remote-docs --dry-run` previews a remote Streamable HTTP entry, conservatively session-bound until probes prove otherwise.
-- `mcpace server add <name> --command <cmd> [--arg <arg>...]` writes a fully custom per-server MCP settings fragment.
-- `mcpace server enable|disable <name> [--dry-run]` pauses or resumes a server entry without deleting JSON.
-- `mcpace server remove <name> [--dry-run]` removes a server entry from the source file where it was found.
-- `mcpace server sources --json` inventories every MCP settings source and duplicate/override warning.
-- `mcpace server test <name> --refresh --json` runs a live stdio `tools/list` smoke before wiring a client.
-- `mcpace server list --json` shows both policy-declared servers and source-only MCP settings servers.
-- `mcpace server capabilities --json --name <server>` shows transport, command, source, and policy details.
-- `mcpace verify readiness --json` reports missing stdio commands for source-only servers.
-- `mcpace lab report --json` writes a lab report.
-- `mcpace release build --json` creates local release artifacts and does not publish.
+## Verify
 
-## Not implemented yet
+```bash
+npm run check
+cargo test
+```
 
-Network publication, HTTP upstream fan-out from the stdio bridge, cloud relay support as a product lane, and enterprise/team policy management are not implemented yet. Keep those claims out of product docs until they have proof artifacts.
-- `npm run verify:mcp-overhead-profile` measures MCP-specific cold/warm discovery, tool-index, projection, and scheduler overhead without starting random third-party MCP servers.
-- `npm run verify:mcp-fixture-overhead` measures actual local MCP stdio cold/warm lifecycle overhead against the deterministic fixture server.
+Read the runbook in [`docs/README.md`](docs/README.md). This ZIP is source-only: no `.git`, `node_modules`, caches, runtime logs, vendored binaries, or heavy build outputs.

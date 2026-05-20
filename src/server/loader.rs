@@ -69,10 +69,7 @@ fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServe
     let mut map = BTreeMap::new();
     for entry in registry.servers.values() {
         let value = &entry.value;
-        let enabled = value
-            .get("enabled")
-            .and_then(JsonValue::as_bool)
-            .unwrap_or(true);
+        let enabled = source_enabled(value);
         let raw_source_type = value
             .get("type")
             .and_then(JsonValue::as_str)
@@ -603,6 +600,16 @@ fn infer_source_type(raw_source_type: &str, command: &str, url: &str) -> String 
     } else {
         "stdio".to_string()
     }
+}
+
+fn source_enabled(value: &JsonValue) -> bool {
+    if let Some(enabled) = value.get("enabled").and_then(JsonValue::as_bool) {
+        return enabled;
+    }
+    !value
+        .get("disabled")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false)
 }
 
 fn normalize_source_type(value: &str) -> String {

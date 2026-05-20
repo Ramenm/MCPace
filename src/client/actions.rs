@@ -1018,10 +1018,15 @@ fn install_warnings_from_plan(
         .cloned()
         .collect::<Vec<_>>();
     warnings.push(format!(
-        "MCPace installs {} into the shared {} scope by default at {} so one localhost MCPace server can be reused across projects.",
+        "MCPace upserts only the '{}' entry for {} at {}; existing MCP server entries in that client config are preserved, and a backup is written before changes.",
+        plan.configured_client_key_name.as_deref().unwrap_or("MCPace"),
         target.display_name,
-        preferred_install_scope(target),
         preferred_install_config_path(target)
+    ));
+    warnings.push(format!(
+        "MCPace installs {} into the shared {} scope by default so one localhost MCPace server can be reused across projects.",
+        target.display_name,
+        preferred_install_scope(target)
     ));
     warnings.sort();
     warnings.dedup();

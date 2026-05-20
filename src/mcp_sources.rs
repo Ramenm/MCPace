@@ -80,9 +80,9 @@ pub fn load_mcp_server_registry(root_path: &Path) -> Result<McpServerRegistry, S
             }
         };
         registry.sources.push(source.path.display().to_string());
-        let Some(servers) = json_helpers::object_at_path(&value, &["mcpServers"]) else {
+        let Some(servers) = source_servers_object(&value) else {
             registry.warnings.push(format!(
-                "MCP settings source '{}' has no mcpServers object; skipping",
+                "MCP settings source '{}' has no mcpServers or servers object; skipping",
                 source.path.display()
             ));
             continue;
@@ -165,7 +165,7 @@ pub fn load_mcp_source_report(root_path: &Path) -> Result<McpSourceReport, Strin
         };
         registry.sources.push(source.path.display().to_string());
         let mut source_server_count = 0usize;
-        if let Some(servers) = json_helpers::object_at_path(&value, &["mcpServers"]) {
+        if let Some(servers) = source_servers_object(&value) {
             source_server_count = servers.len();
             for (name, server) in servers {
                 let normalized_name = normalize_server_name(name);
@@ -195,7 +195,7 @@ pub fn load_mcp_source_report(root_path: &Path) -> Result<McpSourceReport, Strin
             }
         } else {
             registry.warnings.push(format!(
-                "MCP settings source '{}' has no mcpServers object; skipping",
+                "MCP settings source '{}' has no mcpServers or servers object; skipping",
                 source.path.display()
             ));
         }
@@ -250,6 +250,11 @@ pub fn normalize_server_name(value: &str) -> String {
         .collect::<String>()
         .trim_matches('-')
         .to_ascii_lowercase()
+}
+
+fn source_servers_object(value: &JsonValue) -> Option<&BTreeMap<String, JsonValue>> {
+    json_helpers::object_at_path(value, &["mcpServers"])
+        .or_else(|| json_helpers::object_at_path(value, &["servers"]))
 }
 
 impl McpSourceReport {

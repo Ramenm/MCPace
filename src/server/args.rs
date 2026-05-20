@@ -27,46 +27,26 @@ pub(crate) struct ParsedArgs {
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace server <list|capabilities|sources|candidates|add|install|import|remove|enable|disable|test> [--json] [--root <path>] [--name <server>]");
+    let _ = writeln!(stdout, "Usage: mcpace server <install|import|list|test|remove|enable|disable|sources> [options]");
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Implemented now:");
-    let _ = writeln!(stdout, "  mcpace server list [--json] [--root <path>]");
-    let _ = writeln!(
-        stdout,
-        "  mcpace server capabilities [--json] [--root <path>] [--name <server>]"
-    );
-    let _ = writeln!(stdout, "  mcpace server sources [--json] [--root <path>]");
-    let _ = writeln!(
-        stdout,
-        "  mcpace server candidates [--json] [--root <path>]"
-    );
-    let _ = writeln!(stdout, "  mcpace server install <npm-package|npm:package|pypi:package|oci:image|url> [--as <server-name>] [--type npm|pypi|oci|streamable-http] [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
-    let _ = writeln!(stdout, "  mcpace server install --url <url> [--as <server-name>] [--header KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
-    let _ = writeln!(stdout, "  mcpace server install <name> --command <cmd> [--arg <arg>...] [--path <path>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
-    let _ = writeln!(stdout, "  mcpace server add <name> --command <cmd> [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
-    let _ = writeln!(stdout, "  mcpace server add <name> --url <url> [--type http|streamable-http] [--header KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--disabled] [--json]");
-    let _ = writeln!(
-        stdout,
-        "  mcpace server import --from <mcp-settings.json> [--settings <target.json>] [--dry-run] [--force] [--disabled] [--json]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace server remove <name> [--settings <path>] [--dry-run] [--json]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace server enable <name> [--settings <path>] [--dry-run] [--json]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace server disable <name> [--settings <path>] [--dry-run] [--json]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace server test [<name>|--name <server>] [--timeout-ms <ms>] [--refresh] [--json] [--root <path>]"
-    );
+    let _ = writeln!(stdout, "Common commands:");
+    let _ = writeln!(stdout, "  mcpace server install <path|package|url|command...> [--as <name>] [--path <path>...] [--dry-run]");
+    let _ = writeln!(stdout, "  mcpace server import <mcp.json> [--dry-run] [--force]");
+    let _ = writeln!(stdout, "  mcpace server test [<name>|--name <server>] [--refresh]");
+    let _ = writeln!(stdout, "  mcpace server list [--json]");
+    let _ = writeln!(stdout, "  mcpace server sources [--json]");
+    let _ = writeln!(stdout, "  mcpace server remove|enable|disable <name> [--dry-run]");
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "server install derives a reviewable MCP settings fragment from a package spec, URL, or command; server add writes fully custom fragments under mcp_settings.d/ by default; server import copies existing mcpServers blocks into MCPace fragments; server enable/disable flips the entry without deleting it; server remove deletes the entry from the source where it was found; and server test performs live stdio initialize/tools-list smoke probes without editing JSON by hand.");
+    let _ = writeln!(stdout, "Install auto-detects the server type and never adds a default server. Examples:");
+    let _ = writeln!(stdout, "  mcpace server import ./mcp.json                 # reuse an existing mcpServers config");
+    let _ = writeln!(stdout, "  mcpace server install . --as filesystem         # explicit filesystem server for this directory");
+    let _ = writeln!(stdout, "  mcpace server install @modelcontextprotocol/server-filesystem --as filesystem --path .");
+    let _ = writeln!(stdout, "  mcpace server install pypi:mcp-server-time --as time");
+    let _ = writeln!(stdout, "  mcpace server install https://example.com/mcp --as remote");
+    let _ = writeln!(stdout, "  mcpace server install npx -y @modelcontextprotocol/server-filesystem . --as filesystem");
+    let _ = writeln!(stdout);
+    let _ = writeln!(stdout, "Import accepts either top-level mcpServers (Claude/Cursor style) or servers (VS Code style), skips MCPace's own client entry, preserves unrelated fields, and auto-fills enabled/type when possible.");
+    let _ = writeln!(stdout, "Advanced still available: capabilities, candidates, add, --settings, --force, --disabled, --env, --header, --type. Local path input such as . or /repo auto-installs the filesystem server only when you explicitly run install/up with that path.");
 }
 
 pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
@@ -76,6 +56,23 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
     while index < args.len() {
         let token = normalize_flag(&args[index]);
         match token.as_str() {
+            "--" => {
+                if parsed.action.as_deref() == Some("install") {
+                    if index + 1 >= args.len() {
+                        parsed.error = Some("server install -- requires a command after --".to_string());
+                        return parsed;
+                    }
+                    let mut value = parsed.name_filter.take().unwrap_or_default();
+                    if !value.trim().is_empty() {
+                        value.push(' ');
+                    }
+                    value.push_str(&args[index + 1..].join(" "));
+                    parsed.name_filter = Some(value);
+                    break;
+                }
+                parsed.error = Some("-- is only supported for server install command specs".to_string());
+                return parsed;
+            }
             "list" | "capabilities" | "sources" | "candidates" | "add" | "install" | "import"
             | "remove" | "enable" | "disable" | "test" => {
                 if parsed.action.is_some() {
@@ -230,14 +227,20 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
                     index += 1;
                     continue;
                 }
+                if parsed.action.as_deref() == Some("install") {
+                    let value = match parsed.name_filter.take() {
+                        Some(existing) if !existing.trim().is_empty() => {
+                            format!("{} {}", existing, args[index])
+                        }
+                        _ => args[index].to_string(),
+                    };
+                    parsed.name_filter = Some(value);
+                    index += 1;
+                    continue;
+                }
                 if matches!(
                     parsed.action.as_deref(),
-                    Some("add")
-                        | Some("install")
-                        | Some("remove")
-                        | Some("enable")
-                        | Some("disable")
-                        | Some("test")
+                    Some("add") | Some("remove") | Some("enable") | Some("disable") | Some("test")
                 ) && parsed.name_filter.is_none()
                 {
                     parsed.name_filter = Some(args[index].to_string());

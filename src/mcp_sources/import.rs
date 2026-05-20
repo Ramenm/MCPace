@@ -55,9 +55,9 @@ pub fn import_mcp_server_entries(
         ));
     }
     let source_value = json_helpers::read_json_file(&source_path)?;
-    let Some(source_servers) = json_helpers::object_at_path(&source_value, &["mcpServers"]) else {
+    let Some(source_servers) = source_servers_object(&source_value) else {
         return Err(format!(
-            "MCP settings import source '{}' must contain an mcpServers object",
+            "MCP settings import source '{}' must contain an mcpServers or servers object",
             source_path.display()
         ));
     };
@@ -88,6 +88,9 @@ pub fn import_mcp_server_entries(
                 name
             ));
         }
+        let Some(value) = normalize_import_server_value(root_path, name, server_value, &source_path, &mut warnings) else {
+            continue;
+        };
         let target_path = options
             .settings_path
             .clone()
@@ -97,7 +100,7 @@ pub fn import_mcp_server_entries(
             name: name.clone(),
             normalized_name,
             target_path,
-            value: server_value.clone(),
+            value,
         });
     }
     if plan_entries.is_empty() {
@@ -201,6 +204,153 @@ pub fn import_mcp_server_entries(
     })
 }
 
+fn source_servers_object(value: &JsonValue) -> Option<&BTreeMap<String, JsonValue>> {
+    json_helpers::object_at_path(value, &["mcpServers"])
+        .or_else(|| json_helpers::object_at_path(value, &["servers"]))
+}
+
+fn normalize_import_server_value(
+    root_path: &Path,
+    name: &str,
+    server_value: &JsonValue,
+    source_path: &Path,
+    warnings: &mut Vec<String>,
+) -> Option<JsonValue> {
+    let JsonValue::Object(object) = server_value else {
+        warnings.push(format!(
+            "MCP settings import source '{}' has non-object server '{}'; skipping",
+            source_path.display(),
+            name
+        ));
+        return None;
+    };
+    if looks_like_mcpace_self_entry(root_path, name, object) {
+        warnings.push(format!(
+            "MCP settings import source '{}' contains MCPace's own client entry '{}'; skipping to avoid a self-loop",
+            source_path.display(),
+            name
+        ));
+        return None;
+    }
+
+    let command = trimmed_string_field(object, "command").unwrap_or("");
+    let url = first_server_url_field(object).unwrap_or("");
+    if command.is_empty() && url.is_empty() {
+        warnings.push(format!(
+            "MCP settings import source '{}' server '{}' has neither command nor url/serverUrl/httpUrl/endpoint; skipping",
+            source_path.display(),
+            name
+        ));
+        return None;
+    }
+
+    let mut normalized = object.clone();
+    if !url.is_empty() {
+        let existing_url = trimmed_string_field(&normalized, "url").unwrap_or("");
+        if existing_url.is_empty() {
+            normalized.insert("url".to_string(), JsonValue::string(url));
+        }
+    }
+    if !normalized.contains_key("enabled") {
+        let enabled = !normalized
+            .get("disabled")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(false);
+        normalized.insert("enabled".to_string(), JsonValue::bool(enabled));
+    }
+
+    let raw_type = normalized
+        .get("type")
+        .or_else(|| normalized.get("transport"))
+        .and_then(JsonValue::as_str)
+        .unwrap_or("");
+    let inferred_type = infer_import_server_type(raw_type, !command.is_empty(), !url.is_empty());
+    normalized.insert("type".to_string(), JsonValue::string(inferred_type));
+
+    Some(JsonValue::Object(normalized))
+}
+
+fn trimmed_string_field<'a>(
+    object: &'a BTreeMap<String, JsonValue>,
+    key: &str,
+) -> Option<&'a str> {
+    object
+        .get(key)
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn first_server_url_field(object: &BTreeMap<String, JsonValue>) -> Option<&str> {
+    ["url", "serverUrl", "httpUrl", "endpoint"]
+        .iter()
+        .find_map(|key| trimmed_string_field(object, key))
+}
+
+fn infer_import_server_type(raw_type: &str, has_command: bool, has_url: bool) -> String {
+    match raw_type.trim().to_ascii_lowercase().as_str() {
+        "" => {
+            if has_url && !has_command {
+                "streamable-http".to_string()
+            } else {
+                "stdio".to_string()
+            }
+        }
+        "streamablehttp" | "streamable-http" | "streamable_http" | "http-stream"
+        | "remote-http" | "remote" | "http" | "url" => "streamable-http".to_string(),
+        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => {
+            "sse-legacy".to_string()
+        }
+        "stdio" | "local" | "local-stdio" | "local-command" | "command" => {
+            "stdio".to_string()
+        }
+        other => other.to_string(),
+    }
+}
+
+fn looks_like_mcpace_self_entry(
+    root_path: &Path,
+    name: &str,
+    object: &BTreeMap<String, JsonValue>,
+) -> bool {
+    let normalized_name = normalize_server_name(name);
+    if normalized_name == "mcpace" || normalized_name == "mcp-pace" {
+        return true;
+    }
+
+    let configured_url = runtimepaths::configured_mcp_url(root_path).to_ascii_lowercase();
+    let url = object
+        .get("url")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_ascii_lowercase();
+    if !url.is_empty()
+        && (url == configured_url
+            || url.starts_with("http://127.0.0.1:39022/mcp")
+            || url.starts_with("http://localhost:39022/mcp"))
+    {
+        return true;
+    }
+
+    let command = object
+        .get("command")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim()
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("")
+        .trim_end_matches(".exe")
+        .to_ascii_lowercase();
+    if command != "mcpace" {
+        return false;
+    }
+    json_helpers::strings_from_array(object.get("args").and_then(JsonValue::as_array))
+        .into_iter()
+        .any(|arg| arg == "mcp-server" || arg == "stdio-shim")
+}
+
 fn read_or_new_settings(path: &Path) -> Result<JsonValue, String> {
     if path.is_file() {
         return json_helpers::read_json_file(path);
@@ -289,5 +439,95 @@ impl McpServerImportEntry {
             ("dryRun", JsonValue::bool(self.dry_run)),
             ("existedBefore", JsonValue::bool(self.existed_before)),
         ])
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_root(label: &str) -> PathBuf {
+        let millis = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_millis();
+        let path = std::env::temp_dir().join(format!(
+            "mcpace-import-test-{}-{}-{}",
+            label,
+            std::process::id(),
+            millis
+        ));
+        fs::create_dir_all(&path).expect("create temp root");
+        path
+    }
+
+    #[test]
+    fn imports_servers_shape_with_url_alias_disabled_and_inferred_type() {
+        let root = temp_root("remote-alias");
+        let source = root.join("source.json");
+        let target = root.join("imported.json");
+        fs::write(
+            &source,
+            r#"{
+  "servers": {
+    "Remote API": {
+      "serverUrl": "https://example.com/mcp",
+      "disabled": true
+    }
+  }
+}"#,
+        )
+        .expect("write source");
+
+        let result = import_mcp_server_entries(
+            &root,
+            McpServerImportOptions {
+                source_path: source,
+                settings_path: Some(target.clone()),
+                dry_run: false,
+                force: false,
+            },
+        )
+        .expect("import servers shape");
+
+        assert_eq!(result.imported_count, 1);
+        let written = json_helpers::read_json_file(&target).expect("read import target");
+        let servers = json_helpers::object_at_path(&written, &["mcpServers"]).expect("mcpServers");
+        let remote = servers.get("Remote API").expect("Remote API");
+        assert_eq!(remote.get("url").and_then(JsonValue::as_str), Some("https://example.com/mcp"));
+        assert_eq!(remote.get("type").and_then(JsonValue::as_str), Some("streamable-http"));
+        assert_eq!(remote.get("enabled").and_then(JsonValue::as_bool), Some(false));
+    }
+
+    #[test]
+    fn skips_mcpace_self_entry_during_import() {
+        let root = temp_root("self-entry");
+        let source = root.join("source.json");
+        fs::write(
+            &source,
+            r#"{
+  "mcpServers": {
+    "mcp pace": {
+      "url": "http://127.0.0.1:39022/mcp"
+    }
+  }
+}"#,
+        )
+        .expect("write source");
+
+        let error = import_mcp_server_entries(
+            &root,
+            McpServerImportOptions {
+                source_path: source,
+                settings_path: Some(root.join("imported.json")),
+                dry_run: false,
+                force: false,
+            },
+        )
+        .expect_err("self entry should leave no usable servers");
+        assert!(error.contains("no usable servers"), "unexpected error: {error}");
     }
 }

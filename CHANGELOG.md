@@ -4,8 +4,28 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 
 ## Unreleased
 
+## 0.6.9
+
+### Changed
+
+- Normalized documentation around the install/user path: short landing README, compact runbook, focused architecture/configuration/security/client/troubleshooting docs, and a current summary.
+- Removed stale/nonessential bundle documents and empty platform-package scaffolding from the source ZIP.
+- Shortened `mcpace help` to keep the visible CLI surface centered on `up`, `install`, `serve`, `server`, `client`, `connect`, and `doctor`.
+
+### Fixed
+
+- Home import now recognizes the normalized MCPace self-entry name `mcp-pace` and skips it to avoid loops.
+- MCP config import now accepts URL aliases (`serverUrl`, `httpUrl`, `endpoint`) and normalizes remote type aliases to `streamable-http`.
+
 ### Added
 
+- Node tests for docs/package hygiene, version alignment, forbidden artifact checks, and MCP import-normalization source guards.
+- Rust unit tests for import normalization and MCPace self-entry skipping.
+
+### Added
+
+- `mcpace up` home-first onboarding: creates/repairs MCPace home, starts the local endpoint, preserves client MCP config entries, and does not add upstream servers unless explicitly requested.
+- Local path server install detection: `mcpace install .` auto-configures the filesystem MCP server without requiring `--type` or a package name.
 - Public GitHub launch kit: support policy, code of conduct, public issue templates, release-notes categorization, and a local GitHub health audit.
 - Stronger product-proof hygiene: runtime trace reports carry host target metadata, and product-practice checks reject stale or host-mismatched proof before allowing runtime beta claims.
 - Target-aware runtime trace binary discovery for `packages/npm/cli/vendor/<target>/mcpace` alongside local release/debug binaries.
@@ -13,6 +33,8 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 
 ### Changed
 
+- README, runbook, npm CLI docs, and CLI help now lead with the one-command home setup plus explicit/config-first upstream server add/import paths.
+- Setup readiness now treats zero discovered tools as a warning after initialize succeeds, not as the only determinant of endpoint/client readiness.
 - README and repo docs now point contributors toward launch readiness, support boundaries, and release gates instead of broad unproven product claims.
 
 ### Still blocked before beta

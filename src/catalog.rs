@@ -28,8 +28,8 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         name: "setup",
         description:
-            "Start MCPace, install supported local clients, and smoke-test the MCP endpoint.",
-        aliases: &["quickstart", "bootstrap", "one-click"],
+            "Home-first onboarding: create/repair MCPace home, start the endpoint, wire supported local clients, and smoke-test without adding upstream servers.",
+        aliases: &["up", "quickstart", "bootstrap", "one-click"],
         implemented: true,
     },
     CommandSpec {
@@ -76,8 +76,8 @@ pub const COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "server",
-        description: "Grouped server inspection and automatic MCP package/URL install command.",
-        aliases: &["servers", "capabilities", "server-capabilities", "mcp"],
+        description: "Grouped server inspection and automatic MCP package/URL/command install command.",
+        aliases: &["servers", "capabilities", "server-capabilities", "mcp", "add-server", "server-install"],
         implemented: true,
     },
     CommandSpec {
@@ -97,7 +97,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         name: "init",
         description: "Bootstrap runtime state layout and readiness.",
-        aliases: &["install", "boot"],
+        aliases: &["boot"],
         implemented: true,
     },
     CommandSpec {

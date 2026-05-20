@@ -1,114 +1,113 @@
-# MCPace docs
+# MCPace runbook
 
-This packaged copy tracks repo version `0.6.5`.
+MCPace is packaged as a small local home for MCP: start one endpoint, reuse servers that already exist in local MCP configs, and add new upstream servers only when the user explicitly asks for them.
 
-MCPace is a Rust-first local MCP hub. It ships with no upstream MCP servers enabled by default and no Rust-hardcoded recommended upstream catalog. Use `mcpace connect` as the read-only top-down guide. Configure user-supplied MCP servers with `mcpace server install`, `mcpace server import`, `mcpace server add`, `mcpace server test`, `mcpace server enable` / `mcpace server disable`, and `mcpace server remove`, root `mcp_settings.json`, `mcp_settings.d/*.json`, `mcpSettings.includePaths` / `mcpSettings.includeDirs`, or `MCPACE_MCP_SETTINGS` / `MCPACE_MCP_SETTINGS_DIRS`; add `mcpace.config.json` server policy only when you need extra routing, platform, or tool-risk metadata.
+## Requirements
 
-Start with:
+- Rust/Cargo to build the native binary from this source bundle.
+- Node.js 22+ and npm 10+ for npm-based MCP servers and Node-side checks.
+- Optional: `uvx` for PyPI MCP servers, Docker for OCI/container MCP servers.
 
-- `../ROADMAP.md` for the public-facing roadmap and what to star/watch/fork for.
-- `github-launch-playbook.md` for GitHub launch, repository settings, maintainer loops, and growth without overclaiming.
-- `ideal-product-backlog.md` for the maximum-quality backlog ordered by product impact.
-- `maintainer-playbook.md` for triage, release, issue, and contribution routines.
-- `bug-lifecycle.md` for reproduce-first bug fixing, root-cause notes, regression guards, and runtime traces.
-- `bug-hunting-and-fix-playbook.md`, `defect-taxonomy-and-labels.md`, and `maintainer-debugging-guide.md` for the maintainer bug-sweep operating model.
-- `product-truth.json` for the machine-readable product promise.
-- `mcp-spec-alignment.md` for the checked MCP baseline.
-- `client-surface-matrix.md` and `client-metadata-routing.md` for client routing.
-- `server-segmentation-and-auto-discovery.md` for server discovery and serialization.
-- `test-strategy.md` and `verification-matrix.md` for checks.
-- `adr/0004-source-only-mcp-env-isolation.md` for the source-only MCP env isolation decision.
-- `adr/0005-ci-cache-and-upstream-diagnostic-redaction.md` for Cargo CI caching and stderr diagnostic redaction.
-- `mcp-http-api-spec.md`, `universal-mcp-connectivity.md`, `security-review-20260501.md`, and `adr/0006`/`0008`/`0009`/`0015` for the current `/mcp` hardening, configurable ingress, source-registry contract, and client-first connect guide; ADR 0017/0018 are superseded by automatic useful MCP install; `adr/0019-install-readiness-and-boot-harness.md` covers the install/readiness harness decision.
-
-Run this first when wiring a client:
+## One-command home setup
 
 ```bash
-mcpace connect --json
-mcpace connect cursor-local --server filesystem
+cargo install --path .
+mcpace up
 ```
 
+When MCPace has no root yet, `mcpace up` uses `~/.mcpace` and creates:
 
-`product-practice.md` describes what not to claim before Rust/runtime proof. `mcp-overhead-and-optimization.md` is the canonical overhead, optimization, and safety guardrail for the automatic MCP server path; `mcp-overhead-optimization.md` is the focused pressure-audit note. `performance-verification.md`, `multi-client-runtime.md`, `adaptive-mcp-orchestration.md`, and `adaptive-edge-case-coverage.md` define the source-level performance smoke pass and the host-specific proof still required before release performance claims.
-
-Install/readiness artifacts now include `reports/boot-harness-latest.json`, `reports/boot-harness-latest.md`, `reports/install-readiness-latest.json`, and `reports/code-inventory-latest.*`. Use these before claiming an install path is ready.
-
-Run from the repository root:
-
-```bash
-npm test
-npm run inventory:source
-npm run inventory:project
-npm run verify:boot
-npm run verify:install-readiness
-npm run verify:product-practice
-npm run verify:defect-gates
-npm run verify:bug-sweep
-npm run verify:runtime-trace
-npm run verify:performance
-npm run verify:overhead:quick
-npm run verify:dashboard-chaos
-npm run verify:experience
-npm run verify:rust-quality
-cargo fmt --all -- --check
-cargo check --all-targets --locked
-cargo test --all-targets --locked
+```text
+~/.mcpace/mcpace.config.json
+~/.mcpace/mcp_settings.json
+~/.mcpace/mcp_settings.d/
 ```
 
-Client-first source-only upstream example. Start with the read-only guide, then import or add, smoke-test, and only then export/install a client config:
+The command does not invent a default upstream server. On an empty MCPace home it first scans existing local MCP configs, writes reusable entries to `mcp_settings.d/auto-imported-home.json`, skips MCPace self-references, starts the endpoint, patches only detected clients, and verifies readiness. If no existing servers are found, it starts clean and prints the next explicit command.
 
-```bash
-mcpace connect
-mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path . --dry-run
-mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
-mcpace server sources --json
-mcpace server test filesystem --refresh --json
-mcpace client export cursor-local --json
-mcpace client install cursor-local --dry-run
-mcpace server disable my-server --dry-run
-mcpace server enable my-server --dry-run
-mcpace server remove my-server --dry-run
-```
+## Accepted config shapes
 
-Manual JSON example:
+MCPace accepts both common MCP shapes:
 
 ```json
 {
   "mcpServers": {
-    "my-server": {
-      "command": "node",
-      "args": ["path/to/server.js"],
-      "env": { "EXPLICIT_VAR": "value" },
-      "env_vars": ["TOKEN_FROM_PARENT_ENV", { "name": "LOCAL_TOKEN", "source": "local" }],
-      "cwd": "/absolute/or/project-specific/path"
+    "memory": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-memory"]
     }
   }
 }
 ```
 
-Stdio upstream children get a cleared environment plus a small process-launch baseline, MCPace runtime variables, and explicit `env` / local `env_vars` values only. This preserves generic MCP server support without forwarding every parent process secret by default.
-Cache/session fingerprints hash explicit env values so plaintext tokens are not embedded in cache keys.
-Upstream stderr included in errors is bounded and sanitized before display so diagnostics remain useful without intentionally echoing obvious credentials.
-- [Runtime state, cache, restart, and reinstall lifecycle](runtime-state-cache-lifecycle.md) - lifecycle contract for config, state, cache, sessions, restart, and reinstall behavior.
+```json
+{
+  "servers": {
+    "remote": {
+      "url": "https://example.com/mcp"
+    }
+  }
+}
+```
 
-- [System lifecycle hardening](system-lifecycle-hardening.md) - end-to-end install/runtime/restart/reinstall/uninstall and release contract.
+Import normalization is intentionally small and predictable:
 
-- [Tool scale and reuse hardening](tool-scale-and-reuse-hardening.md)
+- `command` -> `type: "stdio"`
+- `url`, `serverUrl`, `httpUrl`, or `endpoint` -> `url` + `type: "streamable-http"`
+- `transport` aliases such as `http`, `remote`, `command`, or `stdio` are normalized
+- `disabled: true` -> `enabled: false`
+- MCPace's own endpoint or launcher entry is skipped to avoid loops
 
-- [Mixed upstream topology hardening](mixed-upstream-topologies.md)
+## Client behavior
 
-- [Upstream fail-safe hardening](upstream-failsafe-hardening.md)
+By default, `mcpace up` uses `--client auto`:
 
-- [Tool exposure and call safety](tool-exposure-and-call-safety.md)
+```bash
+mcpace up --client auto
+mcpace up --client cursor-local
+mcpace up --client all
+mcpace up --client none
+```
 
-## Packaged source archive
+`auto` patches a client only when MCPace detects an existing local config or installed CLI. It preserves unrelated server entries and leaves configs alone when no supported client is detected.
 
-This ZIP is a clean source archive. It intentionally excludes `.git`, `node_modules`, build outputs, caches, generated reports, and stale prebuilt binaries. Build the Rust binary locally before creating npm/platform release artifacts.
+## Add servers without choosing a type
 
-- [Performance verification](performance-verification.md) - source-level performance smoke checks and host-specific runtime proof requirements.
+```bash
+mcpace install npm:@modelcontextprotocol/server-memory --as memory
+mcpace install pypi:mcp-server-demo --as demo
+mcpace install oci:ghcr.io/example/mcp-server --as container-demo
+mcpace install https://example.com/mcp --as remote
+mcpace install . --as filesystem
+mcpace install -- npx -y @modelcontextprotocol/server-memory
+```
 
-- [Developer operating mode](developer-operating-mode.md) - grounded task intake, multi-track analysis, eval governance, cautious high-risk answers, and side-effect boundaries for maintainer/agent work.
+Use `--dry-run` before writing and `--as <name>` to choose the server name. Use `mcpace server sources` to see exactly what MCPace loaded.
 
-- `mcp-mass-package-survey-and-race-audit.md` for mass MCP package and race-condition pressure tests.
-- [MCP overhead and optimization gates](mcp-overhead-and-optimization.md) for launcher overhead, fixture lifecycle overhead, synthetic 100-server/100k-tool pressure, deep decomposition, and anti-duplication rules.
-- [MCP overhead pressure guardrails](mcp-overhead-optimization.md) for the focused profile/fragment/scheduler pressure audit.
+## Useful checks
+
+```bash
+mcpace serve status
+mcpace doctor --json
+mcpace server list --json
+mcpace server sources --json
+mcpace server test <name> --refresh --json
+```
+
+## Source verification
+
+```bash
+npm run lint:npm
+npm run test:npm
+npm run check
+cargo fmt --check
+cargo test
+```
+
+`npm run check` covers Node syntax, npm launcher tests, docs/package hygiene, and static MCP import-normalization guards. Run the Rust checks on a host with the Rust toolchain installed.
+
+## Archive policy
+
+The release ZIP contains one root directory with source code, needed configs, compact docs, examples, schemas, tests, and `reports/summary.md`.
+
+Excluded by design: `.git`, `node_modules`, caches, temporary files, OS artifacts, runtime data/logs/backups, vendored platform binaries, and heavyweight build output.

@@ -1,6 +1,5 @@
-use crate::catalog::{find, normalize, COMMANDS};
+use crate::catalog::{find, normalize};
 use crate::client_catalog::client_install_support_summary;
-use crate::resources;
 use crate::runtimepaths;
 use crate::{
     candidates, cleanup, client, connect, dashboard, doctor, hub, init, lab, mcp_server, profile,
@@ -20,6 +19,9 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
     let normalized = normalize(&args[0]);
     match normalized.as_str() {
         "project" => return projects::run(&args[1..], root_path, stdout, stderr),
+        "install" | "add" | "add-server" | "server-install" => {
+            return run_server_with_action("install", &args[1..], root_path, stdout, stderr)
+        }
         "servers" => return run_server_with_action("list", &args[1..], root_path, stdout, stderr),
         "capabilities" | "server-capabilities" => {
             return run_server_with_action("capabilities", &args[1..], root_path, stdout, stderr)
@@ -70,7 +72,7 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
             let _ = writeln!(stderr, "unknown command: {}", args[0]);
             let _ = writeln!(
                 stderr,
-                "Run 'mcpace help' to see the current Rust-only surface."
+                "Run 'mcpace help' to see the public commands."
             );
             2
         }
@@ -157,140 +159,28 @@ fn run_verify_with_action(
 fn run_planned(name: &str, stderr: &mut dyn Write) -> i32 {
     let _ = writeln!(
         stderr,
-        "command '{}' is not implemented yet in the Rust-only repo. The legacy PowerShell entrypoints were removed; use the current native subset or continue the grouped Rust implementation.",
+        "command '{}' is not available in the public CLI surface; run 'mcpace help' for supported commands.",
         name
     );
     2
 }
 
 fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "MCPace Rust-only local MCP hub");
+    let _ = writeln!(stdout, "MCPace");
+    let _ = writeln!(stdout, "One MCP endpoint for all your AI clients.");
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Implemented now:");
-    let _ = writeln!(stdout, "  version");
-    let _ = writeln!(stdout, "  doctor [--json] [--root <path>]");
-    let _ = writeln!(
-        stdout,
-        "  setup [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--skip-client-install] [--install-service|--install-autostart] [--no-enable]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  service install|status|uninstall|print [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  serve [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  serve start|restart|stop|status [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  local HTTP defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms, health cache={}ms",
-        resources::default_http_connection_limit(),
-        resources::default_http_io_timeout_ms(),
-        resources::default_max_http_body_bytes(),
-        resources::default_dashboard_overview_cache_ms(),
-        resources::default_dashboard_health_cache_ms()
-    );
-    let _ = writeln!(stdout, "  init [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  hub up [--json] [--root <path>] [--foreground]");
-    let _ = writeln!(stdout, "  hub down [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  hub repair [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  hub status [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  hub logs [--json] [--root <path>] [--tail <n>]");
-    let _ = writeln!(stdout, "  hub lease list [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  hub lease acquire --server <name> [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--ttl-ms <n>]");
-    let _ = writeln!(
-        stdout,
-        "  hub lease renew --lease-id <id> [--json] [--root <path>] [--ttl-ms <n>]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  hub lease release --lease-id <id> [--json] [--root <path>]"
-    );
-    let _ = writeln!(stdout, "  profile [show] [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  projects [list] [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  candidates [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server install <npm-package|npm:package|pypi:package|oci:image|url> [--as <server-name>] [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--json] [--root <path>] [--dry-run] [--force]");
-    let _ = writeln!(
-        stdout,
-        "  connect [<client>] [--server <name>] [--json] [--root <path>]"
-    );
-    let _ = writeln!(stdout, "  client list [--json] [--root <path>]");
-    let _ = writeln!(
-        stdout,
-        "  cleanup [status|cache|runtime|logs|all-safe] [--json] [--root <path>] [--dry-run]"
-    );
-    let _ = writeln!(stdout, "  client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]");
-    let _ = writeln!(
-        stdout,
-        "  client install <client|all> [--json] [--root <path>] [--dry-run] [--diff]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  client restore <client|all> [--json] [--root <path>] [--backup <id|latest>]"
-    );
-    let _ = writeln!(stdout, "  client export <client> [--json] [--root <path>] [--transport <stdio|streamable-http>] [--session-id <id>] [--project-root <path>]");
-    let _ = writeln!(stdout, "  mcp-server [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>]  # internal compatibility");
-    let _ = writeln!(stdout, "  stdio-shim --json [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]  # internal bootstrap proof");
-    let _ = writeln!(stdout, "  lab list [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  lab matrix [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  lab coverage [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  lab gaps [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  lab report [--json] [--root <path>]");
-    let _ = writeln!(
-        stdout,
-        "  lab show --id <scenario> [--json] [--root <path>]"
-    );
-    let _ = writeln!(stdout, "  server list [--json] [--root <path>]");
-    let _ = writeln!(
-        stdout,
-        "  server capabilities [--json] [--root <path>] [--name <server>]"
-    );
-    let _ = writeln!(stdout, "  server sources [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server install <npm-package|npm:package|pypi:package|oci:image|url> [--as <server-name>] [--type npm|pypi|oci|streamable-http] [--path <path>...] [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server test [<name>|--name <server>] [--timeout-ms <ms>] [--refresh] [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server candidates [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  server add <name> --command <cmd> [--arg <arg>...] [--env KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json]");
-    let _ = writeln!(stdout, "  server add <name> --url <url> [--type http|streamable-http] [--header KEY=VALUE...] [--settings <path>] [--dry-run] [--force] [--json]");
-    let _ = writeln!(stdout, "  server import --from <mcp-settings.json> [--settings <target.json>] [--dry-run] [--force] [--json]");
-    let _ = writeln!(
-        stdout,
-        "  server remove <name> [--settings <path>] [--dry-run] [--json]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  server enable|disable <name> [--settings <path>] [--dry-run] [--json]"
-    );
-    let _ = writeln!(stdout, "  verify doctor [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  verify readiness [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  repair [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  release [build] [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  update check [--json] [--source none|env|npm] [--latest-version <semver>] [--package <name>]");
+    let _ = writeln!(stdout, "Usage:");
+    let _ = writeln!(stdout, "  mcpace up");
+    let _ = writeln!(stdout, "  mcpace install <path|package|url|command...> [--as <name>] [--dry-run]");
+    let _ = writeln!(stdout, "  mcpace serve [start|stop|status]");
+    let _ = writeln!(stdout, "  mcpace server <list|test|remove|enable|disable|sources>");
+    let _ = writeln!(stdout, "  mcpace client <install|export|list|restore>");
+    let _ = writeln!(stdout, "  mcpace connect [client]");
+    let _ = writeln!(stdout, "  mcpace doctor [--json]");
     let _ = writeln!(stdout);
-    let _ = writeln!(
-        stdout,
-        "doctor/profile/projects/candidates/connect/client-plan/lab/server/verify have native Rust read paths; connect gives a client-first read-only wiring guide across endpoint, client target, upstream sources, readiness blockers, and exact next commands; server sources inventories every MCP settings source, server install derives useful MCP entries from package specs, URLs, or commands without a packaged upstream catalog, server add writes per-server fragments under mcp_settings.d/, server import copies existing mcpServers blocks into MCPace fragments, server enable/disable toggles a BYO MCP entry without deleting it, server remove deletes stale BYO MCP entries without manual JSON editing, and server test probes configured upstreams before clients use them; setup starts the one-port MCPace endpoint, installs supported local clients, and smokes the configured health plus MCP paths in one command; service installs user-level autostart entries without requiring mcpace in PATH; serve is the public one-port MCPace surface on {} and now has start/restart/stop/status lifecycle commands, dashboard provides the same local web control surface, init seeds the runtime layout, hub owns a local lifecycle/state/log/repair/lease surface, client install patches MCPace entries for catalog-declared local patchers ({}) and client install all can patch every supported local target in one pass with dry-run/diff previews plus restoreable backups, client export emits connectable MCPace URL contracts for HTTP-capable clients plus preview-only blocked surfaces for unsupported lanes, cleanup removes only disposable cache/log/ephemeral runtime files while preserving durable config and backups, stdio-shim remains a bootstrap proof surface, mcp-server remains an internal compatibility lane, update check reports safe package-manager update guidance without self-updating, and release build now wraps the local artifact/proof bundle without publishing.",
-        runtimepaths::default_local_mcp_url(),
-        client_install_support_summary()
-    );
-    let _ = writeln!(
-        stdout,
-        "Compatibility aliases: project, servers, capabilities, check, status, readiness, probe."
-    );
-    let _ = writeln!(
-        stdout,
-        "Unsupported commands are reported as not implemented yet in the Rust-only repo."
-    );
+    let _ = writeln!(stdout, "Quickstart:");
+    let _ = writeln!(stdout, "  mcpace up");
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Still planned grouped surfaces:");
-    for command in COMMANDS.iter().filter(|command| !command.implemented) {
-        let _ = writeln!(stdout, "  {:<8} {}", command.name, command.description);
-    }
+    let _ = writeln!(stdout, "`up` creates/repairs MCPace home, imports existing MCP servers, starts the endpoint, and wires detected clients. It does not add a default upstream server.");
+    let _ = writeln!(stdout, "Server type is inferred from command/url/path/package input. Endpoint: {}. Supported client patchers: {}.", runtimepaths::default_local_mcp_url(), client_install_support_summary());
 }

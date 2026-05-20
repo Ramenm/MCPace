@@ -2,6 +2,8 @@ use crate::json::JsonValue;
 use crate::mcp_sources::{self, McpServerWriteOptions, McpServerWriteResult};
 use std::path::{Path, PathBuf};
 
+const FILESYSTEM_NPM_PACKAGE: &str = "@modelcontextprotocol/server-filesystem";
+
 #[derive(Clone, Debug, Default)]
 pub struct McpAutoInstallOptions {
     pub spec: String,
@@ -17,6 +19,15 @@ pub struct McpAutoInstallOptions {
     pub dry_run: bool,
     pub force: bool,
     pub disabled: bool,
+}
+
+#[derive(Clone, Debug)]
+struct CommandLikeSpec {
+    method: String,
+    launcher: String,
+    command: String,
+    args: Vec<String>,
+    package: Option<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -82,22 +93,37 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty());
 
-    if spec.is_empty() && explicit_url.is_none() && explicit_command.is_none() {
+    if spec.is_empty()
+        && explicit_url.is_none()
+        && explicit_command.is_none()
+        && options.paths.is_empty()
+        && explicit_type.as_deref() != Some("filesystem")
+    {
         return Err(
-            "server install requires a package spec, --url <endpoint>, or --command <cmd>"
+            "server install requires a package spec, URL, local path, or command-like server command"
                 .to_string(),
         );
     }
 
-    if explicit_url.is_some()
-        || looks_like_url(spec)
-        || explicit_type.as_deref() == Some("streamable-http")
+    if explicit_type.as_deref() == Some("filesystem")
+        || (explicit_url.is_none()
+            && explicit_command.is_none()
+            && ((spec.is_empty() && !options.paths.is_empty()) || looks_like_local_path_spec(spec)))
     {
-        let url = explicit_url.unwrap_or_else(|| spec.to_string());
+        return Ok(filesystem_path_install_plan(options, spec));
+    }
+
+    let url_requested = explicit_url.is_some()
+        || looks_like_url(spec)
+        || explicit_type.as_deref() == Some("streamable-http");
+    if url_requested {
+        let url = explicit_url
+            .or_else(|| looks_like_url(spec).then(|| spec.to_string()))
+            .ok_or_else(|| "server install --type streamable-http requires --url <endpoint> or an https:// URL spec".to_string())?;
         let name = resolve_name(options, || name_from_url(&url));
         return Ok(McpAutoInstallPlan {
             original_spec: spec.to_string(),
-            name,
+            name: name.clone(),
             method: "remote-url".to_string(),
             launcher: "remote-url".to_string(),
             server_type: "streamable-http".to_string(),
@@ -111,18 +137,21 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
             ],
             next_checks: vec![
                 "mcpace server sources --json".to_string(),
-                "run remote initialize/session smoke before enabling broad fan-out".to_string(),
+                format!("mcpace connect --server {}", name),
             ],
         });
     }
 
     if let Some(command) = explicit_command {
+        if let Some(command_like) = command_like_spec(&command)? {
+            return Ok(command_like_install_plan(options, spec, command_like));
+        }
         let name = resolve_name(options, || name_from_spec(spec, "local-command"));
         let mut args = options.extra_args.clone();
         args.extend(options.paths.iter().cloned());
         return Ok(McpAutoInstallPlan {
             original_spec: spec.to_string(),
-            name,
+            name: name.clone(),
             method: "local-command".to_string(),
             launcher: launcher_from_command(&command),
             server_type: "stdio".to_string(),
@@ -134,8 +163,12 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
                 "custom stdio command starts conservative until initialize/tools-list evidence is collected"
                     .to_string(),
             ],
-            next_checks: vec!["mcpace server test <name> --refresh --json".to_string()],
+            next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
         });
+    }
+
+    if let Some(command_like) = command_like_spec(spec)? {
+        return Ok(command_like_install_plan(options, spec, command_like));
     }
 
     let method = choose_package_method(spec, explicit_type.as_deref());
@@ -148,7 +181,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
             args.extend(options.paths.iter().cloned());
             Ok(McpAutoInstallPlan {
                 original_spec: spec.to_string(),
-                name,
+                name: name.clone(),
                 method,
                 launcher: "npx".to_string(),
                 server_type: "stdio".to_string(),
@@ -162,7 +195,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
                     "statefulness is inferred later from source hints and live MCP probes, not from a packaged upstream catalog"
                         .to_string(),
                 ],
-                next_checks: vec!["mcpace server test <name> --refresh --json".to_string()],
+                next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
             })
         }
         "pypi" => {
@@ -173,7 +206,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
             args.extend(options.paths.iter().cloned());
             Ok(McpAutoInstallPlan {
                 original_spec: spec.to_string(),
-                name,
+                name: name.clone(),
                 method,
                 launcher: "uvx".to_string(),
                 server_type: "stdio".to_string(),
@@ -187,7 +220,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
                     "statefulness is inferred later from source hints and live MCP probes, not from a packaged upstream catalog"
                         .to_string(),
                 ],
-                next_checks: vec!["mcpace server test <name> --refresh --json".to_string()],
+                next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
             })
         }
         "oci" => {
@@ -198,7 +231,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
             args.extend(options.paths.iter().cloned());
             Ok(McpAutoInstallPlan {
                 original_spec: spec.to_string(),
-                name,
+                name: name.clone(),
                 method,
                 launcher: "oci".to_string(),
                 server_type: "stdio".to_string(),
@@ -210,28 +243,341 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
                     "containerized MCP servers remain unknown stdio until image provenance and probe results are reviewed"
                         .to_string(),
                 ],
-                next_checks: vec!["mcpace server test <name> --refresh --json".to_string()],
+                next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
             })
         }
         other => Err(format!(
-            "unsupported server install type '{}'; use npm:, pypi:, oci:, --url, or --command",
+            "unsupported server install type '{}'; use npm:, pypi:, oci:, an https:// URL, or a command such as npx/uvx/docker run",
             other
         )),
     }
 }
 
+fn command_like_install_plan(
+    options: &McpAutoInstallOptions,
+    spec: &str,
+    command_like: CommandLikeSpec,
+) -> McpAutoInstallPlan {
+    let name = resolve_name(options, || name_from_command_like(&command_like, spec));
+    let mut args = command_like.args.clone();
+    args.extend(options.extra_args.iter().cloned());
+    args.extend(options.paths.iter().cloned());
+    McpAutoInstallPlan {
+        original_spec: spec.to_string(),
+        name: name.clone(),
+        method: command_like.method.clone(),
+        launcher: command_like.launcher.clone(),
+        server_type: "stdio".to_string(),
+        command: Some(command_like.command.clone()),
+        url: None,
+        package: command_like.package.clone(),
+        args,
+        assumptions: assumptions_for_command_like(&command_like),
+        next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+    }
+}
+
+fn filesystem_path_install_plan(options: &McpAutoInstallOptions, spec: &str) -> McpAutoInstallPlan {
+    let name = resolve_name(options, || "filesystem".to_string());
+    let mut args = vec!["-y".to_string(), FILESYSTEM_NPM_PACKAGE.to_string()];
+    args.extend(options.extra_args.iter().cloned());
+
+    let mut paths = Vec::new();
+    if let Some(path) = local_path_argument(spec) {
+        paths.push(path);
+    }
+    paths.extend(options.paths.iter().cloned());
+    if paths.is_empty() {
+        paths.push(".".to_string());
+    }
+    args.extend(paths.iter().map(|path| absolutize_local_path_arg(path)));
+
+    McpAutoInstallPlan {
+        original_spec: spec.to_string(),
+        name: name.clone(),
+        method: "filesystem-path".to_string(),
+        launcher: "npx".to_string(),
+        server_type: "stdio".to_string(),
+        command: Some("npx".to_string()),
+        url: None,
+        package: Some(FILESYSTEM_NPM_PACKAGE.to_string()),
+        args,
+        assumptions: vec![
+            "local path input was auto-detected as the official filesystem MCP server".to_string(),
+            "filesystem access is limited to the configured path arguments".to_string(),
+            "statefulness is inferred later from live MCP probes and source hints".to_string(),
+        ],
+        next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+    }
+}
+
+fn command_like_spec(value: &str) -> Result<Option<CommandLikeSpec>, String> {
+    let tokens = split_command_words(value)?;
+    if tokens.len() < 2 {
+        return Ok(None);
+    }
+
+    let command = tokens[0].clone();
+    let base = command_basename(&command).to_ascii_lowercase();
+    let tail = tokens[1..].to_vec();
+
+    if base == "npx" {
+        let mut args = tail;
+        ensure_npx_yes(&mut args);
+        let package = first_non_option_arg(&args, 0);
+        return Ok(Some(CommandLikeSpec {
+            method: "npm".to_string(),
+            launcher: "npx".to_string(),
+            command,
+            args,
+            package,
+        }));
+    }
+
+    if base == "bunx" {
+        let package = first_non_option_arg(&tail, 0);
+        return Ok(Some(CommandLikeSpec {
+            method: "npm".to_string(),
+            launcher: "bunx".to_string(),
+            command,
+            args: tail,
+            package,
+        }));
+    }
+
+    if (base == "pnpm" || base == "yarn") && tail.first().map(|value| value.as_str()) == Some("dlx") {
+        let package = first_non_option_arg(&tail, 1);
+        return Ok(Some(CommandLikeSpec {
+            method: "npm".to_string(),
+            launcher: base,
+            command,
+            args: tail,
+            package,
+        }));
+    }
+
+    if base == "uvx" {
+        let package = first_non_option_arg(&tail, 0);
+        return Ok(Some(CommandLikeSpec {
+            method: "pypi".to_string(),
+            launcher: "uvx".to_string(),
+            command,
+            args: tail,
+            package,
+        }));
+    }
+
+    if base == "docker" {
+        let package = docker_image_arg(&tail);
+        return Ok(Some(CommandLikeSpec {
+            method: "oci".to_string(),
+            launcher: "oci".to_string(),
+            command,
+            args: tail,
+            package,
+        }));
+    }
+
+    Ok(Some(CommandLikeSpec {
+        method: "local-command".to_string(),
+        launcher: launcher_from_command(&command),
+        command,
+        args: tail,
+        package: None,
+    }))
+}
+
+fn split_command_words(value: &str) -> Result<Vec<String>, String> {
+    let mut words = Vec::new();
+    let mut current = String::new();
+    let mut quote: Option<char> = None;
+    let mut escaping = false;
+
+    for ch in value.trim().chars() {
+        if escaping {
+            current.push(ch);
+            escaping = false;
+            continue;
+        }
+        if ch == '\\' {
+            if quote.is_some() {
+                escaping = true;
+            } else {
+                current.push(ch);
+            }
+            continue;
+        }
+        if let Some(active_quote) = quote {
+            if ch == active_quote {
+                quote = None;
+            } else {
+                current.push(ch);
+            }
+            continue;
+        }
+        if ch == '\'' || ch == '"' {
+            quote = Some(ch);
+            continue;
+        }
+        if ch.is_whitespace() {
+            if !current.is_empty() {
+                words.push(current.clone());
+                current.clear();
+            }
+            continue;
+        }
+        current.push(ch);
+    }
+
+    if escaping {
+        current.push('\\');
+    }
+    if let Some(active_quote) = quote {
+        return Err(format!(
+            "server install command spec has an unterminated {} quote",
+            active_quote
+        ));
+    }
+    if !current.is_empty() {
+        words.push(current);
+    }
+    Ok(words)
+}
+
+fn command_basename(command: &str) -> &str {
+    let slash = command.rfind('/');
+    let backslash = command.rfind('\\');
+    let start = match (slash, backslash) {
+        (Some(left), Some(right)) => left.max(right) + 1,
+        (Some(index), None) | (None, Some(index)) => index + 1,
+        (None, None) => 0,
+    };
+    command[start..]
+        .strip_suffix(".exe")
+        .or_else(|| command[start..].strip_suffix(".EXE"))
+        .unwrap_or(&command[start..])
+}
+
+fn ensure_npx_yes(args: &mut Vec<String>) {
+    if args.iter().any(|arg| arg == "-y" || arg == "--yes") {
+        return;
+    }
+    args.insert(0, "-y".to_string());
+}
+
+fn first_non_option_arg(args: &[String], start_index: usize) -> Option<String> {
+    let mut index = start_index;
+    while index < args.len() {
+        let arg = args[index].trim();
+        if arg == "--" {
+            return args.get(index + 1).cloned();
+        }
+        if arg == "--package" || arg == "-p" {
+            index += 2;
+            continue;
+        }
+        if arg.starts_with('-') {
+            index += 1;
+            continue;
+        }
+        return Some(args[index].clone());
+    }
+    None
+}
+
+fn docker_image_arg(args: &[String]) -> Option<String> {
+    let mut index = usize::from(args.first().map(|value| value == "run").unwrap_or(false));
+    while index < args.len() {
+        let arg = args[index].trim();
+        if arg == "--" {
+            return args.get(index + 1).cloned();
+        }
+        if docker_option_takes_value(arg) {
+            index += 2;
+            continue;
+        }
+        if arg.starts_with("--") && arg.contains('=') {
+            index += 1;
+            continue;
+        }
+        if arg.starts_with('-') {
+            index += 1;
+            continue;
+        }
+        return Some(args[index].clone());
+    }
+    None
+}
+
+fn docker_option_takes_value(arg: &str) -> bool {
+    matches!(
+        arg,
+        "-e" | "--env"
+            | "-v"
+            | "--volume"
+            | "-p"
+            | "--publish"
+            | "--name"
+            | "-w"
+            | "--workdir"
+            | "--network"
+            | "--entrypoint"
+            | "--user"
+            | "-u"
+    )
+}
+
+fn assumptions_for_command_like(command_like: &CommandLikeSpec) -> Vec<String> {
+    match command_like.method.as_str() {
+        "npm" => vec![
+            format!(
+                "{} command-like spec was auto-detected as an npm stdio MCP launcher",
+                command_like.launcher
+            ),
+            "statefulness is inferred later from source hints and live MCP probes, not from a packaged upstream catalog"
+                .to_string(),
+        ],
+        "pypi" => vec![
+            "uvx command-like spec was auto-detected as a PyPI stdio MCP launcher".to_string(),
+            "statefulness is inferred later from source hints and live MCP probes, not from a packaged upstream catalog"
+                .to_string(),
+        ],
+        "oci" => vec![
+            "docker command-like spec was auto-detected as a containerized stdio MCP launcher"
+                .to_string(),
+            "containerized MCP servers remain unknown stdio until image provenance and probe results are reviewed"
+                .to_string(),
+        ],
+        _ => vec![
+            "custom command-like stdio server starts conservative until initialize/tools-list evidence is collected"
+                .to_string(),
+        ],
+    }
+}
+
+fn name_from_command_like(command_like: &CommandLikeSpec, spec: &str) -> String {
+    if let Some(package) = &command_like.package {
+        return name_from_spec(package, &command_like.launcher);
+    }
+    if let Some(first_arg) = command_like.args.first() {
+        return name_from_spec(first_arg, "local-command");
+    }
+    name_from_spec(spec, "local-command")
+}
+
 fn normalize_install_type(value: &str) -> Result<String, String> {
     match value.trim().to_ascii_lowercase().as_str() {
-        "" => Ok(String::new()),
+        "" | "auto" | "infer" | "detect" => Ok(String::new()),
         "npm" | "npx" | "node" => Ok("npm".to_string()),
         "pypi" | "python" | "uvx" | "uv" => Ok("pypi".to_string()),
         "oci" | "docker" | "container" => Ok("oci".to_string()),
+        "filesystem" | "fs" | "path" | "directory" | "dir" => Ok("filesystem".to_string()),
         "stdio" | "command" | "local" | "local-command" => Ok("stdio".to_string()),
         "http" | "streamable-http" | "streamable_http" | "remote" | "url" => {
             Ok("streamable-http".to_string())
         }
         other => Err(format!(
-            "unsupported server install type '{}'; use npm, pypi, oci, stdio, or streamable-http",
+            "unsupported server install type '{}'; use auto, npm, pypi, oci, filesystem, stdio, or streamable-http",
             other
         )),
     }
@@ -271,6 +617,85 @@ fn looks_like_url(value: &str) -> bool {
     lower.starts_with("http://") || lower.starts_with("https://")
 }
 
+fn looks_like_local_path_spec(value: &str) -> bool {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || looks_like_url(trimmed) {
+        return false;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.starts_with("file:") || lower.starts_with("path:") {
+        return true;
+    }
+    if trimmed == "."
+        || trimmed == ".."
+        || trimmed.starts_with("./")
+        || trimmed.starts_with("../")
+        || trimmed.starts_with("~/")
+        || trimmed.starts_with('/')
+        || trimmed.starts_with('\\')
+    {
+        return true;
+    }
+    if trimmed.len() > 2 && trimmed.as_bytes()[1] == b':' {
+        return true;
+    }
+    Path::new(trimmed).exists()
+}
+
+fn local_path_argument(spec: &str) -> Option<String> {
+    let trimmed = spec.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let lower = trimmed.to_ascii_lowercase();
+    let value = if lower.starts_with("file://") {
+        trimmed[7..].to_string()
+    } else if lower.starts_with("file:") {
+        trimmed[5..].to_string()
+    } else if lower.starts_with("path:") {
+        trimmed[5..].to_string()
+    } else {
+        trimmed.to_string()
+    };
+    Some(if value.trim().is_empty() { ".".to_string() } else { value })
+}
+
+fn absolutize_local_path_arg(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return ".".to_string();
+    }
+    if let Some(rest) = trimmed.strip_prefix("~/").or_else(|| trimmed.strip_prefix("~\\")) {
+        if let Some(home) = user_home_dir() {
+            let mut path = home;
+            for segment in rest.split(['/', '\\']) {
+                if !segment.is_empty() {
+                    path.push(segment);
+                }
+            }
+            return path.display().to_string();
+        }
+    }
+    let path = PathBuf::from(trimmed);
+    let candidate = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .map(|cwd| cwd.join(path))
+            .unwrap_or_else(|_| PathBuf::from(trimmed))
+    };
+    std::fs::canonicalize(&candidate)
+        .unwrap_or(candidate)
+        .display()
+        .to_string()
+}
+
+fn user_home_dir() -> Option<PathBuf> {
+    std::env::var_os("HOME")
+        .or_else(|| std::env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
+}
+
 fn strip_known_prefix<'a>(value: &'a str, prefix: &str) -> &'a str {
     let trimmed = value.trim();
     if trimmed.to_ascii_lowercase().starts_with(prefix) {
@@ -298,13 +723,16 @@ fn name_from_url(url: &str) -> String {
 }
 
 fn name_from_spec(spec: &str, fallback: &str) -> String {
-    let stripped = spec
-        .trim()
-        .trim_start_matches("npm:")
-        .trim_start_matches("pypi:")
-        .trim_start_matches("uvx:")
-        .trim_start_matches("oci:")
-        .trim_start_matches("docker:");
+    let stripped = strip_known_prefix(
+        strip_known_prefix(
+            strip_known_prefix(
+                strip_known_prefix(strip_known_prefix(spec, "npm:"), "pypi:"),
+                "uvx:",
+            ),
+            "oci:",
+        ),
+        "docker:",
+    );
     let package_name = package_name_without_version(stripped);
     let candidate = package_name
         .trim_start_matches("@")
