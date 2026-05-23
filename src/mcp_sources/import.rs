@@ -88,7 +88,13 @@ pub fn import_mcp_server_entries(
                 name
             ));
         }
-        let Some(value) = normalize_import_server_value(root_path, name, server_value, &source_path, &mut warnings) else {
+        let Some(value) = normalize_import_server_value(
+            root_path,
+            name,
+            server_value,
+            &source_path,
+            &mut warnings,
+        ) else {
             continue;
         };
         let target_path = options
@@ -270,10 +276,7 @@ fn normalize_import_server_value(
     Some(JsonValue::Object(normalized))
 }
 
-fn trimmed_string_field<'a>(
-    object: &'a BTreeMap<String, JsonValue>,
-    key: &str,
-) -> Option<&'a str> {
+fn trimmed_string_field<'a>(object: &'a BTreeMap<String, JsonValue>, key: &str) -> Option<&'a str> {
     object
         .get(key)
         .and_then(JsonValue::as_str)
@@ -298,12 +301,8 @@ fn infer_import_server_type(raw_type: &str, has_command: bool, has_url: bool) ->
         }
         "streamablehttp" | "streamable-http" | "streamable_http" | "http-stream"
         | "remote-http" | "remote" | "http" | "url" => "streamable-http".to_string(),
-        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => {
-            "sse-legacy".to_string()
-        }
-        "stdio" | "local" | "local-stdio" | "local-command" | "command" => {
-            "stdio".to_string()
-        }
+        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => "sse-legacy".to_string(),
+        "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
         other => other.to_string(),
     }
 }
@@ -442,7 +441,6 @@ impl McpServerImportEntry {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -497,9 +495,18 @@ mod tests {
         let written = json_helpers::read_json_file(&target).expect("read import target");
         let servers = json_helpers::object_at_path(&written, &["mcpServers"]).expect("mcpServers");
         let remote = servers.get("Remote API").expect("Remote API");
-        assert_eq!(remote.get("url").and_then(JsonValue::as_str), Some("https://example.com/mcp"));
-        assert_eq!(remote.get("type").and_then(JsonValue::as_str), Some("streamable-http"));
-        assert_eq!(remote.get("enabled").and_then(JsonValue::as_bool), Some(false));
+        assert_eq!(
+            remote.get("url").and_then(JsonValue::as_str),
+            Some("https://example.com/mcp")
+        );
+        assert_eq!(
+            remote.get("type").and_then(JsonValue::as_str),
+            Some("streamable-http")
+        );
+        assert_eq!(
+            remote.get("enabled").and_then(JsonValue::as_bool),
+            Some(false)
+        );
     }
 
     #[test]
@@ -528,6 +535,9 @@ mod tests {
             },
         )
         .expect_err("self entry should leave no usable servers");
-        assert!(error.contains("no usable servers"), "unexpected error: {error}");
+        assert!(
+            error.contains("no usable servers"),
+            "unexpected error: {error}"
+        );
     }
 }

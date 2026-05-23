@@ -14,7 +14,10 @@ mod overview;
 mod response;
 mod tool_runtime;
 use self::diagnostics::runtime_diagnostics;
-use self::http_tools::{http_tool_definitions, http_tool_definitions_for_request, http_tool_names};
+use self::http_tools::{
+    http_tool_definitions, http_tool_definitions_for_protocol, http_tool_definitions_for_request,
+    http_tool_names,
+};
 use self::mcp_http::{handle_mcp_http_route, write_json_error_response};
 use self::overview::{
     action_response, cached_health_json, cached_overview_json, query_bool_flag,
@@ -980,6 +983,9 @@ fn handle_http_request(
             "401 Unauthorized",
             &[("WWW-Authenticate", "Bearer realm=\"mcpace\"")],
         )?;
+        return Ok(());
+    }
+    if reject_forbidden_origin(stream, request)? {
         return Ok(());
     }
 

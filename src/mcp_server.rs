@@ -59,6 +59,7 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
     let mut initialize_seen = false;
     let mut initialized_notification_seen = false;
     let mut initialize_params: Option<JsonValue> = None;
+    let mut seen_request_ids = BTreeSet::new();
     let upstream_session_pool = Mutex::new(upstream::UpstreamSessionPool::default());
 
     loop {
@@ -108,12 +109,95 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
         }
         let method = json_helpers::string_at_path(&message, &["method"])
             .expect("validate_request_envelope checked method");
+        if let Some(id) = request_id.as_ref() {
+            if method_is_notification(method) {
+                let response = mcp::error(
+                    id.clone(),
+                    mcp::ERROR_INVALID_REQUEST,
+                    "MCP notifications must not include a JSON-RPC id",
+                    None,
+                );
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+                continue;
+            }
+            let Some(id_key) = mcp::request_id_key(id) else {
+                let response = mcp::error(
+                    id.clone(),
+                    mcp::ERROR_INVALID_REQUEST,
+                    "JSON-RPC request id must be a string or integer number",
+                    None,
+                );
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+                continue;
+            };
+            if !seen_request_ids.insert(id_key) {
+                let response = mcp::error(
+                    id.clone(),
+                    mcp::ERROR_INVALID_REQUEST,
+                    "JSON-RPC request id was already used in this MCP session",
+                    None,
+                );
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+                continue;
+            }
+        }
+
+        if method != "initialize" && method != "ping" && !initialize_seen {
+            if let Some(id) = request_id.clone() {
+                let response = mcp::error(
+                    id,
+                    mcp::ERROR_NOT_INITIALIZED,
+                    "Server not initialized; send initialize first",
+                    None,
+                );
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+            }
+            continue;
+        }
+
+        if initialize_seen
+            && !initialized_notification_seen
+            && !matches!(method, "initialize" | "ping" | "notifications/initialized")
+        {
+            if let Some(id) = request_id.clone() {
+                let response = mcp::error(
+                    id,
+                    mcp::ERROR_NOT_INITIALIZED,
+                    "MCP session is initialized but not ready; send notifications/initialized before normal operations",
+                    None,
+                );
+                if write_message(stdout, &response).is_err() {
+                    return 1;
+                }
+            }
+            continue;
+        }
 
         match method {
             "initialize" => {
                 let Some(id) = request_id else {
                     continue;
                 };
+                if initialize_seen {
+                    let response = mcp::error(
+                        id,
+                        mcp::ERROR_INVALID_REQUEST,
+                        "MCP session is already initialized",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    continue;
+                }
                 initialize_seen = true;
                 initialize_params = json_helpers::value_at_path(&message, &["params"]).cloned();
                 let startup_notes = bootstrap_hub_runtime(&config, stderr);
@@ -389,7 +473,7 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                         mcp::error(id, mcp::ERROR_INVALID_PARAMS, &message, None)
                     }
                     Err(ToolCallError::UnknownTool(message)) => {
-                        mcp::error(id, mcp::ERROR_METHOD_NOT_FOUND, &message, None)
+                        mcp::error(id, mcp::ERROR_INVALID_PARAMS, &message, None)
                     }
                     Err(ToolCallError::Execution(message)) => {
                         mcp::result(id, tool_error_result(message))
@@ -423,6 +507,10 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
 fn write_message(stdout: &mut dyn Write, message: &JsonValue) -> io::Result<()> {
     writeln!(stdout, "{}", message.to_compact_string())?;
     stdout.flush()
+}
+
+fn method_is_notification(method: &str) -> bool {
+    method.starts_with("notifications/")
 }
 
 enum ToolCallError {

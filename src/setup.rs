@@ -1,5 +1,7 @@
 use crate::json::{parse_str, JsonValue};
-use crate::{app, client_catalog, doctor, json_helpers, mcp_sources, resources, runtimepaths, server};
+use crate::{
+    app, client_catalog, doctor, json_helpers, mcp_sources, resources, runtimepaths, server,
+};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::io::{Read, Write};
@@ -229,7 +231,10 @@ fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--client" | "--for" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("setup requires a client id, 'auto', 'all', or 'none' after --client".to_string());
+                    parsed.error = Some(
+                        "setup requires a client id, 'auto', 'all', or 'none' after --client"
+                            .to_string(),
+                    );
                     return parsed;
                 };
                 let value = value.trim().to_ascii_lowercase();
@@ -267,7 +272,8 @@ fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--path" | "--server-path" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("setup requires a filesystem path after --path".to_string());
+                    parsed.error =
+                        Some("setup requires a filesystem path after --path".to_string());
                     return parsed;
                 };
                 parsed.server_paths.push(value.to_string());
@@ -339,10 +345,22 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(stdout, "Examples:");
     let _ = writeln!(stdout, "  mcpace up                              # start endpoint, wire detected clients, keep existing client servers");
-    let _ = writeln!(stdout, "  mcpace up --client cursor-local        # explicit client, no new upstream server");
-    let _ = writeln!(stdout, "  mcpace up npm:@modelcontextprotocol/server-memory --as memory --client none");
-    let _ = writeln!(stdout, "  mcpace up https://example.com/mcp --as remote --client all");
-    let _ = writeln!(stdout, "  mcpace up --server \"npx -y @modelcontextprotocol/server-memory\" --as memory");
+    let _ = writeln!(
+        stdout,
+        "  mcpace up --client cursor-local        # explicit client, no new upstream server"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace up npm:@modelcontextprotocol/server-memory --as memory --client none"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace up https://example.com/mcp --as remote --client all"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace up --server \"npx -y @modelcontextprotocol/server-memory\" --as memory"
+    );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Use 'mcpace install <path|package|url|command...>' when you actually want to add a new upstream server.");
     let _ = writeln!(stdout);
@@ -356,7 +374,10 @@ fn write_help(stdout: &mut dyn Write) {
     );
 }
 
-fn resolve_setup_root(root_override: Option<PathBuf>, discovered_root: Option<PathBuf>) -> Result<PathBuf, String> {
+fn resolve_setup_root(
+    root_override: Option<PathBuf>,
+    discovered_root: Option<PathBuf>,
+) -> Result<PathBuf, String> {
     if let Some(path) = root_override.or(discovered_root) {
         return Ok(canonicalize_or_original(&path));
     }
@@ -365,13 +386,23 @@ fn resolve_setup_root(root_override: Option<PathBuf>, discovered_root: Option<Pa
     }
     std::env::current_dir()
         .map(|path| path.join(".mcpace"))
-        .map_err(|error| format!("failed to resolve current directory for MCPace setup: {}", error))
+        .map_err(|error| {
+            format!(
+                "failed to resolve current directory for MCPace setup: {}",
+                error
+            )
+        })
 }
 
 fn ensure_setup_root_layout(root_path: &Path) -> Result<RootBootstrap, String> {
     let existed_before = root_path.is_dir();
-    fs::create_dir_all(root_path)
-        .map_err(|error| format!("failed to create MCPace root {}: {}", root_path.display(), error))?;
+    fs::create_dir_all(root_path).map_err(|error| {
+        format!(
+            "failed to create MCPace root {}: {}",
+            root_path.display(),
+            error
+        )
+    })?;
     let root_path = canonicalize_or_original(root_path);
 
     let config_path = root_path.join("mcpace.config.json");
@@ -411,7 +442,10 @@ fn default_config_json() -> JsonValue {
         ("version", JsonValue::string(env!("CARGO_PKG_VERSION"))),
         (
             "ports",
-            JsonValue::object([("serve", JsonValue::number(runtimepaths::DEFAULT_LOCAL_MCP_PORT))]),
+            JsonValue::object([(
+                "serve",
+                JsonValue::number(runtimepaths::DEFAULT_LOCAL_MCP_PORT),
+            )]),
         ),
         (
             "profiles",
@@ -421,28 +455,46 @@ fn default_config_json() -> JsonValue {
                     ("default", JsonValue::string("safe")),
                     (
                         "profiles",
-                        JsonValue::object([("safe", JsonValue::object([
-                            ("description", JsonValue::string("Default safe local runtime profile.")),
-                            ("serverOverrides", empty_object()),
-                        ]))]),
+                        JsonValue::object([(
+                            "safe",
+                            JsonValue::object([
+                                (
+                                    "description",
+                                    JsonValue::string("Default safe local runtime profile."),
+                                ),
+                                ("serverOverrides", empty_object()),
+                            ]),
+                        )]),
                     ),
                 ]),
             )]),
         ),
         ("servers", empty_object()),
-        ("client", JsonValue::object([("keyName", JsonValue::string("MCPace"))])),
+        (
+            "client",
+            JsonValue::object([("keyName", JsonValue::string("MCPace"))]),
+        ),
         (
             "serve",
             JsonValue::object([
                 ("host", JsonValue::string(runtimepaths::DEFAULT_LOCAL_HOST)),
-                ("port", JsonValue::number(runtimepaths::DEFAULT_LOCAL_MCP_PORT)),
-                ("mcpPath", JsonValue::string(runtimepaths::DEFAULT_LOCAL_MCP_PATH)),
+                (
+                    "port",
+                    JsonValue::number(runtimepaths::DEFAULT_LOCAL_MCP_PORT),
+                ),
+                (
+                    "mcpPath",
+                    JsonValue::string(runtimepaths::DEFAULT_LOCAL_MCP_PATH),
+                ),
                 ("publicUrl", JsonValue::string("")),
             ]),
         ),
         (
             "mcpSettings",
-            JsonValue::object([("includeDirs", JsonValue::array([JsonValue::string("mcp_settings.d")]))]),
+            JsonValue::object([(
+                "includeDirs",
+                JsonValue::array([JsonValue::string("mcp_settings.d")]),
+            )]),
         ),
         (
             "clientCatalog",
@@ -532,7 +584,11 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
     }
 
     let home_import = if server_count_before == 0 && requested_server_spec.is_none() {
-        Some(import_existing_home_mcp_servers(&root_path, &endpoint, &mut warnings))
+        Some(import_existing_home_mcp_servers(
+            &root_path,
+            &endpoint,
+            &mut warnings,
+        ))
     } else {
         None
     };
@@ -549,7 +605,12 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
             "--root".to_string(),
             root_text.clone(),
         ];
-        if let Some(name) = parsed.server_name.as_deref().map(str::trim).filter(|value| !value.is_empty()) {
+        if let Some(name) = parsed
+            .server_name
+            .as_deref()
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
             args.push("--as".to_string());
             args.push(name.to_string());
         }
@@ -595,11 +656,17 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
 
     let client_install = if parsed.skip_client_install {
         warnings.push(
-            "Client install was skipped; run 'mcpace client install <client-id>' when ready.".to_string(),
+            "Client install was skipped; run 'mcpace client install <client-id>' when ready."
+                .to_string(),
         );
         None
     } else {
-        Some(run_client_install(&root_path, &root_text, parsed.client_selector.as_deref(), &mut warnings))
+        Some(run_client_install(
+            &root_path,
+            &root_text,
+            parsed.client_selector.as_deref(),
+            &mut warnings,
+        ))
     };
 
     let readiness = run_json_command(vec![
@@ -690,10 +757,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
     );
 
     let init_ok = init.ok;
-    let home_import_ok = home_import
-        .as_ref()
-        .map(|result| result.ok)
-        .unwrap_or(true);
+    let home_import_ok = home_import.as_ref().map(|result| result.ok).unwrap_or(true);
     let server_install_ok = server_install
         .as_ref()
         .map(|result| result.ok)
@@ -902,7 +966,6 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
     ])
 }
 
-
 #[derive(Clone, Debug)]
 struct HomeMcpSource {
     client_id: String,
@@ -1091,7 +1154,10 @@ fn import_existing_home_mcp_servers(
     }
 }
 
-fn collect_existing_home_mcp_sources(root_path: &Path, warnings: &mut Vec<String>) -> Vec<HomeMcpSource> {
+fn collect_existing_home_mcp_sources(
+    root_path: &Path,
+    warnings: &mut Vec<String>,
+) -> Vec<HomeMcpSource> {
     let mut sources = Vec::new();
     let mut seen = BTreeSet::new();
 
@@ -1152,7 +1218,10 @@ fn push_existing_home_source_expr(
         push_existing_home_source_path(sources, seen, client_id, path);
     }
     let trimmed = expr.trim();
-    if trimmed.starts_with("~/") || trimmed.starts_with("~\\") || PathBuf::from(trimmed).is_absolute() {
+    if trimmed.starts_with("~/")
+        || trimmed.starts_with("~\\")
+        || PathBuf::from(trimmed).is_absolute()
+    {
         return;
     }
     if let Ok(current_dir) = std::env::current_dir() {
@@ -1222,19 +1291,18 @@ fn standard_home_mcp_config_paths(root_path: &Path) -> Vec<(String, PathBuf)> {
             appdata.join("Code - Insiders/User/mcp.json"),
         ));
     }
-    paths.push((
-        "mcpace".to_string(),
-        root_path.join("mcp_settings.json"),
-    ));
+    paths.push(("mcpace".to_string(), root_path.join("mcp_settings.json")));
     paths
 }
 
-fn source_servers_object<'a>(
-    value: &'a JsonValue,
-) -> Option<(&'static str, &'a BTreeMap<String, JsonValue>)> {
+fn source_servers_object(
+    value: &JsonValue,
+) -> Option<(&'static str, &BTreeMap<String, JsonValue>)> {
     json_helpers::object_at_path(value, &["mcpServers"])
         .map(|servers| ("mcpServers", servers))
-        .or_else(|| json_helpers::object_at_path(value, &["servers"]).map(|servers| ("servers", servers)))
+        .or_else(|| {
+            json_helpers::object_at_path(value, &["servers"]).map(|servers| ("servers", servers))
+        })
 }
 
 fn normalize_home_import_type(raw_type: &str, has_command: bool, has_url: bool) -> String {
@@ -1250,9 +1318,7 @@ fn normalize_home_import_type(raw_type: &str, has_command: bool, has_url: bool) 
         }
         "streamablehttp" | "streamable-http" | "streamable_http" | "http-stream"
         | "remote-http" | "remote" | "http" | "url" => "streamable-http".to_string(),
-        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => {
-            "sse-legacy".to_string()
-        }
+        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => "sse-legacy".to_string(),
         "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
         other => other.to_string(),
     }
@@ -1388,7 +1454,10 @@ fn run_client_install(
         let json = JsonValue::object([
             ("mode", JsonValue::string("auto-detected-none")),
             ("ok", JsonValue::bool(true)),
-            ("detected", JsonValue::array(std::iter::empty::<JsonValue>())),
+            (
+                "detected",
+                JsonValue::array(std::iter::empty::<JsonValue>()),
+            ),
         ]);
         return CommandResult {
             ok: true,
@@ -1441,7 +1510,10 @@ fn detect_local_clients(root_path: &Path, warnings: &mut Vec<String>) -> Vec<Str
     let registry = match client_catalog::load_registry(Some(root_path)) {
         Ok(value) => value,
         Err(error) => {
-            warnings.push(format!("Client auto-detect could not load client catalog: {}", error));
+            warnings.push(format!(
+                "Client auto-detect could not load client catalog: {}",
+                error
+            ));
             return Vec::new();
         }
     };
@@ -1484,7 +1556,10 @@ fn config_path_exists_for_target(expr: &str, root_path: &Path) -> bool {
         return true;
     }
     let trimmed = expr.trim();
-    if trimmed.starts_with("~/") || trimmed.starts_with("~\\") || PathBuf::from(trimmed).is_absolute() {
+    if trimmed.starts_with("~/")
+        || trimmed.starts_with("~\\")
+        || PathBuf::from(trimmed).is_absolute()
+    {
         return false;
     }
     std::env::current_dir()
@@ -1511,7 +1586,10 @@ fn expand_user_or_root_path(expr: &str, root_path: &Path) -> Option<PathBuf> {
         return None;
     }
     let trimmed = expr.trim();
-    if let Some(rest) = trimmed.strip_prefix("~/").or_else(|| trimmed.strip_prefix("~\\")) {
+    if let Some(rest) = trimmed
+        .strip_prefix("~/")
+        .or_else(|| trimmed.strip_prefix("~\\"))
+    {
         let mut path = user_home_dir()?;
         for segment in rest.split(['/', '\\']) {
             if !segment.is_empty() {
@@ -1530,10 +1608,19 @@ fn expand_user_or_root_path(expr: &str, root_path: &Path) -> Option<PathBuf> {
 
 fn root_bootstrap_json(bootstrap: &RootBootstrap) -> JsonValue {
     JsonValue::object([
-        ("createdRootDir", JsonValue::bool(bootstrap.created_root_dir)),
+        (
+            "createdRootDir",
+            JsonValue::bool(bootstrap.created_root_dir),
+        ),
         ("createdConfig", JsonValue::bool(bootstrap.created_config)),
-        ("createdSettings", JsonValue::bool(bootstrap.created_settings)),
-        ("createdSettingsDir", JsonValue::bool(bootstrap.created_settings_dir)),
+        (
+            "createdSettings",
+            JsonValue::bool(bootstrap.created_settings),
+        ),
+        (
+            "createdSettingsDir",
+            JsonValue::bool(bootstrap.created_settings_dir),
+        ),
     ])
 }
 
@@ -1547,7 +1634,10 @@ fn looks_like_multiword_server_command(spec: &str) -> bool {
         .unwrap_or("")
         .trim_end_matches(".exe")
         .to_ascii_lowercase();
-    matches!(base.as_str(), "npx" | "bunx" | "pnpm" | "yarn" | "uvx" | "docker")
+    matches!(
+        base.as_str(),
+        "npx" | "bunx" | "pnpm" | "yarn" | "uvx" | "docker"
+    )
 }
 
 fn canonicalize_or_original(path: &Path) -> PathBuf {
@@ -1710,7 +1800,6 @@ fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1731,7 +1820,10 @@ mod tests {
             normalized.get("type").and_then(JsonValue::as_str),
             Some("streamable-http")
         );
-        assert_eq!(normalized.get("enabled").and_then(JsonValue::as_bool), Some(false));
+        assert_eq!(
+            normalized.get("enabled").and_then(JsonValue::as_bool),
+            Some(false)
+        );
     }
 
     #[test]

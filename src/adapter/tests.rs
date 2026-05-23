@@ -153,6 +153,30 @@ rl.on('line', async (line) => {
 }
 
 #[test]
+fn upstream_search_finds_tool_names_when_server_metadata_does_not_match() {
+    let root = temp_root();
+    let started = write_probe_marker_upstream(&root);
+
+    let result = upstream_search(&root, None, Some("echo"), 10, false, Some(2_500), true)
+        .expect("upstream_search should succeed");
+    let results = json_helpers::array_at_path(&result, &["results"]).unwrap_or(&[]);
+
+    assert_eq!(
+        json_helpers::value_at_path(&result, &["resultCount"]).and_then(JsonValue::as_i64),
+        Some(1)
+    );
+    assert!(results.iter().any(|tool| {
+        json_helpers::string_at_path(tool, &["server"]) == Some("probe")
+            && json_helpers::string_at_path(tool, &["name"]) == Some("echo")
+    }));
+    assert!(
+        started.exists(),
+        "tool-name search must probe the bounded fallback catalog when server metadata misses"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn safe_projected_names_are_bounded_and_unique() {
     let mut used = BTreeSet::new();
     let first = unique_projected_name("u", "Example Server", "read/file", &mut used);

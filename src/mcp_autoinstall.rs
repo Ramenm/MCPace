@@ -345,7 +345,8 @@ fn command_like_spec(value: &str) -> Result<Option<CommandLikeSpec>, String> {
         }));
     }
 
-    if (base == "pnpm" || base == "yarn") && tail.first().map(|value| value.as_str()) == Some("dlx") {
+    if (base == "pnpm" || base == "yarn") && tail.first().map(|value| value.as_str()) == Some("dlx")
+    {
         let package = first_non_option_arg(&tail, 1);
         return Ok(Some(CommandLikeSpec {
             method: "npm".to_string(),
@@ -650,14 +651,16 @@ fn local_path_argument(spec: &str) -> Option<String> {
     let lower = trimmed.to_ascii_lowercase();
     let value = if lower.starts_with("file://") {
         trimmed[7..].to_string()
-    } else if lower.starts_with("file:") {
-        trimmed[5..].to_string()
-    } else if lower.starts_with("path:") {
+    } else if lower.starts_with("file:") || lower.starts_with("path:") {
         trimmed[5..].to_string()
     } else {
         trimmed.to_string()
     };
-    Some(if value.trim().is_empty() { ".".to_string() } else { value })
+    Some(if value.trim().is_empty() {
+        ".".to_string()
+    } else {
+        value
+    })
 }
 
 fn absolutize_local_path_arg(value: &str) -> String {
@@ -665,7 +668,10 @@ fn absolutize_local_path_arg(value: &str) -> String {
     if trimmed.is_empty() {
         return ".".to_string();
     }
-    if let Some(rest) = trimmed.strip_prefix("~/").or_else(|| trimmed.strip_prefix("~\\")) {
+    if let Some(rest) = trimmed
+        .strip_prefix("~/")
+        .or_else(|| trimmed.strip_prefix("~\\"))
+    {
         if let Some(home) = user_home_dir() {
             let mut path = home;
             for segment in rest.split(['/', '\\']) {

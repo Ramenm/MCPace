@@ -102,9 +102,14 @@ npm run test:npm
 npm run check
 cargo fmt --check
 cargo test
+cargo clippy --all-targets -- -D warnings
+cargo build --release
+npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --concurrency 64
 ```
 
 `npm run check` covers Node syntax, npm launcher tests, docs/package hygiene, and static MCP import-normalization guards. Run the Rust checks on a host with the Rust toolchain installed.
+
+`npm run load:local` starts a release or debug MCPace binary against an isolated temporary root, keeps upstream warmup disabled, exercises `/healthz`, `/api/overview`, and `/mcp`, and verifies important HTTP/MCP edge cases such as spoofed Host, cross-origin POST, missing Streamable HTTP `Accept`, oversized body, and unknown session id rejection.
 
 ## Archive policy
 

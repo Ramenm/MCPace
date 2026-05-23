@@ -18,7 +18,9 @@
     "build": "cargo build --release",
     "test:rust": "cargo test",
     "test": "npm run test:npm",
-    "pack:npm:dry-run": "npm pack --workspace @mcpace/cli --json --dry-run"
+    "pack:npm:dry-run": "npm pack --workspace @mcpace/cli --json --dry-run",
+    "load:local": "node scripts/load-test-local.mjs",
+    "test:logic": "node scripts/logic-test-local.mjs"
   },
   "packageManager": "npm@10.9.2",
   "devEngines": {

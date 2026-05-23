@@ -83,7 +83,31 @@ pub fn upstream_search(
             }
             Ok((ranked_count, _)) => {
                 candidate_server_count = ranked_count;
-                search_strategy = "query-ranked-no-candidates".to_string();
+                let fallback_servers =
+                    fallback_upstream_search_servers(root_path, limit, &mut errors);
+                if fallback_servers.is_empty() {
+                    search_strategy = "query-ranked-no-candidates".to_string();
+                } else {
+                    search_strategy = "query-ranked-fallback-catalog".to_string();
+                    let catalog = upstream::callable_tools_raw_catalog_for_servers(
+                        root_path,
+                        &fallback_servers,
+                        timeout_ms,
+                        refresh,
+                    )?;
+                    catalog_ok = json_helpers::bool_at_path(&catalog, &["ok"]).unwrap_or(false);
+                    scan_search_catalog(
+                        &catalog,
+                        &terms,
+                        include_schema,
+                        keep_limit,
+                        &mut search_space_tool_count,
+                        &mut total_matches,
+                        &mut scored,
+                        &mut searched_servers,
+                        &mut errors,
+                    );
+                }
             }
             Err(error) => {
                 errors.push(JsonValue::object([
@@ -134,7 +158,7 @@ pub fn upstream_search(
         ("mode", JsonValue::string("upstream-search")),
         (
             "summary",
-            JsonValue::string("Searched configured upstream MCP tool catalogs with bounded top-k selection and returned compact ready-to-call results. Query searches first rank candidate servers from local metadata to avoid full live upstream fan-out; set MCPACE_UPSTREAM_SEARCH_EXHAUSTIVE=true for exhaustive discovery. Use each call object with upstream_call, or use a projected u_<server>_<tool>_<hash> name when it appears in tools/list."),
+            JsonValue::string("Searched configured upstream MCP tool catalogs with bounded top-k selection and returned compact ready-to-call results. Query searches first rank candidate servers from local metadata; if metadata has no candidate, MCPace falls back to a bounded callable-server catalog scan before requiring MCPACE_UPSTREAM_SEARCH_EXHAUSTIVE=true for full fan-out. Use each call object with upstream_call, or use a projected u_<server>_<tool>_<hash> name when it appears in tools/list."),
         ),
         (
             "query",
@@ -1192,6 +1216,18 @@ fn upstream_search_min_server_score() -> usize {
     env_usize("MCPACE_UPSTREAM_SEARCH_MIN_SERVER_SCORE")
         .unwrap_or(DEFAULT_UPSTREAM_SEARCH_MIN_SERVER_SCORE)
         .clamp(0, 1000)
+}
+
+fn fallback_upstream_search_servers(
+    root_path: &Path,
+    limit: usize,
+    errors: &mut Vec<JsonValue>,
+) -> Vec<String> {
+    let mut names = callable_server_names(root_path, errors);
+    names.sort_by_key(|name| name.to_ascii_lowercase());
+    names.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+    names.truncate(limit);
+    names
 }
 
 fn ranked_upstream_search_servers(

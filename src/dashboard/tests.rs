@@ -867,17 +867,15 @@ fn unified_serve_exposes_health_and_mcp_routes() {
         .unwrap();
     stream.read_to_string(&mut unsupported_response).unwrap();
     assert!(
-        unsupported_response.contains("\"isError\": true"),
+        unsupported_response.contains("\"error\""),
         "unsupported response: {}",
         unsupported_response
     );
     assert!(
-            unsupported_response.contains(
-                "surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch"
-            ),
-            "unsupported response: {}",
-            unsupported_response
-        );
+        unsupported_response.contains("Unknown tool: unsupported_tool"),
+        "unsupported response: {}",
+        unsupported_response
+    );
 
     let diagnostics_call = r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"runtime_diagnostics","arguments":{}}}"#;
     let mut diagnostics_response = String::new();
@@ -955,7 +953,7 @@ fn unified_serve_generates_session_id_instead_of_trusting_initialize_header() {
         let mut stderr = Vec::new();
         serve_listener(
             listener,
-            test_config(server_root, Some(3), super::ServeSurface::UnifiedServe),
+            test_config(server_root, Some(4), super::ServeSurface::UnifiedServe),
             &mut stderr,
         )
     });
@@ -997,6 +995,25 @@ fn unified_serve_generates_session_id_instead_of_trusting_initialize_header() {
         fixed_session_response
     );
 
+    let initialized = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
+    let mut initialized_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        generated_session_id,
+        initialized.len(),
+        initialized
+    )
+    .unwrap();
+    stream.read_to_string(&mut initialized_response).unwrap();
+    assert!(
+        initialized_response.starts_with("HTTP/1.1 202 Accepted"),
+        "initialized response: {}",
+        initialized_response
+    );
+
     let mut generated_session_response = String::new();
     let mut stream = TcpStream::connect(addr).unwrap();
     write!(
@@ -1036,7 +1053,7 @@ fn unified_serve_enforces_mcp_http_session_lifecycle() {
         let mut stderr = Vec::new();
         serve_listener(
             listener,
-            test_config(server_root, Some(7), super::ServeSurface::UnifiedServe),
+                test_config(server_root, Some(10), super::ServeSurface::UnifiedServe),
             &mut stderr,
         )
     });
@@ -1144,6 +1161,84 @@ Connection: close
         protocol_mismatch_response
     );
 
+    let pre_initialized_tools_list = r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#;
+    let mut pre_initialized_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        session_id,
+        pre_initialized_tools_list.len(),
+        pre_initialized_tools_list
+    )
+    .unwrap();
+    stream
+        .read_to_string(&mut pre_initialized_response)
+        .unwrap();
+    assert!(
+        pre_initialized_response.starts_with("HTTP/1.1 400 Bad Request"),
+        "pre-initialized response: {}",
+        pre_initialized_response
+    );
+    assert!(
+        pre_initialized_response.contains("notifications/initialized"),
+        "pre-initialized response: {}",
+        pre_initialized_response
+    );
+
+    let initialized = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
+    let mut initialized_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        session_id,
+        initialized.len(),
+        initialized
+    )
+    .unwrap();
+    stream.read_to_string(&mut initialized_response).unwrap();
+    assert!(
+        initialized_response.starts_with("HTTP/1.1 202 Accepted"),
+        "initialized response: {}",
+        initialized_response
+    );
+
+    let duplicate_pre_initialized_id = r#"{"jsonrpc":"2.0","id":3,"method":"ping"}"#;
+    let mut duplicate_id_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1
+Host: {}
+Accept: application/json, text/event-stream
+Content-Type: application/json
+Mcp-Session-Id: {}
+Content-Length: {}
+Connection: close
+
+{}",
+        addr,
+        session_id,
+        duplicate_pre_initialized_id.len(),
+        duplicate_pre_initialized_id
+    )
+    .unwrap();
+    stream.read_to_string(&mut duplicate_id_response).unwrap();
+    assert!(
+        duplicate_id_response.starts_with("HTTP/1.1 400 Bad Request"),
+        "duplicate id response: {}",
+        duplicate_id_response
+    );
+    assert!(
+        duplicate_id_response.contains("already used"),
+        "duplicate id response: {}",
+        duplicate_id_response
+    );
+
+    let tools_list = r#"{"jsonrpc":"2.0","id":4,"method":"tools/list"}"#;
     let mut valid_session_response = String::new();
     let mut stream = TcpStream::connect(addr).unwrap();
     write!(
@@ -1323,6 +1418,58 @@ fn unified_serve_rejects_mcp_cross_origin_and_missing_accept() {
         mismatched_name_response.contains("Mcp-Name header"),
         "mismatched Mcp-Name response: {}",
         mismatched_name_response
+    );
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn unified_serve_rejects_spoofed_host_for_non_mcp_routes() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_minimal_config(&root);
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_root = root.clone();
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(
+            listener,
+            test_config(server_root, Some(2), super::ServeSurface::UnifiedServe),
+            &mut stderr,
+        )
+    });
+
+    let mut health_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "GET /healthz HTTP/1.1\r\nHost: 127.0.0.1.evil.example\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    stream.read_to_string(&mut health_response).unwrap();
+    assert!(
+        health_response.starts_with("HTTP/1.1 403 Forbidden"),
+        "spoofed health Host response: {}",
+        health_response
+    );
+
+    let mut overview_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "GET /api/overview HTTP/1.1\r\nHost: localhost.evil.example\r\nConnection: close\r\n\r\n"
+    )
+    .unwrap();
+    stream.read_to_string(&mut overview_response).unwrap();
+    assert!(
+        overview_response.starts_with("HTTP/1.1 403 Forbidden"),
+        "spoofed overview Host response: {}",
+        overview_response
     );
 
     assert_eq!(handle.join().unwrap(), 0);

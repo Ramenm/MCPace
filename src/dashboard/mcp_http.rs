@@ -1,6 +1,6 @@
 use super::{
     empty_object, http_boundary, http_headers, http_session, http_tool_definitions,
-    http_tool_definitions_for_request, now_ms, reject_forbidden_origin, run_http_tool,
+    http_tool_definitions_for_protocol, now_ms, reject_forbidden_origin, run_http_tool,
     write_empty_response, write_empty_response_with_headers, write_json_response,
     write_json_response_with_owned_headers, write_text_response, DashboardConfig, HttpRequest,
     McpHttpResponse, ServeSurface,
@@ -152,10 +152,10 @@ fn handle_mcp_http_request(
         .map_err(|error| format!("invalid UTF-8 request body: {}", error))?;
     let message =
         parse_str(body_text.trim()).map_err(|error| format!("invalid JSON-RPC body: {}", error))?;
-    let id = json_helpers::value_at_path(&message, &["id"]).cloned();
+    let request_id = json_helpers::value_at_path(&message, &["id"]).cloned();
     let method_value = json_helpers::value_at_path(&message, &["method"]);
 
-    let id = id.unwrap_or(JsonValue::Null);
+    let id = request_id.clone().unwrap_or(JsonValue::Null);
     let method = match method_value {
         Some(JsonValue::String(value)) => value.as_str(),
         Some(_) => {
@@ -172,9 +172,7 @@ fn handle_mcp_http_request(
             if json_helpers::value_at_path(&message, &["result"]).is_some()
                 || json_helpers::value_at_path(&message, &["error"]).is_some()
             {
-                if let Some(response) =
-                    validate_mcp_session_for_request(request, config, id.clone())
-                {
+                if let Err(response) = touch_mcp_session_for_request(request, config, id.clone()) {
                     return Ok(response);
                 }
                 return Ok(McpHttpResponse::Accepted);
@@ -186,6 +184,16 @@ fn handle_mcp_http_request(
         return Ok(McpHttpResponse::JsonStatus(
             "400 Bad Request",
             mcp_error_response(id, mcp::ERROR_INVALID_REQUEST, error),
+        ));
+    }
+    if request_id.is_some() && method_is_notification(method) {
+        return Ok(McpHttpResponse::JsonStatus(
+            "400 Bad Request",
+            mcp_error_response(
+                id,
+                mcp::ERROR_INVALID_REQUEST,
+                "MCP notifications must not include a JSON-RPC id",
+            ),
         ));
     }
     if let Some(protocol_header) =
@@ -213,14 +221,40 @@ fn handle_mcp_http_request(
         ));
     }
 
+    let mut session_protocol: Option<String> = None;
+
     if method != "initialize" {
-        if let Some(response) = validate_mcp_session_for_request(request, config, id.clone()) {
-            return Ok(response);
-        }
-        if json_helpers::value_at_path(&message, &["id"]).is_none() {
+        if method == "notifications/initialized" && request_id.is_none() {
+            if let Err(response) = mark_mcp_session_initialized(request, config, id.clone()) {
+                return Ok(response);
+            }
             return Ok(McpHttpResponse::Accepted);
         }
-    } else if json_helpers::value_at_path(&message, &["id"]).is_none() {
+
+        let session = match touch_mcp_session_for_request(request, config, id.clone()) {
+            Ok(value) => value,
+            Err(response) => return Ok(response),
+        };
+        session_protocol = Some(session.protocol_version.clone());
+        if request_id.is_none() {
+            return Ok(McpHttpResponse::Accepted);
+        }
+        if let Some(id_key) = request_id.as_ref().and_then(mcp::request_id_key) {
+            if let Err(response) = track_mcp_request_id(config, &session.id, &id_key, id.clone()) {
+                return Ok(response);
+            }
+        }
+        if method != "ping" && !session.initialized {
+            return Ok(McpHttpResponse::JsonStatus(
+                "400 Bad Request",
+                mcp_error_response(
+                    id,
+                    mcp::ERROR_NOT_INITIALIZED,
+                    "MCP HTTP session is initialized but not ready; send notifications/initialized before normal operations",
+                ),
+            ));
+        }
+    } else if request_id.is_none() {
         return Ok(McpHttpResponse::Accepted);
     }
 
@@ -259,6 +293,7 @@ fn handle_mcp_http_request(
                     negotiated,
                     client_name,
                     client_version,
+                    request_id.as_ref().and_then(mcp::request_id_key),
                     now_ms(),
                 );
             Ok(McpHttpResponse::JsonWithHeaders(
@@ -301,12 +336,13 @@ fn handle_mcp_http_request(
                 http_boundary::request_header_string(Some(request), "mcp-protocol-version")
                     .map(|value| value.trim().to_string())
                     .filter(|value| !value.is_empty())
+                    .or_else(|| session_protocol.clone())
                     .unwrap_or_else(|| mcp::STREAMABLE_HTTP_DEFAULT_PROTOCOL_VERSION.to_string());
             let protocol_params =
-                JsonValue::object([("protocolVersion", JsonValue::string(protocol))]);
+                JsonValue::object([("protocolVersion", JsonValue::string(protocol.clone()))]);
             let result = adapter::tool_list_result(
                 &config.root_path,
-                http_tool_definitions_for_request(request),
+                http_tool_definitions_for_protocol(Some(protocol.as_str())),
                 Some(&protocol_params),
                 cursor,
             );
@@ -436,8 +472,13 @@ fn handle_mcp_http_request(
             Ok(McpHttpResponse::Json(result))
         }
         "tools/call" => {
-            let tool_name = json_helpers::string_at_path(&message, &["params", "name"])
-                .ok_or_else(|| "tools/call requires a tool name".to_string())?;
+            let Some(tool_name) = json_helpers::string_at_path(&message, &["params", "name"]) else {
+                return Ok(McpHttpResponse::Json(mcp_error_response(
+                    id,
+                    mcp::ERROR_INVALID_PARAMS,
+                    "tools/call requires a tool name",
+                )));
+            };
             let args = match mcp::tool_call_arguments_or_empty(&message) {
                 Ok(value) => value,
                 Err(error) => {
@@ -449,6 +490,13 @@ fn handle_mcp_http_request(
                 }
             };
             let projected_call = tool_name.starts_with("u_");
+            if !projected_call && !http_tool_names().iter().any(|name| name.as_str() == tool_name) {
+                return Ok(McpHttpResponse::Json(mcp_error_response(
+                    id,
+                    mcp::ERROR_INVALID_PARAMS,
+                    format!("Unknown tool: {}", tool_name),
+                )));
+            }
             let option_arguments = if projected_call {
                 adapter::projected_adapter_control_arguments(&args)
             } else {
@@ -519,34 +567,88 @@ fn handle_mcp_http_request(
     }
 }
 
-fn validate_mcp_session_for_request(
+fn method_is_notification(method: &str) -> bool {
+    method.starts_with("notifications/")
+}
+
+fn touch_mcp_session_for_request(
     request: &HttpRequest,
     config: &DashboardConfig,
     id: JsonValue,
-) -> Option<McpHttpResponse> {
+) -> Result<http_session::McpHttpSession, McpHttpResponse> {
     let result = config
         .http_session_store
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .touch_from_request(request, now_ms());
     match result {
-        Ok(_) => None,
+        Ok(session) => Ok(session),
         Err(error) => {
             let code = match error.kind {
                 http_session::McpHttpSessionErrorKind::Missing
                 | http_session::McpHttpSessionErrorKind::Invalid
-                | http_session::McpHttpSessionErrorKind::ProtocolMismatch => {
-                    mcp::ERROR_INVALID_REQUEST
-                }
+                | http_session::McpHttpSessionErrorKind::ProtocolMismatch
+                | http_session::McpHttpSessionErrorKind::DuplicateRequestId => mcp::ERROR_INVALID_REQUEST,
                 http_session::McpHttpSessionErrorKind::Unknown
                 | http_session::McpHttpSessionErrorKind::Expired => mcp::ERROR_NOT_INITIALIZED,
             };
-            Some(McpHttpResponse::JsonStatus(
+            Err(McpHttpResponse::JsonStatus(
                 error.http_status(),
                 mcp_error_response(id, code, error.message),
             ))
         }
     }
+}
+
+fn mark_mcp_session_initialized(
+    request: &HttpRequest,
+    config: &DashboardConfig,
+    id: JsonValue,
+) -> Result<http_session::McpHttpSession, McpHttpResponse> {
+    let result = config
+        .http_session_store
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .mark_initialized_from_request(request, now_ms());
+    match result {
+        Ok(session) => Ok(session),
+        Err(error) => Err(session_error_response(error, id)),
+    }
+}
+
+fn track_mcp_request_id(
+    config: &DashboardConfig,
+    session_id: &str,
+    request_id_key: &str,
+    id: JsonValue,
+) -> Result<http_session::McpHttpSession, McpHttpResponse> {
+    let result = config
+        .http_session_store
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .track_request_id(session_id, request_id_key);
+    match result {
+        Ok(session) => Ok(session),
+        Err(error) => Err(session_error_response(error, id)),
+    }
+}
+
+fn session_error_response(
+    error: http_session::McpHttpSessionError,
+    id: JsonValue,
+) -> McpHttpResponse {
+    let code = match error.kind {
+        http_session::McpHttpSessionErrorKind::Missing
+        | http_session::McpHttpSessionErrorKind::Invalid
+        | http_session::McpHttpSessionErrorKind::ProtocolMismatch
+        | http_session::McpHttpSessionErrorKind::DuplicateRequestId => mcp::ERROR_INVALID_REQUEST,
+        http_session::McpHttpSessionErrorKind::Unknown
+        | http_session::McpHttpSessionErrorKind::Expired => mcp::ERROR_NOT_INITIALIZED,
+    };
+    McpHttpResponse::JsonStatus(
+        error.http_status(),
+        mcp_error_response(id, code, error.message),
+    )
 }
 
 fn mcp_tool_result(

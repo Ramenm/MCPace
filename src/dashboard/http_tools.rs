@@ -814,7 +814,11 @@ pub(super) fn http_tool_definitions() -> Vec<JsonValue> {
 
 pub(super) fn http_tool_definitions_for_request(request: &HttpRequest) -> Vec<JsonValue> {
     let protocol = http_boundary::request_header_string(Some(request), "mcp-protocol-version");
-    let options = adapter::tool_surface_options_from_http_header(protocol.as_deref());
+    http_tool_definitions_for_protocol(protocol.as_deref())
+}
+
+pub(super) fn http_tool_definitions_for_protocol(protocol: Option<&str>) -> Vec<JsonValue> {
+    let options = adapter::tool_surface_options_from_http_header(protocol);
     let names = http_tool_definitions()
         .iter()
         .filter_map(|tool| json_helpers::string_at_path(tool, &["name"]).map(str::to_string))

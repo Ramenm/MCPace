@@ -33,6 +33,27 @@ pub fn request_id(message: &JsonValue) -> Option<JsonValue> {
     json_helpers::value_at_path(message, &["id"]).cloned()
 }
 
+pub fn request_id_key(id: &JsonValue) -> Option<String> {
+    if is_request_id_value(id) {
+        Some(id.to_compact_string())
+    } else {
+        None
+    }
+}
+
+pub fn is_request_id_value(id: &JsonValue) -> bool {
+    match id {
+        JsonValue::String(_) => true,
+        JsonValue::Number(value) => is_integer_number_text(value),
+        _ => false,
+    }
+}
+
+fn is_integer_number_text(value: &str) -> bool {
+    let digits = value.strip_prefix('-').unwrap_or(value);
+    !digits.is_empty() && digits.bytes().all(|byte| byte.is_ascii_digit())
+}
+
 pub fn request_id_or_null(message: &JsonValue) -> JsonValue {
     request_id(message).unwrap_or(JsonValue::Null)
 }
@@ -95,21 +116,21 @@ pub fn validate_request_envelope(message: &JsonValue) -> Result<(), String> {
     }
 
     if let Some(params) = object.get("params") {
-        match params {
-            JsonValue::Object(_) | JsonValue::Array(_) | JsonValue::Null => {}
-            _ => {
-                return Err(
-                    "JSON-RPC params must be an object, array, or null when present".to_string(),
-                )
-            }
+        if !matches!(params, JsonValue::Object(_)) {
+            return Err("MCP params must be a JSON object when present".to_string());
         }
     }
 
     if let Some(id) = object.get("id") {
         match id {
-            JsonValue::String(_) | JsonValue::Number(_) | JsonValue::Null => {}
+            JsonValue::String(_) => {}
+            JsonValue::Number(value) if is_integer_number_text(value) => {}
+            JsonValue::Number(_) => {
+                return Err("JSON-RPC request id must be an integer number when numeric".to_string())
+            }
+            JsonValue::Null => return Err("JSON-RPC request id must not be null".to_string()),
             _ => {
-                return Err("JSON-RPC id must be a string, number, or null when present".to_string())
+                return Err("JSON-RPC id must be a string or integer number when present".to_string())
             }
         }
     }
@@ -168,5 +189,61 @@ mod tests {
         assert_eq!(request_id(&request), Some(JsonValue::number(7)));
         assert_eq!(request_id(&notification), None);
         assert_eq!(request_id_or_null(&notification), JsonValue::Null);
+    }
+
+    #[test]
+    fn validate_request_envelope_rejects_null_ids() {
+        let request = JsonValue::object([
+            ("jsonrpc", JsonValue::string(JSONRPC_VERSION)),
+            ("id", JsonValue::Null),
+            ("method", JsonValue::string("tools/list")),
+        ]);
+
+        assert!(validate_request_envelope(&request)
+            .expect_err("null request IDs must be rejected")
+            .contains("must not be null"));
+    }
+
+    #[test]
+    fn request_id_key_preserves_string_number_distinction() {
+        assert_eq!(request_id_key(&JsonValue::number(1)).as_deref(), Some("1"));
+        assert_eq!(
+            request_id_key(&JsonValue::string("1")).as_deref(),
+            Some("\"1\"")
+        );
+        assert_eq!(request_id_key(&JsonValue::Null), None);
+        assert_eq!(
+            request_id_key(&JsonValue::number("9007199254740993123456789")).as_deref(),
+            Some("9007199254740993123456789")
+        );
+        assert_eq!(request_id_key(&JsonValue::number("1.5")), None);
+        assert_eq!(request_id_key(&JsonValue::number("6e+23")), None);
+    }
+
+    #[test]
+    fn validate_request_envelope_rejects_decimal_numeric_ids() {
+        let request = JsonValue::object([
+            ("jsonrpc", JsonValue::string(JSONRPC_VERSION)),
+            ("id", JsonValue::number("1.5")),
+            ("method", JsonValue::string("tools/list")),
+        ]);
+
+        assert!(validate_request_envelope(&request)
+            .expect_err("numeric request IDs must be integers")
+            .contains("integer"));
+    }
+
+    #[test]
+    fn validate_request_envelope_rejects_array_params() {
+        let request = JsonValue::object([
+            ("jsonrpc", JsonValue::string(JSONRPC_VERSION)),
+            ("id", JsonValue::number(7)),
+            ("method", JsonValue::string("tools/list")),
+            ("params", JsonValue::array([JsonValue::string("cursor")])),
+        ]);
+
+        assert!(validate_request_envelope(&request)
+            .expect_err("MCP params must use object form")
+            .contains("params"));
     }
 }

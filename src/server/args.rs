@@ -27,23 +27,53 @@ pub(crate) struct ParsedArgs {
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace server <install|import|list|test|remove|enable|disable|sources> [options]");
+    let _ = writeln!(
+        stdout,
+        "Usage: mcpace server <install|import|list|test|remove|enable|disable|sources> [options]"
+    );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Common commands:");
     let _ = writeln!(stdout, "  mcpace server install <path|package|url|command...> [--as <name>] [--path <path>...] [--dry-run]");
-    let _ = writeln!(stdout, "  mcpace server import <mcp.json> [--dry-run] [--force]");
-    let _ = writeln!(stdout, "  mcpace server test [<name>|--name <server>] [--refresh]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace server import <mcp.json> [--dry-run] [--force]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace server test [<name>|--name <server>] [--refresh]"
+    );
     let _ = writeln!(stdout, "  mcpace server list [--json]");
     let _ = writeln!(stdout, "  mcpace server sources [--json]");
-    let _ = writeln!(stdout, "  mcpace server remove|enable|disable <name> [--dry-run]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace server remove|enable|disable <name> [--dry-run]"
+    );
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Install auto-detects the server type and never adds a default server. Examples:");
-    let _ = writeln!(stdout, "  mcpace server import ./mcp.json                 # reuse an existing mcpServers config");
+    let _ = writeln!(
+        stdout,
+        "Install auto-detects the server type and never adds a default server. Examples:"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace server import ./mcp.json                 # reuse an existing mcpServers config"
+    );
     let _ = writeln!(stdout, "  mcpace server install . --as filesystem         # explicit filesystem server for this directory");
-    let _ = writeln!(stdout, "  mcpace server install @modelcontextprotocol/server-filesystem --as filesystem --path .");
-    let _ = writeln!(stdout, "  mcpace server install pypi:mcp-server-time --as time");
-    let _ = writeln!(stdout, "  mcpace server install https://example.com/mcp --as remote");
-    let _ = writeln!(stdout, "  mcpace server install npx -y @modelcontextprotocol/server-filesystem . --as filesystem");
+    let _ = writeln!(
+        stdout,
+        "  mcpace server install @modelcontextprotocol/server-filesystem --as filesystem --path ."
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace server install pypi:mcp-server-time --as time"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace server install https://example.com/mcp --as remote"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace server install npx -y @modelcontextprotocol/server-filesystem . --as filesystem"
+    );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Import accepts either top-level mcpServers (Claude/Cursor style) or servers (VS Code style), skips MCPace's own client entry, preserves unrelated fields, and auto-fills enabled/type when possible.");
     let _ = writeln!(stdout, "Advanced still available: capabilities, candidates, add, --settings, --force, --disabled, --env, --header, --type. Local path input such as . or /repo auto-installs the filesystem server only when you explicitly run install/up with that path.");
@@ -59,7 +89,8 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
             "--" => {
                 if parsed.action.as_deref() == Some("install") {
                     if index + 1 >= args.len() {
-                        parsed.error = Some("server install -- requires a command after --".to_string());
+                        parsed.error =
+                            Some("server install -- requires a command after --".to_string());
                         return parsed;
                     }
                     let mut value = parsed.name_filter.take().unwrap_or_default();
@@ -70,7 +101,8 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
                     parsed.name_filter = Some(value);
                     break;
                 }
-                parsed.error = Some("-- is only supported for server install command specs".to_string());
+                parsed.error =
+                    Some("-- is only supported for server install command specs".to_string());
                 return parsed;
             }
             "list" | "capabilities" | "sources" | "candidates" | "add" | "install" | "import"

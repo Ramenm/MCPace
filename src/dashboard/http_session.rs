@@ -1,7 +1,7 @@
 use super::http_boundary::request_header_string;
 use super::HttpRequest;
 use crate::resources;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 
 pub(super) const DEFAULT_MCP_HTTP_SESSION_TTL_MS: u128 = 60 * 60 * 1000;
 pub(super) const DEFAULT_MCP_HTTP_SESSION_LIMIT: usize = 1024;
@@ -16,6 +16,8 @@ pub(super) struct McpHttpSession {
     pub(super) created_at_ms: u128,
     pub(super) last_seen_at_ms: u128,
     pub(super) expires_at_ms: u128,
+    pub(super) initialized: bool,
+    seen_request_ids: BTreeSet<String>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,6 +27,7 @@ pub(super) enum McpHttpSessionErrorKind {
     Unknown,
     Expired,
     ProtocolMismatch,
+    DuplicateRequestId,
 }
 
 #[derive(Clone, Debug)]
@@ -46,7 +49,8 @@ impl McpHttpSessionError {
             McpHttpSessionErrorKind::Unknown | McpHttpSessionErrorKind::Expired => "404 Not Found",
             McpHttpSessionErrorKind::Missing
             | McpHttpSessionErrorKind::Invalid
-            | McpHttpSessionErrorKind::ProtocolMismatch => "400 Bad Request",
+            | McpHttpSessionErrorKind::ProtocolMismatch
+            | McpHttpSessionErrorKind::DuplicateRequestId => "400 Bad Request",
         }
     }
 }
@@ -97,11 +101,16 @@ impl McpHttpSessionStore {
         protocol_version: &str,
         client_name: Option<String>,
         client_version: Option<String>,
+        initialize_request_id_key: Option<String>,
         now_ms: u128,
     ) -> McpHttpSession {
         self.prune_expired(now_ms);
         if !self.sessions.contains_key(&session_id) {
             self.evict_until_capacity_for_insert();
+        }
+        let mut seen_request_ids = BTreeSet::new();
+        if let Some(id_key) = initialize_request_id_key {
+            seen_request_ids.insert(id_key);
         }
         let session = McpHttpSession {
             id: session_id.clone(),
@@ -111,6 +120,8 @@ impl McpHttpSessionStore {
             created_at_ms: now_ms,
             last_seen_at_ms: now_ms,
             expires_at_ms: now_ms.saturating_add(self.ttl_ms),
+            initialized: false,
+            seen_request_ids,
         };
         self.sessions.insert(session_id, session.clone());
         session
@@ -178,6 +189,42 @@ impl McpHttpSessionStore {
 
         session.last_seen_at_ms = now_ms;
         session.expires_at_ms = now_ms.saturating_add(self.ttl_ms);
+        Ok(session.clone())
+    }
+
+    pub(super) fn mark_initialized_from_request(
+        &mut self,
+        request: &HttpRequest,
+        now_ms: u128,
+    ) -> Result<McpHttpSession, McpHttpSessionError> {
+        let touched = self.touch_from_request(request, now_ms)?;
+        let session = self.sessions.get_mut(&touched.id).ok_or_else(|| {
+            McpHttpSessionError::new(
+                McpHttpSessionErrorKind::Unknown,
+                "unknown MCP HTTP session; initialize again before sending more requests",
+            )
+        })?;
+        session.initialized = true;
+        Ok(session.clone())
+    }
+
+    pub(super) fn track_request_id(
+        &mut self,
+        session_id: &str,
+        request_id_key: &str,
+    ) -> Result<McpHttpSession, McpHttpSessionError> {
+        let session = self.sessions.get_mut(session_id).ok_or_else(|| {
+            McpHttpSessionError::new(
+                McpHttpSessionErrorKind::Unknown,
+                "unknown MCP HTTP session; initialize again before sending more requests",
+            )
+        })?;
+        if !session.seen_request_ids.insert(request_id_key.to_string()) {
+            return Err(McpHttpSessionError::new(
+                McpHttpSessionErrorKind::DuplicateRequestId,
+                "JSON-RPC request id was already used in this MCP HTTP session",
+            ));
+        }
         Ok(session.clone())
     }
 

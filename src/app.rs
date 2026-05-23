@@ -70,10 +70,7 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         "release" => release::run(&args[1..], root_path, stdout, stderr),
         _ => {
             let _ = writeln!(stderr, "unknown command: {}", args[0]);
-            let _ = writeln!(
-                stderr,
-                "Run 'mcpace help' to see the public commands."
-            );
+            let _ = writeln!(stderr, "Run 'mcpace help' to see the public commands.");
             2
         }
     }
@@ -171,9 +168,15 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Usage:");
     let _ = writeln!(stdout, "  mcpace up");
-    let _ = writeln!(stdout, "  mcpace install <path|package|url|command...> [--as <name>] [--dry-run]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace install <path|package|url|command...> [--as <name>] [--dry-run]"
+    );
     let _ = writeln!(stdout, "  mcpace serve [start|stop|status]");
-    let _ = writeln!(stdout, "  mcpace server <list|test|remove|enable|disable|sources>");
+    let _ = writeln!(
+        stdout,
+        "  mcpace server <list|test|remove|enable|disable|sources>"
+    );
     let _ = writeln!(stdout, "  mcpace client <install|export|list|restore>");
     let _ = writeln!(stdout, "  mcpace connect [client]");
     let _ = writeln!(stdout, "  mcpace doctor [--json]");
