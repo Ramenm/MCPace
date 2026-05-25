@@ -79,7 +79,7 @@ pub fn run(
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
         return 1;
     };
-    let root_path = canonicalize_or_original(&root_path);
+    let root_path = runtimepaths::canonicalize_or_original(&root_path);
     let config = match service_config(
         &root_path,
         &parsed.host,
@@ -275,31 +275,6 @@ fn write_help(stdout: &mut dyn Write) {
     );
 }
 
-fn append_serve_resource_args(
-    args: &mut Vec<String>,
-    max_connections: Option<usize>,
-    io_timeout_ms: Option<u64>,
-    max_body_bytes: Option<usize>,
-    overview_cache_ms: Option<u64>,
-) {
-    if let Some(value) = max_connections {
-        args.push("--max-connections".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = io_timeout_ms {
-        args.push("--io-timeout-ms".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = max_body_bytes {
-        args.push("--max-body-bytes".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = overview_cache_ms {
-        args.push("--overview-cache-ms".to_string());
-        args.push(value.to_string());
-    }
-}
-
 fn service_config(
     root_path: &Path,
     host: &str,
@@ -323,7 +298,7 @@ fn service_config(
         "--port".to_string(),
         port.to_string(),
     ];
-    append_serve_resource_args(
+    resources::append_serve_resource_args(
         &mut target_args,
         max_connections,
         io_timeout_ms,
@@ -406,12 +381,9 @@ fn autostart_launcher_command(
         vec![
             "//B".to_string(),
             "//Nologo".to_string(),
-            format!(
-                "\"{}\"",
-                autostart_script_path
-                    .map(command_path_string)
-                    .unwrap_or_else(|| "mcpace-autostart.vbs".to_string())
-            ),
+            autostart_script_path
+                .map(command_path_string)
+                .unwrap_or_else(|| "mcpace-autostart.vbs".to_string()),
         ],
         "windows-hidden-wscript-launcher".to_string(),
     )
@@ -452,8 +424,9 @@ fn write_autostart_script(config: &ServiceConfig) -> Result<(), String> {
         fs::create_dir_all(parent)
             .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
     }
-    let command_line = windows_command_line(
-        std::iter::once(&config.target_app_path).chain(config.target_args.iter()),
+    let command_line = crate::windows_process::windows_command_line_from_strs(
+        std::iter::once(config.target_app_path.as_str())
+            .chain(config.target_args.iter().map(String::as_str)),
     );
     let script = format!(
         "Option Explicit\r\nDim shell\r\nSet shell = CreateObject(\"WScript.Shell\")\r\nshell.Run \"{}\", 0, False\r\n",
@@ -477,49 +450,6 @@ fn write_autostart_script(_config: &ServiceConfig) -> Result<(), String> {
 
 #[cfg(not(windows))]
 fn remove_autostart_script(_config: &ServiceConfig) {}
-
-#[cfg(windows)]
-fn windows_command_line<'a, I>(args: I) -> String
-where
-    I: IntoIterator<Item = &'a String>,
-{
-    args.into_iter()
-        .map(|arg| quote_windows_arg(arg))
-        .collect::<Vec<_>>()
-        .join(" ")
-}
-
-#[cfg(windows)]
-fn quote_windows_arg(arg: &str) -> String {
-    if !arg.is_empty()
-        && !arg
-            .chars()
-            .any(|ch| ch.is_whitespace() || ch == '"' || ch == '\\')
-    {
-        return arg.to_string();
-    }
-
-    let mut quoted = String::from("\"");
-    let mut backslashes = 0usize;
-    for ch in arg.chars() {
-        match ch {
-            '\\' => backslashes += 1,
-            '"' => {
-                quoted.push_str(&"\\".repeat(backslashes * 2 + 1));
-                quoted.push('"');
-                backslashes = 0;
-            }
-            _ => {
-                quoted.push_str(&"\\".repeat(backslashes));
-                quoted.push(ch);
-                backslashes = 0;
-            }
-        }
-    }
-    quoted.push_str(&"\\".repeat(backslashes * 2));
-    quoted.push('"');
-    quoted
-}
 
 #[cfg(windows)]
 fn escape_vbscript_string(value: &str) -> String {
@@ -736,8 +666,4 @@ fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
     );
     let _ = writeln!(stdout, "Backend: {}", backend);
     let _ = writeln!(stdout, "Enabled: {}", if enabled { "yes" } else { "no" });
-}
-
-fn canonicalize_or_original(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }

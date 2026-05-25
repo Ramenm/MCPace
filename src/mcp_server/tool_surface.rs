@@ -1,6 +1,7 @@
 use crate::adapter;
 use crate::json::JsonValue;
 use crate::mcp_protocol as mcp;
+use crate::tool_schemas;
 
 #[derive(Clone, Copy, Debug)]
 pub(super) struct ToolSpec {
@@ -863,7 +864,7 @@ pub(super) fn tool_definition(
                                     (
                                         "description",
                                         JsonValue::string(
-                                            "Tool-result content mode. native preserves upstream content at the top level and avoids duplicate JSON; compat keeps legacy pretty JSON; compact uses compact JSON; summary uses short text plus structuredContent.",
+                                            "Tool-result content mode. native preserves upstream content at the top level and avoids duplicate JSON; compat keeps pretty JSON text; compact uses compact JSON; summary uses short text plus structuredContent.",
                                         ),
                                     ),
                                 ]),
@@ -1000,7 +1001,7 @@ pub(super) fn tool_definition(
                                             "Ordered upstream calls to execute after one initialize handshake.",
                                         ),
                                     ),
-                                    ("items", upstream_batch_call_item_schema()),
+                                    ("items", tool_schemas::upstream_batch_call_item_schema()),
                                 ]),
                             ),
                             (
@@ -1031,7 +1032,7 @@ pub(super) fn tool_definition(
                                     (
                                         "description",
                                         JsonValue::string(
-                                            "Tool-result content mode. native preserves upstream content at the top level and avoids duplicate JSON; compat keeps legacy pretty JSON; compact uses compact JSON; summary uses short text plus structuredContent.",
+                                            "Tool-result content mode. native preserves upstream content at the top level and avoids duplicate JSON; compat keeps pretty JSON text; compact uses compact JSON; summary uses short text plus structuredContent.",
                                         ),
                                     ),
                                 ]),
@@ -1169,67 +1170,4 @@ pub(super) fn mcp_tool_names() -> Vec<String> {
         .iter()
         .map(|tool| tool.name.to_string())
         .collect()
-}
-
-fn upstream_batch_call_item_schema() -> JsonValue {
-    JsonValue::object([(
-        "oneOf",
-        JsonValue::array([
-            JsonValue::object([
-                ("type", JsonValue::string("object")),
-                (
-                    "properties",
-                    JsonValue::object([
-                        (
-                            "tool",
-                            JsonValue::object([
-                                ("type", JsonValue::string("string")),
-                                ("description", JsonValue::string("Upstream tool name.")),
-                            ]),
-                        ),
-                        (
-                            "arguments",
-                            JsonValue::object([
-                                ("type", JsonValue::string("object")),
-                                (
-                                    "description",
-                                    JsonValue::string("Arguments to pass to the upstream tool."),
-                                ),
-                                ("additionalProperties", JsonValue::bool(true)),
-                            ]),
-                        ),
-                    ]),
-                ),
-                ("required", JsonValue::array([JsonValue::string("tool")])),
-                ("additionalProperties", JsonValue::bool(false)),
-            ]),
-            JsonValue::object([
-                ("type", JsonValue::string("array")),
-                (
-                    "description",
-                    JsonValue::string("Compact tuple form: [tool] or [tool, arguments]."),
-                ),
-                ("minItems", JsonValue::number(1)),
-                ("maxItems", JsonValue::number(2)),
-                (
-                    "prefixItems",
-                    JsonValue::array([
-                        JsonValue::object([
-                            ("type", JsonValue::string("string")),
-                            ("description", JsonValue::string("Upstream tool name.")),
-                        ]),
-                        JsonValue::object([
-                            ("type", JsonValue::string("object")),
-                            (
-                                "description",
-                                JsonValue::string("Arguments to pass to the upstream tool."),
-                            ),
-                            ("additionalProperties", JsonValue::bool(true)),
-                        ]),
-                    ]),
-                ),
-                ("items", JsonValue::bool(false)),
-            ]),
-        ]),
-    )])
 }

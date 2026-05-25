@@ -66,25 +66,22 @@ pub(super) fn normalize_server_type(
     has_command: bool,
     has_url: bool,
 ) -> Result<String, String> {
-    let inferred = if has_command {
-        "stdio"
-    } else if has_url {
-        "streamable-http"
-    } else {
-        "stdio"
-    };
-    let value = requested.unwrap_or(inferred).trim().to_ascii_lowercase();
-    let normalized = match value.as_str() {
-        "stdio" | "command" | "local" => "stdio",
-        "http" | "streamable-http" | "streamable_http" | "remote" | "url" => "streamable-http",
-        other => {
-            return Err(format!(
-                "unsupported MCP server type '{}'; use stdio or streamable-http",
-                other
-            ))
-        }
-    };
-    Ok(normalized.to_string())
+    let normalized = crate::source_type::infer_public_source_type(
+        requested.unwrap_or(""),
+        if has_command { "command" } else { "" },
+        if has_url {
+            "https://example.invalid/mcp"
+        } else {
+            ""
+        },
+    );
+    match normalized.as_str() {
+        "stdio" | "streamable-http" => Ok(normalized),
+        other => Err(format!(
+            "unsupported MCP server type '{}'; use stdio or streamable-http",
+            other
+        )),
+    }
 }
 
 pub(super) fn validate_remote_mcp_url(value: &str) -> Result<(), String> {

@@ -55,7 +55,7 @@ pub fn import_mcp_server_entries(
         ));
     }
     let source_value = json_helpers::read_json_file(&source_path)?;
-    let Some(source_servers) = source_servers_object(&source_value) else {
+    let Some(source_servers) = json_helpers::mcp_servers_object(&source_value) else {
         return Err(format!(
             "MCP settings import source '{}' must contain an mcpServers or servers object",
             source_path.display()
@@ -210,11 +210,6 @@ pub fn import_mcp_server_entries(
     })
 }
 
-fn source_servers_object(value: &JsonValue) -> Option<&BTreeMap<String, JsonValue>> {
-    json_helpers::object_at_path(value, &["mcpServers"])
-        .or_else(|| json_helpers::object_at_path(value, &["servers"]))
-}
-
 fn normalize_import_server_value(
     root_path: &Path,
     name: &str,
@@ -291,20 +286,15 @@ fn first_server_url_field(object: &BTreeMap<String, JsonValue>) -> Option<&str> 
 }
 
 fn infer_import_server_type(raw_type: &str, has_command: bool, has_url: bool) -> String {
-    match raw_type.trim().to_ascii_lowercase().as_str() {
-        "" => {
-            if has_url && !has_command {
-                "streamable-http".to_string()
-            } else {
-                "stdio".to_string()
-            }
-        }
-        "streamablehttp" | "streamable-http" | "streamable_http" | "http-stream"
-        | "remote-http" | "remote" | "http" | "url" => "streamable-http".to_string(),
-        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => "sse-legacy".to_string(),
-        "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
-        other => other.to_string(),
-    }
+    crate::source_type::infer_public_source_type(
+        raw_type,
+        if has_command { "command" } else { "" },
+        if has_url {
+            "https://example.invalid/mcp"
+        } else {
+            ""
+        },
+    )
 }
 
 fn looks_like_mcpace_self_entry(

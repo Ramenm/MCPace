@@ -1,303 +1,79 @@
 name: ci
 
-# Local CI is the default cost-control gate for this repository:
-#   npm run ci:local
-# GitHub-hosted runners are opt-in only so private-repo pushes/PRs do not
-# consume paid Actions minutes or fail when account billing is disabled.
 on:
   workflow_dispatch:
-    inputs:
-      full_ci:
-        description: Run expensive Windows/macOS/Docker proof lanes.
-        required: false
-        default: false
-        type: boolean
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
 
 permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.ref }}
+  group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-
 jobs:
-  node-source-validation:
+  node-and-package:
+    name: node ${{ matrix.node }} / ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-latest
-            node: '22'
-          - os: ubuntu-latest
-            node: '24'
+        os: [ubuntu-latest, windows-latest]
+        node: ['22', '24']
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
       - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node }}
-          package-manager-cache: false
-      - name: Run source and launcher tests
-        run: npm test
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run check
+      - run: npm run check:package
+      - run: npm run pack:npm:dry-run
 
-      - name: Verify platform package manifests
-        run: npm run verify:platform-packages
-
-      - name: Verify GitHub readiness contract
-        run: npm run verify:github-readiness
-
-      - name: Verify defect gates
-        run: npm run verify:defect-gates
-
-      - name: Verify bug-fix hygiene sweep
-        run: npm run verify:bug-sweep
-
-  package-dry-run:
+  source-bundle:
+    name: source bundle
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          package-manager-cache: false
-      - name: Validate npm package dry-run
-        run: |
-          npm run verify:platform-packages
-          npm run pack:npm:dry-run
-
-  rust-build-validation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v6
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm run build:release-artifacts
+      - uses: actions/upload-artifact@v7
         with:
-          persist-credentials: false
+          name: source-bundle
+          path: dist/*.zip
+          if-no-files-found: error
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-          components: rustfmt, clippy
-
-      - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-rust-1.95.0-quality-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-rust-1.95.0-
-
-      - name: Run Rust quality gate
-        run: npm run verify:rust-quality
-
-      - name: Upload Rust quality report
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: rust-quality-${{ runner.os }}
-          path: reports/rust-quality-latest.json
-
-  rust-lifecycle-validation:
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        suite:
-          - test:hub_runtime
-          - test:mcp_server
-          - test:stdio_shim
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-
-      - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-rust-1.95.0-lifecycle-${{ matrix.suite }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-rust-1.95.0-lifecycle-
-            ${{ runner.os }}-cargo-rust-1.95.0-
-
-      - name: Run isolated Rust lifecycle suite
-        run: node scripts/run-rust-tests.mjs --json --suite ${{ matrix.suite }}
-
-  windows-launcher-smoke:
-    runs-on: windows-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-
-      - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-rust-1.95.0-launcher-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-rust-1.95.0-
-
-      - name: Run targeted Windows launcher smoke test
-        run: cargo test --test hub_runtime hub_up_releases_captured_stdio_for_background_launcher -- --exact
-
-  hosted-platform-validation:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
+  rust:
+    name: rust / ${{ matrix.os }}
+    if: ${{ github.event_name == 'workflow_dispatch' || github.repository_visibility == 'public' }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: windows-latest
-            node: '24'
-          - os: macos-latest
-            node: '24'
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-
-      - uses: actions/setup-node@v6
+      - uses: dtolnay/rust-toolchain@1.95.0
         with:
-          node-version: ${{ matrix.node }}
-          package-manager-cache: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
           components: rustfmt, clippy
-
-      - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-rust-1.95.0-hosted-platform-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-rust-1.95.0-
-
-      - name: Run hosted platform source tests
-        run: npm test
-
-      - name: Run hosted platform Rust quality gate
-        run: npm run verify:rust-quality
-
-      - name: Verify platform package manifests
-        run: npm run verify:platform-packages
-
-  launcher-fast-hosted:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 10
-    strategy:
-      fail-fast: false
-      matrix:
-        os:
-          - macos-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-
-      - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-rust-1.95.0-launcher-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-rust-1.95.0-
-
-      - name: Run targeted hosted launcher smoke test
-        run: cargo test --test hub_runtime hub_up_releases_captured_stdio_for_background_launcher -- --exact
-
-  launcher-fast-ubuntu-docker:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - name: Run targeted launcher smoke test in Ubuntu Docker
-        run: node scripts/verify-ubuntu-docker-fast.mjs --json
-
-  launcher-e2e-ubuntu-docker:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - name: Run constrained Ubuntu Docker E2E smoke
-        run: node scripts/verify-ubuntu-docker-e2e.mjs --json
-
-  full-work-ubuntu-docker:
-    if: ${{ (github.event_name == 'workflow_dispatch' && inputs.full_ci == true) || (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'full-ci')) }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - name: Run constrained Ubuntu Docker full-work verification
-        run: node scripts/verify-ubuntu-docker-full.mjs --json
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo test

@@ -379,9 +379,9 @@ fn resolve_setup_root(
     discovered_root: Option<PathBuf>,
 ) -> Result<PathBuf, String> {
     if let Some(path) = root_override.or(discovered_root) {
-        return Ok(canonicalize_or_original(&path));
+        return Ok(runtimepaths::canonicalize_or_original(&path));
     }
-    if let Some(home) = user_home_dir() {
+    if let Some(home) = runtimepaths::user_home_dir() {
         return Ok(home.join(".mcpace"));
     }
     std::env::current_dir()
@@ -403,7 +403,7 @@ fn ensure_setup_root_layout(root_path: &Path) -> Result<RootBootstrap, String> {
             error
         )
     })?;
-    let root_path = canonicalize_or_original(root_path);
+    let root_path = runtimepaths::canonicalize_or_original(root_path);
 
     let config_path = root_path.join("mcpace.config.json");
     let created_config = !config_path.is_file();
@@ -504,31 +504,6 @@ fn default_config_json() -> JsonValue {
             ]),
         ),
     ])
-}
-
-fn append_serve_resource_args(
-    args: &mut Vec<String>,
-    max_connections: Option<usize>,
-    io_timeout_ms: Option<u64>,
-    max_body_bytes: Option<usize>,
-    overview_cache_ms: Option<u64>,
-) {
-    if let Some(value) = max_connections {
-        args.push("--max-connections".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = io_timeout_ms {
-        args.push("--io-timeout-ms".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = max_body_bytes {
-        args.push("--max-body-bytes".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = overview_cache_ms {
-        args.push("--overview-cache-ms".to_string());
-        args.push(value.to_string());
-    }
 }
 
 fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
@@ -645,7 +620,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         "--root".to_string(),
         root_text.clone(),
     ];
-    append_serve_resource_args(
+    resources::append_serve_resource_args(
         &mut serve_args,
         parsed.max_connections,
         parsed.io_timeout_ms,
@@ -689,7 +664,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
             "--root".to_string(),
             root_text.clone(),
         ];
-        append_serve_resource_args(
+        resources::append_serve_resource_args(
             &mut args,
             parsed.max_connections,
             parsed.io_timeout_ms,
@@ -998,7 +973,7 @@ fn import_existing_home_mcp_servers(
                 continue;
             }
         };
-        let (shape, servers) = match source_servers_object(&source_value) {
+        let (shape, servers) = match json_helpers::mcp_servers_object_with_key(&source_value) {
             Some(value) => value,
             None => continue,
         };
@@ -1238,7 +1213,7 @@ fn push_existing_home_source_path(
     if !path.is_file() {
         return;
     }
-    let path = canonicalize_or_original(&path);
+    let path = runtimepaths::canonicalize_or_original(&path);
     if seen.insert(path.clone()) {
         sources.push(HomeMcpSource {
             client_id: client_id.to_string(),
@@ -1253,7 +1228,7 @@ fn standard_home_mcp_config_paths(root_path: &Path) -> Vec<(String, PathBuf)> {
         paths.push(("vscode".to_string(), current_dir.join(".vscode/mcp.json")));
         paths.push(("claude-code".to_string(), current_dir.join(".mcp.json")));
     }
-    if let Some(home) = user_home_dir() {
+    if let Some(home) = runtimepaths::user_home_dir() {
         paths.push((
             "claude-desktop".to_string(),
             home.join("Library/Application Support/Claude/claude_desktop_config.json"),
@@ -1295,33 +1270,19 @@ fn standard_home_mcp_config_paths(root_path: &Path) -> Vec<(String, PathBuf)> {
     paths
 }
 
-fn source_servers_object(
-    value: &JsonValue,
-) -> Option<(&'static str, &BTreeMap<String, JsonValue>)> {
-    json_helpers::object_at_path(value, &["mcpServers"])
-        .map(|servers| ("mcpServers", servers))
-        .or_else(|| {
-            json_helpers::object_at_path(value, &["servers"]).map(|servers| ("servers", servers))
-        })
-}
-
 fn normalize_home_import_type(raw_type: &str, has_command: bool, has_url: bool) -> String {
-    match raw_type.trim().to_ascii_lowercase().as_str() {
-        "" => {
-            if has_url && !has_command {
-                "streamable-http".to_string()
-            } else if has_command {
-                "stdio".to_string()
-            } else {
-                String::new()
-            }
-        }
-        "streamablehttp" | "streamable-http" | "streamable_http" | "http-stream"
-        | "remote-http" | "remote" | "http" | "url" => "streamable-http".to_string(),
-        "legacy-sse" | "http+sse" | "http-sse" | "remote-sse" | "sse" => "sse-legacy".to_string(),
-        "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
-        other => other.to_string(),
+    if raw_type.trim().is_empty() && !has_command && !has_url {
+        return String::new();
     }
+    crate::source_type::infer_public_source_type(
+        raw_type,
+        if has_command { "command" } else { "" },
+        if has_url {
+            "https://example.invalid/mcp"
+        } else {
+            ""
+        },
+    )
 }
 
 fn normalize_home_imported_server_value(value: &JsonValue) -> JsonValue {
@@ -1590,7 +1551,7 @@ fn expand_user_or_root_path(expr: &str, root_path: &Path) -> Option<PathBuf> {
         .strip_prefix("~/")
         .or_else(|| trimmed.strip_prefix("~\\"))
     {
-        let mut path = user_home_dir()?;
+        let mut path = runtimepaths::user_home_dir()?;
         for segment in rest.split(['/', '\\']) {
             if !segment.is_empty() {
                 path.push(segment);
@@ -1640,16 +1601,6 @@ fn looks_like_multiword_server_command(spec: &str) -> bool {
     )
 }
 
-fn canonicalize_or_original(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn user_home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
-}
-
 fn command_result_json(result: &CommandResult) -> JsonValue {
     JsonValue::object([
         ("ok", JsonValue::bool(result.ok)),
@@ -1661,7 +1612,7 @@ fn command_result_json(result: &CommandResult) -> JsonValue {
 }
 
 fn empty_object() -> JsonValue {
-    JsonValue::Object(BTreeMap::new())
+    json_helpers::empty_object()
 }
 
 fn result_json(result: Result<JsonValue, String>) -> JsonValue {

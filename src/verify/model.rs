@@ -2,6 +2,7 @@ use crate::doctor;
 use crate::json::JsonValue;
 use crate::profile;
 use crate::server;
+use crate::text_utils;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -69,14 +70,14 @@ fn build_readiness_report(
         .filter(|record| record.effective_enabled)
         .count();
 
-    let missing_required_source_enablement = sorted_unique(
+    let missing_required_source_enablement = text_utils::sorted_unique(
         required_servers
             .iter()
             .filter(|record| !record.source_enabled)
             .map(|record| record.name.clone())
             .collect(),
     );
-    let missing_profile_source_enablement = sorted_unique(
+    let missing_profile_source_enablement = text_utils::sorted_unique(
         profile_enabled_servers
             .iter()
             .filter(|record| !record.source_enabled)
@@ -84,7 +85,7 @@ fn build_readiness_report(
             .collect(),
     );
 
-    let missing_required_commands = sorted_unique(
+    let missing_required_commands = text_utils::sorted_unique(
         required_servers
             .iter()
             .flat_map(|record| record.required_commands.iter())
@@ -92,7 +93,7 @@ fn build_readiness_report(
             .cloned()
             .collect(),
     );
-    let missing_profile_commands = sorted_unique(
+    let missing_profile_commands = text_utils::sorted_unique(
         profile_enabled_servers
             .iter()
             .flat_map(|record| record.required_commands.iter())
@@ -269,10 +270,4 @@ impl ReadinessReport {
         );
         JsonValue::Object(map)
     }
-}
-
-fn sorted_unique(mut values: Vec<String>) -> Vec<String> {
-    values.sort();
-    values.dedup();
-    values
 }

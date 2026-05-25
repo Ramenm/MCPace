@@ -4,6 +4,7 @@ use crate::client::{self, RuntimePlanRequest};
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::runtimepaths;
+use crate::text_utils;
 use std::collections::BTreeMap;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
@@ -133,10 +134,13 @@ impl SessionAccumulator {
                 JsonValue::string(self.session_lease_id.clone()),
             ),
             ("clientId", JsonValue::string(self.client_id.clone())),
-            ("sessionId", optional_json_string(self.session_id.clone())),
+            (
+                "sessionId",
+                json_helpers::json_string_or_null(self.session_id.clone()),
+            ),
             (
                 "projectRoot",
-                optional_json_string(self.project_root.clone()),
+                json_helpers::json_string_or_null(self.project_root.clone()),
             ),
             ("startedAtMs", JsonValue::number(self.started_at_ms)),
             (
@@ -295,10 +299,10 @@ fn conservative_settings_only_route(
     server_name: &str,
 ) -> PlannedRoute {
     let server_token = non_empty_token(server_name, "server");
-    let client_id = request_text(request.client_id.as_ref())
+    let client_id = text_utils::trimmed_non_empty_owned(request.client_id.as_ref())
         .unwrap_or_else(|| "mcpace-upstream-bridge".to_string());
-    let session_id = request_text(request.session_id.as_ref());
-    let project_root = request_text(request.project_root.as_ref());
+    let session_id = text_utils::trimmed_non_empty_owned(request.session_id.as_ref());
+    let project_root = text_utils::trimmed_non_empty_owned(request.project_root.as_ref());
     let project_token = project_root
         .as_deref()
         .map(|value| non_empty_token(value, "global"))
@@ -307,8 +311,8 @@ fn conservative_settings_only_route(
         .as_deref()
         .map(|value| non_empty_token(value, "adhoc"))
         .unwrap_or_else(|| format!("settings-only-{}", server_token));
-    let upstream_transport =
-        request_text(request.transport.as_ref()).unwrap_or_else(|| "stdio".to_string());
+    let upstream_transport = text_utils::trimmed_non_empty_owned(request.transport.as_ref())
+        .unwrap_or_else(|| "stdio".to_string());
 
     PlannedRoute {
         server_name: server_name.to_string(),
@@ -1052,10 +1056,13 @@ fn lease_record_json(
             "sessionLeaseId",
             JsonValue::string(route.session_lease_id.clone()),
         ),
-        ("sessionId", optional_json_string(route.session_id.clone())),
+        (
+            "sessionId",
+            json_helpers::json_string_or_null(route.session_id.clone()),
+        ),
         (
             "projectRoot",
-            optional_json_string(route.project_root.clone()),
+            json_helpers::json_string_or_null(route.project_root.clone()),
         ),
         ("acquiredAtMs", JsonValue::number(acquired_at_ms)),
         ("expiresAtMs", JsonValue::number(expires_at_ms)),
@@ -1077,11 +1084,11 @@ fn route_json(route: &PlannedRoute) -> JsonValue {
         ),
         (
             "requestMutexKey",
-            optional_json_string(route.request_mutex_key.clone()),
+            json_helpers::json_string_or_null(route.request_mutex_key.clone()),
         ),
         (
             "sessionAffinityKey",
-            optional_json_string(route.session_affinity_key.clone()),
+            json_helpers::json_string_or_null(route.session_affinity_key.clone()),
         ),
         ("capacityKey", JsonValue::string(route_capacity_key(route))),
         (
@@ -1094,11 +1101,11 @@ fn route_json(route: &PlannedRoute) -> JsonValue {
         ),
         (
             "projectBindingKey",
-            optional_json_string(route.project_binding_key.clone()),
+            json_helpers::json_string_or_null(route.project_binding_key.clone()),
         ),
         (
             "worktreeBindingKey",
-            optional_json_string(route.worktree_binding_key.clone()),
+            json_helpers::json_string_or_null(route.worktree_binding_key.clone()),
         ),
         (
             "conflictDomain",
@@ -1106,11 +1113,11 @@ fn route_json(route: &PlannedRoute) -> JsonValue {
         ),
         (
             "hostLockKey",
-            optional_json_string(route.host_lock_key.clone()),
+            json_helpers::json_string_or_null(route.host_lock_key.clone()),
         ),
         (
             "stateProfileKey",
-            optional_json_string(route.state_profile_key.clone()),
+            json_helpers::json_string_or_null(route.state_profile_key.clone()),
         ),
         (
             "schedulerLane",
@@ -1207,13 +1214,6 @@ fn strings_at(value: &JsonValue, path: &[&str]) -> Vec<String> {
         .collect()
 }
 
-fn optional_json_string(value: Option<String>) -> JsonValue {
-    match value {
-        Some(value) => JsonValue::string(value),
-        None => JsonValue::Null,
-    }
-}
-
 fn expires_at_ms(value: &JsonValue) -> Option<u128> {
     json_helpers::value_at_path(value, &["expiresAtMs"]).and_then(|value| match value {
         JsonValue::Number(text) => text.parse::<u128>().ok(),
@@ -1234,13 +1234,6 @@ fn clean_required_server_name(server_name: &str) -> Result<String, String> {
         return Err("hub lease acquire requires --server <name>".to_string());
     }
     Ok(server_name.to_string())
-}
-
-fn request_text(value: Option<&String>) -> Option<String> {
-    value
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
 }
 
 fn non_empty_token(value: &str, fallback: &str) -> String {

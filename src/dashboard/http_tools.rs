@@ -1,7 +1,8 @@
-use super::{empty_object, http_boundary, HttpRequest};
+use super::empty_object;
 use crate::adapter;
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::tool_schemas;
 
 pub(super) fn http_tool_definitions() -> Vec<JsonValue> {
     vec![
@@ -646,7 +647,7 @@ pub(super) fn http_tool_definitions() -> Vec<JsonValue> {
                                 "Ordered upstream calls to execute after one initialize handshake. Use this for any stateful upstream server that needs a shared session.",
                             ),
                         ),
-                        ("items", http_upstream_batch_call_item_schema()),
+                        ("items", tool_schemas::upstream_batch_call_item_schema()),
                     ]),
                 ),
                 (
@@ -812,11 +813,6 @@ pub(super) fn http_tool_definitions() -> Vec<JsonValue> {
     ]
 }
 
-pub(super) fn http_tool_definitions_for_request(request: &HttpRequest) -> Vec<JsonValue> {
-    let protocol = http_boundary::request_header_string(Some(request), "mcp-protocol-version");
-    http_tool_definitions_for_protocol(protocol.as_deref())
-}
-
 pub(super) fn http_tool_definitions_for_protocol(protocol: Option<&str>) -> Vec<JsonValue> {
     let options = adapter::tool_surface_options_from_http_header(protocol);
     let names = http_tool_definitions()
@@ -835,21 +831,8 @@ pub(super) fn http_tool_definitions_for_protocol(protocol: Option<&str>) -> Vec<
                 .map(|name| visible.contains(name))
                 .unwrap_or(false)
         })
-        .map(|tool| shape_http_tool_for_client(tool, options))
+        .map(|tool| adapter::shape_tool_for_client(tool, options))
         .collect()
-}
-
-fn shape_http_tool_for_client(tool: JsonValue, options: adapter::ToolSurfaceOptions) -> JsonValue {
-    let JsonValue::Object(mut map) = tool else {
-        return tool;
-    };
-    if !options.include_title {
-        map.remove("title");
-    }
-    if !options.include_annotations {
-        map.remove("annotations");
-    }
-    JsonValue::Object(map)
 }
 
 fn http_tool(name: &str, description: &str) -> JsonValue {
@@ -945,69 +928,6 @@ fn http_tool_with_schema(
             ]),
         ),
     ])
-}
-
-fn http_upstream_batch_call_item_schema() -> JsonValue {
-    JsonValue::object([(
-        "oneOf",
-        JsonValue::array([
-            JsonValue::object([
-                ("type", JsonValue::string("object")),
-                (
-                    "properties",
-                    JsonValue::object([
-                        (
-                            "tool",
-                            JsonValue::object([
-                                ("type", JsonValue::string("string")),
-                                ("description", JsonValue::string("Upstream tool name.")),
-                            ]),
-                        ),
-                        (
-                            "arguments",
-                            JsonValue::object([
-                                ("type", JsonValue::string("object")),
-                                (
-                                    "description",
-                                    JsonValue::string("Arguments to pass to the upstream tool."),
-                                ),
-                                ("additionalProperties", JsonValue::bool(true)),
-                            ]),
-                        ),
-                    ]),
-                ),
-                ("required", JsonValue::array([JsonValue::string("tool")])),
-                ("additionalProperties", JsonValue::bool(false)),
-            ]),
-            JsonValue::object([
-                ("type", JsonValue::string("array")),
-                (
-                    "description",
-                    JsonValue::string("Compact tuple form: [tool] or [tool, arguments]."),
-                ),
-                ("minItems", JsonValue::number(1)),
-                ("maxItems", JsonValue::number(2)),
-                (
-                    "prefixItems",
-                    JsonValue::array([
-                        JsonValue::object([
-                            ("type", JsonValue::string("string")),
-                            ("description", JsonValue::string("Upstream tool name.")),
-                        ]),
-                        JsonValue::object([
-                            ("type", JsonValue::string("object")),
-                            (
-                                "description",
-                                JsonValue::string("Arguments to pass to the upstream tool."),
-                            ),
-                            ("additionalProperties", JsonValue::bool(true)),
-                        ]),
-                    ]),
-                ),
-                ("items", JsonValue::bool(false)),
-            ]),
-        ]),
-    )])
 }
 
 pub(super) fn http_tool_names() -> Vec<String> {

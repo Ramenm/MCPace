@@ -1,4 +1,6 @@
 use crate::doctor;
+use crate::text_utils::join_or_none;
+use crate::text_utils::yes_no;
 use crate::verify::model::collect_readiness;
 use std::io::Write;
 use std::path::PathBuf;
@@ -140,20 +142,4 @@ pub(super) fn run_readiness(
         yes_no(readiness.container_tooling_ready)
     );
     0
-}
-
-fn join_or_none(values: &[String]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join(", ")
-    }
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
 }

@@ -7,7 +7,7 @@ pub enum ToolResultMode {
     /// Native-first MCP behavior: preserve upstream content items at the top level when
     /// possible, keep structuredContent useful, and avoid duplicating large JSON text.
     Native,
-    /// Legacy MCPace behavior: pretty JSON text plus structuredContent.
+    /// Pretty JSON text plus structuredContent for clients that prefer serialized output.
     Compat,
     /// MCP-compatible compact serialized JSON text plus structuredContent.
     Compact,
@@ -166,15 +166,6 @@ pub fn upstream_tool_result_payload(
             tool_result_payload(shaped, effective_is_error, options)
         }
     }
-}
-
-/// Preserve the old public helper for callers that want to pre-shape an upstream wrapper payload.
-pub fn shape_upstream_structured_content(
-    value: JsonValue,
-    options: ToolResultOptions,
-) -> JsonValue {
-    let value = shape_upstream_diagnostics(value, options.upstream_diagnostics);
-    shape_nested_upstream_content(value, options.nested_upstream_content)
 }
 
 fn default_result_mode() -> ToolResultMode {

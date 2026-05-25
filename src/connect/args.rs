@@ -1,3 +1,4 @@
+use crate::text_utils::normalize_flag;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -89,8 +90,4 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "  mcpace connect --client cursor-local --server filesystem --json"
     );
-}
-
-fn normalize_flag(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
 }

@@ -1,5 +1,5 @@
 use super::super::args::ParsedArgs;
-use super::super::render::{count_static, join_count_map, join_or_none};
+use super::super::render::{count_static, join_count_map, join_semicolon_or_none};
 use super::read_client_key_name;
 use crate::client_catalog::{
     self, client_install_support_summary_for_targets, ClientTargetRecord as ClientTarget,
@@ -128,12 +128,12 @@ pub(in crate::client) fn run_list(
     let _ = writeln!(
         stdout,
         "Catalog sources: {}",
-        join_or_none(&registry.sources)
+        join_semicolon_or_none(&registry.sources)
     );
     let _ = writeln!(
         stdout,
         "Catalog warnings: {}",
-        join_or_none(&registry.warnings)
+        join_semicolon_or_none(&registry.warnings)
     );
     let _ = writeln!(stdout, "Families: {}", join_count_map(&family_counts));
     let _ = writeln!(
@@ -165,8 +165,8 @@ pub(in crate::client) fn run_list(
             target.surface_kind,
             target.proof_tier(),
             target.config_format,
-            join_or_none(&target.supported_ingresses),
-            join_or_none(&target.native_scopes),
+            join_semicolon_or_none(&target.supported_ingresses),
+            join_semicolon_or_none(&target.native_scopes),
             install_label,
         );
         let _ = writeln!(
@@ -179,24 +179,28 @@ pub(in crate::client) fn run_list(
                 .install_support()
                 .map(|value| value.kind.as_str())
                 .unwrap_or("manual"),
-            join_or_none(&target.config_paths)
+            join_semicolon_or_none(&target.config_paths)
         );
         let _ = writeln!(
             stdout,
             "    precedence={}",
-            join_or_none(&target.config_precedence)
+            join_semicolon_or_none(&target.config_precedence)
         );
         let _ = writeln!(
             stdout,
             "    features={}",
-            join_or_none(&target.documented_features)
+            join_semicolon_or_none(&target.documented_features)
         );
         let _ = writeln!(
             stdout,
             "    constraints={}",
-            join_or_none(&target.documented_constraints)
+            join_semicolon_or_none(&target.documented_constraints)
         );
-        let _ = writeln!(stdout, "    notes={}", join_or_none(&target.notes));
+        let _ = writeln!(
+            stdout,
+            "    notes={}",
+            join_semicolon_or_none(&target.notes)
+        );
     }
     0
 }

@@ -262,9 +262,17 @@ fn read_env_latest_version() -> Result<Option<String>, String> {
         .filter(|value| !value.is_empty()))
 }
 
+fn npm_command_name() -> &'static str {
+    if cfg!(windows) {
+        "npm.cmd"
+    } else {
+        "npm"
+    }
+}
+
 fn read_npm_latest_version(package_name: &str) -> Result<Option<String>, String> {
     let timeout = update_timeout();
-    let mut command = Command::new("npm");
+    let mut command = Command::new(npm_command_name());
     command
         .args(["view", package_name, "version", "--silent"])
         .stdin(Stdio::null())

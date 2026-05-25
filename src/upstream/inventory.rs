@@ -4,6 +4,7 @@ use super::{
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::resources::env_usize;
 use std::path::Path;
 use std::time::Instant;
 
@@ -657,8 +658,4 @@ fn catalog_server_response_view(server: &JsonValue, per_server_limit: usize) -> 
     );
     map.insert("tools".to_string(), JsonValue::array(returned));
     JsonValue::Object(map)
-}
-
-fn env_usize(name: &str) -> Option<usize> {
-    std::env::var(name).ok()?.trim().parse::<usize>().ok()
 }

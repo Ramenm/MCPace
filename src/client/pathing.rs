@@ -1,3 +1,5 @@
+use crate::text_utils;
+
 pub(super) fn path_is_within(path: &str, root: &str) -> bool {
     let normalized_path = trim_trailing_separator(path);
     let normalized_root = trim_trailing_separator(root);
@@ -25,7 +27,7 @@ fn looks_like_windows_path(value: &str) -> bool {
 }
 
 pub(super) fn normalize(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
+    text_utils::normalize_flag(value)
 }
 
 pub(super) fn normalize_transport(value: &str) -> String {

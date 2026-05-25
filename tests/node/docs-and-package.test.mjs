@@ -19,6 +19,9 @@ const REMOVED_ROOT_DOCS = [
   'CONTRIBUTING.md',
   'SOURCE_ARCHIVE_NOTE.txt'
 ];
+const REMOVED_LEGACY_CONFIGS = [
+  'manager.settings.json'
+];
 const FORBIDDEN_DIRS = [
   '.git',
   'node_modules',
@@ -99,7 +102,7 @@ test('docs directory contains the normalized user-facing set only', () => {
 
 test('source bundle excludes stale public-repo docs and heavyweight artifacts', () => {
   const manifest = JSON.parse(readText('release-manifest.json'));
-  for (const relativePath of REMOVED_ROOT_DOCS) {
+  for (const relativePath of [...REMOVED_ROOT_DOCS, ...REMOVED_LEGACY_CONFIGS]) {
     assert.equal(fs.existsSync(path.join(repoRoot, relativePath)), false, `${relativePath} should not be in the source bundle`);
   }
 
@@ -118,8 +121,34 @@ test('release manifest matches the normalized bundle contract', () => {
   for (const required of ['README.md', 'docs/README.md', 'reports/summary.md', 'tests/node', 'packages/npm/cli', 'scripts/check-node-syntax.mjs']) {
     assert.ok(manifest.includePaths.includes(required), `manifest missing ${required}`);
   }
-  for (const removed of REMOVED_ROOT_DOCS) {
+  for (const removed of [...REMOVED_ROOT_DOCS, ...REMOVED_LEGACY_CONFIGS]) {
     assert.equal(manifest.includePaths.includes(removed), false, `manifest still includes ${removed}`);
   }
   assert.equal(manifest.includePaths.some((item) => item.startsWith('packages/npm/cli-')), false, 'manifest still includes platform package scaffolding');
 });
+
+test('bundled hub examples align with the hub schema empty-manual-profile contract', () => {
+  const schema = JSON.parse(readText('schemas/mcpace-hub.schema.json'));
+  const schemaProperties = schema.properties || {};
+
+  assert.equal(schemaProperties.compatibility, undefined, 'retired legacy bridge flags must not stay in the hub schema');
+  assert.equal(schemaProperties.servers.minItems ?? 0, 0, 'manual hub examples must be allowed to start with zero upstream servers');
+  assert.equal(
+    schemaProperties.profiles.properties.definitions.additionalProperties.properties.serverIds.minItems ?? 0,
+    0,
+    'manual profile examples must be allowed to start with zero serverIds'
+  );
+
+  for (const relativePath of ['examples/mcpace-hub.minimal.json', 'examples/mcpace-hub.workstation.json']) {
+    const example = JSON.parse(readText(relativePath));
+    assert.equal(example.compatibility, undefined, `${relativePath} must not ship retired legacy bridge flags`);
+    for (const key of Object.keys(example)) {
+      assert.ok(schemaProperties[key], `${relativePath} has top-level key not described by schema: ${key}`);
+    }
+    assert.deepEqual(example.servers, [], `${relativePath} should remain safe-by-default with no bundled upstream servers`);
+    for (const [profileName, profile] of Object.entries(example.profiles.definitions)) {
+      assert.ok(Array.isArray(profile.serverIds), `${relativePath} profile ${profileName} must declare serverIds`);
+    }
+  }
+});
+

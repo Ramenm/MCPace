@@ -247,8 +247,27 @@ fn windows_quote(value: &str) -> String {
             .chars()
             .any(|ch| ch.is_whitespace() || ch == '"' || ch == '\\')
     {
-        value.into()
-    } else {
-        format!("\"{}\"", value.replace('"', "\"\""))
+        return value.into();
     }
+
+    let mut quoted = String::from("\"");
+    let mut backslashes = 0usize;
+    for ch in value.chars() {
+        match ch {
+            '\\' => backslashes += 1,
+            '"' => {
+                quoted.push_str(&"\\".repeat(backslashes * 2 + 1));
+                quoted.push('"');
+                backslashes = 0;
+            }
+            _ => {
+                quoted.push_str(&"\\".repeat(backslashes));
+                quoted.push(ch);
+                backslashes = 0;
+            }
+        }
+    }
+    quoted.push_str(&"\\".repeat(backslashes * 2));
+    quoted.push('"');
+    quoted
 }

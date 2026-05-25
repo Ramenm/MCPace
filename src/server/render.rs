@@ -1,6 +1,8 @@
 use super::model::ServerRecord;
 use crate::json::JsonValue;
 use crate::mcp_sources::{McpServerRemoveResult, McpServerToggleResult};
+use crate::text_utils::join_or_none;
+use crate::text_utils::yes_no;
 use std::io::Write;
 
 pub(super) fn render_list(
@@ -139,14 +141,6 @@ fn filter_records<'a>(
                 .collect()
         }
         None => records.iter().collect(),
-    }
-}
-
-fn join_or_none(values: &[String]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join(", ")
     }
 }
 
@@ -294,14 +288,6 @@ pub(super) fn render_import_result(
         let _ = writeln!(stdout, "no files written; rerun without --dry-run to apply");
     }
     0
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
 }
 
 pub(super) fn render_sources(

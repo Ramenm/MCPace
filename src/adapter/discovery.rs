@@ -999,7 +999,7 @@ fn resolve_projected_prompt(
     Ok(None)
 }
 
-pub(super) fn shape_tool_for_client(tool: JsonValue, options: ToolSurfaceOptions) -> JsonValue {
+pub(crate) fn shape_tool_for_client(tool: JsonValue, options: ToolSurfaceOptions) -> JsonValue {
     let JsonValue::Object(mut map) = tool else {
         return tool;
     };

@@ -1,19 +1,21 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
+use crate::resources::{env_bool, env_u64, env_usize};
 use crate::upstream;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 mod discovery;
 mod profile;
 mod proxy_uri;
+pub(crate) use self::discovery::shape_tool_for_client;
 pub use self::discovery::{
     adapter_route_plan, get_prompt, list_prompts, list_resource_templates, list_resources,
     read_resource, upstream_search,
 };
 use self::discovery::{
-    estimate_json_tokens, paginated_tool_list, projected_tool_definition, shape_tool_for_client,
-    take_tools_with_budget, tool_names, tool_projection_rank,
+    estimate_json_tokens, paginated_tool_list, projected_tool_definition, take_tools_with_budget,
+    tool_names, tool_projection_rank,
 };
 pub use self::profile::adapter_profile;
 use self::proxy_uri::{
@@ -103,7 +105,7 @@ impl ToolSurfaceOptions {
             include_annotations: true,
         }
     }
-    pub fn legacy() -> Self {
+    pub fn compact() -> Self {
         Self {
             include_title: false,
             include_annotations: false,
@@ -185,14 +187,14 @@ pub fn tool_surface_options_from_protocol(protocol_version: &str) -> ToolSurface
         .map(|value| value.trim().to_ascii_lowercase())
         .as_deref()
     {
-        Some("legacy") | Some("old") | Some("compact") => return ToolSurfaceOptions::legacy(),
+        Some("compact") => return ToolSurfaceOptions::compact(),
         Some("native") | Some("current") | Some("modern") => return ToolSurfaceOptions::current(),
         _ => {}
     }
     if protocol_rank(protocol_version) >= protocol_rank("2025-03-26") {
         ToolSurfaceOptions::current()
     } else {
-        ToolSurfaceOptions::legacy()
+        ToolSurfaceOptions::compact()
     }
 }
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -828,9 +830,6 @@ pub fn strip_projected_adapter_arguments(arguments: &JsonValue) -> JsonValue {
         if key == "_mcpace" || key == "mcpace" {
             continue;
         }
-        if legacy_projected_top_level_controls_enabled() && projected_adapter_argument_key(key) {
-            continue;
-        }
         cleaned.insert(key.clone(), value.clone());
     }
     JsonValue::Object(cleaned)
@@ -845,15 +844,6 @@ pub fn projected_adapter_control_arguments(arguments: &JsonValue) -> JsonValue {
         &mut controls,
         json_helpers::value_at_path(arguments, &["mcpace"]),
     );
-    if legacy_projected_top_level_controls_enabled() {
-        if let Some(object) = arguments.as_object() {
-            for (key, value) in object {
-                if projected_adapter_argument_key(key) {
-                    controls.insert(key.clone(), value.clone());
-                }
-            }
-        }
-    }
     JsonValue::Object(controls)
 }
 fn merge_control_object(target: &mut BTreeMap<String, JsonValue>, value: Option<&JsonValue>) {
@@ -863,36 +853,6 @@ fn merge_control_object(target: &mut BTreeMap<String, JsonValue>, value: Option<
     for (key, value) in object {
         target.insert(key.clone(), value.clone());
     }
-}
-fn legacy_projected_top_level_controls_enabled() -> bool {
-    env_bool("MCPACE_PROJECTED_LEGACY_TOP_LEVEL_CONTROLS").unwrap_or(false)
-}
-fn projected_adapter_argument_key(key: &str) -> bool {
-    matches!(
-        key,
-        "clientId"
-            | "sessionId"
-            | "projectRoot"
-            | "transport"
-            | "ttlMs"
-            | "metadata"
-            | "timeoutMs"
-            | "resultMode"
-            | "toolResultMode"
-            | "diagnostics"
-            | "upstreamDiagnostics"
-            | "nestedContent"
-            | "upstreamNestedContent"
-            | "tokenReducerPlugins"
-            | "resultPlugins"
-            | "tokenReducerPluginPolicy"
-            | "pluginPolicy"
-            | "resultPluginPolicy"
-            | "allowArguments"
-            | "allowToolRiskClasses"
-            | "allowUnknownTool"
-            | "allowUnknownUpstreamTool"
-    )
 }
 fn prefixed_description(server: &str, name: &str, description: &str) -> String {
     let trimmed = description.trim();
@@ -1146,24 +1106,6 @@ fn protocol_rank(protocol_version: &str) -> usize {
         "2025-06-18" => 3,
         "2025-11-25" => 4,
         _ => 4,
-    }
-}
-fn env_usize(name: &str) -> Option<usize> {
-    std::env::var(name).ok()?.trim().parse::<usize>().ok()
-}
-fn env_u64(name: &str) -> Option<u64> {
-    std::env::var(name).ok()?.trim().parse::<u64>().ok()
-}
-fn env_bool(name: &str) -> Option<bool> {
-    match std::env::var(name)
-        .ok()?
-        .trim()
-        .to_ascii_lowercase()
-        .as_str()
-    {
-        "1" | "true" | "yes" | "on" => Some(true),
-        "0" | "false" | "no" | "off" => Some(false),
-        _ => None,
     }
 }
 #[cfg(test)]

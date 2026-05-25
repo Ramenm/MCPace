@@ -1,50 +1,17 @@
-## Why
+## Summary
 
-Describe the intent of the change and the constraint it answers.
+Describe the change and why it is needed.
 
-Linked issue:
+## Validation
 
-## What Changed
-
--
-
-## Bug / Regression Closure
-
-- [ ] This is not a bugfix/regression fix
-- [ ] Reproduction or failing test was captured before the fix
-- [ ] Root cause is described below
-- [ ] Regression test or proof artifact now protects the behavior
-
-Root cause:
-
-Regression test:
-
-Runtime trace:
-
-## Verification
-
-- [ ] `npm test`
-- [ ] `npm run verify:defect-gates`
-- [ ] `npm run verify:bug-sweep`
-- [ ] `npm run verify:github-readiness`
-- [ ] `npm run verify:product-practice`
+- [ ] `npm run check`
 - [ ] `npm run pack:npm:dry-run`
-- [ ] `cargo fmt --all -- --check`
-- [ ] `cargo clippy --all-targets --locked -- -D warnings` (when a Rust host is available)
-- [ ] `cargo test --all-targets --locked` (when a Rust host is available)
-- [ ] Additional targeted verification:
+- [ ] `npm run release:dry-run`
+- [ ] `cargo fmt --check`
+- [ ] `cargo clippy --all-targets -- -D warnings`
+- [ ] `cargo test`
 
-## Repo Contract Hygiene
+## Windows / MCP notes
 
-- [ ] No deleted PowerShell entrypoints were reintroduced
-- [ ] Docs/tests/manifests/reports stay aligned with the actual repo state
-- [ ] Unsupported or unproven behavior is described honestly
-- [ ] New public claims have fresh proof reports
-
-## Risks
-
--
-
-## Not-tested
-
--
+- [ ] npm/npx process launches use `.cmd` on Windows where needed.
+- [ ] MCP stdio code writes only valid protocol messages to stdout; diagnostics go to stderr.

@@ -1,4 +1,5 @@
 use crate::client_catalog::ClientTargetRecord;
+use crate::platform_utils;
 use crate::runtimepaths;
 use crate::server::ServerRecord;
 use std::path::Path;
@@ -213,11 +214,11 @@ fn build_server_plan(record: &ServerRecord, context: &ResolvedContext) -> Server
             record.name
         ));
     }
-    if !server_supports_current_platform(record) {
+    if !platform_utils::supports_current_platform(&record.platforms) {
         warnings.push(format!(
             "{} is not declared for the current platform '{}'; installer/startup logic should skip it unless an override proves compatibility.",
             record.name,
-            current_platform_alias()
+            platform_utils::current_platform_alias()
         ));
     }
     warnings.sort();
@@ -649,35 +650,6 @@ fn credential_partition(
 fn is_none_marker(value: &str) -> bool {
     let normalized = value.trim().to_ascii_lowercase();
     normalized.is_empty() || normalized == "none" || normalized == "false"
-}
-
-fn server_supports_current_platform(record: &ServerRecord) -> bool {
-    if record.platforms.is_empty() {
-        return true;
-    }
-    let current = current_platform_alias();
-    record.platforms.iter().any(|platform| {
-        let normalized = normalize_platform(platform);
-        normalized == current || normalized == "any" || normalized == "all" || normalized == "*"
-    })
-}
-
-fn current_platform_alias() -> &'static str {
-    match std::env::consts::OS {
-        "macos" => "macos",
-        "windows" => "windows",
-        "linux" => "linux",
-        other => other,
-    }
-}
-
-fn normalize_platform(value: &str) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "darwin" | "mac" | "osx" | "macos" => "macos".to_string(),
-        "win" | "windows" => "windows".to_string(),
-        "linux" => "linux".to_string(),
-        other => other.to_string(),
-    }
 }
 
 fn admission_state(record: &ServerRecord) -> String {

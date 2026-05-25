@@ -1,3 +1,4 @@
+use crate::text_utils::normalize_flag;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -63,8 +64,4 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Implemented now:");
     let _ = writeln!(stdout, "  mcpace verify doctor [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace verify readiness [--json] [--root <path>]");
-}
-
-fn normalize_flag(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
 }

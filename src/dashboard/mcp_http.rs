@@ -1,7 +1,7 @@
 use super::{
     empty_object, http_boundary, http_headers, http_session, http_tool_definitions,
-    http_tool_definitions_for_protocol, now_ms, reject_forbidden_origin, run_http_tool,
-    write_empty_response, write_empty_response_with_headers, write_json_response,
+    http_tool_definitions_for_protocol, http_tool_names, now_ms, reject_forbidden_origin,
+    run_http_tool, write_empty_response, write_empty_response_with_headers, write_json_response,
     write_json_response_with_owned_headers, write_text_response, DashboardConfig, HttpRequest,
     McpHttpResponse, ServeSurface,
 };
@@ -186,7 +186,7 @@ fn handle_mcp_http_request(
             mcp_error_response(id, mcp::ERROR_INVALID_REQUEST, error),
         ));
     }
-    if request_id.is_some() && method_is_notification(method) {
+    if request_id.is_some() && mcp::method_is_notification(method) {
         return Ok(McpHttpResponse::JsonStatus(
             "400 Bad Request",
             mcp_error_response(
@@ -472,7 +472,8 @@ fn handle_mcp_http_request(
             Ok(McpHttpResponse::Json(result))
         }
         "tools/call" => {
-            let Some(tool_name) = json_helpers::string_at_path(&message, &["params", "name"]) else {
+            let Some(tool_name) = json_helpers::string_at_path(&message, &["params", "name"])
+            else {
                 return Ok(McpHttpResponse::Json(mcp_error_response(
                     id,
                     mcp::ERROR_INVALID_PARAMS,
@@ -490,7 +491,11 @@ fn handle_mcp_http_request(
                 }
             };
             let projected_call = tool_name.starts_with("u_");
-            if !projected_call && !http_tool_names().iter().any(|name| name.as_str() == tool_name) {
+            if !projected_call
+                && !http_tool_names()
+                    .iter()
+                    .any(|name| name.as_str() == tool_name)
+            {
                 return Ok(McpHttpResponse::Json(mcp_error_response(
                     id,
                     mcp::ERROR_INVALID_PARAMS,
@@ -567,10 +572,6 @@ fn handle_mcp_http_request(
     }
 }
 
-fn method_is_notification(method: &str) -> bool {
-    method.starts_with("notifications/")
-}
-
 fn touch_mcp_session_for_request(
     request: &HttpRequest,
     config: &DashboardConfig,
@@ -588,7 +589,9 @@ fn touch_mcp_session_for_request(
                 http_session::McpHttpSessionErrorKind::Missing
                 | http_session::McpHttpSessionErrorKind::Invalid
                 | http_session::McpHttpSessionErrorKind::ProtocolMismatch
-                | http_session::McpHttpSessionErrorKind::DuplicateRequestId => mcp::ERROR_INVALID_REQUEST,
+                | http_session::McpHttpSessionErrorKind::DuplicateRequestId => {
+                    mcp::ERROR_INVALID_REQUEST
+                }
                 http_session::McpHttpSessionErrorKind::Unknown
                 | http_session::McpHttpSessionErrorKind::Expired => mcp::ERROR_NOT_INITIALIZED,
             };

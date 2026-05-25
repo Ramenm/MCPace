@@ -1,6 +1,7 @@
 use super::sanitize_path_for_display;
 use crate::codex_config;
 use crate::json::{parse_str, JsonValue};
+use crate::json_helpers;
 use std::path::Path;
 
 pub(super) fn build_unified_config_diff(path: &Path, before: &str, after: &str) -> String {
@@ -163,7 +164,7 @@ pub(super) fn detect_newline(existing: &str) -> &'static str {
 }
 
 fn empty_json_object() -> JsonValue {
-    JsonValue::object::<String, Vec<(String, JsonValue)>>(Vec::new())
+    json_helpers::empty_object()
 }
 
 pub(super) fn build_toml_managed_block(
@@ -214,7 +215,7 @@ pub(super) fn upsert_json_mcp_server(
     config_path: &Path,
 ) -> Result<ClientConfigUpdate, String> {
     let mut root = if existing.trim().is_empty() {
-        JsonValue::object::<String, Vec<(String, JsonValue)>>(Vec::new())
+        json_helpers::empty_object()
     } else {
         parse_str(existing).map_err(|error| {
             format!(
@@ -709,7 +710,7 @@ mod tests {
     use std::path::Path;
 
     #[test]
-    fn toml_managed_block_repair_preserves_foreign_tables_when_legacy_marker_overreaches() {
+    fn toml_managed_block_repair_preserves_foreign_tables_when_marker_overreaches() {
         let existing = concat!(
             "model = \"gpt\"\n",
             "\n",
@@ -730,7 +731,7 @@ mod tests {
 
         let update =
             upsert_toml_managed_block(existing, "MCPace", &managed_block, Path::new("config.toml"))
-                .expect("legacy over-wide block should be recoverable");
+                .expect("over-wide managed block should be recoverable");
 
         assert!(update.replaced_existing_block);
         assert!(update.contents.contains("[plugins]\nenabled = true"));

@@ -1,6 +1,6 @@
 use super::{build_adapter_contract, resolve_export_mode, yes_no};
 use crate::client::model::ClientPlan;
-use crate::client::render::join_or_none;
+use crate::client::render::join_semicolon_or_none;
 use crate::client_catalog::ClientTargetRecord as ClientTarget;
 use crate::json::JsonValue;
 use crate::runtimepaths;
@@ -308,16 +308,20 @@ impl ClientExportPreview {
         );
         let _ = writeln!(stdout, "Adapter key: {}", self.adapter_key_name);
         let _ = writeln!(stdout, "Config format: {}", self.config_format);
-        let _ = writeln!(stdout, "Config paths: {}", join_or_none(&self.config_paths));
+        let _ = writeln!(
+            stdout,
+            "Config paths: {}",
+            join_semicolon_or_none(&self.config_paths)
+        );
         let _ = writeln!(
             stdout,
             "Config precedence: {}",
-            join_or_none(&self.config_precedence)
+            join_semicolon_or_none(&self.config_precedence)
         );
         let _ = writeln!(
             stdout,
             "Native scopes: {}",
-            join_or_none(&self.native_scopes)
+            join_semicolon_or_none(&self.native_scopes)
         );
         let _ = writeln!(stdout, "Preferred ingress: {}", self.preferred_ingress);
         let _ = writeln!(stdout, "Export mode: {}", self.export_mode);
@@ -340,9 +344,21 @@ impl ClientExportPreview {
             self.recommended_install_path.as_deref().unwrap_or("none")
         );
         self.adapter_contract.write_text(stdout);
-        let _ = writeln!(stdout, "Blockers: {}", join_or_none(&self.blockers));
-        let _ = writeln!(stdout, "Warnings: {}", join_or_none(&self.warnings));
-        let _ = writeln!(stdout, "Next actions: {}", join_or_none(&self.next_actions));
+        let _ = writeln!(
+            stdout,
+            "Blockers: {}",
+            join_semicolon_or_none(&self.blockers)
+        );
+        let _ = writeln!(
+            stdout,
+            "Warnings: {}",
+            join_semicolon_or_none(&self.warnings)
+        );
+        let _ = writeln!(
+            stdout,
+            "Next actions: {}",
+            join_semicolon_or_none(&self.next_actions)
+        );
     }
 }
 
@@ -496,7 +512,11 @@ impl ClientInstallResult {
                 let _ = writeln!(stdout, "Diff:\n{}", diff);
             }
         }
-        let _ = writeln!(stdout, "Warnings: {}", join_or_none(&self.warnings));
+        let _ = writeln!(
+            stdout,
+            "Warnings: {}",
+            join_semicolon_or_none(&self.warnings)
+        );
     }
 }
 
@@ -593,7 +613,11 @@ impl AdapterContractPreview {
             "Adapter command: {}",
             self.command.as_deref().unwrap_or("none")
         );
-        let _ = writeln!(stdout, "Adapter args: {}", join_or_none(&self.args));
+        let _ = writeln!(
+            stdout,
+            "Adapter args: {}",
+            join_semicolon_or_none(&self.args)
+        );
         let _ = writeln!(
             stdout,
             "Adapter URL template: {}",
@@ -601,6 +625,10 @@ impl AdapterContractPreview {
         );
         let _ = writeln!(stdout, "Metadata carrier: {}", self.metadata_carrier);
         let _ = writeln!(stdout, "Session model: {}", self.session_model);
-        let _ = writeln!(stdout, "Adapter notes: {}", join_or_none(&self.notes));
+        let _ = writeln!(
+            stdout,
+            "Adapter notes: {}",
+            join_semicolon_or_none(&self.notes)
+        );
     }
 }

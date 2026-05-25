@@ -15,8 +15,7 @@ mod response;
 mod tool_runtime;
 use self::diagnostics::runtime_diagnostics;
 use self::http_tools::{
-    http_tool_definitions, http_tool_definitions_for_protocol, http_tool_definitions_for_request,
-    http_tool_names,
+    http_tool_definitions, http_tool_definitions_for_protocol, http_tool_names,
 };
 use self::mcp_http::{handle_mcp_http_route, write_json_error_response};
 use self::overview::{

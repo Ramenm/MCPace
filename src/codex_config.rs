@@ -1,3 +1,5 @@
+use crate::text_utils;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct CodexMcpCommand {
     pub(crate) server_name: String,
@@ -144,10 +146,7 @@ fn find_toml_quoted_string_end(value: &str, quote: char) -> Option<usize> {
 }
 
 pub(crate) fn is_bare_toml_key(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
+    text_utils::ascii_alnum_dash_underscore(value)
 }
 
 pub(crate) fn toml_basic_string(value: &str) -> String {

@@ -32,35 +32,27 @@ jobs:
         with:
           node-version-file: .nvmrc
           registry-url: https://registry.npmjs.org
-          package-manager-cache: false
+          cache: npm
+
+      - name: Install locked Node tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Verify exact npm version for trusted publishing
         run: npm exec --yes --package=npm@11.13.0 -- npm --version
 
-      - name: Download npm tarballs from the matching GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          mkdir -p dist/npm
-          gh release download "$GITHUB_REF_NAME" --dir dist/npm --pattern '*.tgz' --pattern 'SHA256SUMS.txt'
-
-      - name: Verify downloaded npm tarballs against release checksums
-        run: node scripts/verify-release-checksums.mjs --json --artifact-dir dist/npm
-
-      - name: Inject exact GitHub repository metadata for trusted publishing
-        run: node scripts/sync-platform-packages.mjs --json --repository-url "${{ github.server_url }}/${{ github.repository }}"
-
       - name: Validate source and publish contracts
         run: |
-          npm test
-          node scripts/verify-publish-readiness.mjs --json --repository-url "${{ github.server_url }}/${{ github.repository }}"
+          npm run check
+          npm run check:package
+          npm run pack:npm:dry-run
 
-      - name: Publish prebuilt npm artifacts
+      - name: Publish main npm launcher
+        working-directory: packages/npm/cli
         env:
           MCPACE_NPM_EXEC_PACKAGE: npm@11.13.0
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            node scripts/publish-npm-artifacts.mjs --json --artifact-dir dist/npm --dry-run
+            npm publish --dry-run --access public
           else
-            node scripts/publish-npm-artifacts.mjs --json --artifact-dir dist/npm
+            npm publish --access public
           fi

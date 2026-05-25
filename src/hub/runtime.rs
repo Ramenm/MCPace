@@ -7,7 +7,6 @@ use std::env;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 const DEFAULT_MAX_LOG_BYTES: u64 = 1_048_576;
 
@@ -366,10 +365,7 @@ pub(super) fn acquire_runtime_lock(
 }
 
 pub(super) fn now_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or(0)
+    runtimepaths::unix_time_ms()
 }
 
 fn seed_json_if_missing(path: &Path, value: JsonValue) -> Result<bool, String> {

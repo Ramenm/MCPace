@@ -2,6 +2,7 @@ use super::model::{HubStatus, RepairReport};
 use super::{launcher, runtime, status};
 use crate::json::JsonValue;
 use crate::runtimepaths;
+use crate::text_utils::join_or_none;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::Write;
@@ -460,12 +461,4 @@ fn write_repair_response(
         final_status.status, final_status.health
     );
     0
-}
-
-fn join_or_none(values: &[String]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join(", ")
-    }
 }

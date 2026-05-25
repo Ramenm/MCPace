@@ -163,6 +163,22 @@ pub fn parse_nonnegative_u64(value: &str, label: &str) -> Result<u64, String> {
         .map_err(|_| format!("{} must be a non-negative integer", label))
 }
 
+pub fn env_usize(name: &str) -> Option<usize> {
+    env::var(name).ok()?.trim().parse::<usize>().ok()
+}
+
+pub fn env_u64(name: &str) -> Option<u64> {
+    env::var(name).ok()?.trim().parse::<u64>().ok()
+}
+
+pub fn env_bool(name: &str) -> Option<bool> {
+    match env::var(name).ok()?.trim().to_ascii_lowercase().as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
 fn env_positive_usize(name: &str) -> Option<usize> {
     env::var(name)
         .ok()
@@ -179,6 +195,31 @@ fn env_nonnegative_u64(name: &str) -> Option<u64> {
     env::var(name)
         .ok()
         .and_then(|value| parse_nonnegative_u64(value.trim(), name).ok())
+}
+
+pub(crate) fn append_serve_resource_args(
+    args: &mut Vec<String>,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
+) {
+    if let Some(value) = max_connections {
+        args.push("--max-connections".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = io_timeout_ms {
+        args.push("--io-timeout-ms".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = max_body_bytes {
+        args.push("--max-body-bytes".to_string());
+        args.push(value.to_string());
+    }
+    if let Some(value) = overview_cache_ms {
+        args.push("--overview-cache-ms".to_string());
+        args.push(value.to_string());
+    }
 }
 
 #[cfg(test)]

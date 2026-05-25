@@ -1,0 +1,11 @@
+# zizmor security-audit policy for this repository.
+#
+# We keep first-party GitHub Actions and the Rust toolchain action ref-pinned
+# so Dependabot can update them normally. Stricter release pipelines may replace
+# these refs with full commit SHA pins after verifying the exact upstream SHAs.
+rules:
+  unpinned-uses:
+    config:
+      policies:
+        actions/*: ref-pin
+        dtolnay/rust-toolchain: ref-pin

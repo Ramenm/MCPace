@@ -5,8 +5,10 @@ use super::{
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_sources;
+use crate::platform_utils;
 use crate::profile;
 use crate::resources;
+use crate::text_utils;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
 use std::path::{Path, PathBuf};
@@ -14,21 +16,15 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 
 pub(super) fn context_string(value: Option<&String>) -> Option<String> {
-    value
-        .map(|value| value.trim())
-        .filter(|value| !value.is_empty())
-        .map(str::to_string)
+    text_utils::trimmed_non_empty_owned(value)
 }
 
 fn normalize_policy_token(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
+    text_utils::normalize_flag(value)
 }
 
 pub(super) fn optional_json_string(value: Option<String>) -> JsonValue {
-    match value {
-        Some(value) => JsonValue::string(value),
-        None => JsonValue::Null,
-    }
+    json_helpers::json_string_or_null(value)
 }
 
 pub(super) fn env_var_names_from_array(values: Option<&[JsonValue]>) -> Vec<String> {
@@ -98,7 +94,7 @@ pub(super) fn load_servers(
         {
             Some(format!(
                 "server is not declared for the current platform '{}'",
-                current_platform_alias()
+                platform_utils::current_platform_alias()
             ))
         } else if policy
             .map(|policy| !policy.profile_enabled)
@@ -201,7 +197,7 @@ fn load_upstream_server_policies(
             override_enabled.unwrap_or(default_enabled)
         };
         let platform_supported =
-            server_supports_current_platform(&json_helpers::strings_from_array(
+            platform_utils::supports_current_platform(&json_helpers::strings_from_array(
                 json_helpers::array_at_path(raw_server, &["platforms"]),
             ));
         let mut tool_policies = Vec::new();
@@ -255,35 +251,6 @@ fn parse_tool_policy(raw: &JsonValue) -> Option<ToolRiskPolicy> {
             .filter(|value| !value.is_empty())
             .map(ToOwned::to_owned),
     })
-}
-
-fn server_supports_current_platform(platforms: &[String]) -> bool {
-    if platforms.is_empty() {
-        return true;
-    }
-    let current = current_platform_alias();
-    platforms.iter().any(|platform| {
-        let normalized = normalize_platform(platform);
-        normalized == current || normalized == "any" || normalized == "all" || normalized == "*"
-    })
-}
-
-pub(super) fn current_platform_alias() -> &'static str {
-    match std::env::consts::OS {
-        "macos" => "macos",
-        "windows" => "windows",
-        "linux" => "linux",
-        other => other,
-    }
-}
-
-fn normalize_platform(value: &str) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "darwin" | "mac" | "osx" | "macos" => "macos".to_string(),
-        "win" | "windows" => "windows".to_string(),
-        "linux" => "linux".to_string(),
-        other => other.to_string(),
-    }
 }
 
 pub(super) fn find_server<'a>(

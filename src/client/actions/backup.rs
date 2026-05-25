@@ -3,9 +3,9 @@ use super::sanitize_path_for_display;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::runtimepaths;
+use crate::text_utils;
 use std::fs;
 use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::super::pathing::stable_hash_hex;
 
@@ -115,7 +115,7 @@ fn resolve_backup_path(
     if normalized_selector.is_empty() || normalized_selector.eq_ignore_ascii_case("latest") {
         return latest_backup_path(&client_backup_root, client_id);
     }
-    if !is_safe_backup_id(normalized_selector) {
+    if !text_utils::ascii_alnum_dash_underscore(normalized_selector) {
         return Err(format!(
             "client restore backup selector '{}' is invalid; use a backup id or 'latest'",
             selector
@@ -177,13 +177,6 @@ fn required_manifest_string(
         })
 }
 
-fn is_safe_backup_id(value: &str) -> bool {
-    !value.is_empty()
-        && value
-            .chars()
-            .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
-}
-
 pub(super) fn install_backup_root(root_path: &Path) -> PathBuf {
     runtimepaths::resolve_state_root(root_path)
         .join("data")
@@ -209,8 +202,5 @@ pub(super) fn safe_file_segment(value: &str) -> String {
 }
 
 pub(super) fn now_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|duration| duration.as_millis())
-        .unwrap_or(0)
+    runtimepaths::unix_time_ms()
 }

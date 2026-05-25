@@ -16,7 +16,7 @@ pub fn write_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
     let temp_path = path.with_extension(format!(
         "tmp-{}-{}-{}",
         std::process::id(),
-        unix_time_ms_for_temp_path(),
+        unix_time_ms(),
         ATOMIC_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     fs::write(&temp_path, contents)
@@ -36,11 +36,29 @@ pub fn write_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
     })
 }
 
-fn unix_time_ms_for_temp_path() -> u128 {
+pub(crate) fn unix_time_ms() -> u128 {
+    unix_time_ms_checked().unwrap_or(0)
+}
+
+pub(crate) fn unix_time_ms_checked() -> Option<u128> {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
+        .ok()
         .map(|duration| duration.as_millis())
-        .unwrap_or(0)
+}
+
+pub(crate) fn strip_windows_extended_path_prefix(value: &str) -> String {
+    value.strip_prefix(r"\\?").unwrap_or(value).to_string()
+}
+
+pub fn canonicalize_or_original(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+pub fn user_home_dir() -> Option<PathBuf> {
+    env::var_os("HOME")
+        .or_else(|| env::var_os("USERPROFILE"))
+        .map(PathBuf::from)
 }
 
 pub const DEFAULT_LOCAL_HOST: &str = "127.0.0.1";

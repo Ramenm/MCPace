@@ -60,8 +60,6 @@ use self::process_config::{
     expand_template, redact_command, resolve_command_for_cwd, validate_stdio_cwd,
 };
 #[cfg(test)]
-use self::server_config::current_platform_alias;
-#[cfg(test)]
 use self::server_config::env_var_names_from_array;
 use self::server_config::{
     context_string, load_servers, optional_json_string, run_server_tasks, select_servers,
@@ -75,6 +73,8 @@ use self::tool_cache::{
 };
 #[cfg(test)]
 use crate::json::parse_str;
+#[cfg(test)]
+use crate::platform_utils::current_platform_alias;
 
 const DEFAULT_TIMEOUT_MS: u64 = 120_000;
 const DEFAULT_PROBE_TIMEOUT_MS: u64 = 30_000;
@@ -1282,7 +1282,7 @@ fn server_inventory_item(root_path: &Path, server: &UpstreamServerConfig) -> Jso
 }
 
 fn empty_object() -> JsonValue {
-    JsonValue::object::<String, Vec<(String, JsonValue)>>(Vec::new())
+    json_helpers::empty_object()
 }
 
 #[cfg(test)]

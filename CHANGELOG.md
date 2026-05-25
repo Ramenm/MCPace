@@ -6,66 +6,40 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 
 ## 0.6.9
 
+### Added
+
+- Node-side source-bundle checks for npm package integrity, release artifact creation, GitHub metadata labels, line endings, local script references, Rust module reachability, helper duplication, and bundled hub-example/schema drift.
+- Node-only release ZIP writer/reader so source artifact creation no longer depends on external `zip` or `unzip` binaries.
+- npm launcher shim at `packages/npm/cli/bin/mcpace.js` with Node-version guard and native-binary resolution.
+- Local load-test binary discovery now supports `MCPACE_BINARY_PATH` / `MCPACE_DEV_BINARY` in addition to `--binary`.
+
 ### Changed
 
-- Normalized documentation around the install/user path: short landing README, compact runbook, focused architecture/configuration/security/client/troubleshooting docs, and a current summary.
-- Removed stale/nonessential bundle documents and empty platform-package scaffolding from the source ZIP.
-- Shortened `mcpace help` to keep the visible CLI surface centered on `up`, `install`, `serve`, `server`, `client`, `connect`, and `doctor`.
+- Consolidated release/CI workflows to commands that exist in this source bundle.
+- The npm launcher only considers `target/` or `dist/` development binaries when running from the MCPace source workspace, not from arbitrary consuming projects.
+- Kept the repository source-only: no prebuilt native binaries, `node_modules`, Rust `target`, runtime state, logs, caches, or stale public-repo scaffolding are included.
+- Centralized Rust helpers for runtime paths, CLI text formatting, environment parsing, platform aliases, notification-method detection, and Windows command-line quoting.
+- Aligned GitHub labels across Dependabot, issue templates, release categories, and workflow hygiene tests.
+- Normalized documentation around the install/user path: short landing README, focused docs under `docs/`, and explicit final-validation steps for Rust-capable hosts.
+- Removed retired legacy bridge surfaces from the source bundle: `manager.settings.json`, hub bridge flags, and opt-in projected-tool top-level controls.
 
 ### Fixed
 
-- Home import now recognizes the normalized MCPace self-entry name `mcp-pace` and skips it to avoid loops.
-- MCP config import now accepts URL aliases (`serverUrl`, `httpUrl`, `endpoint`) and normalizes remote type aliases to `streamable-http`.
+- Fixed broken source-package references to missing files and missing npm/Node scripts.
+- Fixed Windows-sensitive npm/npx launching by resolving `.cmd` wrappers where needed and by keeping service-launcher argument quoting centralized.
+- Fixed hub example/schema drift: the bundled `examples/mcpace-hub.*.json` files are allowed to start with zero upstream servers and empty manual profiles.
+- Fixed profile selection drift by using `mcpace.config.json` as the single source of runtime-profile truth, with `MCPACE_RUNTIME_PROFILE` as the explicit override.
+- Fixed stale generated-code comments and CRLF text files that contradicted `.editorconfig`/`.gitattributes`.
+- Fixed `npm run load:local` guidance and error reporting when the Rust binary has not been built yet.
+- Home import recognizes the normalized MCPace self-entry name `mcp-pace` and skips it to avoid loops.
+- MCP config import accepts URL aliases (`serverUrl`, `httpUrl`, `endpoint`) and normalizes remote type aliases to `streamable-http`.
 
-### Added
+### Still requires Rust-host validation
 
-- Node tests for docs/package hygiene, version alignment, forbidden artifact checks, and MCP import-normalization source guards.
-- Rust unit tests for import normalization and MCPace self-entry skipping.
+- `cargo fmt --check`
+- `cargo clippy --all-targets -- -D warnings`
+- `cargo test`
+- `cargo build --release`
+- `npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --concurrency 64`
 
-### Added
-
-- `mcpace up` home-first onboarding: creates/repairs MCPace home, starts the local endpoint, preserves client MCP config entries, and does not add upstream servers unless explicitly requested.
-- Local path server install detection: `mcpace install .` auto-configures the filesystem MCP server without requiring `--type` or a package name.
-- Public GitHub launch kit: support policy, code of conduct, public issue templates, release-notes categorization, and a local GitHub health audit.
-- Stronger product-proof hygiene: runtime trace reports carry host target metadata, and product-practice checks reject stale or host-mismatched proof before allowing runtime beta claims.
-- Target-aware runtime trace binary discovery for `packages/npm/cli/vendor/<target>/mcpace` alongside local release/debug binaries.
-- In-process Streamable HTTP session lifecycle for `/mcp`: create/reuse/touch, missing/unknown/expired/protocol-mismatch rejection, diagnostics, and `DELETE /mcp` close behavior.
-
-### Changed
-
-- README, runbook, npm CLI docs, and CLI help now lead with the one-command home setup plus explicit/config-first upstream server add/import paths.
-- Setup readiness now treats zero discovered tools as a warning after initialize succeeds, not as the only determinant of endpoint/client readiness.
-- README and repo docs now point contributors toward launch readiness, support boundaries, and release gates instead of broad unproven product claims.
-
-### Still blocked before beta
-
-- Fresh real-host proof for the in-process HTTP session lifecycle, plus any cross-process/relay-grade persistence needed after beta.
-- HTTP/Streamable HTTP upstream forwarding.
-- Real-client runtime traces through at least one tier-1 local client.
-- Published native binary packages with checksums, attestations, and npm Trusted Publishing proof.
-
-## 0.6.2
-
-- Added `npm run verify:performance`, a source-level performance smoke harness that records HTTP benchmark wiring plus bounded tool-scale, mixed-upstream, and upstream-failsafe simulations.
-- Added `docs/performance-verification.md` and bundled fresh `reports/performance-smoke-latest.*` artifacts in the source archive.
-- Kept release performance claims gated on real Rust host p50/p95/p99 and memory baselines.
-
-## 0.6.1
-
-- Tightened source archive hygiene: generated historical reports are no longer included wholesale in release archives.
-- Added a maintainer operating-mode document for grounded task intake, tech-debt prioritization, eval governance, and cautious high-risk answers.
-- Added a second-pass technical-debt report and kept eval/version metadata aligned with the current source snapshot.
-
-## 0.6.0
-
-- Source package refresh: message-integrity hardening, tool exposure guards, lifecycle/scale/failsafe checks, and clean source archive packaging.
-- Prebuilt binaries are intentionally omitted from this source ZIP; rebuild with the Rust toolchain before publishing platform packages.
-
-## 0.5.9
-
-### Current status
-
-- Rust-first local MCP hub/control-plane source tree.
-- Local `/mcp` endpoint and stdio MCP compatibility lane.
-- BYO upstream registry, preset-based onboarding, client install/export surfaces, release/proof harnesses, and platform package scaffolding.
-- Runtime and release claims remain proof-gated by `docs/product-truth-and-beta-gate.md`.
+Reason: this source bundle does not ship a Rust toolchain or prebuilt native binary.

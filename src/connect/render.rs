@@ -1,4 +1,5 @@
 use super::model::ConnectReport;
+use crate::text_utils::yes_no;
 use std::io::Write;
 
 pub(super) fn render(report: &ConnectReport, json_output: bool, stdout: &mut dyn Write) -> i32 {
@@ -114,13 +115,5 @@ pub(super) fn render(report: &ConnectReport, json_output: bool, stdout: &mut dyn
         0
     } else {
         1
-    }
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
     }
 }

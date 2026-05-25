@@ -1,124 +1,39 @@
 name: Bug report
-description: Report a reproducible MCPace problem.
-title: "[bug] "
-labels:
-  - type:bug
-  - status:needs-repro
+description: Report a reproducible MCPace bug.
+title: "bug: "
+labels: [type:bug]
 body:
-  - type: markdown
+  - type: textarea
+    id: summary
     attributes:
-      value: |
-        Thanks for helping improve MCPace. Please redact tokens, private paths, hostnames, and environment values before posting logs. Security issues should be reported privately through the security policy, not as public bugs.
+      label: What happened?
+      description: Include the command, platform, expected result, and actual result.
+    validations:
+      required: true
   - type: input
     id: version
     attributes:
-      label: MCPace version or commit
-      placeholder: 0.5.9 or commit SHA
-    validations:
-      required: true
+      label: MCPace version
+      placeholder: mcpace 0.6.9
   - type: dropdown
-    id: area
+    id: os
     attributes:
-      label: Area
+      label: Operating system
       options:
-        - source checkout / build
-        - npm launcher / install
-        - client install / export
-        - serve / local /mcp endpoint
-        - MCP HTTP session lifecycle
-        - upstream stdio server
-        - HTTP upstream inventory / future fan-out
-        - dashboard / hub lifecycle
-        - release / packaging
-        - docs
+        - Windows
+        - macOS
+        - Linux
+        - Other
     validations:
       required: true
-  - type: dropdown
-    id: severity
-    attributes:
-      label: Severity
-      description: Pick impact, not how hard the fix looks.
-      options:
-        - severity:p0 security/data-loss/runtime-dead
-        - severity:p1 core workflow broken
-        - severity:p2 degraded or confusing workflow
-        - severity:p3 polish/docs/edge case
-    validations:
-      required: true
-  - type: input
-    id: platform
-    attributes:
-      label: OS and architecture
-      placeholder: macOS arm64, Linux x64 glibc, Windows x64
-    validations:
-      required: true
-  - type: textarea
-    id: reproduction
-    attributes:
-      label: Reproduction
-      description: Exact commands or client steps. Include a minimal config when possible.
-      placeholder: |
-        1. mcpace server install npm:@modelcontextprotocol/server-filesystem --as filesystem --path .
-        2. mcpace serve --port 39022
-        3. client connects to http://127.0.0.1:39022/mcp
-        4. send tools/list or upstream_call with ...
-    validations:
-      required: true
-  - type: textarea
-    id: expected
-    attributes:
-      label: Expected behavior
-    validations:
-      required: true
-  - type: textarea
-    id: actual
-    attributes:
-      label: Actual behavior
-    validations:
-      required: true
-  - type: dropdown
-    id: regression
-    attributes:
-      label: Regression?
-      options:
-        - unknown
-        - no / first seen
-        - yes / worked in a previous version
-    validations:
-      required: true
-  - type: input
-    id: last_known_good
-    attributes:
-      label: Last known good version or commit
-      description: Required for regressions. Write "unknown" if this is not known yet.
-      placeholder: 0.5.8, commit SHA, or unknown
-    validations:
-      required: true
-  - type: textarea
-    id: proof
-    attributes:
-      label: Proof commands already tried
-      description: Paste redacted output from the closest gate you ran.
-      placeholder: |
-        npm run verify:defect-gates
-        npm run verify:runtime-trace
-        npm run verify:product-practice
-        cargo test --all-targets --locked
-      render: shell
-    validations:
-      required: false
   - type: textarea
     id: logs
     attributes:
-      label: Logs or JSON output
-      description: Paste redacted output from mcpace connect --json, verify readiness, runtime trace, or the failing command.
-      render: shell
-    validations:
-      required: false
+      label: Logs or error output
+      render: text
   - type: textarea
-    id: context
+    id: validation
     attributes:
-      label: Additional context
-      description: Client surface, upstream server, config shape, or anything unusual.
-    validations:
-      required: false
+      label: Checks tried
+      description: For source builds, useful checks are npm run check, npm run pack:npm:dry-run, npm run release:dry-run, and cargo test.
+      render: text

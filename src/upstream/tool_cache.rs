@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Condvar, Mutex, OnceLock};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant};
 
 const TOOL_LIST_DISK_CACHE_SCHEMA_VERSION: i64 = 2;
 const TOOL_LIST_DISK_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -183,7 +183,7 @@ fn read_disk_cached_tools(key: &ToolListCacheKey) -> Option<JsonValue> {
         return None;
     }
     let stored_at = u128_at_path(&value, &["storedAtUnixMs"])?;
-    let now = unix_time_ms()?;
+    let now = runtimepaths::unix_time_ms_checked()?;
     if stored_at.saturating_add(TOOL_LIST_DISK_CACHE_TTL.as_millis()) < now {
         let _ = fs::remove_file(path);
         return None;
@@ -198,8 +198,8 @@ fn write_disk_cached_tools(key: &ToolListCacheKey, tools: &JsonValue) -> Result<
         return Ok(());
     };
     let path = write_disk_cache_path(key)?;
-    let stored_at =
-        unix_time_ms().ok_or_else(|| "system clock is before UNIX epoch".to_string())?;
+    let stored_at = runtimepaths::unix_time_ms_checked()
+        .ok_or_else(|| "system clock is before UNIX epoch".to_string())?;
     let envelope = JsonValue::object([
         (
             "schemaVersion",
@@ -290,13 +290,6 @@ fn feed_stable_hash(hash: &mut u64, bytes: &[u8]) {
     }
     *hash ^= 0xff;
     *hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
-}
-
-fn unix_time_ms() -> Option<u128> {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|duration| duration.as_millis())
 }
 
 fn u128_at_path(value: &JsonValue, path: &[&str]) -> Option<u128> {

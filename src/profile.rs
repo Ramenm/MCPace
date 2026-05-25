@@ -1,5 +1,6 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::text_utils::normalize_flag;
 use std::collections::BTreeMap;
 use std::env;
 use std::io::Write;
@@ -27,11 +28,6 @@ struct ParsedArgs {
     help: bool,
     root_override: Option<PathBuf>,
     error: Option<String>,
-}
-
-#[derive(Debug, Default, Clone)]
-struct LegacySettings {
-    active_profile: String,
 }
 
 #[derive(Debug, Clone)]
@@ -120,8 +116,7 @@ pub fn run(
 
 pub fn load_runtime_profile_selection(root_path: &Path) -> Result<RuntimeProfileSelection, String> {
     let catalog = build_profile_catalog_from_config(root_path)?;
-    let legacy_settings = read_legacy_settings(root_path);
-    let (active_profile, selection_source) = resolve_active_profile(&catalog, &legacy_settings);
+    let (active_profile, selection_source) = resolve_active_profile(&catalog);
     let server_overrides = read_server_overrides(root_path, &active_profile)?;
 
     Ok(RuntimeProfileSelection {
@@ -191,10 +186,6 @@ fn parse_args(args: &[String]) -> ParsedArgs {
     }
 
     parsed
-}
-
-fn normalize_flag(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
 }
 
 fn build_profile_catalog_from_config(root_path: &Path) -> Result<ProfileCatalog, String> {
@@ -269,18 +260,6 @@ fn build_profile_catalog_from_config(root_path: &Path) -> Result<ProfileCatalog,
     })
 }
 
-fn read_legacy_settings(root_path: &Path) -> LegacySettings {
-    let path = root_path.join("manager.settings.json");
-    let Ok(json) = json_helpers::read_json_file(&path) else {
-        return LegacySettings::default();
-    };
-    let active_profile = json_helpers::string_at_path(&json, &["runtimeProfile", "active"])
-        .unwrap_or("")
-        .trim()
-        .to_string();
-    LegacySettings { active_profile }
-}
-
 fn builtin_profiles() -> [(&'static str, &'static str, usize); 3] {
     [
         (
@@ -301,10 +280,7 @@ fn builtin_profiles() -> [(&'static str, &'static str, usize); 3] {
     ]
 }
 
-fn resolve_active_profile(
-    catalog: &ProfileCatalog,
-    legacy_settings: &LegacySettings,
-) -> (String, String) {
+fn resolve_active_profile(catalog: &ProfileCatalog) -> (String, String) {
     let env_profile = env::var("MCPACE_RUNTIME_PROFILE").ok();
     if let Some(value) = env_profile
         .as_deref()
@@ -314,15 +290,6 @@ fn resolve_active_profile(
         let normalized = value.to_ascii_lowercase();
         if catalog.profiles.contains_key(&normalized) {
             return (normalized, "environment".to_string());
-        }
-        return ("safe".to_string(), "fallback-safe".to_string());
-    }
-
-    let legacy_profile = legacy_settings.active_profile.trim();
-    if !legacy_profile.is_empty() {
-        let normalized = legacy_profile.to_ascii_lowercase();
-        if catalog.profiles.contains_key(&normalized) {
-            return (normalized, "legacy-settings".to_string());
         }
         return ("safe".to_string(), "fallback-safe".to_string());
     }

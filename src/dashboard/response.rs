@@ -1,7 +1,8 @@
 use crate::json::JsonValue;
+use crate::json_helpers;
+use crate::runtimepaths;
 use std::io::Write;
 use std::net::{Shutdown, TcpStream};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(super) fn write_json_response(
     stream: &mut TcpStream,
@@ -121,19 +122,13 @@ pub(super) fn query_parameter<'a>(query: &'a str, key: &str) -> Option<&'a str> 
 }
 
 pub(super) fn empty_object() -> JsonValue {
-    JsonValue::object::<String, Vec<(String, JsonValue)>>(Vec::new())
+    json_helpers::empty_object()
 }
 
 pub(super) fn sanitize_root_path(root_path: &str) -> String {
-    root_path
-        .strip_prefix(r"\\?\")
-        .unwrap_or(root_path)
-        .to_string()
+    runtimepaths::strip_windows_extended_path_prefix(root_path)
 }
 
 pub(super) fn now_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
+    runtimepaths::unix_time_ms()
 }

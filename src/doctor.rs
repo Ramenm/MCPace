@@ -2,6 +2,9 @@ use crate::codex_config;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_sources;
+use crate::runtimepaths;
+use crate::text_utils::join_or_none;
+use crate::text_utils::yes_no;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
@@ -295,22 +298,6 @@ pub fn write_text_report(report: &Report, stdout: &mut dyn std::io::Write) {
     }
 }
 
-fn join_or_none(values: &[String]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join(", ")
-    }
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
-}
-
 pub fn read_config_version(root_path: &Path) -> Option<String> {
     let config_path = root_path.join("mcpace.config.json");
     let json = json_helpers::read_json_file(&config_path).ok()?;
@@ -368,7 +355,7 @@ fn load_project_status(root_path: Option<&Path>, tools: &[ToolStatus]) -> Projec
 }
 
 fn collect_client_config_warnings() -> Vec<String> {
-    let Some(home) = user_home_dir() else {
+    let Some(home) = runtimepaths::user_home_dir() else {
         return Vec::new();
     };
     let mut warnings = Vec::new();
@@ -395,12 +382,6 @@ fn collect_codex_toml_command_warnings(config_path: &Path) -> Vec<String> {
             )
         })
         .collect()
-}
-
-fn user_home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
 }
 
 fn collect_runtime_prerequisites(root_path: Option<&Path>) -> Vec<RuntimePrerequisiteStatus> {
@@ -500,7 +481,7 @@ fn load_source_runtime_commands(root_path: &Path) -> BTreeMap<String, String> {
             .and_then(JsonValue::as_str)
             .map(str::trim)
             .unwrap_or("");
-        let source_type = infer_runtime_source_type(
+        let source_type = crate::source_type::infer_runtime_source_type(
             server.get("type").and_then(JsonValue::as_str).unwrap_or(""),
             command,
             url,
@@ -510,30 +491,6 @@ fn load_source_runtime_commands(root_path: &Path) -> BTreeMap<String, String> {
         }
     }
     commands
-}
-
-fn infer_runtime_source_type(raw_source_type: &str, command: &str, url: &str) -> String {
-    let normalized = normalize_runtime_source_type(raw_source_type);
-    if !normalized.is_empty() {
-        return normalized;
-    }
-    if !command.trim().is_empty() {
-        "stdio".to_string()
-    } else if !url.trim().is_empty() {
-        "http".to_string()
-    } else {
-        "stdio".to_string()
-    }
-}
-
-fn normalize_runtime_source_type(value: &str) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "" => String::new(),
-        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote-sse"
-        | "remote" | "http" | "sse" => "http".to_string(),
-        "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
-        other => other.to_string(),
-    }
 }
 
 fn add_runtime_prerequisite(

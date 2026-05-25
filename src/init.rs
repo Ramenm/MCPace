@@ -2,6 +2,7 @@ use crate::doctor;
 use crate::json::JsonValue;
 use crate::profile;
 use crate::runtimepaths;
+use crate::text_utils::yes_no;
 use crate::verify;
 use std::collections::BTreeMap;
 use std::fs;
@@ -310,13 +311,5 @@ impl InitReport {
             JsonValue::array(self.existing_paths.iter().cloned().map(JsonValue::string)),
         );
         JsonValue::Object(map)
-    }
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
     }
 }

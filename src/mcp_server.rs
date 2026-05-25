@@ -107,10 +107,20 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
             }
             continue;
         }
-        let method = json_helpers::string_at_path(&message, &["method"])
-            .expect("validate_request_envelope checked method");
+        let Some(method) = json_helpers::string_at_path(&message, &["method"]) else {
+            let response = mcp::error(
+                mcp::request_id_or_null(&message),
+                mcp::ERROR_INVALID_REQUEST,
+                "Missing JSON-RPC method",
+                None,
+            );
+            if write_message(stdout, &response).is_err() {
+                return 1;
+            }
+            continue;
+        };
         if let Some(id) = request_id.as_ref() {
-            if method_is_notification(method) {
+            if mcp::method_is_notification(method) {
                 let response = mcp::error(
                     id.clone(),
                     mcp::ERROR_INVALID_REQUEST,
@@ -509,10 +519,6 @@ fn write_message(stdout: &mut dyn Write, message: &JsonValue) -> io::Result<()> 
     stdout.flush()
 }
 
-fn method_is_notification(method: &str) -> bool {
-    method.starts_with("notifications/")
-}
-
 enum ToolCallError {
     InvalidParams(String),
     UnknownTool(String),
@@ -852,9 +858,7 @@ fn parse_upstream_batch_call(
         })?
         .to_string();
     let arguments = match json_helpers::value_at_path(raw_call, &["arguments"]) {
-        Some(JsonValue::Object(_)) => json_helpers::value_at_path(raw_call, &["arguments"])
-            .cloned()
-            .expect("checked above"),
+        Some(value @ JsonValue::Object(_)) => value.clone(),
         Some(JsonValue::Null) | None => mcp::empty_object(),
         Some(_) => {
             return Err(ToolCallError::InvalidParams(format!(
@@ -1083,9 +1087,7 @@ fn optional_string_argument(
 
 fn optional_object_argument(arguments: &JsonValue, key: &str) -> Result<JsonValue, ToolCallError> {
     match json_helpers::value_at_path(arguments, &[key]) {
-        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(arguments, &[key])
-            .cloned()
-            .expect("checked above")),
+        Some(value @ JsonValue::Object(_)) => Ok(value.clone()),
         Some(JsonValue::Null) | None => Ok(mcp::empty_object()),
         Some(_) => Err(ToolCallError::InvalidParams(format!(
             "'{}' must be a JSON object",

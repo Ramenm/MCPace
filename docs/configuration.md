@@ -5,7 +5,6 @@ Common files:
 - `mcpace.config.json` — runtime defaults and include paths.
 - `mcp_settings.json` — root MCP server settings.
 - `mcp_settings.d/*.json` — per-server fragments written by `mcpace install` or `mcpace up` import.
-- `manager.settings.json` — manager-level settings.
 
 ## Config-first import
 

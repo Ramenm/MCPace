@@ -1,4 +1,5 @@
 use crate::json::JsonValue;
+use crate::text_utils::yes_no;
 use std::collections::BTreeMap;
 use std::io::Write;
 
@@ -456,7 +457,7 @@ pub(super) fn write_text_plan(plan: &ClientPlan, stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
         "Workspace roots: {}",
-        join_or_none(&plan.context.workspace_roots)
+        join_semicolon_or_none(&plan.context.workspace_roots)
     );
     let _ = writeln!(
         stdout,
@@ -483,7 +484,11 @@ pub(super) fn write_text_plan(plan: &ClientPlan, stdout: &mut dyn Write) {
     );
     let _ = writeln!(stdout, "Serialized servers: {}", plan.serialized_servers);
     let _ = writeln!(stdout, "Exclusive servers: {}", plan.exclusive_servers);
-    let _ = writeln!(stdout, "Warnings: {}", join_or_none(&plan.warnings));
+    let _ = writeln!(
+        stdout,
+        "Warnings: {}",
+        join_semicolon_or_none(&plan.warnings)
+    );
     let _ = writeln!(stdout, "Server arbitration:");
     for server in &plan.servers {
         let _ = writeln!(
@@ -545,11 +550,15 @@ pub(super) fn write_text_plan(plan: &ClientPlan, stdout: &mut dyn Write) {
             "    sessionAffinity={}",
             server.session_affinity_key.as_deref().unwrap_or("none")
         );
-        let _ = writeln!(stdout, "    warnings={}", join_or_none(&server.warnings));
+        let _ = writeln!(
+            stdout,
+            "    warnings={}",
+            join_semicolon_or_none(&server.warnings)
+        );
     }
 }
 
-pub(super) fn join_or_none(values: &[String]) -> String {
+pub(super) fn join_semicolon_or_none(values: &[String]) -> String {
     if values.is_empty() {
         "none".to_string()
     } else {
@@ -578,12 +587,4 @@ pub(super) fn join_count_map(values: &BTreeMap<String, usize>) -> String {
         .map(|(key, value)| format!("{}={}", key, value))
         .collect::<Vec<_>>()
         .join(", ")
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
 }

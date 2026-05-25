@@ -1,5 +1,6 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::text_utils;
 use std::collections::BTreeMap;
 use std::env;
 use std::path::{Path, PathBuf};
@@ -180,8 +181,8 @@ pub fn load_registry(root_path: Option<&Path>) -> Result<ClientRegistry, String>
 
     Ok(ClientRegistry {
         targets: targets.into_values().collect(),
-        sources: dedup_sorted(sources),
-        warnings: dedup_sorted(warnings),
+        sources: text_utils::sorted_unique(sources),
+        warnings: text_utils::sorted_unique(warnings),
     })
 }
 
@@ -693,12 +694,6 @@ fn default_array_field(
     }
 }
 
-fn dedup_sorted(mut values: Vec<String>) -> Vec<String> {
-    values.sort();
-    values.dedup();
-    values
-}
-
 pub fn find(id: &str) -> Option<&'static ClientTarget> {
     let normalized = normalize(id);
     CLIENT_TARGETS.iter().find(|target| {
@@ -711,7 +706,7 @@ pub fn find(id: &str) -> Option<&'static ClientTarget> {
 }
 
 pub fn normalize(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
+    text_utils::normalize_flag(value)
 }
 
 pub fn client_install_support_summary() -> String {

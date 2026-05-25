@@ -3,6 +3,7 @@ use super::runtime;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::runtimepaths;
+use crate::text_utils::yes_no;
 use crate::verify;
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -305,12 +306,4 @@ fn count_active_sessions(active_leases: &[JsonValue]) -> usize {
         .filter_map(|lease| first_string(&[Some(lease)], &["sessionLeaseId"]))
         .collect::<BTreeSet<_>>()
         .len()
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
 }

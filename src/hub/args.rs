@@ -1,3 +1,4 @@
+use crate::text_utils::normalize_flag;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -234,8 +235,4 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "  mcpace hub lease release --lease-id <id> [--json] [--root <path>]"
     );
-}
-
-fn normalize_flag(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
 }

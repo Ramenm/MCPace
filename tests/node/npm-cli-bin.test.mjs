@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { repoRoot } from '../../scripts/lib/project-metadata.mjs';
+import { runChecked } from '../../scripts/lib/process.mjs';
 
 const cliBin = path.join(repoRoot, 'packages', 'npm', 'cli', 'bin', 'mcpace.js');
 
@@ -17,10 +18,9 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
     assert.notEqual(fs.statSync(cliBin).mode & 0o111, 0, 'bin/mcpace.js must be executable on Unix');
   }
 
-  const pack = spawnSync('npm', ['pack', '--workspace', '@mcpace/cli', '--json', '--dry-run'], {
+  const pack = runChecked('npm', ['pack', '--workspace', '@mcpace/cli', '--json', '--dry-run'], {
     cwd: repoRoot,
     encoding: 'utf8',
-    windowsHide: true,
   });
   assert.equal(pack.status, 0, pack.stderr || pack.stdout);
   const [manifest] = JSON.parse(pack.stdout);

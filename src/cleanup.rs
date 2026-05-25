@@ -58,7 +58,7 @@ pub fn run(
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
         return 1;
     };
-    let root_path = canonicalize_or_original(&root_path);
+    let root_path = runtimepaths::canonicalize_or_original(&root_path);
     let report = cleanup_report(&root_path, &parsed.scope, parsed.dry_run);
 
     if parsed.json_output {
@@ -312,8 +312,4 @@ fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
         stdout,
         "Policy: durable config, source fragments, client config, and backups are preserved."
     );
-}
-
-fn canonicalize_or_original(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }

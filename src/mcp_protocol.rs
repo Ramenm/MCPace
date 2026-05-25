@@ -1,6 +1,5 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
-use std::collections::BTreeMap;
 
 pub const CURRENT_PROTOCOL_VERSION: &str = "2025-11-25";
 pub const STREAMABLE_HTTP_DEFAULT_PROTOCOL_VERSION: &str = "2025-03-26";
@@ -19,6 +18,10 @@ pub const ERROR_NOT_INITIALIZED: i64 = -32002;
 
 pub fn is_supported_protocol_version(requested: &str) -> bool {
     SUPPORTED_PROTOCOL_VERSIONS.contains(&requested)
+}
+
+pub fn method_is_notification(method: &str) -> bool {
+    method.starts_with("notifications/")
 }
 
 pub fn negotiate_protocol_version(requested: &str) -> &'static str {
@@ -87,7 +90,7 @@ pub fn error(id: JsonValue, code: i64, message: &str, data: Option<JsonValue>) -
 }
 
 pub fn empty_object() -> JsonValue {
-    JsonValue::Object(BTreeMap::new())
+    json_helpers::empty_object()
 }
 
 pub fn validate_request_envelope(message: &JsonValue) -> Result<(), String> {
@@ -130,7 +133,9 @@ pub fn validate_request_envelope(message: &JsonValue) -> Result<(), String> {
             }
             JsonValue::Null => return Err("JSON-RPC request id must not be null".to_string()),
             _ => {
-                return Err("JSON-RPC id must be a string or integer number when present".to_string())
+                return Err(
+                    "JSON-RPC id must be a string or integer number when present".to_string(),
+                )
             }
         }
     }
@@ -143,12 +148,7 @@ pub fn params_arguments_object_or_empty(
     method_label: &str,
 ) -> Result<JsonValue, String> {
     match json_helpers::value_at_path(message, &["params", "arguments"]) {
-        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(
-            message,
-            &["params", "arguments"],
-        )
-        .cloned()
-        .expect("checked above")),
+        Some(value @ JsonValue::Object(_)) => Ok(value.clone()),
         Some(JsonValue::Null) | None => Ok(empty_object()),
         Some(_) => Err(format!(
             "{} arguments must be a JSON object when present",

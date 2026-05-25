@@ -138,7 +138,18 @@ where
 }
 
 #[cfg(windows)]
-fn quote_windows_arg(arg: &str) -> String {
+pub(crate) fn windows_command_line_from_strs<'a, I>(args: I) -> String
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    args.into_iter()
+        .map(quote_windows_arg)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(windows)]
+pub(crate) fn quote_windows_arg(arg: &str) -> String {
     if !arg.is_empty()
         && !arg
             .chars()

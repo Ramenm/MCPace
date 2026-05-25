@@ -2,9 +2,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { extractTomlPackageName, extractTomlVersion, readRootPackageJson, repoRoot } from './lib/project-metadata.mjs';
+import { deriveProjectName, deriveProjectVersion, readJson, repoRoot } from './lib/project-metadata.mjs';
+import { createZipFromDirectory, listZipEntries } from './lib/zip-writer.mjs';
 
 const args = process.argv.slice(2);
 const jsonOutput = args.includes('--json');
@@ -20,28 +19,6 @@ const timestampOverride = argValue('--timestamp', process.env.MCPACE_RELEASE_TIM
 const forbiddenParts = new Set(['.git', 'node_modules', 'target', 'dist', '.cache', '.pytest_cache', '__pycache__']);
 const forbiddenFiles = new Set(['.DS_Store', 'Thumbs.db']);
 
-function kebabCase(value) {
-  return String(value)
-    .trim()
-    .replace(/^@/, '')
-    .replace(/[\\/]+/g, '-')
-    .replace(/[^a-zA-Z0-9._-]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .toLowerCase();
-}
-
-function readText(relativePath) {
-  return fs.readFileSync(path.join(repoRoot, relativePath), 'utf8');
-}
-
-function projectMetadata() {
-  const cargo = readText('Cargo.toml');
-  const rootPackage = readRootPackageJson();
-  const name = extractTomlPackageName(cargo) || rootPackage.name || 'mcpace';
-  const version = extractTomlVersion(cargo) || rootPackage.version || '0.1.0';
-  return { name: kebabCase(name), version };
-}
-
 function timestamp(now = new Date()) {
   if (timestampOverride) {
     if (!/^\d{6}-\d{6}$/.test(timestampOverride)) {
@@ -54,7 +31,7 @@ function timestamp(now = new Date()) {
 }
 
 function readManifest() {
-  const manifest = JSON.parse(readText('release-manifest.json'));
+  const manifest = readJson('release-manifest.json');
   if (!Array.isArray(manifest.includePaths)) {
     throw new Error('release-manifest.json must contain includePaths array');
   }
@@ -66,17 +43,22 @@ function shouldSkip(relativePath) {
   return parts.some((part) => forbiddenParts.has(part)) || forbiddenFiles.has(path.basename(relativePath));
 }
 
+function normalizeRelativePath(relativePath) {
+  return relativePath.split(path.sep).join('/');
+}
+
 function copyPath(source, destination, relativePath) {
-  if (shouldSkip(relativePath)) {
-    return { skipped: [relativePath], copied: [] };
+  const normalizedRelativePath = normalizeRelativePath(relativePath);
+  if (shouldSkip(normalizedRelativePath)) {
+    return { skipped: [normalizedRelativePath], copied: [] };
   }
   const stat = fs.statSync(source);
   if (stat.isDirectory()) {
     const copied = [];
     const skipped = [];
     fs.mkdirSync(destination, { recursive: true });
-    for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
-      const childRelative = path.posix.join(relativePath.split(path.sep).join('/'), entry.name);
+    for (const entry of fs.readdirSync(source, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+      const childRelative = path.posix.join(normalizedRelativePath, entry.name);
       const child = copyPath(path.join(source, entry.name), path.join(destination, entry.name), childRelative);
       copied.push(...child.copied);
       skipped.push(...child.skipped);
@@ -86,7 +68,7 @@ function copyPath(source, destination, relativePath) {
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.copyFileSync(source, destination);
   fs.chmodSync(destination, stat.mode & 0o777);
-  return { copied: [relativePath.split(path.sep).join('/')], skipped: [] };
+  return { copied: [normalizedRelativePath], skipped: [] };
 }
 
 function walkFiles(root) {
@@ -94,32 +76,33 @@ function walkFiles(root) {
   const stack = [root];
   while (stack.length > 0) {
     const current = stack.pop();
-    for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+    for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
       const full = path.join(current, entry.name);
-      if (entry.isDirectory()) {
-        stack.push(full);
-      } else {
-        files.push(path.relative(root, full).split(path.sep).join('/'));
-      }
+      if (entry.isDirectory()) stack.push(full);
+      else if (entry.isFile()) files.push(normalizeRelativePath(path.relative(root, full)));
     }
   }
   return files.sort();
 }
 
-function run(command, commandArgs, options = {}) {
-  const result = spawnSync(command, commandArgs, {
-    cwd: options.cwd ?? repoRoot,
-    encoding: 'utf8',
-    windowsHide: true,
-  });
-  if (result.status !== 0) {
-    throw new Error(`${command} ${commandArgs.join(' ')} failed\n${result.stderr || result.stdout}`.trim());
-  }
-  return result;
+function validateZipContents(archivePath, rootName, stagedFiles) {
+  const expected = new Set(stagedFiles.map((file) => `${rootName}/${file}`));
+  const actual = listZipEntries(archivePath);
+  const outsideRoot = actual.filter((entry) => !entry.startsWith(`${rootName}/`));
+  const missing = [...expected].filter((entry) => !actual.includes(entry));
+  const extra = actual.filter((entry) => !expected.has(entry));
+  return {
+    status: outsideRoot.length === 0 && missing.length === 0 && extra.length === 0 ? 'pass' : 'failed',
+    entryCount: actual.length,
+    outsideRoot,
+    missing,
+    extra,
+  };
 }
 
 function build() {
-  const { name, version } = projectMetadata();
+  const name = deriveProjectName();
+  const version = deriveProjectVersion();
   const stamp = timestamp();
   const rootName = `${name}-v${version}-${stamp}`;
   const archiveName = `${rootName}.zip`;
@@ -148,6 +131,10 @@ function build() {
   const missingRequired = required.filter((relativePath) => !stagedFiles.includes(relativePath));
   const forbiddenIncluded = stagedFiles.filter(shouldSkip);
 
+  let zipVerification = dryRun
+    ? { status: 'dry-run', entryCount: 0, outsideRoot: [], missing: [], extra: [] }
+    : null;
+
   const verificationReport = {
     sourceProofStatus: missing.length === 0 && missingRequired.length === 0 && forbiddenIncluded.length === 0 ? 'pass' : 'failed',
     copiedFileCount: stagedFiles.length,
@@ -162,6 +149,16 @@ function build() {
   }
 
   fs.mkdirSync(outDir, { recursive: true });
+
+  if (!dryRun) {
+    fs.rmSync(archivePath, { force: true });
+    createZipFromDirectory(stagedRoot, archivePath, { rootName, date: new Date(0) });
+    zipVerification = validateZipContents(archivePath, rootName, stagedFiles);
+    if (zipVerification.status !== 'pass') {
+      throw new Error(`ZIP verification failed: ${JSON.stringify(zipVerification, null, 2)}`);
+    }
+  }
+
   fs.writeFileSync(manifestPath, JSON.stringify({
     schema: 'mcpace.releaseArtifactManifest.v1',
     generatedAt: new Date().toISOString(),
@@ -171,13 +168,8 @@ function build() {
     includePaths: manifest.includePaths,
     files: stagedFiles,
     verificationReport,
+    zipVerification,
   }, null, 2) + '\n');
-
-  if (!dryRun) {
-    fs.rmSync(archivePath, { force: true });
-    run('zip', ['-qr', archivePath, rootName], { cwd: tempParent });
-    run('unzip', ['-tq', archivePath]);
-  }
 
   fs.rmSync(tempParent, { recursive: true, force: true });
   return {
@@ -192,6 +184,7 @@ function build() {
     manifestPath,
     releaseProofStatus: dryRun ? 'dry-run' : 'pass',
     verificationReport,
+    zipVerification,
   };
 }
 

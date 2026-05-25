@@ -6,27 +6,23 @@ changelog:
   categories:
     - title: Runtime and MCP protocol
       labels:
-        - runtime
-        - mcp
-        - protocol
+        - area:mcp-http
+        - area:upstream-stdio
+        - area:upstream-http
     - title: Client and upstream compatibility
       labels:
-        - client-compatibility
-        - upstream-compatibility
-        - compatibility
+        - area:client-config
+        - type:compatibility
     - title: Install, release, and packaging
       labels:
-        - install
-        - release
-        - packaging
+        - area:npm
+        - area:release
     - title: Security and hardening
       labels:
-        - security
-        - hardening
+        - type:security
     - title: Documentation and examples
       labels:
-        - docs
-        - examples
+        - area:docs
     - title: Other changes
       labels:
         - "*"

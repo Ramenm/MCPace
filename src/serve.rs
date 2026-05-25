@@ -1,5 +1,6 @@
 use crate::dashboard;
 use crate::json::{parse_str, JsonValue};
+use crate::json_helpers;
 use crate::resources;
 use crate::runtimepaths;
 use std::collections::BTreeMap;
@@ -8,7 +9,7 @@ use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 const HEALTH_PROBE_IO_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -207,27 +208,6 @@ fn parse_args(args: &[String]) -> ParsedArgs {
     parsed
 }
 
-fn serve_resource_args(parsed: &ParsedArgs) -> Vec<String> {
-    let mut args = Vec::new();
-    if let Some(value) = parsed.max_connections {
-        args.push("--max-connections".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = parsed.io_timeout_ms {
-        args.push("--io-timeout-ms".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = parsed.max_body_bytes {
-        args.push("--max-body-bytes".to_string());
-        args.push(value.to_string());
-    }
-    if let Some(value) = parsed.overview_cache_ms {
-        args.push("--overview-cache-ms".to_string());
-        args.push(value.to_string());
-    }
-    args
-}
-
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
@@ -273,7 +253,14 @@ fn run_start(
     stderr: &mut dyn Write,
 ) -> i32 {
     let json_output = parsed.json_output;
-    let resource_args = serve_resource_args(&parsed);
+    let mut resource_args = Vec::new();
+    resources::append_serve_resource_args(
+        &mut resource_args,
+        parsed.max_connections,
+        parsed.io_timeout_ms,
+        parsed.max_body_bytes,
+        parsed.overview_cache_ms,
+    );
     let max_connections = parsed.max_connections;
     let io_timeout_ms = parsed.io_timeout_ms;
     let max_body_bytes = parsed.max_body_bytes;
@@ -284,7 +271,7 @@ fn run_start(
         return 1;
     };
 
-    let canonical_root = canonicalize_or_original(&root_path);
+    let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
     let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
     let host = parsed.host.unwrap_or_else(|| endpoint.host.clone());
     let port = parsed.port.unwrap_or(endpoint.port);
@@ -425,7 +412,7 @@ fn run_stop(
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
         return 1;
     };
-    let canonical_root = canonicalize_or_original(&root_path);
+    let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
     stop_existing_serve(&canonical_root);
 
     let status = match collect_status(&canonical_root, None, None) {
@@ -449,7 +436,7 @@ fn run_restart(
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
         return 1;
     };
-    let canonical_root = canonicalize_or_original(&root_path);
+    let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
     stop_existing_serve(&canonical_root);
     run_start(parsed, default_root, stdout, stderr)
 }
@@ -483,7 +470,7 @@ fn run_status(
         let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
         return 1;
     };
-    let canonical_root = canonicalize_or_original(&root_path);
+    let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
     let status = match collect_status(&canonical_root, parsed.host, parsed.port) {
         Ok(value) => value,
         Err(error) => {
@@ -576,14 +563,6 @@ fn collect_status(
     })
 }
 
-fn option_usize_json(value: Option<usize>) -> JsonValue {
-    value.map(JsonValue::number).unwrap_or(JsonValue::Null)
-}
-
-fn option_u64_json(value: Option<u64>) -> JsonValue {
-    value.map(JsonValue::number).unwrap_or(JsonValue::Null)
-}
-
 fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut dyn Write) -> i32 {
     if json_output {
         let mut map = BTreeMap::new();
@@ -599,19 +578,19 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
         map.insert("port".to_string(), JsonValue::number(status.port));
         map.insert(
             "maxConnections".to_string(),
-            option_usize_json(status.max_connections),
+            json_helpers::optional_number(status.max_connections),
         );
         map.insert(
             "ioTimeoutMs".to_string(),
-            option_u64_json(status.io_timeout_ms),
+            json_helpers::optional_number(status.io_timeout_ms),
         );
         map.insert(
             "maxBodyBytes".to_string(),
-            option_usize_json(status.max_body_bytes),
+            json_helpers::optional_number(status.max_body_bytes),
         );
         map.insert(
             "overviewCacheMs".to_string(),
-            option_u64_json(status.overview_cache_ms),
+            json_helpers::optional_number(status.overview_cache_ms),
         );
         map.insert("url".to_string(), JsonValue::string(status.url.clone()));
         map.insert(
@@ -686,10 +665,22 @@ fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
         ("stateRoot", JsonValue::string(state.state_root.clone())),
         ("host", JsonValue::string(state.host.clone())),
         ("port", JsonValue::number(state.port)),
-        ("maxConnections", option_usize_json(state.max_connections)),
-        ("ioTimeoutMs", option_u64_json(state.io_timeout_ms)),
-        ("maxBodyBytes", option_usize_json(state.max_body_bytes)),
-        ("overviewCacheMs", option_u64_json(state.overview_cache_ms)),
+        (
+            "maxConnections",
+            json_helpers::optional_number(state.max_connections),
+        ),
+        (
+            "ioTimeoutMs",
+            json_helpers::optional_number(state.io_timeout_ms),
+        ),
+        (
+            "maxBodyBytes",
+            json_helpers::optional_number(state.max_body_bytes),
+        ),
+        (
+            "overviewCacheMs",
+            json_helpers::optional_number(state.overview_cache_ms),
+        ),
         ("url", JsonValue::string(state.url.clone())),
         ("pid", JsonValue::number(state.pid)),
         ("startedAtMs", JsonValue::number(state.started_at_ms)),
@@ -704,7 +695,7 @@ fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
         ),
     ])
     .to_pretty_string();
-    write_atomic(path, payload)
+    runtimepaths::write_text_atomic(path, &payload)
 }
 
 fn read_state(path: &Path) -> Result<ServeState, String> {
@@ -888,10 +879,6 @@ fn probe_host(host: &str) -> String {
     }
 }
 
-fn canonicalize_or_original(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
 fn stale_runner_warning(state: &ServeState) -> Option<String> {
     let current_runner_path = resolve_runner_source().ok()?;
     let runner_path = PathBuf::from(&state.runner_path);
@@ -902,8 +889,8 @@ fn stale_runner_warning_for_paths(
     runner_path: &Path,
     current_runner_path: &Path,
 ) -> Option<String> {
-    let runner_path = canonicalize_or_original(runner_path);
-    let current_runner_path = canonicalize_or_original(current_runner_path);
+    let runner_path = runtimepaths::canonicalize_or_original(runner_path);
+    let current_runner_path = runtimepaths::canonicalize_or_original(current_runner_path);
     if runner_path == current_runner_path {
         return None;
     }
@@ -988,14 +975,7 @@ fn sanitize_display(path: &Path) -> String {
 }
 
 fn now_ms() -> u128 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis()
-}
-
-fn write_atomic(path: &Path, contents: String) -> Result<(), String> {
-    runtimepaths::write_text_atomic(path, &contents)
+    runtimepaths::unix_time_ms()
 }
 
 fn spawn_background(

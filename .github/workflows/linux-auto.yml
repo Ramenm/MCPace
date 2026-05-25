@@ -1,14 +1,14 @@
 name: linux-auto
 
 # Local CI is the default cost-control gate for this repository:
-#   npm run ci:local:linux
+#   npm run check:ci
 # GitHub-hosted Linux proof lanes stay manual-only to avoid paid Actions
 # minutes on normal private-repo pushes/PRs.
 on:
   workflow_dispatch:
     inputs:
       full:
-        description: Run Docker clean-install proof as well.
+        description: Run the full local CI proof rather than the fast check.
         required: false
         default: false
         type: boolean
@@ -32,21 +32,23 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          package-manager-cache: false
+          cache: npm
+
+      - name: Install locked Node tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Run Linux auto-check
-        run: npm run verify:linux:auto
+        run: npm run check
 
       - name: Upload Linux auto-check report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: linux-auto-check-standard
-          path: |
-            reports/linux-auto-check-latest.json
-            reports/linux-auto-check-latest.md
+          path: reports/**
+          if-no-files-found: ignore
 
-  linux-clean-install-docker:
+  linux-clean-install-proof:
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.full == true }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -58,16 +60,18 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          package-manager-cache: false
+          cache: npm
 
-      - name: Run full Linux auto-check with Docker proof
-        run: npm run verify:linux:auto:full
+      - name: Install locked Node tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Run full Linux auto-check
+        run: npm run check:ci
 
       - name: Upload full Linux auto-check report
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: linux-auto-check-full
-          path: |
-            reports/linux-auto-check-full-latest.json
-            reports/linux-auto-check-full-latest.md
+          path: reports/**
+          if-no-files-found: ignore

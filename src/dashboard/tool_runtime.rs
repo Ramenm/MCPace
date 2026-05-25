@@ -286,9 +286,7 @@ fn parse_http_upstream_batch_call(
 
 fn optional_object_arg(arguments: &JsonValue, key: &str) -> Result<JsonValue, String> {
     match json_helpers::value_at_path(arguments, &[key]) {
-        Some(JsonValue::Object(_)) => Ok(json_helpers::value_at_path(arguments, &[key])
-            .cloned()
-            .expect("checked above")),
+        Some(value @ JsonValue::Object(_)) => Ok(value.clone()),
         Some(JsonValue::Null) | None => Ok(empty_object()),
         Some(_) => Err(format!("{} must be a JSON object", key)),
     }

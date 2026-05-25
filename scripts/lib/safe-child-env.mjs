@@ -62,10 +62,6 @@ export function cleanChildEnv(overrides = {}, baseEnv = process.env) {
   return env;
 }
 
-export function childEnvForCommand(command, overrides = {}, baseEnv = process.env) {
-  const env = cleanChildEnv(overrides, baseEnv);
-  if ((command === 'cargo' || command === 'rustc') && !env.RUSTUP_TOOLCHAIN) {
-    env.RUSTUP_TOOLCHAIN = 'stable';
-  }
-  return env;
+export function childEnvForCommand(_command, overrides = {}, baseEnv = process.env) {
+  return cleanChildEnv(overrides, baseEnv);
 }

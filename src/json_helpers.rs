@@ -37,6 +37,24 @@ pub fn value_at_path<'a>(value: &'a JsonValue, path: &[&str]) -> Option<&'a Json
     Some(current)
 }
 
+/// Returns the MCP server map from either common config shape.
+///
+/// MCP clients and examples commonly use either `mcpServers` or `servers`;
+/// keeping this selector centralized prevents import, source listing, and setup
+/// flows from drifting apart.
+pub fn mcp_servers_object(value: &JsonValue) -> Option<&BTreeMap<String, JsonValue>> {
+    mcp_servers_object_with_key(value).map(|(_, servers)| servers)
+}
+
+/// Returns the selected MCP server map plus the source key that was used.
+pub fn mcp_servers_object_with_key(
+    value: &JsonValue,
+) -> Option<(&'static str, &BTreeMap<String, JsonValue>)> {
+    object_at_path(value, &["mcpServers"])
+        .map(|servers| ("mcpServers", servers))
+        .or_else(|| object_at_path(value, &["servers"]).map(|servers| ("servers", servers)))
+}
+
 pub fn strings_from_array(value: Option<&[JsonValue]>) -> Vec<String> {
     value
         .unwrap_or(&[])
@@ -44,4 +62,19 @@ pub fn strings_from_array(value: Option<&[JsonValue]>) -> Vec<String> {
         .filter_map(|item| item.as_str().map(|text| text.trim().to_string()))
         .filter(|item| !item.is_empty())
         .collect()
+}
+
+pub fn json_string_or_null(value: Option<String>) -> JsonValue {
+    match value {
+        Some(value) => JsonValue::string(value),
+        None => JsonValue::Null,
+    }
+}
+
+pub fn empty_object() -> JsonValue {
+    JsonValue::Object(BTreeMap::new())
+}
+
+pub fn optional_number<T: ToString>(value: Option<T>) -> JsonValue {
+    value.map(JsonValue::number).unwrap_or(JsonValue::Null)
 }

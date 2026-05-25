@@ -5,7 +5,7 @@ Thin npm launcher for the MCPace native Rust binary.
 The package resolves and launches `mcpace`; it does not duplicate the Rust runtime. Resolution order:
 
 1. `MCPACE_BINARY_PATH` or `MCPACE_DEV_BINARY`
-2. local source builds under `target/` or `dist/`
+2. local source builds under `target/` or `dist/` when running inside the MCPace source workspace
 3. optional platform packages such as `@mcpace/cli-linux-x64-gnu`
 
 After the native binary is available:

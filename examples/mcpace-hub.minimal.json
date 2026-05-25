@@ -5,7 +5,9 @@
     "stateDir": "data/runtime",
     "logDir": "logs",
     "ingress": {
-      "stdioLaunchers": { "enabled": true },
+      "stdioLaunchers": {
+        "enabled": true
+      },
       "streamableHttp": {
         "enabled": true,
         "bind": "127.0.0.1:12223",
@@ -15,7 +17,11 @@
   },
   "clients": {
     "default": "cursor",
-    "supported": ["cursor", "vscode", "generic-stdio"]
+    "supported": [
+      "cursor",
+      "vscode",
+      "generic-stdio"
+    ]
   },
   "profiles": {
     "default": "manual",
@@ -30,9 +36,5 @@
   "projects": {
     "discoveryRoots": [],
     "stickySessions": true
-  },
-  "compatibility": {
-    "legacyManagerBridge": false,
-    "legacyScriptAliases": false
   }
 }

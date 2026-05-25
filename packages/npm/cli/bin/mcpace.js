@@ -1,30 +1,37 @@
 #!/usr/bin/env node
-import { spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
+import process from 'node:process';
 import { resolveBinary } from '../lib/resolve-binary.js';
-import { assertSupportedNodeVersion } from '../lib/runtime.js';
-
-function fail(error) {
-  const message = error && error.stack ? error.stack : String(error);
-  process.stderr.write(`${message}\n`);
-  process.exitCode = typeof error?.exitCode === 'number' ? error.exitCode : 1;
-}
+import { assertSupportedNodeVersion, formatUnsupportedNodeMessage } from '../lib/runtime.js';
 
 try {
   assertSupportedNodeVersion();
-  const binary = resolveBinary();
-  const child = spawn(binary, process.argv.slice(2), {
-    stdio: 'inherit',
-    windowsHide: false,
-  });
-
-  child.on('error', fail);
-  child.on('exit', (code, signal) => {
-    if (signal) {
-      process.kill(process.pid, signal);
-      return;
-    }
-    process.exitCode = code ?? 1;
-  });
 } catch (error) {
-  fail(error);
+  process.stderr.write(`${error?.message || formatUnsupportedNodeMessage()}\n`);
+  process.exit(1);
 }
+
+let binaryPath;
+try {
+  binaryPath = resolveBinary();
+} catch (error) {
+  process.stderr.write(`${error?.message || error}\n`);
+  process.exit(1);
+}
+
+const result = spawnSync(binaryPath, process.argv.slice(2), {
+  stdio: 'inherit',
+  windowsHide: true,
+});
+
+if (result.error) {
+  process.stderr.write(`failed to launch mcpace native binary '${binaryPath}': ${result.error.message}\n`);
+  process.exit(1);
+}
+
+if (result.signal) {
+  process.stderr.write(`mcpace native binary terminated by signal ${result.signal}\n`);
+  process.exit(1);
+}
+
+process.exit(result.status ?? 0);

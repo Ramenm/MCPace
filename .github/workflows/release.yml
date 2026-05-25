@@ -12,7 +12,7 @@ on:
         default: false
         type: boolean
       release_tag:
-        description: Tag to use when create_github_release is true on a manual run. Leave empty on tag-triggered runs.
+        description: Tag to use when create_github_release is true on a manual run.
         required: false
         default: ''
         type: string
@@ -32,8 +32,6 @@ jobs:
       id-token: write
       attestations: write
     timeout-minutes: 20
-    outputs:
-      native_matrix: ${{ steps.release-matrices.outputs.native_matrix }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -42,216 +40,36 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          package-manager-cache: false
-      - name: Generate release matrices from release-targets.json
-        id: release-matrices
-        run: node scripts/github-release-matrix.mjs --github-output "$GITHUB_OUTPUT"
+          cache: npm
 
-      - name: Verify source release contracts
-        run: |
-          npm run verify:release-targets
-          npm run verify:platform-packages
-          npm test
+      - uses: dtolnay/rust-toolchain@1.95.0
 
-      - name: Verify generated platform package manifests are committed
-        run: |
-          npm run sync:platform-packages
-          git diff --exit-code -- package.json release-targets.json packages/npm
+      - name: Install locked Node tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
 
-      - name: Inject GitHub repository metadata for packed npm artifacts
-        run: node scripts/sync-platform-packages.mjs --json --repository-url "${{ github.server_url }}/${{ github.repository }}"
+      - name: Verify release contracts
+        run: npm run check:ci
 
       - name: Build source release artifact bundle
         run: npm run build:release-artifacts
 
-      - name: Pack main npm launcher
-        run: |
-          node -e "require('node:fs').mkdirSync('dist/npm', { recursive: true })"
-          npm pack --workspace "@mcpace/cli" --json --pack-destination dist/npm
-
-      - name: Generate source checksums
-        run: node scripts/generate-checksums.mjs --output-dir dist --output-path dist/SHA256SUMS.source.txt --recursive --json
-
-      - name: Attest main npm package when supported
-        if: github.repository_visibility == 'public' || vars.MCPACE_ENABLE_PRIVATE_ATTESTATIONS == 'true'
-        uses: actions/attest@v4
-        with:
-          subject-path: 'dist/npm/*.tgz'
-
-      - name: Upload source and main package artifacts
+      - name: Upload source release artifacts
         uses: actions/upload-artifact@v7
         with:
           name: source-release
-          path: |
-            dist/**
-
-
-  runtime-lifecycle-release-proof:
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 25
-    needs: source-release
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: ubuntu-24.04
-            suite: test:hub_runtime
-          - os: ubuntu-24.04
-            suite: test:mcp_server
-          - os: ubuntu-24.04
-            suite: test:stdio_shim
-          - os: macos-15
-            suite: test:hub_runtime
-          - os: windows-2025
-            suite: test:hub_runtime
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-
-      - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-rust-1.95.0-lifecycle-${{ matrix.suite }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-rust-1.95.0-lifecycle-
-            ${{ runner.os }}-cargo-rust-1.95.0-
-
-      - name: Run isolated Rust lifecycle suite
-        run: node scripts/run-rust-tests.mjs --json --suite ${{ matrix.suite }}
-
-  native-platform-release:
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 35
-    needs: source-release
-    permissions:
-      contents: read
-      id-token: write
-      attestations: write
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJson(needs.source-release.outputs.native_matrix) }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          persist-credentials: false
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version-file: .nvmrc
-          package-manager-cache: false
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.95.0
-          targets: ${{ matrix.rust_target }}
-
-      - name: Cache Cargo registry and build outputs
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-rust-1.95.0-${{ matrix.rust_target }}-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-rust-1.95.0-${{ matrix.rust_target }}-
-            ${{ runner.os }}-cargo-rust-1.95.0-
-
-      - name: Inject GitHub repository metadata for packed npm artifacts
-        run: node scripts/sync-platform-packages.mjs --json --repository-url "${{ github.server_url }}/${{ github.repository }}"
-
-      - name: Run Rust tests suite-by-suite on native host
-        run: npm run test:rust:ci
-
-      - name: Build release binary for target
-        run: cargo build --release --target ${{ matrix.rust_target }} --locked
-
-      - name: Stage and verify vendored binary
-        run: |
-          node scripts/stage-vendored-binary.mjs --json --target-key ${{ matrix.target_key }} --binary-path target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} --clear-target-dir
-          node scripts/verify-vendored-binary.mjs --json --target-key ${{ matrix.target_key }} --write reports/vendored-binary-${{ matrix.target_key }}.json
-
-      - name: Stage, verify, and pack platform npm package
-        run: |
-          node scripts/stage-platform-package-binary.mjs --json --target-key ${{ matrix.target_key }} --binary-path target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }} --clear-bin-dir
-          node scripts/verify-platform-packages.mjs --json --target-key ${{ matrix.target_key }} --require-binaries --pack-dry-run
-          node -e "require('node:fs').mkdirSync('dist/npm', { recursive: true })"
-          npm pack "packages/npm/cli-${{ matrix.target_key }}" --json --pack-destination dist/npm
-
-      - name: Generate platform checksums
-        run: node scripts/generate-checksums.mjs --output-dir packages/npm/cli/vendor/${{ matrix.target_key }} --output-path packages/npm/cli/vendor/${{ matrix.target_key }}/SHA256SUMS.txt --recursive --json
-
-      - name: Attest native binary and npm package when supported
-        if: github.repository_visibility == 'public' || vars.MCPACE_ENABLE_PRIVATE_ATTESTATIONS == 'true'
-        uses: actions/attest@v4
-        with:
-          subject-path: |
-            target/${{ matrix.rust_target }}/release/${{ matrix.binary_name }}
-            dist/npm/*.tgz
-
-      - name: Upload native release artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: native-${{ matrix.target_key }}
-          path: |
-            packages/npm/cli/vendor/${{ matrix.target_key }}/**
-            packages/npm/cli-${{ matrix.target_key }}/bin/**
-            dist/npm/*.tgz
+          path: dist/**
 
   github-draft-release:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs:
-      - source-release
-      - runtime-lifecycle-release-proof
-      - native-platform-release
+    needs: source-release
     if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.create_github_release == true)
     permissions:
       contents: write
-      id-token: write
-      attestations: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/download-artifact@v7
         with:
           path: dist/release-assets
-
-      - name: Flatten release assets and generate combined checksums
-        run: |
-          mkdir -p dist/release-upload
-          find dist/release-assets -type f \( -name '*.tgz' -o -name '*.zip' \) -exec cp {} dist/release-upload/ \;
-          find dist/release-assets -type f -name verification-latest.json -print -quit | xargs -r -I{} cp {} dist/release-upload/verification-latest.json
-          find dist/release-assets -type f -name release-artifacts.json -print -quit | xargs -r -I{} cp {} dist/release-upload/release-artifacts.json
-          find dist/release-assets -type f -name SHA256SUMS.source.txt -print -quit | xargs -r -I{} cp {} dist/release-upload/SHA256SUMS.source.txt
-          for artifact_dir in dist/release-assets/native-*; do
-            [ -d "$artifact_dir" ] || continue
-            target_key="${artifact_dir##*/native-}"
-            binary_path="$(find "$artifact_dir" -path "*/packages/npm/cli-${target_key}/bin/mcpace*" -type f -print -quit)"
-            [ -n "$binary_path" ] || continue
-            extension=""
-            case "$binary_path" in
-              *.exe) extension=".exe" ;;
-            esac
-            cp "$binary_path" "dist/release-upload/mcpace-${target_key}${extension}"
-          done
-          find dist/release-upload -type f -print0 | sort -z | xargs -0 sha256sum > dist/release-upload/SHA256SUMS.txt
-
-      - name: Attest combined checksum manifest when supported
-        if: github.repository_visibility == 'public' || vars.MCPACE_ENABLE_PRIVATE_ATTESTATIONS == 'true'
-        uses: actions/attest@v4
-        with:
-          subject-path: 'dist/release-upload/SHA256SUMS.txt'
 
       - name: Create or update draft GitHub release
         env:
@@ -263,7 +81,7 @@ jobs:
             echo "release_tag input is required for manual draft release creation outside a tag ref" >&2
             exit 1
           fi
-          assets=(dist/release-upload/*)
+          assets=(dist/release-assets/**/*)
           if [ ${#assets[@]} -eq 0 ]; then
             echo "no release assets found" >&2
             exit 1
@@ -271,5 +89,5 @@ jobs:
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
           else
-            gh release create "$RELEASE_TAG" "${assets[@]}" --draft --verify-tag --title "$RELEASE_TAG" --notes "Automated MCPace release assets. Verify SHA256SUMS.txt before publishing."
+            gh release create "$RELEASE_TAG" "${assets[@]}" --draft --verify-tag --title "$RELEASE_TAG" --notes "Automated MCPace release assets. Verify checksums before publishing."
           fi

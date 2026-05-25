@@ -2,6 +2,7 @@ use super::analysis::{build_gap_list, build_next_steps, capability_index, readin
 use super::model::{CapabilityGap, CapabilityRecord, ScenarioAssessment};
 use crate::client_catalog;
 use crate::json::JsonValue;
+use crate::text_utils::join_or_none;
 use std::collections::BTreeMap;
 use std::io::Write;
 
@@ -563,7 +564,7 @@ pub(super) fn render_show(
             target.family_id,
             target.surface_class,
             target.surface_kind,
-            join_static_or_none(target.documented_constraints)
+            join_or_none(target.documented_constraints)
         );
     }
     let _ = writeln!(
@@ -611,22 +612,6 @@ pub(super) fn render_show(
     }
 
     0
-}
-
-fn join_or_none(values: &[String]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join(", ")
-    }
-}
-
-fn join_static_or_none(values: &[&str]) -> String {
-    if values.is_empty() {
-        "none".to_string()
-    } else {
-        values.join(", ")
-    }
 }
 
 fn blank_to_none(value: &str) -> String {

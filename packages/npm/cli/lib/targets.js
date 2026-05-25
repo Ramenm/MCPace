@@ -1,5 +1,5 @@
-// Generated from release-targets.json by scripts/sync-platform-packages.mjs.
-// Do not edit by hand.
+// Generated from release-targets.json. Keep this file aligned through tests before publishing.
+// Do not edit target data without updating release-targets.json.
 export const RELEASE_TARGETS = [
   {
     "publishEnabled": true,

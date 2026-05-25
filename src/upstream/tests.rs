@@ -516,6 +516,30 @@ fn load_servers_accepts_source_only_standard_mcp_shape() {
 }
 
 #[test]
+fn load_servers_normalizes_public_sse_legacy_type_to_internal_runtime_type() {
+    let root = temp_root();
+    fs::write(
+        root.join("mcp_settings.json"),
+        r#"{
+  "mcpServers": {
+    "Remote SSE": {
+      "enabled": true,
+      "type": "sse-legacy",
+      "url": "http://127.0.0.1:39023/sse"
+    }
+  }
+}"#,
+    )
+    .unwrap();
+
+    let servers = load_servers(&root).expect("sse legacy source config");
+    let server = servers.get("Remote SSE").expect("remote SSE server");
+    assert_eq!(server.source_type, "legacy-sse");
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn expands_workspace_and_fallback_placeholders() {
     let root = PathBuf::from(r"C:\workspace\project");
     let expanded = expand_template(

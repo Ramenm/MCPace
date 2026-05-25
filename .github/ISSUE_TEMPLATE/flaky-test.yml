@@ -13,7 +13,7 @@ body:
     id: workflow
     attributes:
       label: Workflow, job, or local command
-      placeholder: npm run test:repo, rust-build-validation, verify:runtime-trace
+      placeholder: npm run check, npm run test:rust, npm run load:local
     validations:
       required: true
   - type: input

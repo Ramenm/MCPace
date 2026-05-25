@@ -1,5 +1,6 @@
 use crate::json::JsonValue;
 use crate::mcp_sources::{self, McpServerWriteOptions, McpServerWriteResult};
+use crate::runtimepaths;
 use std::path::{Path, PathBuf};
 
 const FILESYSTEM_NPM_PACKAGE: &str = "@modelcontextprotocol/server-filesystem";
@@ -672,7 +673,7 @@ fn absolutize_local_path_arg(value: &str) -> String {
         .strip_prefix("~/")
         .or_else(|| trimmed.strip_prefix("~\\"))
     {
-        if let Some(home) = user_home_dir() {
+        if let Some(home) = runtimepaths::user_home_dir() {
             let mut path = home;
             for segment in rest.split(['/', '\\']) {
                 if !segment.is_empty() {
@@ -694,12 +695,6 @@ fn absolutize_local_path_arg(value: &str) -> String {
         .unwrap_or(candidate)
         .display()
         .to_string()
-}
-
-fn user_home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
 }
 
 fn strip_known_prefix<'a>(value: &'a str, prefix: &str) -> &'a str {

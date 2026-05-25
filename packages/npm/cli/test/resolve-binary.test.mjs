@@ -6,6 +6,11 @@ import path from 'node:path';
 import { createExecutableFixture, resolveBinary } from '../lib/resolve-binary.js';
 import { binaryNameForTarget, detectTarget } from '../lib/platform.js';
 
+function writeSourceWorkspaceMarker(root) {
+  fs.writeFileSync(path.join(root, 'Cargo.toml'), '[package]\nname = "mcpace"\nversion = "0.6.9"\n', 'utf8');
+  fs.writeFileSync(path.join(root, 'package.json'), '{"name":"mcpace-workspace","version":"0.6.9"}\n', 'utf8');
+}
+
 test('resolveBinary prefers MCPACE_BINARY_PATH', async (t) => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-bin-'));
   const bin = createExecutableFixture(path.join(tmp, process.platform === 'win32' ? 'mcpace.exe' : 'mcpace'));
@@ -21,6 +26,7 @@ test('resolveBinary prefers MCPACE_BINARY_PATH', async (t) => {
 
 test('resolveBinary prefers MCPACE_DEV_BINARY when explicit path is given', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-dev-'));
+  writeSourceWorkspaceMarker(tmp);
   const bin = createExecutableFixture(path.join(tmp, process.platform === 'win32' ? 'mcpace.exe' : 'mcpace'));
   process.env.MCPACE_DEV_BINARY = bin;
   try {
@@ -31,6 +37,30 @@ test('resolveBinary prefers MCPACE_DEV_BINARY when explicit path is given', () =
   }
 });
 
+
+
+test('resolveBinary accepts quoted explicit env paths from shell snippets', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-quoted-env-'));
+  const bin = createExecutableFixture(path.join(tmp, process.platform === 'win32' ? 'mcpace.exe' : 'mcpace'));
+  process.env.MCPACE_BINARY_PATH = `"${bin}"`;
+  try {
+    assert.equal(resolveBinary(), path.resolve(bin));
+  } finally {
+    delete process.env.MCPACE_BINARY_PATH;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('resolveBinary rejects directories passed as explicit binary paths', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-dir-env-'));
+  process.env.MCPACE_BINARY_PATH = tmp;
+  try {
+    assert.throws(() => resolveBinary(), /not a file/);
+  } finally {
+    delete process.env.MCPACE_BINARY_PATH;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
 
 test('resolveBinary rejects a non-executable explicit binary path on unix', () => {
   if (process.platform === 'win32') {
@@ -45,6 +75,19 @@ test('resolveBinary rejects a non-executable explicit binary path on unix', () =
     assert.throws(() => resolveBinary(), /not executable/);
   } finally {
     delete process.env.MCPACE_BINARY_PATH;
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('resolveBinary ignores accidental consumer-project target binaries outside MCPace source workspaces', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'consumer-project-'));
+  createExecutableFixture(path.join(tmp, 'target', 'release', process.platform === 'win32' ? 'mcpace.exe' : 'mcpace'));
+  try {
+    assert.throws(
+      () => resolveBinary({ repoRoot: tmp, ignoreVendoredBinary: true }),
+      /Unable to resolve the mcpace binary/
+    );
+  } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

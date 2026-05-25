@@ -1,55 +1,24 @@
 name: Feature request
-description: Propose a product improvement tied to a real MCPace use case.
-title: "[feature] "
-labels:
-  - enhancement
+description: Suggest a focused improvement.
+title: "feat: "
+labels: [type:enhancement]
 body:
   - type: textarea
     id: problem
     attributes:
       label: Problem
-      description: What pain does this solve for MCPace users?
-      placeholder: I use two local MCP clients and want...
+      description: What user problem should this solve?
     validations:
       required: true
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed behavior
-      description: Describe the smallest useful behavior, not only the implementation.
-    validations:
-      required: true
-  - type: dropdown
-    id: product_lane
-    attributes:
-      label: Product lane
-      options:
-        - runtime beta / sessions / leases
-        - stdio upstream brokering
-        - HTTP upstream fan-out
-        - client install / export / rollback
-        - presets / BYO server config
-        - release / packaging
-        - diagnostics / dashboard
-        - documentation / onboarding
-        - other
+      label: Proposed solution
+      description: Keep the solution narrow and mention any Windows or MCP stdio impact.
     validations:
       required: true
   - type: textarea
-    id: acceptance
+    id: validation
     attributes:
-      label: Acceptance criteria
-      description: What proof would show this is done?
-      placeholder: |
-        - npm run verify:runtime-trace still passes
-        - new test covers missing session id
-        - README claim remains honest
-    validations:
-      required: true
-  - type: textarea
-    id: non_goals
-    attributes:
-      label: Non-goals
-      description: What should this not change?
-    validations:
-      required: false
+      label: Validation idea
+      description: What command or test should prove this works?

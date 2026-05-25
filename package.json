@@ -13,14 +13,21 @@
     "lint:npm": "node scripts/check-node-syntax.mjs --json",
     "test:npm": "node --test packages/npm/cli/test/*.test.mjs tests/node/*.test.mjs",
     "check": "npm run lint:npm && npm run test:npm",
+    "check:package": "publint packages/npm/cli",
+    "check:ci": "npm run check && npm run check:package && npm run release:dry-run",
     "ci:local:quick": "npm run check",
-    "ci": "npm run check",
-    "build": "cargo build --release",
-    "test:rust": "cargo test",
+    "ci": "npm run check:ci",
+    "build": "node scripts/cargo-task.mjs build --release",
+    "test:rust": "node scripts/cargo-task.mjs test",
     "test": "npm run test:npm",
     "pack:npm:dry-run": "npm pack --workspace @mcpace/cli --json --dry-run",
+    "build:release-artifacts": "node scripts/build-release-artifacts.mjs --json --out-dir dist",
+    "release:dry-run": "node scripts/build-release-artifacts.mjs --json --dry-run --out-dir dist",
     "load:local": "node scripts/load-test-local.mjs",
-    "test:logic": "node scripts/logic-test-local.mjs"
+    "fmt:check": "node scripts/cargo-task.mjs fmt --check",
+    "clippy": "node scripts/cargo-task.mjs clippy --all-targets -- -D warnings",
+    "check:rust": "npm run fmt:check && npm run clippy && npm run test:rust",
+    "check:external-tools": "node scripts/tooling-preflight.mjs"
   },
   "packageManager": "npm@10.9.2",
   "devEngines": {
@@ -34,5 +41,8 @@
       "version": "^10.0.0 || ^11.0.0",
       "onFail": "error"
     }
+  },
+  "devDependencies": {
+    "publint": "^0.3.21"
   }
 }

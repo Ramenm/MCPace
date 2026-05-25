@@ -1,3 +1,4 @@
+use crate::text_utils::normalize_flag;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -289,8 +290,4 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
     }
 
     parsed
-}
-
-fn normalize_flag(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
 }

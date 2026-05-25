@@ -13,7 +13,7 @@ test('import code accepts common MCP URL aliases and normalizes remote type', ()
   for (const key of ['serverUrl', 'httpUrl', 'endpoint']) {
     assert.match(source, new RegExp(`"${key}"`), `missing URL alias support for ${key}`);
   }
-  assert.match(source, /"streamable-http"\.to_string\(\)/, 'remote URL imports should normalize to streamable-http');
+  assert.match(source, /source_type::infer_public_source_type/, 'remote URL imports should use the shared source-type normalizer');
   assert.match(source, /"servers"/, 'VS Code-style top-level servers object should remain supported');
   assert.match(source, /"mcpServers"/, 'mcpServers object should remain supported');
 });

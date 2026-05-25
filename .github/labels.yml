@@ -50,6 +50,9 @@
 - name: area:release
   color: 5319e7
   description: Release artifacts, checksums, provenance, publishing.
+- name: area:rust
+  color: 5319e7
+  description: Rust crate, Cargo toolchain, clippy, or native binary behavior.
 - name: area:docs
   color: 0075ca
   description: Docs, examples, roadmap, or product truth.
@@ -77,3 +80,9 @@
 - name: full-ci
   color: c2e0c6
   description: Request expensive platform/Docker CI lanes.
+- name: skip-changelog
+  color: cfd3d7
+  description: Exclude from generated release notes.
+- name: internal-only
+  color: cfd3d7
+  description: Internal maintenance change that should not be highlighted publicly.

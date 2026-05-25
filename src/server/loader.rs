@@ -2,6 +2,7 @@ use super::model::{ServerRecord, SourceServerRecord};
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_sources;
+use crate::platform_utils;
 use crate::profile;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
@@ -589,17 +590,7 @@ fn source_signals(
 }
 
 fn infer_source_type(raw_source_type: &str, command: &str, url: &str) -> String {
-    let normalized = normalize_source_type(raw_source_type);
-    if !normalized.is_empty() {
-        return normalized;
-    }
-    if !command.trim().is_empty() {
-        "stdio".to_string()
-    } else if !url.trim().is_empty() {
-        "http".to_string()
-    } else {
-        "stdio".to_string()
-    }
+    crate::source_type::infer_public_source_type(raw_source_type, command, url)
 }
 
 fn source_enabled(value: &JsonValue) -> bool {
@@ -610,17 +601,6 @@ fn source_enabled(value: &JsonValue) -> bool {
         .get("disabled")
         .and_then(JsonValue::as_bool)
         .unwrap_or(false)
-}
-
-fn normalize_source_type(value: &str) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "" => String::new(),
-        "streamablehttp" | "streamable-http" | "http-stream" | "remote-http" | "remote"
-        | "http" => "streamable-http".to_string(),
-        "sse" | "remote-sse" | "http+sse" | "http-sse" | "legacy-sse" => "sse-legacy".to_string(),
-        "stdio" | "local" | "local-stdio" | "local-command" | "command" => "stdio".to_string(),
-        other => other.to_string(),
-    }
 }
 
 fn supported_transports_for_source_type(source_type: &str) -> Vec<String> {
@@ -658,7 +638,7 @@ fn normalize_server_record(
     let source_enabled = source_record.map(|record| record.enabled).unwrap_or(false);
     let platforms =
         json_helpers::strings_from_array(object.get("platforms").and_then(JsonValue::as_array));
-    let platform_supported = server_supports_current_platform(&platforms);
+    let platform_supported = platform_utils::supports_current_platform(&platforms);
     let effective_enabled = profile_enabled && source_enabled && platform_supported;
 
     let scope_class = policy_string(policy, "scopeClass", "");
@@ -1165,35 +1145,6 @@ fn profile_evidence_records(input: ProfileEvidenceInput<'_>) -> Vec<JsonValue> {
         ]));
     }
     records
-}
-
-fn server_supports_current_platform(platforms: &[String]) -> bool {
-    if platforms.is_empty() {
-        return true;
-    }
-    let current = current_platform_alias();
-    platforms.iter().any(|platform| {
-        let normalized = normalize_platform(platform);
-        normalized == current || normalized == "any" || normalized == "all" || normalized == "*"
-    })
-}
-
-fn current_platform_alias() -> &'static str {
-    match std::env::consts::OS {
-        "macos" => "macos",
-        "windows" => "windows",
-        "linux" => "linux",
-        other => other,
-    }
-}
-
-fn normalize_platform(value: &str) -> String {
-    match value.trim().to_ascii_lowercase().as_str() {
-        "darwin" | "mac" | "osx" | "macos" => "macos".to_string(),
-        "win" | "windows" => "windows".to_string(),
-        "linux" => "linux".to_string(),
-        other => other.to_string(),
-    }
 }
 
 fn default_parallelism_limit(concurrency_policy: &str) -> usize {

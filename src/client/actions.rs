@@ -1,3 +1,4 @@
+use crate::text_utils::yes_no;
 mod backup;
 mod config_update;
 mod list;
@@ -21,7 +22,7 @@ use super::context::resolve_context;
 use super::metadata::load_metadata;
 use super::pathing::stable_hash_hex;
 use super::plan::build_plan;
-use super::render::{join_or_none, write_text_plan};
+use super::render::{join_semicolon_or_none, write_text_plan};
 use crate::client_catalog::{
     self, client_install_support_summary as catalog_client_install_support_summary,
     ClientInstallKindRecord as ClientInstallKind, ClientTargetRecord as ClientTarget,
@@ -140,9 +141,9 @@ pub(super) fn run_export(
     };
     let mut context = resolve_context(&parsed, &metadata);
     if context.project_root.is_none() {
-        context.project_root = Some(sanitize_path_for_display(&canonicalize_or_original(
-            &root_path,
-        )));
+        context.project_root = Some(sanitize_path_for_display(
+            &runtimepaths::canonicalize_or_original(&root_path),
+        ));
         context.project_root_source = "export-root".to_string();
     }
     let client_target = match client_catalog::find_in_targets(&registry.targets, &context.client_id)
@@ -224,9 +225,9 @@ pub(super) fn run_install(
     };
     let mut context = resolve_context(&parsed, &metadata);
     if context.project_root.is_none() {
-        context.project_root = Some(sanitize_path_for_display(&canonicalize_or_original(
-            &root_path,
-        )));
+        context.project_root = Some(sanitize_path_for_display(
+            &runtimepaths::canonicalize_or_original(&root_path),
+        ));
         context.project_root_source = "install-root".to_string();
     }
     let client_target = match client_catalog::find_in_targets(&registry.targets, &context.client_id)
@@ -463,9 +464,9 @@ fn run_install_all(
         };
         let mut context = resolve_context(&target_args, &metadata);
         if context.project_root.is_none() {
-            context.project_root = Some(sanitize_path_for_display(&canonicalize_or_original(
-                &root_path,
-            )));
+            context.project_root = Some(sanitize_path_for_display(
+                &runtimepaths::canonicalize_or_original(&root_path),
+            ));
             context.project_root_source = "install-root".to_string();
         }
         prefer_local_http_when_supported(&target_args, &mut context, target, "serve-default");
@@ -537,7 +538,7 @@ fn run_install_all(
             result.write_text(stdout);
         }
         if !skipped.is_empty() {
-            let _ = writeln!(stdout, "Skipped: {}", join_or_none(&skipped));
+            let _ = writeln!(stdout, "Skipped: {}", join_semicolon_or_none(&skipped));
         }
         for (target, error) in &failed {
             let _ = writeln!(stderr, "{}: {}", target, error);
@@ -957,22 +958,15 @@ fn build_adapter_contract(
 }
 
 fn sanitize_launcher_root_path(root_path: &str) -> String {
-    root_path
-        .strip_prefix(r"\\?\")
-        .unwrap_or(root_path)
-        .to_string()
+    crate::runtimepaths::strip_windows_extended_path_prefix(root_path)
 }
 
 fn sanitize_path_for_display(path: &Path) -> String {
     sanitize_launcher_root_path(&path.display().to_string())
 }
 
-fn canonicalize_or_original(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
 fn resolve_install_path(default_config_path: &str) -> Result<PathBuf, String> {
-    let home = user_home_dir().ok_or_else(|| {
+    let home = runtimepaths::user_home_dir().ok_or_else(|| {
         "failed to resolve the current user's home directory for user-scoped client config"
             .to_string()
     })?;
@@ -994,12 +988,6 @@ fn resolve_install_path(default_config_path: &str) -> Result<PathBuf, String> {
         }
     }
     Ok(path)
-}
-
-fn user_home_dir() -> Option<PathBuf> {
-    std::env::var_os("HOME")
-        .or_else(|| std::env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
 }
 
 fn install_warnings_from_plan(
@@ -1031,12 +1019,4 @@ fn install_warnings_from_plan(
     warnings.sort();
     warnings.dedup();
     warnings
-}
-
-fn yes_no(value: bool) -> &'static str {
-    if value {
-        "yes"
-    } else {
-        "no"
-    }
 }

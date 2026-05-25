@@ -140,7 +140,6 @@
               },
               "serverIds": {
                 "type": "array",
-                "minItems": 1,
                 "uniqueItems": true,
                 "items": {
                   "type": "string",
@@ -154,7 +153,6 @@
     },
     "servers": {
       "type": "array",
-      "minItems": 1,
       "items": {
         "type": "object",
         "additionalProperties": false,
@@ -290,18 +288,6 @@
           }
         },
         "stickySessions": {
-          "type": "boolean"
-        }
-      }
-    },
-    "compatibility": {
-      "type": "object",
-      "additionalProperties": false,
-      "properties": {
-        "legacyManagerBridge": {
-          "type": "boolean"
-        },
-        "legacyScriptAliases": {
           "type": "boolean"
         }
       }

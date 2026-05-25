@@ -1053,7 +1053,7 @@ fn unified_serve_enforces_mcp_http_session_lifecycle() {
         let mut stderr = Vec::new();
         serve_listener(
             listener,
-                test_config(server_root, Some(10), super::ServeSurface::UnifiedServe),
+            test_config(server_root, Some(10), super::ServeSurface::UnifiedServe),
             &mut stderr,
         )
     });

@@ -1,3 +1,5 @@
+use crate::text_utils;
+
 #[derive(Clone, Copy, Debug)]
 pub struct CommandSpec {
     pub name: &'static str,
@@ -103,7 +105,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         name: "hub",
         description: "Manage the local hub lifecycle, status, and logs.",
-        aliases: &["start", "autostart"],
+        aliases: &["start"],
         implemented: true,
     },
     CommandSpec {
@@ -165,5 +167,5 @@ pub fn find(name: &str) -> Option<&'static CommandSpec> {
 }
 
 pub fn normalize(value: &str) -> String {
-    value.trim().to_ascii_lowercase()
+    text_utils::normalize_flag(value)
 }
