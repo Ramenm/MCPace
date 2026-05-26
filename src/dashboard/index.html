@@ -1694,8 +1694,8 @@
         }
         if (!evidence.checked) {
           return {
-            title: "Run Test first",
-            body: "The dashboard will not guess capabilities. Test runs initialize + tools/list and shows real tool evidence."
+            title: "Run test",
+            body: `No live tool evidence yet: ${firstSentence(guidance.body)}`
           };
         }
         if (policyNeedsTuning(server, related, recommendation)) {
@@ -1724,7 +1724,7 @@
             stateTitle,
             stateBody,
             routeTitle: recommended,
-            routeBody: "When enabled, MCPace will start from the current inferred conservative policy.",
+            routeBody: `${recommendation.reason} Current is ${current}.`,
             useTitle: guidance.title,
             useBody: guidance.body,
             current
@@ -1745,11 +1745,11 @@
           stateTitle: "On",
           stateBody: "The visible capability text is based only on live/cached evidence or source state.",
           routeTitle: recommended,
-          routeBody: `Current is ${current}. Worker controls stay in Advanced because they are not normal user decisions.`,
+            routeBody: `${recommendation.reason} Current is ${current}.`,
           useTitle: guidance.title,
           useBody: guidance.body,
           current
-        };
+          };
       }
 
       function settingCard(label, title, body) {
@@ -2042,7 +2042,7 @@
           `<span class="fact"><strong>Status</strong> On</span>`,
           `<span class="fact"><strong>Tools</strong> ${escapeHtml(toolLabel)}</span>`,
           `<span class="fact"><strong>Policy</strong> ${escapeHtml(serverSensitivity(server, risk))}</span>`,
-          tuned ? "" : `<span class="fact"><strong>Fix</strong> Apply safe</span>`
+          tuned ? "" : `<span class="fact"><strong>Fix</strong> ${escapeHtml(recommendation.label)}</span>`
         ].filter(Boolean).join("");
       }
 
@@ -2051,6 +2051,11 @@
         const enabled = Boolean(server.effectiveEnabled);
         const recommendation = recommendedPolicy(server, related);
         const needsTuning = policyNeedsTuning(server, related, recommendation);
+        const evidence = serverToolEvidence(server);
+        const testLabel = evidence.checked ? "Re-test" : "Test";
+        const applyLabel = needsTuning
+          ? `Apply ${recommendation.label}`
+          : `Policy ${recommendation.label}`;
         if (placement === "row") {
           if (!enabled) {
             return `
@@ -2060,13 +2065,13 @@
           }
           if (needsTuning) {
             return `
-              <button class="primary" type="button" data-server-name="${name}" data-server-action="auto">Apply policy</button>
-              <button type="button" data-server-name="${name}" data-server-action="test">Test</button>
+              <button class="primary" type="button" data-server-name="${name}" data-server-action="auto">${escapeHtml(applyLabel)}</button>
+              <button type="button" data-server-name="${name}" data-server-action="test">${escapeHtml(testLabel)}</button>
               <button class="quiet" type="button" data-server-name="${name}" data-server-action="settings">Details</button>
             `;
           }
           return `
-            <button class="primary" type="button" data-server-name="${name}" data-server-action="test">Test</button>
+            <button class="primary" type="button" data-server-name="${name}" data-server-action="test">${escapeHtml(testLabel)}</button>
             <button class="server-toggle on" type="button" aria-pressed="true" data-server-name="${name}" data-server-action="toggle">Turn off</button>
             <button class="quiet" type="button" data-server-name="${name}" data-server-action="settings">Details</button>
           `;
@@ -2075,8 +2080,8 @@
           <button class="server-toggle ${enabled ? "on" : "off"}" type="button" aria-pressed="${enabled}" data-server-name="${name}" data-server-action="toggle">
             ${enabled ? "Turn off" : "Turn on"}
           </button>
-          <button type="button" data-server-name="${name}" data-server-action="auto"${!enabled || !needsTuning ? " disabled" : ""}>${!enabled ? "Policy after on" : needsTuning ? "Apply policy" : "Policy active"}</button>
-          <button type="button" data-server-name="${name}" data-server-action="test">Test</button>
+          <button type="button" data-server-name="${name}" data-server-action="auto"${!enabled || !needsTuning ? " disabled" : ""}>${!enabled ? "Enable to apply" : escapeHtml(applyLabel)}</button>
+          <button type="button" data-server-name="${name}" data-server-action="test">${escapeHtml(testLabel)}</button>
         `;
       }
 

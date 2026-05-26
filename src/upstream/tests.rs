@@ -22,6 +22,76 @@ fn temp_root() -> PathBuf {
     path
 }
 
+fn write_exiting_upstream_server_config(root: &std::path::Path) -> PathBuf {
+    let script = root.join("upstream-exit-probe.js");
+    fs::write(
+        &script,
+        r#"
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
+
+function send(id, result) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
+}
+
+rl.on('line', (line) => {
+  const message = JSON.parse(line);
+  if (message.method === 'initialize') {
+    send(message.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'exit-probe', version: '0.1.0' } });
+  } else if (message.method === 'tools/list') {
+    send(message.id, {
+      tools: [{ name: 'ping', inputSchema: { type: 'object' } }],
+    });
+  } else if (message.method === 'tools/call') {
+    send(message.id, { content: [{ type: 'text', text: 'ok' }], isError: false });
+  }
+});
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("mcp_settings.json"),
+        format!(
+            r#"{{
+  "mcpServers": {{
+    "exit-probe": {{
+      "enabled": true,
+      "type": "stdio",
+      "command": "node",
+      "args": ["{}"]
+    }}
+  }}
+}}"#,
+            script
+                .display()
+                .to_string()
+                .replace('\\', "\\\\")
+                .replace('\"', "\\\"")
+        ),
+    )
+    .unwrap();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": {
+    "keyName": "MCPace"
+  },
+  "profiles": {
+    "runtime": {
+      "default": "safe",
+      "profiles": {
+        "safe": { "description": "Safe", "serverOverrides": {} }
+      }
+    }
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    script
+}
+
 #[test]
 fn config_declared_sensitive_tools_require_explicit_policy_flags() {
     let server = UpstreamServerConfig {
@@ -203,6 +273,106 @@ fn env_var_names_accept_codex_local_object_entries_and_skip_remote_entries() {
             "DEFAULT_LOCAL_TOKEN".to_string(),
         ]
     );
+}
+
+#[test]
+fn pooled_upstream_session_recycles_oldest_session_when_capacity_is_reached() {
+    let original_mcpace_mcp_settings = std::env::var_os("MCPACE_MCP_SETTINGS");
+    let original_mcpace_mcp_settings_dirs = std::env::var_os("MCPACE_MCP_SETTINGS_DIRS");
+    std::env::remove_var("MCPACE_MCP_SETTINGS");
+    std::env::remove_var("MCPACE_MCP_SETTINGS_DIRS");
+
+    if std::process::Command::new("node")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        if let Some(value) = original_mcpace_mcp_settings {
+            std::env::set_var("MCPACE_MCP_SETTINGS", value);
+        }
+        if let Some(value) = original_mcpace_mcp_settings_dirs {
+            std::env::set_var("MCPACE_MCP_SETTINGS_DIRS", value);
+        }
+        eprintln!("skipping upstream session exit reaping smoke test because node is unavailable");
+        return;
+    }
+
+    let root = temp_root();
+    write_exiting_upstream_server_config(&root);
+    let servers = load_servers(&root).expect("load exit-probe server");
+    assert_eq!(servers.len(), 1);
+    let pool = std::sync::Mutex::new(UpstreamSessionPool::with_max_sessions(1));
+    let arguments = JsonValue::object([("payload", JsonValue::string("test"))]);
+    let shared_context = UpstreamLeaseContext {
+        session_id: Some("shared-session".to_string()),
+        ..Default::default()
+    };
+    let another_context = UpstreamLeaseContext {
+        session_id: Some("alternate-session".to_string()),
+        ..Default::default()
+    };
+
+    let first = call_tool_with_pooled_context(
+        &root,
+        "exit-probe",
+        "ping",
+        &arguments,
+        Some(2_000),
+        Some(&shared_context),
+        &pool,
+    )
+    .expect("first pooled tool call");
+    assert_eq!(
+        json_helpers::bool_at_path(&first, &["sessionPoolHit"]),
+        Some(false),
+        "first pooled invocation should create a fresh session"
+    );
+    assert_eq!(
+        json_helpers::value_at_path(&first, &["sessionPoolSessionCallCount"])
+            .and_then(JsonValue::as_i64),
+        Some(1),
+        "fresh session should have a single call in its history"
+    );
+    assert_eq!(
+        json_helpers::value_at_path(&first, &["sessionPoolSize"]).and_then(JsonValue::as_i64),
+        Some(1),
+        "one upstream session should be pooled after first call"
+    );
+
+    let second = call_tool_with_pooled_context(
+        &root,
+        "exit-probe",
+        "ping",
+        &arguments,
+        Some(2_000),
+        Some(&another_context),
+        &pool,
+    )
+    .expect("second pooled tool call");
+    assert_eq!(
+        json_helpers::bool_at_path(&second, &["sessionPoolHit"]),
+        Some(false),
+        "second pooled invocation with a different context should evict the first shard session"
+    );
+    assert_eq!(
+        json_helpers::value_at_path(&second, &["sessionPoolSessionCallCount"])
+            .and_then(JsonValue::as_i64),
+        Some(1),
+        "freshly evicted/replaced session should start call history at one"
+    );
+    assert_eq!(
+        json_helpers::value_at_path(&second, &["sessionPoolSize"]).and_then(JsonValue::as_i64),
+        Some(1),
+        "pool should remain within max size after eviction"
+    );
+
+    if let Some(value) = original_mcpace_mcp_settings {
+        std::env::set_var("MCPACE_MCP_SETTINGS", value);
+    }
+    if let Some(value) = original_mcpace_mcp_settings_dirs {
+        std::env::set_var("MCPACE_MCP_SETTINGS_DIRS", value);
+    }
+    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
@@ -578,7 +748,7 @@ fn inventory_marks_stdio_and_plain_http_callable() {
             root.join("mcp_settings.json"),
             r#"{
   "mcpServers": {
-    "memory": { "enabled": true, "type": "stdio", "command": "__COMMAND__", "args": ["-y", "server"] },
+    "local-memory": { "enabled": true, "type": "stdio", "command": "__COMMAND__", "args": ["-y", "server"] },
     "remote-demo": { "enabled": true, "type": "http", "url": "http://127.0.0.1:39022/mcp" },
     "off": { "enabled": false, "type": "stdio", "command": "uvx", "args": [] }
   }
@@ -591,15 +761,18 @@ fn inventory_marks_stdio_and_plain_http_callable() {
     let servers = json_helpers::array_at_path(&inventory, &["servers"]).unwrap();
     let memory = servers
         .iter()
-        .find(|item| json_helpers::string_at_path(item, &["name"]) == Some("memory"))
+        .find(|item| json_helpers::string_at_path(item, &["name"]) == Some("local-memory"))
         .unwrap();
     let remote = servers
         .iter()
         .find(|item| json_helpers::string_at_path(item, &["name"]) == Some("remote-demo"))
         .unwrap();
+    let memory_status = json_helpers::string_at_path(memory, &["status"]).unwrap_or("<none>");
+    let memory_reason = json_helpers::string_at_path(memory, &["reason"]).unwrap_or("<none>");
     assert_eq!(
-        json_helpers::string_at_path(memory, &["status"]),
-        Some("callable-stdio")
+        memory_status, "callable-stdio",
+        "status={}, reason={}",
+        memory_status, memory_reason
     );
     assert_eq!(
         json_helpers::string_at_path(remote, &["status"]),
@@ -786,7 +959,7 @@ fn surface_manifest_is_explicit_about_wrapper_projection() {
             root.join("mcp_settings.json"),
             r#"{
   "mcpServers": {
-    "memory": { "enabled": true, "type": "stdio", "command": "__COMMAND__", "args": ["-y", "server"] }
+    "local-memory": { "enabled": true, "type": "stdio", "command": "__COMMAND__", "args": ["-y", "server"] }
   }
 }"#
             .replace("__COMMAND__", &command),

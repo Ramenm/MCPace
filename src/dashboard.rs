@@ -1,5 +1,6 @@
 use crate::app;
 use crate::json::{parse_str, JsonValue};
+use crate::json_helpers;
 use crate::resources;
 use crate::runtimepaths;
 use crate::upstream;
@@ -1088,6 +1089,21 @@ fn handle_http_request(
             );
             write_json_response(stream, "200 OK", &payload)?;
         }
+        ("POST", "/api/actions/server-enable") => {
+            run_server_action_endpoint(stream, request, config, "server-enable", "enable")?;
+        }
+        ("POST", "/api/actions/server-disable") => {
+            run_server_action_endpoint(stream, request, config, "server-disable", "disable")?;
+        }
+        ("POST", "/api/actions/server-policy") => {
+            run_server_policy_action(stream, request, config)?;
+        }
+        ("POST", "/api/actions/server-autotune") => {
+            run_server_autotune_action(stream, request, config)?;
+        }
+        ("POST", "/api/actions/server-test") => {
+            run_server_test_action(stream, request, config)?;
+        }
         _ => write_text_response(
             stream,
             "404 Not Found",
@@ -1096,6 +1112,256 @@ fn handle_http_request(
         )?,
     }
 
+    Ok(())
+}
+
+fn run_server_action_endpoint(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+    action: &str,
+    operation: &str,
+) -> Result<(), String> {
+    if reject_forbidden_origin(stream, request)? {
+        return Ok(());
+    }
+
+    let payload = parse_action_payload(request, action)?;
+    let server = required_string_field(&payload, "server", action)?;
+    let cli_result = run_json_command_vec(
+        &config.root_path,
+        vec![
+            "server".to_string(),
+            operation.to_string(),
+            server,
+            "--json".to_string(),
+        ],
+    )?;
+    let response = action_response(action, cli_result);
+    write_json_response(stream, "200 OK", &response)?;
+    Ok(())
+}
+
+fn run_server_policy_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    if reject_forbidden_origin(stream, request)? {
+        return Ok(());
+    }
+    let payload = parse_action_payload(request, "server-policy")?;
+    let server = required_string_field(&payload, "server", "server-policy")?;
+    let mut args = vec![
+        "server".to_string(),
+        "set-policy".to_string(),
+        server,
+        "--json".to_string(),
+    ];
+    push_option_arg_from_payload(&mut args, &payload, "mode", "--mode", "server-policy")?;
+    push_u64_arg_from_payload(
+        &mut args,
+        &payload,
+        "maxWorkers",
+        "--max-workers",
+        "server-policy",
+    )?;
+    push_u64_arg_from_payload(
+        &mut args,
+        &payload,
+        "maxInFlightPerWorker",
+        "--max-in-flight-per-worker",
+        "server-policy",
+    )?;
+    push_u64_arg_from_payload(
+        &mut args,
+        &payload,
+        "queueTimeoutMs",
+        "--queue-timeout-ms",
+        "server-policy",
+    )?;
+    push_option_arg_from_payload(
+        &mut args,
+        &payload,
+        "reusePolicy",
+        "--reuse-policy",
+        "server-policy",
+    )?;
+    if let Some(value) = payload.get("affinity").and_then(JsonValue::as_str) {
+        let affinity = value.trim();
+        if !affinity.is_empty() {
+            args.push("--affinity".to_string());
+            args.push(affinity.to_string());
+        }
+    }
+
+    let cli_result = run_json_command_vec(&config.root_path, args)?;
+    let response = action_response("server-policy", cli_result);
+    write_json_response(stream, "200 OK", &response)?;
+    Ok(())
+}
+
+fn run_server_autotune_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    if reject_forbidden_origin(stream, request)? {
+        return Ok(());
+    }
+    let payload = parse_action_payload(request, "server-autotune")?;
+    let changes = match payload.get("changes") {
+        Some(JsonValue::Array(value)) => value,
+        Some(_) => return Err("server-autotune body requires \"changes\" as an array".to_string()),
+        None => return Err("server-autotune body requires \"changes\"".to_string()),
+    };
+
+    let mut results = Vec::new();
+    let mut updated = 0u64;
+
+    for raw_change in changes.iter() {
+        let change =
+            match raw_change {
+                JsonValue::Object(_) => raw_change,
+                _ => return Err(
+                    "server-autotune changes entries must be objects with at least a server field"
+                        .to_string(),
+                ),
+            };
+        let server = required_string_field(change, "server", "server-autotune")?;
+        let mut args = vec![
+            "server".to_string(),
+            "set-policy".to_string(),
+            server,
+            "--json".to_string(),
+        ];
+
+        push_option_arg_from_payload(&mut args, change, "mode", "--mode", "server-autotune")?;
+        push_u64_arg_from_payload(
+            &mut args,
+            change,
+            "maxWorkers",
+            "--max-workers",
+            "server-autotune",
+        )?;
+        push_u64_arg_from_payload(
+            &mut args,
+            change,
+            "maxInFlightPerWorker",
+            "--max-in-flight-per-worker",
+            "server-autotune",
+        )?;
+
+        let cli_result = run_json_command_vec(&config.root_path, args)?;
+        updated = updated.saturating_add(1);
+        results.push(cli_result);
+    }
+
+    let response = action_response(
+        "server-autotune",
+        JsonValue::object([
+            ("updated", JsonValue::number(updated)),
+            ("results", JsonValue::array(results)),
+        ]),
+    );
+    write_json_response(stream, "200 OK", &response)?;
+    Ok(())
+}
+
+fn run_server_test_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    if reject_forbidden_origin(stream, request)? {
+        return Ok(());
+    }
+
+    let payload = parse_action_payload(request, "server-test")?;
+    let server = required_string_field(&payload, "server", "server-test")?;
+    let mut args = vec![
+        "server".to_string(),
+        "test".to_string(),
+        server,
+        "--json".to_string(),
+    ];
+    push_u64_arg_from_payload(
+        &mut args,
+        &payload,
+        "timeoutMs",
+        "--timeout-ms",
+        "server-test",
+    )?;
+    let cli_result = run_json_command_vec(&config.root_path, args)?;
+    let response = action_response("server-test", cli_result);
+    write_json_response(stream, "200 OK", &response)?;
+    Ok(())
+}
+
+fn parse_action_payload(request: &HttpRequest, action: &str) -> Result<JsonValue, String> {
+    let body_text = std::str::from_utf8(&request.body)
+        .map_err(|error| format!("invalid UTF-8 body for {}: {}", action, error))?;
+    let payload = parse_str(body_text.trim())
+        .map_err(|error| format!("invalid JSON body for {}: {}", action, error))?;
+    match &payload {
+        JsonValue::Object(_) => Ok(payload),
+        _ => Err(format!("{} body must be a JSON object", action)),
+    }
+}
+
+fn required_string_field(payload: &JsonValue, key: &str, action: &str) -> Result<String, String> {
+    let value = json_helpers::value_at_path(payload, &[key]).and_then(JsonValue::as_str);
+    let trimmed = value.unwrap_or("").trim();
+    if trimmed.is_empty() {
+        return Err(format!("{} body requires a non-empty \"{}\"", action, key));
+    }
+    Ok(trimmed.to_string())
+}
+
+fn push_option_arg_from_payload(
+    args: &mut Vec<String>,
+    payload: &JsonValue,
+    key: &str,
+    arg_name: &str,
+    action: &str,
+) -> Result<(), String> {
+    match payload.get(key) {
+        Some(JsonValue::String(value)) => {
+            let value = value.trim();
+            if !value.is_empty() {
+                args.push(arg_name.to_string());
+                args.push(value.to_string());
+            }
+        }
+        Some(_) => {
+            return Err(format!("{} body field {} must be a string", action, key));
+        }
+        None => {}
+    }
+    Ok(())
+}
+
+fn push_u64_arg_from_payload(
+    args: &mut Vec<String>,
+    payload: &JsonValue,
+    key: &str,
+    arg_name: &str,
+    action: &str,
+) -> Result<(), String> {
+    let Some(value) = payload.get(key) else {
+        return Ok(());
+    };
+    let parsed = value
+        .as_i64()
+        .ok_or_else(|| format!("{} body field {} requires a positive integer", action, key))?;
+    if parsed <= 0 {
+        return Err(format!(
+            "{} body field {} requires a positive integer",
+            action, key
+        ));
+    }
+    args.push(arg_name.to_string());
+    args.push(parsed.to_string());
     Ok(())
 }
 

@@ -150,7 +150,7 @@ fn dashboard_ui_exposes_production_cockpit_without_probe_loop_copy() {
     assert!(super::DASHBOARD_HTML.contains("function serverBucket"));
     assert!(super::DASHBOARD_HTML.contains("function serverSensitivity"));
     assert!(super::DASHBOARD_HTML.contains("reset group filter"));
-    assert!(super::DASHBOARD_HTML.contains("Run Test first"));
+    assert!(super::DASHBOARD_HTML.contains("Run test"));
     assert!(super::DASHBOARD_HTML.contains("server-guide"));
     assert!(super::DASHBOARD_HTML.contains("function serverToolEvidence"));
     assert!(super::DASHBOARD_HTML.contains("function normalizeProbeEvidence"));
@@ -170,7 +170,7 @@ fn dashboard_ui_exposes_production_cockpit_without_probe_loop_copy() {
     assert!(super::DASHBOARD_HTML.contains("Tool evidence"));
     assert!(super::DASHBOARD_HTML.contains("Best setting"));
     assert!(super::DASHBOARD_HTML.contains("Routing and workers"));
-    assert!(super::DASHBOARD_HTML.contains("Policy after on"));
+    assert!(super::DASHBOARD_HTML.contains("Enable to apply"));
     assert!(super::DASHBOARD_HTML.contains("Manual override: routing and workers"));
     assert!(super::DASHBOARD_HTML.contains("Recommended next step"));
     assert!(super::DASHBOARD_HTML.contains("allowHidden"));
@@ -1731,6 +1731,49 @@ fn dashboard_server_policy_action_updates_workers_and_mode() {
         .and_then(JsonValue::as_i64),
         Some(2)
     );
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn dashboard_server_test_action_invokes_server_test_with_payload() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_fake_upstream_config(&root);
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_root = root.clone();
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(
+            listener,
+            test_config(server_root, Some(1), super::ServeSurface::Dashboard),
+            &mut stderr,
+        )
+    });
+
+    let body = r#"{"server":"fake","timeoutMs":5000}"#;
+    let mut response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /api/actions/server-test HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        body.len(),
+        body
+    )
+    .unwrap();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(
+        response.starts_with("HTTP/1.1 200 OK"),
+        "server-test response: {}",
+        response
+    );
+    assert!(response.contains("\"action\": \"server-test\""));
 
     assert_eq!(handle.join().unwrap(), 0);
     let _ = fs::remove_dir_all(root);
