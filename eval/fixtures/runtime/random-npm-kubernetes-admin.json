@@ -1,0 +1,75 @@
+{
+  "id": "random-npm-kubernetes-admin",
+  "suite": "random-npm-heldout",
+  "category": "cluster-control",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "mcp-server-kubernetes controls a cluster through kubectl",
+  "objective": "Cluster control packages must not be shared as read-only just because tools may list/query resources.",
+  "traffic": {
+    "clientArchetype": "cline-local",
+    "serverArchetype": "mcp-server-kubernetes@3.8.0",
+    "serverPolicies": [
+      "single-writer",
+      "credential-profile",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "cluster-control",
+      "kubernetes",
+      "kubectl",
+      "helm",
+      "credential-profile",
+      "external-mutating"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view mcp-server-kubernetes@3.8.0",
+    "random held-out package metadata sample"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command",
+    "trust-catalog-rating"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals from name, description, keywords and bin",
+    "separate browser-control, browser-observation, browser-data and external API signals",
+    "apply trust gate before install or probe",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says interacting with Kubernetes clusters via kubectl",
+    "cluster-control signal dominates read-only list/query hints",
+    "random package is not executed"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "random-heldout-corpus"
+  ]
+}

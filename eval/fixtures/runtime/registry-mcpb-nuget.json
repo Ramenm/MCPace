@@ -1,0 +1,67 @@
+{
+  "id": "registry-mcpb-nuget",
+  "suite": "random-registry",
+  "category": "recognized-plan-only",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": true,
+  "title": "NuGet/MCPB candidates are recognized but not executable by default",
+  "objective": "Registry package type recognition should not imply a working launcher.",
+  "traffic": {
+    "clientArchetype": "kiro-cli",
+    "serverArchetype": "registry nuget/mcpb package candidate",
+    "serverPolicies": [
+      "single-writer",
+      "recognized-plan-only"
+    ],
+    "signals": [
+      "nuget",
+      "mcpb",
+      "unknown-side-effects",
+      "package-type-recognized"
+    ]
+  },
+  "expected": {
+    "runtimeType": "unknown",
+    "stateClass": "unknown-conservative",
+    "effectClass": "unknown",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "plan-only",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "MCP Registry package types"
+  ],
+  "checks": [
+    "package type recognized from registry",
+    "launcher not implemented -> plan-only"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "mcp-registry-server-json",
+    "transport-metadata",
+    "package-type-metadata",
+    "trust-catalog-rating",
+    "semantic-name-description-signals"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

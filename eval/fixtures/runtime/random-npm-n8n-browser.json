@@ -1,0 +1,75 @@
+{
+  "id": "random-npm-n8n-browser",
+  "suite": "random-npm-heldout",
+  "category": "local-browser-session",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "@n8n/mcp-browser is browser automation, not a stateless web fetcher",
+  "objective": "Random browser automation packages should serialize per local browser/profile and remain plan-only until approved.",
+  "traffic": {
+    "clientArchetype": "claude-desktop-local",
+    "serverArchetype": "@n8n/mcp-browser@0.5.0",
+    "serverPolicies": [
+      "single-session",
+      "host-lock",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "browser-or-desktop",
+      "playwright",
+      "webdriver",
+      "safaridriver",
+      "automation",
+      "host-profile"
+    ]
+  },
+  "expected": {
+    "runtimeType": "interactive",
+    "stateClass": "host-stateful",
+    "effectClass": "host-mutating",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @n8n/mcp-browser@0.5.0",
+    "random held-out package metadata sample"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command",
+    "trust-catalog-rating"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals from name, description, keywords and bin",
+    "separate browser-control, browser-observation, browser-data and external API signals",
+    "apply trust gate before install or probe",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says browser automation MCP tools",
+    "Playwright/WebDriver/SafariDriver signals imply host/browser session state",
+    "random package is not executed"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "random-heldout-corpus"
+  ]
+}

@@ -32,7 +32,10 @@ pub(super) fn render_list(
         );
         let _ = writeln!(
             stdout,
-            "    scope={}; concurrency={}; state={}; credential={}",
+            "    type={}; stateClass={}; effect={}; scope={}; concurrency={}; state={}; credential={}",
+            record.runtime_type,
+            record.state_class,
+            record.effect_class,
             record.scope_class,
             record.concurrency_policy,
             record.state_binding,
@@ -90,6 +93,11 @@ pub(super) fn render_capabilities(
             stdout,
             "    profile enabled: {}",
             yes_no(record.profile_enabled)
+        );
+        let _ = writeln!(
+            stdout,
+            "    runtime type: {} / {} / {}",
+            record.runtime_type, record.state_class, record.effect_class
         );
         let _ = writeln!(
             stdout,

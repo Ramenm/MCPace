@@ -1,0 +1,67 @@
+{
+  "id": "popular-npm-eslint",
+  "suite": "popular-servers",
+  "category": "project-readonly-analysis",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": false,
+  "title": "ESLint MCP is project analysis state",
+  "objective": "Project-analysis tools depend on local project files/config but are read-only by default.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@eslint/mcp@0.3.5",
+    "serverPolicies": [
+      "isolated-per-project",
+      "read-only"
+    ],
+    "signals": [
+      "stdio",
+      "eslint",
+      "project-analysis",
+      "lint",
+      "project-root"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateful",
+    "stateClass": "project-stateful",
+    "effectClass": "read-only",
+    "concurrencyPolicy": "isolated-per-project",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "approved-sandbox-probe"
+  },
+  "evidenceSources": [
+    "npm-view @eslint/mcp 0.3.5"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says ESLint MCP server",
+    "project root/config is conflict domain"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

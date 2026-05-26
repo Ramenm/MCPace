@@ -146,6 +146,7 @@ fn classify_tool_advisory(tool: &JsonValue) -> AdvisoryClassification {
         add_name_based_advisory_signals(name, &mut risk_classes, &mut signals);
     }
     add_metadata_based_advisory_signals(tool, &mut risk_classes, &mut signals);
+    add_schema_based_advisory_signals(tool, &mut risk_classes, &mut signals);
 
     AdvisoryClassification {
         risk_classes,
@@ -213,6 +214,136 @@ fn add_metadata_based_advisory_signals(
                 &format!("metadata-pattern:{}", pattern),
             );
         }
+    }
+}
+
+fn add_schema_based_advisory_signals(
+    tool: &JsonValue,
+    risk_classes: &mut BTreeSet<String>,
+    signals: &mut Vec<String>,
+) {
+    let mut schema_words = Vec::new();
+    collect_schema_words(
+        json_helpers::value_at_path(tool, &["inputSchema"]),
+        &mut schema_words,
+    );
+    collect_schema_words(
+        json_helpers::value_at_path(tool, &["outputSchema"]),
+        &mut schema_words,
+    );
+    if schema_words.is_empty() {
+        return;
+    }
+    let joined = schema_words.join(" ").to_ascii_lowercase();
+    let tokens = tool_name_tokens(&joined);
+
+    for token in [
+        "write", "delete", "remove", "update", "create", "insert", "upsert", "patch", "deploy",
+        "publish", "send",
+    ] {
+        if tokens.contains(token) {
+            add_advisory_signal(
+                risk_classes,
+                signals,
+                "mutation",
+                &format!("schema-token:{}", token),
+            );
+        }
+    }
+    for token in [
+        "path",
+        "file",
+        "filename",
+        "directory",
+        "dir",
+        "cwd",
+        "workspace",
+        "root",
+    ] {
+        if tokens.contains(token) {
+            add_advisory_signal(
+                risk_classes,
+                signals,
+                "filesystem-access",
+                &format!("schema-token:{}", token),
+            );
+        }
+    }
+    for token in ["sql", "query", "statement", "table", "database", "schema"] {
+        if tokens.contains(token) {
+            add_advisory_signal(
+                risk_classes,
+                signals,
+                "database-access",
+                &format!("schema-token:{}", token),
+            );
+        }
+    }
+    for token in [
+        "url", "uri", "endpoint", "host", "domain", "webhook", "request",
+    ] {
+        if tokens.contains(token) {
+            add_advisory_signal(
+                risk_classes,
+                signals,
+                "open-world",
+                &format!("schema-token:{}", token),
+            );
+        }
+    }
+    for token in [
+        "token",
+        "apikey",
+        "api_key",
+        "authorization",
+        "secret",
+        "password",
+        "credential",
+    ] {
+        if tokens.contains(token) {
+            add_advisory_signal(
+                risk_classes,
+                signals,
+                "credential-input",
+                &format!("schema-token:{}", token),
+            );
+        }
+    }
+    for token in [
+        "command",
+        "shell",
+        "script",
+        "args",
+        "argv",
+        "executable",
+        "process",
+    ] {
+        if tokens.contains(token) {
+            add_advisory_signal(
+                risk_classes,
+                signals,
+                "system-control",
+                &format!("schema-token:{}", token),
+            );
+        }
+    }
+}
+
+fn collect_schema_words(value: Option<&JsonValue>, output: &mut Vec<String>) {
+    match value {
+        Some(JsonValue::String(value)) => output.push(value.clone()),
+        Some(JsonValue::Array(items)) => {
+            for item in items {
+                collect_schema_words(Some(item), output);
+            }
+        }
+        Some(JsonValue::Object(object)) => {
+            for (key, value) in object {
+                output.push(key.clone());
+                collect_schema_words(Some(value), output);
+            }
+        }
+        _ => {}
     }
 }
 
@@ -359,6 +490,9 @@ fn risk_class_recommends_policy(risk_class: &str) -> bool {
             | "desktop-observation"
             | "system-control"
             | "metadata-injection"
+            | "filesystem-access"
+            | "database-access"
+            | "credential-input"
     )
 }
 

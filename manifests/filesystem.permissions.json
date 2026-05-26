@@ -1,0 +1,21 @@
+{
+  "schema": "mcpace.permissionManifest.v1",
+  "server": "filesystem",
+  "transport": "stdio",
+  "risk": "file-access",
+  "permissions": {
+    "filesystem": {
+      "read": ["${projectRoot}"],
+      "write": [],
+      "deny": ["${home}/.ssh", "${home}/.gnupg", "${home}/.aws", "${home}/.config/mcpace"]
+    },
+    "network": "deny",
+    "secrets": "redact-env"
+  },
+  "recommendedExecution": {
+    "mode": "session-isolated",
+    "affinity": ["client", "project", "chat"],
+    "queueTimeoutMs": 10000,
+    "reusePolicy": "sticky-session"
+  }
+}

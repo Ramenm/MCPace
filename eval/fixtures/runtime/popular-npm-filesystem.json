@@ -1,0 +1,70 @@
+{
+  "id": "popular-npm-filesystem",
+  "suite": "popular-servers",
+  "category": "project-stateful",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Filesystem package is project-isolated, not shared globally",
+  "objective": "Prevent two chats in different projects from sharing mutable cwd/path state.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@modelcontextprotocol/server-filesystem@2026.1.14",
+    "serverPolicies": [
+      "isolated-per-project",
+      "project-root-required"
+    ],
+    "signals": [
+      "stdio",
+      "filesystem",
+      "read_file",
+      "write_file",
+      "mutable-tools"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateful",
+    "stateClass": "project-stateful",
+    "effectClass": "project-mutating",
+    "concurrencyPolicy": "isolated-per-project",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-filesystem 2026.1.14"
+  ],
+  "checks": [
+    "package bin=mcp-server-filesystem",
+    "tool names imply file read/write",
+    "project root lock required"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

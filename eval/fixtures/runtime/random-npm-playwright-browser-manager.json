@@ -1,0 +1,74 @@
+{
+  "id": "random-npm-playwright-browser-manager",
+  "suite": "random-npm-heldout",
+  "category": "local-browser-session",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "@linatang/playwright-browser-manager-mcp has multi-session browser control",
+  "objective": "Profile-isolated browser managers should still be interactive host-stateful and not shared as stateless workers.",
+  "traffic": {
+    "clientArchetype": "claude-code",
+    "serverArchetype": "@linatang/playwright-browser-manager-mcp@0.3.0",
+    "serverPolicies": [
+      "single-session",
+      "profile-isolation",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "browser-or-desktop",
+      "playwright",
+      "multi-session",
+      "profile-isolation",
+      "auto-healing"
+    ]
+  },
+  "expected": {
+    "runtimeType": "interactive",
+    "stateClass": "host-stateful",
+    "effectClass": "host-mutating",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @linatang/playwright-browser-manager-mcp@0.3.0",
+    "random held-out package metadata sample"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command",
+    "trust-catalog-rating"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals from name, description, keywords and bin",
+    "separate browser-control, browser-observation, browser-data and external API signals",
+    "apply trust gate before install or probe",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says Playwright browser manager",
+    "profile isolation is evidence for session partitioning, not shared stateless execution",
+    "random package is plan-only"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "random-heldout-corpus"
+  ]
+}

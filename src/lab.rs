@@ -8,8 +8,10 @@ use self::analysis::assess_scenarios;
 use self::args::{parse_args, write_help};
 use self::loader::{load_runtime_capabilities, load_runtime_scenarios};
 use self::render::{
-    render_coverage, render_gaps, render_list, render_matrix, render_report, render_show,
+    render_coverage, render_gaps, render_list, render_matrix, render_probe, render_report,
+    render_show,
 };
+use crate::upstream;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -24,7 +26,7 @@ pub fn run(
         let _ = writeln!(stderr, "{}", error);
         return 2;
     }
-    if parsed.help || parsed.action.is_none() {
+    if parsed.help {
         write_help(stdout);
         return 0;
     }
@@ -51,7 +53,7 @@ pub fn run(
     };
     let assessments = assess_scenarios(&scenarios, &capabilities);
 
-    match parsed.action.as_deref().unwrap_or_default() {
+    match parsed.action.as_deref().unwrap_or("report") {
         "list" => render_list(&assessments, parsed.json_output, stdout),
         "matrix" => render_matrix(&assessments, &capabilities, parsed.json_output, stdout),
         "coverage" => render_coverage(&assessments, parsed.json_output, stdout),
@@ -65,6 +67,18 @@ pub fn run(
             stdout,
             stderr,
         ),
+        "probe" => match upstream::probe_servers(
+            &root_path,
+            parsed.id_filter.as_deref(),
+            parsed.timeout_ms,
+            parsed.refresh,
+        ) {
+            Ok(value) => render_probe(&value, parsed.json_output, stdout),
+            Err(error) => {
+                let _ = writeln!(stderr, "{}", error);
+                1
+            }
+        },
         other => {
             let _ = writeln!(
                 stderr,

@@ -1,0 +1,71 @@
+{
+  "id": "popular-npm-gitlab",
+  "suite": "popular-servers",
+  "category": "credential-external-mutating",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "GitLab API is credential-scoped external mutating",
+  "objective": "Avoid cross-chat mutation through one GitLab token or project namespace.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@modelcontextprotocol/server-gitlab@2025.4.25",
+    "serverPolicies": [
+      "single-writer",
+      "credential-lock"
+    ],
+    "signals": [
+      "stdio",
+      "gitlab",
+      "code-hosting-api",
+      "credentials-or-auth",
+      "create",
+      "update",
+      "write"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "approved-sandbox-probe"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-gitlab 2025.4.25"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "GitLab token in README/config",
+    "code-hosting API is not local git repo"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

@@ -25,12 +25,15 @@ pub(super) fn render_list(
     for assessment in assessments {
         let _ = writeln!(
             stdout,
-            "- {} [{} / {} / {}] {}",
+            "- {} [{} / {} / {}] {} -> {} / {} / {}",
             assessment.record.id,
             assessment.record.suite,
             assessment.record.category,
             assessment.readiness,
-            assessment.record.title
+            assessment.record.title,
+            assessment.record.expected_runtime_type,
+            assessment.record.expected_state_class,
+            assessment.record.expected_concurrency_policy
         );
     }
     0
@@ -168,10 +171,19 @@ pub(super) fn render_coverage(
     let mut surface_kind_counts = BTreeMap::<String, usize>::new();
     let mut constraint_counts = BTreeMap::<String, usize>::new();
     let mut unknown_client_archetypes = Vec::<String>::new();
+    let mut server_archetype_counts = BTreeMap::<String, usize>::new();
+    let mut runtime_type_counts = BTreeMap::<String, usize>::new();
+    let mut state_class_counts = BTreeMap::<String, usize>::new();
+    let mut effect_class_counts = BTreeMap::<String, usize>::new();
+    let mut auto_action_counts = BTreeMap::<String, usize>::new();
     let mut signal_counts = BTreeMap::<String, usize>::new();
     let mut policy_counts = BTreeMap::<String, usize>::new();
     let mut check_counts = BTreeMap::<String, usize>::new();
     let mut requirement_counts = BTreeMap::<String, usize>::new();
+    let mut metadata_layer_counts = BTreeMap::<String, usize>::new();
+    let mut confidence_counts = BTreeMap::<String, usize>::new();
+    let mut trust_boundary_counts = BTreeMap::<String, usize>::new();
+    let mut safe_probe_mode_counts = BTreeMap::<String, usize>::new();
 
     for assessment in assessments {
         *client_counts
@@ -195,6 +207,33 @@ pub(super) fn render_coverage(
             .any(|value| value.eq_ignore_ascii_case(&assessment.record.client_archetype))
         {
             unknown_client_archetypes.push(assessment.record.client_archetype.clone());
+        }
+        *server_archetype_counts
+            .entry(assessment.record.server_archetype.clone())
+            .or_default() += 1;
+        *runtime_type_counts
+            .entry(assessment.record.expected_runtime_type.clone())
+            .or_default() += 1;
+        *state_class_counts
+            .entry(assessment.record.expected_state_class.clone())
+            .or_default() += 1;
+        *effect_class_counts
+            .entry(assessment.record.expected_effect_class.clone())
+            .or_default() += 1;
+        *auto_action_counts
+            .entry(assessment.record.expected_auto_action.clone())
+            .or_default() += 1;
+        *confidence_counts
+            .entry(assessment.record.confidence.clone())
+            .or_default() += 1;
+        *trust_boundary_counts
+            .entry(assessment.record.trust_boundary.clone())
+            .or_default() += 1;
+        *safe_probe_mode_counts
+            .entry(assessment.record.safe_probe_mode.clone())
+            .or_default() += 1;
+        for value in &assessment.record.metadata_layers {
+            *metadata_layer_counts.entry(value.clone()).or_default() += 1;
         }
         for value in &assessment.record.signals {
             *signal_counts.entry(value.clone()).or_default() += 1;
@@ -267,6 +306,78 @@ pub(super) fn render_coverage(
                     ),
                 ),
                 (
+                    "serverArchetypes",
+                    JsonValue::object(
+                        server_archetype_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
+                    "expectedRuntimeTypes",
+                    JsonValue::object(
+                        runtime_type_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
+                    "expectedStateClasses",
+                    JsonValue::object(
+                        state_class_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
+                    "expectedEffectClasses",
+                    JsonValue::object(
+                        effect_class_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
+                    "expectedAutoActions",
+                    JsonValue::object(
+                        auto_action_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
+                    "confidence",
+                    JsonValue::object(
+                        confidence_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
+                    "trustBoundaries",
+                    JsonValue::object(
+                        trust_boundary_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
+                    "safeProbeModes",
+                    JsonValue::object(
+                        safe_probe_mode_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
+                    "metadataLayers",
+                    JsonValue::object(
+                        metadata_layer_counts
+                            .into_iter()
+                            .map(|(key, value)| (key, JsonValue::number(value))),
+                    ),
+                ),
+                (
                     "signals",
                     JsonValue::object(
                         signal_counts
@@ -330,6 +441,42 @@ pub(super) fn render_coverage(
         "  unknown client archetypes: {}",
         join_or_none(&unknown_client_archetypes)
     );
+    let _ = writeln!(stdout, "  server archetypes:");
+    for (name, count) in server_archetype_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
+    let _ = writeln!(stdout, "  expected runtime types:");
+    for (name, count) in runtime_type_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
+    let _ = writeln!(stdout, "  expected state classes:");
+    for (name, count) in state_class_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
+    let _ = writeln!(stdout, "  expected effect classes:");
+    for (name, count) in effect_class_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
+    let _ = writeln!(stdout, "  expected auto actions:");
+    for (name, count) in auto_action_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
+    let _ = writeln!(stdout, "  evidence confidence:");
+    for (name, count) in confidence_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
+    let _ = writeln!(stdout, "  trust boundaries:");
+    for (name, count) in trust_boundary_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
+    let _ = writeln!(stdout, "  safe probe modes:");
+    for (name, count) in safe_probe_mode_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
+    let _ = writeln!(stdout, "  metadata layers:");
+    for (name, count) in metadata_layer_counts {
+        let _ = writeln!(stdout, "    - {}: {}", name, count);
+    }
     let _ = writeln!(stdout, "  signals:");
     for (name, count) in signal_counts {
         let _ = writeln!(stdout, "    - {}: {}", name, count);
@@ -454,8 +601,29 @@ pub(super) fn render_report(
 
     let _ = writeln!(stdout, "Runtime lab report");
     let _ = writeln!(stdout, "  scenarios: {}", assessments.len());
+    let _ = writeln!(
+        stdout,
+        "  proof: server -> evidence -> runtimeType/stateClass/effectClass -> concurrencyPolicy"
+    );
     for (key, value) in &readiness_counts {
         let _ = writeln!(stdout, "  {}: {}", key, value);
+    }
+
+    let _ = writeln!(stdout);
+    let _ = writeln!(stdout, "Evidence matrix sample:");
+    for assessment in assessments.iter().take(12) {
+        let _ = writeln!(
+            stdout,
+            "  - {} => {} / {} / {} / {} ({}, confidence={}, probe={})",
+            assessment.record.server_archetype,
+            assessment.record.expected_runtime_type,
+            assessment.record.expected_state_class,
+            assessment.record.expected_effect_class,
+            assessment.record.expected_concurrency_policy,
+            assessment.record.expected_auto_action,
+            assessment.record.confidence,
+            assessment.record.safe_probe_mode
+        );
     }
 
     let _ = writeln!(stdout);
@@ -557,6 +725,23 @@ pub(super) fn render_show(
         "Client archetype: {}",
         assessment.record.client_archetype
     );
+    let _ = writeln!(
+        stdout,
+        "Server archetype: {}",
+        assessment.record.server_archetype
+    );
+    let _ = writeln!(
+        stdout,
+        "Expected: runtimeType={} stateClass={} effectClass={} concurrencyPolicy={} autoAction={} confidence={} trustBoundary={} safeProbeMode={}",
+        assessment.record.expected_runtime_type,
+        assessment.record.expected_state_class,
+        assessment.record.expected_effect_class,
+        assessment.record.expected_concurrency_policy,
+        assessment.record.expected_auto_action,
+        assessment.record.confidence,
+        assessment.record.trust_boundary,
+        assessment.record.safe_probe_mode
+    );
     if let Some(target) = client_catalog::find(&assessment.record.client_archetype) {
         let _ = writeln!(
             stdout,
@@ -567,6 +752,21 @@ pub(super) fn render_show(
             join_or_none(target.documented_constraints)
         );
     }
+    let _ = writeln!(
+        stdout,
+        "Evidence sources: {}",
+        join_or_none(&assessment.record.evidence_sources)
+    );
+    let _ = writeln!(
+        stdout,
+        "Metadata layers: {}",
+        join_or_none(&assessment.record.metadata_layers)
+    );
+    let _ = writeln!(
+        stdout,
+        "Decision trace: {}",
+        join_or_none(&assessment.record.decision_trace)
+    );
     let _ = writeln!(
         stdout,
         "Signals: {}",
@@ -621,4 +821,94 @@ fn blank_to_none(value: &str) -> String {
     } else {
         trimmed.to_string()
     }
+}
+
+pub(super) fn render_probe(value: &JsonValue, json_output: bool, stdout: &mut dyn Write) -> i32 {
+    if json_output {
+        let _ = writeln!(stdout, "{}", value.to_pretty_string());
+        return 0;
+    }
+
+    let server_count = json_number_text(value, &["serverCount"]).unwrap_or_else(|| "0".to_string());
+    let ok_count = json_number_text(value, &["okCount"]).unwrap_or_else(|| "0".to_string());
+    let failed_count = json_number_text(value, &["failedCount"]).unwrap_or_else(|| "0".to_string());
+    let skipped_count =
+        json_number_text(value, &["skippedCount"]).unwrap_or_else(|| "0".to_string());
+    let cache_hit_count =
+        json_number_text(value, &["cacheHitCount"]).unwrap_or_else(|| "0".to_string());
+    let cache_miss_count =
+        json_number_text(value, &["cacheMissCount"]).unwrap_or_else(|| "0".to_string());
+
+    let _ = writeln!(stdout, "Live safe probe");
+    let _ = writeln!(
+        stdout,
+        "  method: initialize + notifications/initialized + tools/list only"
+    );
+    let _ = writeln!(stdout, "  tools/call: not executed");
+    let _ = writeln!(
+        stdout,
+        "  servers: {} ok={} failed={} skipped={}",
+        server_count, ok_count, failed_count, skipped_count
+    );
+    let _ = writeln!(
+        stdout,
+        "  cache: hit={} miss={}",
+        cache_hit_count, cache_miss_count
+    );
+
+    if let Some(results) = json_array_at_path(value, &["results"]) {
+        for result in results.iter().take(20) {
+            let name = json_string_text(result, &["name"]).unwrap_or_else(|| "unknown".to_string());
+            let status =
+                json_string_text(result, &["status"]).unwrap_or_else(|| "unknown".to_string());
+            let tool_count =
+                json_number_text(result, &["toolCount"]).unwrap_or_else(|| "?".to_string());
+            let ok = json_bool_text(result, &["ok"]).unwrap_or_else(|| "false".to_string());
+            let _ = writeln!(
+                stdout,
+                "  - {}: ok={} status={} tools={}",
+                name, ok, status, tool_count
+            );
+        }
+        if results.len() > 20 {
+            let _ = writeln!(stdout, "  ... {} more", results.len() - 20);
+        }
+    }
+    0
+}
+
+fn json_value_at_path<'a>(value: &'a JsonValue, path: &[&str]) -> Option<&'a JsonValue> {
+    let mut current = value;
+    for segment in path {
+        let JsonValue::Object(object) = current else {
+            return None;
+        };
+        current = object.get(*segment)?;
+    }
+    Some(current)
+}
+
+fn json_string_text(value: &JsonValue, path: &[&str]) -> Option<String> {
+    json_value_at_path(value, path)
+        .and_then(JsonValue::as_str)
+        .map(str::to_string)
+}
+
+fn json_number_text(value: &JsonValue, path: &[&str]) -> Option<String> {
+    match json_value_at_path(value, path)? {
+        JsonValue::Number(value) => Some(value.clone()),
+        JsonValue::Null => None,
+        _ => None,
+    }
+}
+
+fn json_bool_text(value: &JsonValue, path: &[&str]) -> Option<String> {
+    match json_value_at_path(value, path)? {
+        JsonValue::Bool(value) => Some(value.to_string()),
+        _ => None,
+    }
+}
+
+fn json_array_at_path<'a>(value: &'a JsonValue, path: &[&str]) -> Option<&'a [JsonValue]> {
+    json_value_at_path(value, path).and_then(JsonValue::as_array)
 }

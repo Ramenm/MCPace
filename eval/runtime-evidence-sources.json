@@ -1,0 +1,213 @@
+{
+  "schema": "mcpace.runtimeEvidenceSources.v3",
+  "generatedAt": "2026-05-26T00:00:00Z",
+  "purpose": "Document which evidence layers MCPace can use to classify new MCP servers automatically and which layers are required before relaxing concurrency policy.",
+  "layers": [
+    {
+      "id": "client-config",
+      "source": "mcp_settings.json / mcpace.config.json",
+      "fields": [
+        "command",
+        "args",
+        "url",
+        "env keys",
+        "transport",
+        "declared policy",
+        "mcpaceProfileHints"
+      ],
+      "trust": "medium",
+      "usedFor": [
+        "launcher",
+        "transport",
+        "initial conflict domain",
+        "profile hints"
+      ]
+    },
+    {
+      "id": "local-approved-catalog",
+      "source": "catalog/approved-servers.json",
+      "fields": [
+        "server id",
+        "package",
+        "expected transport",
+        "trust level",
+        "permission manifest"
+      ],
+      "trust": "high-local",
+      "usedFor": [
+        "auto-install eligibility",
+        "safe default policy",
+        "known server archetype"
+      ]
+    },
+    {
+      "id": "mcp-registry-server-json",
+      "source": "MCP Registry server.json",
+      "fields": [
+        "packages",
+        "registryType",
+        "runtimeHint",
+        "transport",
+        "remotes",
+        "environment variables",
+        "headers"
+      ],
+      "trust": "metadata-only",
+      "usedFor": [
+        "discovery",
+        "package type",
+        "launcher planning",
+        "remote/local split"
+      ]
+    },
+    {
+      "id": "package-registry-metadata",
+      "source": "npm/PyPI/OCI/NuGet/MCPB metadata",
+      "fields": [
+        "name",
+        "description",
+        "keywords",
+        "version",
+        "repository",
+        "maintainers",
+        "dist tarball"
+      ],
+      "trust": "medium",
+      "usedFor": [
+        "server archetype hints",
+        "credential/API hints",
+        "docs/search/browser/database clues"
+      ]
+    },
+    {
+      "id": "package-artifact-manifest",
+      "source": "npm pack / pip download artifact metadata",
+      "fields": [
+        "package.json",
+        "pyproject.toml",
+        "PKG-INFO",
+        "bin/entrypoints",
+        "dependencies",
+        "README",
+        "file list"
+      ],
+      "trust": "medium",
+      "usedFor": [
+        "runnable vs SDK/example",
+        "browser automation dependencies",
+        "database/cloud/API dependencies",
+        "README semantic clues"
+      ]
+    },
+    {
+      "id": "safe-initialize-probe",
+      "source": "MCP initialize response",
+      "fields": [
+        "protocolVersion",
+        "serverInfo",
+        "capabilities.tools",
+        "capabilities.resources",
+        "capabilities.prompts",
+        "listChanged"
+      ],
+      "trust": "high-observed",
+      "usedFor": [
+        "actual MCP compatibility",
+        "available primitive types",
+        "dynamic surface detection"
+      ]
+    },
+    {
+      "id": "safe-tools-list-probe",
+      "source": "MCP tools/list response",
+      "fields": [
+        "tool.name",
+        "tool.title",
+        "tool.description",
+        "inputSchema",
+        "outputSchema",
+        "annotations"
+      ],
+      "trust": "high-observed-for-surface; annotations-untrusted",
+      "usedFor": [
+        "read vs mutate hints",
+        "filesystem/database/browser/API clues",
+        "confidence score"
+      ]
+    },
+    {
+      "id": "resources-prompts-probe",
+      "source": "resources/list and prompts/list",
+      "fields": [
+        "resource URI schemes",
+        "resource names",
+        "prompt names",
+        "prompt descriptions"
+      ],
+      "trust": "medium-observed",
+      "usedFor": [
+        "context/data-only surfaces",
+        "documentation/indexing surfaces",
+        "project binding"
+      ]
+    },
+    {
+      "id": "runtime-observations",
+      "source": "sandboxed startup/test run",
+      "fields": [
+        "startup exit code",
+        "timeout",
+        "stderr class",
+        "tool list changed",
+        "network/file/process hints"
+      ],
+      "trust": "high-observed",
+      "usedFor": [
+        "stability",
+        "unknown fallback",
+        "probe failure reasons"
+      ]
+    }
+  ],
+  "policyRule": "Never relax unknown/random servers to multi-reader or pool from package/server name alone. Names are weak search/display evidence only; require indirect manifest evidence plus safe initialize/tools-list evidence, or keep conservative.",
+  "random500Finding": {
+    "sampleCount": 500,
+    "metadataOnlyIsNotEnoughForManyServers": true,
+    "weakMetadataCount": 148,
+    "recommendedNextLayer": "safe initialize + tools/list probe for every unknown or low-confidence server"
+  },
+  "fastPathPolicy": {
+    "static-safe-policy": "High-confidence static evidence is enough for conservative safe policy, but not for widening beyond the conservative class.",
+    "needs-safe-probe": "Run initialize + tools/list before enabling multi-reader/pool or before collapsing unknowns.",
+    "plan-only": "Do not start as a server; package appears to be SDK/client/example/framework/bridge artifact.",
+    "blocked-high-risk": "Do not auto-run untrusted packages with shell, SSH, desktop, or arbitrary command execution hints."
+  },
+  "random500SecondPassFinding": {
+    "sampleCount": 500,
+    "source": "eval/random-500-reviewed-each-server.json",
+    "previousUnknownCount": 148,
+    "reviewedUnknownCount": 88,
+    "changedClassificationCount": 207,
+    "staticSafePolicy": 236,
+    "needsSafeProbe": 188,
+    "planOnly": 67,
+    "blockedHighRisk": 9,
+    "finding": "The first random-500 audit over-trusted broad signals. A second-pass per-server metadata review found many records that should be re-routed or escalated to safe probe instead of accepting the first static class."
+  },
+  "recommendedAutomaticPipeline": [
+    "search/catalog gives candidates, not policy",
+    "download/inspect manifest only in sandbox/cache",
+    "derive package shape, launcher, transport, auth/env hints, dependency families",
+    "if weak/conflicting, start server only in probe sandbox and call safe initialize + tools/list + resources/list + prompts/list",
+    "score evidence, pick simple user action, store detailed internal runtimeType/stateClass/effectClass",
+    "keep unknown conservative until observed evidence proves safe parallelism"
+  ],
+  "nameEvidencePolicy": {
+    "packageName": "weak-index-only",
+    "serverDisplayName": "weak-index-only",
+    "installSpec": "launcher-only-not-policy",
+    "toolName": "action-surface-hint-only; combine with description, inputSchema, annotations and transport",
+    "neverRelaxFromNameOnly": true
+  },
+  "indirectEvidenceModel": "eval/indirect-evidence-model.json"
+}

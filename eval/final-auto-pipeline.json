@@ -1,0 +1,95 @@
+{
+  "schema": "mcpace.finalAutoPipeline.v1",
+  "generatedAt": "2026-05-26T00:00:00Z",
+  "status": "production-grade-conservative-auto-ready",
+  "summary": "MCPace now has a name-minimized evidence pipeline: static metadata triage for strong cases, live safe probe for weak configured servers, conservative plan-only/blocked handling for untrusted or high-risk packages, and evidence scoring in profileEvidence output. Full policy widening still requires probe evidence on the target machine because random third-party packages must not be executed blindly.",
+  "userFacingCommand": "mcpace auto",
+  "maintainerVerificationCommands": [
+    "mcpace lab report",
+    "mcpace lab coverage",
+    "mcpace lab probe --refresh --timeout-ms 30000",
+    "mcpace server test --refresh",
+    "mcpace upstream_policy_audit --refresh",
+    "mcpace upstream_policy_suggest --refresh"
+  ],
+  "automaticActions": {
+    "plan-only": 67,
+    "static-safe-policy": 236,
+    "needs-safe-probe": 188,
+    "blocked-high-risk": 9
+  },
+  "random500Evidence": {
+    "sampleCount": 500,
+    "reviewedEveryRecord": true,
+    "executedForeignCode": false,
+    "foreignPackageArtifactsExcludedFromRelease": true,
+    "coreFinding": "Package metadata alone is useful for fast static triage, but weak/unknown or medium-confidence records must be escalated to safe initialize + tools/list probes before relaxing concurrency.",
+    "counts": {
+      "plan-only": 67,
+      "static-safe-policy": 236,
+      "needs-safe-probe": 188,
+      "blocked-high-risk": 9
+    }
+  },
+  "evidencePipeline": [
+    {
+      "stage": 1,
+      "id": "identity-and-install",
+      "source": "registry/config/package identity",
+      "trust": "identity-only",
+      "purpose": "find candidate and choose launcher; never relax concurrency from name alone"
+    },
+    {
+      "stage": 2,
+      "id": "indirect-static-triage",
+      "source": "transport, package shape, entrypoint, env/header requirements, dependency family, file list, README/description",
+      "trust": "medium",
+      "purpose": "static-safe-policy, plan-only, blocked-high-risk, or needs-safe-probe"
+    },
+    {
+      "stage": 3,
+      "id": "live-safe-probe",
+      "source": "initialize + notifications/initialized + tools/list",
+      "trust": "high for observed surface",
+      "purpose": "confirm MCP compatibility and actual tool surface without tools/call"
+    },
+    {
+      "stage": 4,
+      "id": "tool-effect-review",
+      "source": "annotations + title/description + inputSchema/outputSchema parser + declarative toolPolicies",
+      "trust": "mixed; annotations are advisory unless trusted",
+      "purpose": "read-only vs mutating/open-world/credential/system-control hints"
+    },
+    {
+      "stage": 5,
+      "id": "runtime-drift",
+      "source": "package version/integrity + registry metadata hash + tools/list fingerprint",
+      "trust": "high when implemented",
+      "purpose": "downgrade policy when server surface changes"
+    }
+  ],
+  "completionState": {
+    "done": [
+      "one-command auto mode",
+      "random 500 per-server second-pass audit",
+      "name-free indirect evidence model",
+      "profileEvidence evidenceScore/evidenceLevel/automaticAction output",
+      "mcpace lab probe wrapper for safe initialize + tools/list probing",
+      "tool schema advisory parser for path/sql/url/credential/command/mutation signals",
+      "release hygiene: no node_modules, no downloaded package archives, no sandbox paths"
+    ],
+    "requiresTargetMachineEvidence": [
+      "actual live probe of untrusted user-selected servers",
+      "Rust cargo fmt/clippy/test/build in a Rust-capable environment",
+      "non-npm random sweeps when package registries are reachable"
+    ]
+  },
+  "readinessScore": {
+    "conceptAndArchitecture": 92,
+    "staticAutoClassifier": 82,
+    "safeConservativeRuntime": 85,
+    "fullAutomaticPolicyWidening": 72,
+    "productionConfidenceWithoutTargetProbe": 78,
+    "productionConfidenceAfterPassingTargetProbe": 88
+  }
+}

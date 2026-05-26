@@ -1,0 +1,1146 @@
+{
+  "generatedFrom": "sandbox metadata sweep only; package artifacts stayed outside the repository and are not included in release ZIP",
+  "sandboxArtifactsExcluded": true,
+  "npmRecordCount": 37,
+  "pypiRecordCount": 4,
+  "classifierBucketCounts": {
+    "remote-browser-session": 2,
+    "local-browser-session": 9,
+    "unknown-conservative": 2,
+    "stateless-external-read": 6,
+    "project-filesystem": 1,
+    "credential-external-mutating": 11,
+    "session-stateful": 2,
+    "database-stateful": 4,
+    "project-readonly-analysis": 1,
+    "documentation-external-read": 1,
+    "project-git": 1,
+    "local-browser-readonly": 1
+  },
+  "evidenceLayerOrder": [
+    "local/approved catalog trust",
+    "MCP Registry server.json: packages/remotes/transport/env/headers",
+    "package registry metadata: name/version/description/bin/keywords",
+    "downloaded package artifact manifest: package.json/METADATA/entry-points/file-list",
+    "README/description keyword scan for bounded semantic signals",
+    "safe initialize/tools-list probe for approved servers",
+    "tool names/descriptions/input schemas/annotations as untrusted hints",
+    "runtime observations: startup, list_changed, crash/timeouts, resource/prompts support",
+    "user policy override as final explicit control",
+    "random-heldout-audit: metadata-only correctness sample for unknown packages"
+  ],
+  "npm": [
+    {
+      "name": "@browserbasehq/mcp-server-browserbase",
+      "version": "2.4.3",
+      "source": "npm-pack",
+      "description": "MCP server for AI web browser automation using Browserbase and Stagehand",
+      "bin": {
+        "mcp-server-browserbase": "cli.js"
+      },
+      "classifierBucket": "remote-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "browser",
+        "playwright",
+        "puppeteer",
+        "browserbase",
+        "stagehand",
+        "file",
+        "git",
+        "github",
+        "docs",
+        "api key",
+        "write",
+        "create",
+        "session"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "chrome-devtools-mcp",
+      "version": "1.0.1",
+      "source": "npm-pack",
+      "description": "MCP server for Chrome DevTools",
+      "bin": {
+        "chrome-devtools-mcp": "./build/src/bin/chrome-devtools-mcp.js",
+        "chrome-devtools": "./build/src/bin/chrome-devtools.js"
+      },
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "browser",
+        "puppeteer",
+        "chrome",
+        "devtools",
+        "filesystem",
+        "file",
+        "git",
+        "github",
+        "search",
+        "docs",
+        "token",
+        "write",
+        "create",
+        "update"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@executeautomation/playwright-mcp-server",
+      "version": "1.0.12",
+      "source": "npm-pack",
+      "description": "Model Context Protocol servers for Playwright",
+      "bin": {
+        "playwright-mcp-server": "dist/index.js"
+      },
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "browser",
+        "playwright",
+        "chrome",
+        "file",
+        "git",
+        "github",
+        "docs",
+        "scrape",
+        "execute",
+        "session",
+        "profile"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "firecrawl-mcp",
+      "version": "3.17.0",
+      "source": "npm-pack",
+      "description": "MCP server for Firecrawl — search, scrape, and interact with the web. Supports both cloud and self-hosted instances. Features include web search, scraping, page interaction, batch processing, and LLM-powered content analysis.",
+      "bin": {
+        "firecrawl-mcp": "dist/index.js"
+      },
+      "classifierBucket": "unknown-conservative",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "browser",
+        "file",
+        "git",
+        "github",
+        "search",
+        "docs",
+        "api key",
+        "token",
+        "scrape",
+        "crawl",
+        "write",
+        "create",
+        "session",
+        "profile"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-brave-search",
+      "version": "0.6.2",
+      "source": "npm-pack",
+      "description": "MCP server for Brave Search API integration",
+      "bin": {
+        "mcp-server-brave-search": "dist/index.js"
+      },
+      "classifierBucket": "stateless-external-read",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "brave",
+        "search",
+        "api key",
+        "execute"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-everything",
+      "version": "2026.1.26",
+      "source": "npm-pack",
+      "description": "MCP server that exercises all the features of the MCP protocol",
+      "bin": {
+        "mcp-server-everything": "dist/index.js"
+      },
+      "classifierBucket": "unknown-conservative",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "docs",
+        "write"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-filesystem",
+      "version": "2026.1.14",
+      "source": "npm-pack",
+      "description": "MCP server for filesystem access",
+      "bin": {
+        "mcp-server-filesystem": "dist/index.js"
+      },
+      "classifierBucket": "project-filesystem",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "filesystem",
+        "file",
+        "git",
+        "github",
+        "search",
+        "docs",
+        "delete",
+        "write",
+        "create",
+        "update"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-github",
+      "version": "2025.4.8",
+      "source": "npm-pack",
+      "description": "MCP server for using the GitHub API",
+      "bin": {
+        "mcp-server-github": "dist/index.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "memory",
+        "git",
+        "github",
+        "search",
+        "docs",
+        "token",
+        "create",
+        "update"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-gitlab",
+      "version": "2025.4.25",
+      "source": "npm-pack",
+      "description": "MCP server for using the GitLab API",
+      "bin": {
+        "mcp-server-gitlab": "dist/index.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "gitlab",
+        "search",
+        "docs",
+        "token",
+        "write",
+        "create",
+        "update",
+        "profile"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-google-maps",
+      "version": "0.6.2",
+      "source": "npm-pack",
+      "description": "MCP server for using the Google Maps API",
+      "bin": {
+        "mcp-server-google-maps": "dist/index.js"
+      },
+      "classifierBucket": "stateless-external-read",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "maps",
+        "search",
+        "api key",
+        "create"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-memory",
+      "version": "2026.1.26",
+      "source": "npm-pack",
+      "description": "MCP server for enabling memory for Claude through a knowledge graph",
+      "bin": {
+        "mcp-server-memory": "dist/index.js"
+      },
+      "classifierBucket": "session-stateful",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "memory",
+        "git",
+        "github",
+        "search",
+        "docs",
+        "delete",
+        "create",
+        "update"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-postgres",
+      "version": "0.6.2",
+      "source": "npm-pack",
+      "description": "MCP server for interacting with PostgreSQL databases",
+      "bin": {
+        "mcp-server-postgres": "dist/index.js"
+      },
+      "classifierBucket": "database-stateful",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "database",
+        "postgres",
+        "execute"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-puppeteer",
+      "version": "2025.5.12",
+      "source": "npm-pack",
+      "description": "MCP server for browser automation using Puppeteer",
+      "bin": {
+        "mcp-server-puppeteer": "dist/index.js"
+      },
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "browser",
+        "puppeteer",
+        "chrome",
+        "file",
+        "git",
+        "github",
+        "execute"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-redis",
+      "version": "2025.4.25",
+      "source": "npm-pack",
+      "description": "MCP server for using Redis",
+      "bin": {
+        "mcp-server-redis": "dist/index.js"
+      },
+      "classifierBucket": "database-stateful",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "database",
+        "redis",
+        "docs",
+        "delete"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-sequential-thinking",
+      "version": "2025.12.18",
+      "source": "npm-pack",
+      "description": "MCP server for sequential thinking and problem solving",
+      "bin": {
+        "mcp-server-sequential-thinking": "dist/index.js"
+      },
+      "classifierBucket": "session-stateful",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "sequential",
+        "git",
+        "github",
+        "docs"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@modelcontextprotocol/server-slack",
+      "version": "2025.4.25",
+      "source": "npm-pack",
+      "description": "MCP server for interacting with Slack",
+      "bin": {
+        "mcp-server-slack": "dist/index.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "slack",
+        "oauth",
+        "token",
+        "write",
+        "create",
+        "profile"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@notionhq/notion-mcp-server",
+      "version": "2.2.1",
+      "source": "npm-pack",
+      "description": "Official MCP server for Notion API",
+      "bin": {
+        "notion-mcp-server": "bin/cli.mjs"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "database",
+        "notion",
+        "search",
+        "docs",
+        "oauth",
+        "token",
+        "delete",
+        "create",
+        "update",
+        "execute",
+        "session",
+        "profile"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@playwright/mcp",
+      "version": "0.0.75",
+      "source": "npm-pack",
+      "description": "Playwright Tools for MCP",
+      "bin": {
+        "playwright-mcp": "cli.js"
+      },
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "browser",
+        "playwright",
+        "chrome",
+        "devtools",
+        "file",
+        "memory",
+        "git",
+        "github",
+        "docs",
+        "token",
+        "write",
+        "create",
+        "update",
+        "profile"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@sentry/mcp-server",
+      "version": "0.35.0",
+      "source": "npm-pack",
+      "description": "",
+      "bin": {
+        "sentry-mcp": "./dist/index.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "sentry"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@upstash/context7-mcp",
+      "version": "3.0.0",
+      "source": "npm-pack",
+      "description": "MCP server for Context7",
+      "bin": {
+        "context7-mcp": "dist/index.js"
+      },
+      "classifierBucket": "stateless-external-read",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "keywords/readme-signals"
+      ],
+      "signals": [
+        "file",
+        "git",
+        "github",
+        "redis",
+        "search",
+        "docs",
+        "context7",
+        "api key",
+        "crawl",
+        "write",
+        "create",
+        "update"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "@apify/actors-mcp-server",
+      "version": "0.10.8",
+      "source": "npm-view",
+      "description": "Apify MCP Server",
+      "bin": {
+        "actors-mcp-server": "./dist/stdio.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "apify",
+        "mcp",
+        "server",
+        "actors",
+        "model context protocol"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "kubernetes-mcp-server",
+      "version": "0.0.62",
+      "source": "npm-view",
+      "description": "Model Context Protocol (MCP) server for Kubernetes and OpenShift",
+      "bin": {
+        "kubernetes-mcp-server": "bin/index.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mcp",
+        "kubernetes",
+        "openshift",
+        "model context protocol",
+        "model",
+        "context",
+        "protocol"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "mcp-server-kubernetes",
+      "version": "3.8.0",
+      "source": "npm-view",
+      "description": "MCP server for interacting with Kubernetes clusters via kubectl",
+      "bin": {
+        "mcp-server-kubernetes": "dist/index.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mcp",
+        "kubernetes",
+        "claude",
+        "anthropic",
+        "kubectl"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@supabase/mcp-server-supabase",
+      "version": "0.8.1",
+      "source": "npm-view",
+      "description": "MCP server for interacting with Supabase",
+      "bin": {
+        "mcp-server-supabase": "dist/transports/stdio.js"
+      },
+      "classifierBucket": "database-stateful",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@heroku/mcp-server",
+      "version": "1.2.2",
+      "source": "npm-view",
+      "description": "Heroku Platform MCP Server",
+      "bin": {
+        "heroku-mcp-server": "bin/heroku-mcp-server.mjs"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "heroku",
+        "mcp"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@mapbox/mcp-server",
+      "version": "0.11.0",
+      "source": "npm-view",
+      "description": "Mapbox MCP server.",
+      "bin": {
+        "mcp-server": "dist/esm/index.js"
+      },
+      "classifierBucket": "stateless-external-read",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mapbox",
+        "mcp"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@azure-devops/mcp",
+      "version": "2.7.0",
+      "source": "npm-view",
+      "description": "MCP server for interacting with Azure DevOps",
+      "bin": {
+        "mcp-server-azuredevops": "dist/index.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@eslint/mcp",
+      "version": "0.3.5",
+      "source": "npm-view",
+      "description": "MCP server for ESLint",
+      "bin": {
+        "mcp": "src/mcp-cli.js"
+      },
+      "classifierBucket": "project-readonly-analysis",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "eslint",
+        "mcp"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@browserstack/mcp-server",
+      "version": "1.2.17",
+      "source": "npm-view",
+      "description": "BrowserStack's Official MCP Server",
+      "bin": {
+        "browserstack-mcp-server": "dist/index.js"
+      },
+      "classifierBucket": "remote-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mcp",
+        "browserstack",
+        "testing",
+        "automation"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@phantom/mcp-server",
+      "version": "1.2.7",
+      "source": "npm-view",
+      "description": "MCP Server for Phantom Wallet",
+      "bin": {
+        "phantom-mcp": "dist/bin.js"
+      },
+      "classifierBucket": "credential-external-mutating",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "mcpbrowser",
+      "version": "0.3.58",
+      "source": "npm-view",
+      "description": "MCP browser server  loads and interacts with web pages using the user's Chromium-based browser with full JavaScript execution. Handles authentication, SSO, and anti-bot protection automatically via the user's existing browser session.",
+      "bin": {
+        "mcpbrowser": "src/mcp-browser.js"
+      },
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mcp",
+        "mcp-server",
+        "model-context-protocol",
+        "browser",
+        "web-browser",
+        "chrome",
+        "edge",
+        "puppeteer",
+        "authentication",
+        "web-scraping",
+        "scraper",
+        "web-automation",
+        "automation",
+        "cloudflare",
+        "sso",
+        "captcha",
+        "spa",
+        "javascript-rendering"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "sessionmcp",
+      "version": "0.3.2",
+      "source": "npm-view",
+      "description": "Universal MCP browser bridge  connect Claude Code, Cursor, VS Code, Windsurf & Cline to your existing Chrome session. No new browser. Real sessions, real cookies.",
+      "bin": {
+        "sessionmcp": "index.js"
+      },
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mcp",
+        "browser",
+        "chrome",
+        "claude-code",
+        "cursor",
+        "windsurf",
+        "cline",
+        "bridge",
+        "model-context-protocol"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@n8n/mcp-browser",
+      "version": "0.5.0",
+      "source": "npm-view",
+      "description": "Browser automation MCP tools built on Playwright, WebDriver BiDi, and safaridriver",
+      "bin": null,
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@mcp-browser-kit/server",
+      "version": "8.0.0",
+      "source": "npm-view",
+      "description": "An MCP server that enables AI assistants to interact with your local browsers.",
+      "bin": {
+        "mcp-browser-kit": "target/tsup/dist/main.js",
+        "server": "target/tsup/dist/main.js"
+      },
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mcp",
+        "browser",
+        "ai",
+        "model-context-protocol",
+        "automation",
+        "assistant",
+        "websocket",
+        "devtools",
+        "chrome",
+        "extension"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@kazuph/mcp-browser-tabs",
+      "version": "1.2.1",
+      "source": "npm-view",
+      "description": "MCP server for retrieving Chrome browser tabs information",
+      "bin": {
+        "mcp-browser-tabs": "dist/index.js"
+      },
+      "classifierBucket": "local-browser-readonly",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords",
+        "random-heldout-audit"
+      ],
+      "signals": [
+        "browser",
+        "browser-observation",
+        "chrome",
+        "mcp",
+        "read-only",
+        "tabs"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@pipeworx/mcp-caniuse",
+      "version": "0.1.0",
+      "source": "npm-view",
+      "description": "caniuse MCP  browser feature support tables",
+      "bin": null,
+      "classifierBucket": "documentation-external-read",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mcp",
+        "mcp-server",
+        "model-context-protocol",
+        "pipeworx",
+        "caniuse"
+      ],
+      "downloadedButNotExecuted": false
+    },
+    {
+      "name": "@linatang/playwright-browser-manager-mcp",
+      "version": "0.3.0",
+      "source": "npm-view",
+      "description": "Playwright MCP browser manager for multi-session automation with profile isolation and auto-healing recovery",
+      "bin": {
+        "playwright-browser-manager-mcp": "dist/index.js"
+      },
+      "classifierBucket": "local-browser-session",
+      "metadataUsed": [
+        "package-name",
+        "version",
+        "description",
+        "bin",
+        "npm-view-keywords"
+      ],
+      "signals": [
+        "mcp",
+        "model-context-protocol",
+        "playwright",
+        "browser-automation",
+        "browser-manager",
+        "multi-session",
+        "agent-tools",
+        "agentic",
+        "profile-isolation",
+        "auto-healing"
+      ],
+      "downloadedButNotExecuted": false
+    }
+  ],
+  "pypi": [
+    {
+      "name": "mcp-server-fetch",
+      "version": "2025.4.7",
+      "source": "pip-download-no-deps",
+      "summary": "A Model Context Protocol server providing tools to fetch and convert web content for usage by LLMs",
+      "entryPointSnippetPresent": true,
+      "classifierBucket": "stateless-external-read",
+      "metadataUsed": [
+        "distribution-name",
+        "version",
+        "summary",
+        "entry-points",
+        "METADATA/PKG-INFO"
+      ],
+      "signals": [
+        "fetch",
+        "web",
+        "http",
+        "git",
+        "repository",
+        "read",
+        "diff"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "mcp-server-time",
+      "version": "2026.1.26",
+      "source": "pip-download-no-deps",
+      "summary": "A Model Context Protocol server providing tools for time queries and timezone conversions for LLMs",
+      "entryPointSnippetPresent": true,
+      "classifierBucket": "stateless-external-read",
+      "metadataUsed": [
+        "distribution-name",
+        "version",
+        "summary",
+        "entry-points",
+        "METADATA/PKG-INFO"
+      ],
+      "signals": [
+        "http",
+        "time",
+        "timezone",
+        "git",
+        "repository",
+        "diff"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "mcp-server-git",
+      "version": "2026.1.14",
+      "source": "pip-download-no-deps",
+      "summary": "A Model Context Protocol server providing tools to read, search, and manipulate Git repositories programmatically via LLMs",
+      "entryPointSnippetPresent": true,
+      "classifierBucket": "project-git",
+      "metadataUsed": [
+        "distribution-name",
+        "version",
+        "summary",
+        "entry-points",
+        "METADATA/PKG-INFO"
+      ],
+      "signals": [
+        "http",
+        "time",
+        "git",
+        "repository",
+        "read",
+        "commit",
+        "diff"
+      ],
+      "downloadedButNotExecuted": true
+    },
+    {
+      "name": "mcp-server-sqlite",
+      "version": "2025.4.25",
+      "source": "pip-download-no-deps",
+      "summary": "A simple SQLite MCP server",
+      "entryPointSnippetPresent": true,
+      "classifierBucket": "database-stateful",
+      "metadataUsed": [
+        "distribution-name",
+        "version",
+        "summary",
+        "entry-points",
+        "METADATA/PKG-INFO"
+      ],
+      "signals": [
+        "http",
+        "repository",
+        "sqlite",
+        "sql",
+        "database",
+        "read",
+        "write",
+        "query",
+        "table"
+      ],
+      "downloadedButNotExecuted": true
+    }
+  ]
+}

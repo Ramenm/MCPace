@@ -46,6 +46,8 @@ use std::sync::{
 use std::thread;
 use std::time::{Duration, Instant};
 
+const HTTP_WORKER_STACK_BYTES: usize = 4 * 1024 * 1024;
+
 #[derive(Debug)]
 struct ParsedArgs {
     help: bool,
@@ -653,25 +655,31 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
         let worker_rx = Arc::clone(&request_rx);
         let request_config = Arc::clone(&config);
         let worker_log_tx = log_tx.clone();
-        handles.push(thread::spawn(move || loop {
-            let stream = {
-                let rx_guard = worker_rx
-                    .lock()
-                    .unwrap_or_else(|poisoned| poisoned.into_inner());
-                rx_guard.recv()
-            };
-            let Ok(stream) = stream else {
-                break;
-            };
-            let mut metrics_guard = request_config.metrics.begin();
-            if let Err(error) = handle_connection(stream, request_config.as_ref()) {
-                metrics_guard.mark_failed();
-                let _ = worker_log_tx.send(format!(
-                    "dashboard worker {} request failed: {}",
-                    worker_index, error
-                ));
-            }
-        }));
+        handles.push(
+            thread::Builder::new()
+                .name(format!("mcpace-http-{worker_index}"))
+                .stack_size(HTTP_WORKER_STACK_BYTES)
+                .spawn(move || loop {
+                    let stream = {
+                        let rx_guard = worker_rx
+                            .lock()
+                            .unwrap_or_else(|poisoned| poisoned.into_inner());
+                        rx_guard.recv()
+                    };
+                    let Ok(stream) = stream else {
+                        break;
+                    };
+                    let mut metrics_guard = request_config.metrics.begin();
+                    if let Err(error) = handle_connection(stream, request_config.as_ref()) {
+                        metrics_guard.mark_failed();
+                        let _ = worker_log_tx.send(format!(
+                            "dashboard worker {} request failed: {}",
+                            worker_index, error
+                        ));
+                    }
+                })
+                .expect("failed to spawn MCPace HTTP worker"),
+        );
     }
     drop(log_tx);
 

@@ -1,0 +1,71 @@
+{
+  "id": "popular-npm-slack",
+  "suite": "popular-servers",
+  "category": "credential-external",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Slack API is external mutating credential-scoped",
+  "objective": "Read tools can share budget; post/reply/reaction tools require credential/tenant serialization.",
+  "traffic": {
+    "clientArchetype": "claude-code",
+    "serverArchetype": "@modelcontextprotocol/server-slack@2025.4.25",
+    "serverPolicies": [
+      "single-writer",
+      "credential-scoped"
+    ],
+    "signals": [
+      "stdio",
+      "slack",
+      "api",
+      "post_message",
+      "add_reaction",
+      "external-mutating",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-slack 2025.4.25"
+  ],
+  "checks": [
+    "tool names include post/reply/reaction and get/list tools",
+    "mixed read/write surface should be conservative"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

@@ -1,0 +1,133 @@
+{
+  "schema": "mcpace.autoClassificationReadiness.v2",
+  "generatedAt": "2026-05-26T00:00:00Z",
+  "status": "conservative-auto-ready-live-probe-added",
+  "summary": "MCPace now supports conservative automatic classification from indirect evidence plus a live safe-probe path for configured servers. It is ready to choose safe defaults automatically; it should only widen concurrency after probe evidence on the target machine.",
+  "implementedEvidenceSources": [
+    {
+      "id": "client-config",
+      "uses": [
+        "transport",
+        "launcher shape",
+        "env/header presence",
+        "explicit mcpaceProfileHints"
+      ],
+      "policyStrength": "initial conservative binding only"
+    },
+    {
+      "id": "approved-catalog",
+      "uses": [
+        "trust level",
+        "permission manifest pointer",
+        "recommended mode",
+        "transport",
+        "description"
+      ],
+      "policyStrength": "trusted static default plus post-install probe"
+    },
+    {
+      "id": "registry-metadata",
+      "uses": [
+        "package type",
+        "remote/local split",
+        "transport",
+        "env/header requirements",
+        "install planning"
+      ],
+      "policyStrength": "candidate selection and launcher planning, not proof of safety"
+    },
+    {
+      "id": "package-metadata-and-artifact",
+      "uses": [
+        "description",
+        "keywords",
+        "bin/entrypoint",
+        "dependencies by family",
+        "file list",
+        "README"
+      ],
+      "policyStrength": "plan-only vs runnable, static-safe-policy vs needs-safe-probe"
+    },
+    {
+      "id": "lab-corpus",
+      "uses": [
+        "popular fixtures",
+        "random 100",
+        "random 500",
+        "second-pass per-server review"
+      ],
+      "policyStrength": "regression guard; catches broad-signal false positives"
+    }
+  ],
+  "requiredForFullAutomation": [
+    {
+      "id": "live-safe-probe",
+      "priority": "p0",
+      "missing": false,
+      "description": "mcpace lab probe / server test can start configured servers with the safe MCP lifecycle and request tools/list without tools/call. resources/list and prompts/list remain optional future enrichments.",
+      "why": "Metadata-only left many random packages in needs-safe-probe or unknown-conservative; MCP lifecycle and tool discovery are the strongest non-destructive evidence.",
+      "status": "implemented-tools-list-probe"
+    },
+    {
+      "id": "evidence-score-runtime-field",
+      "priority": "p0",
+      "missing": false,
+      "description": "profileEvidence now carries evidenceScore, evidenceLevel, automaticAction and nextStep for dashboard/API consumers without adding brittle top-level fields.",
+      "why": "Users need to see why MCPace chose static-safe-policy, needs-safe-probe, plan-only or blocked-high-risk.",
+      "status": "implemented-in-profile-evidence"
+    },
+    {
+      "id": "tool-schema-effect-parser",
+      "priority": "p1",
+      "missing": false,
+      "description": "upstream policy audit now parses tool inputSchema/outputSchema words for path/file/sql/url/credential/command/mutation signals.",
+      "why": "Tool names and descriptions are weaker than schemas; schemas reveal paths, queries, credentials, mutation payloads and destructive operations.",
+      "status": "implemented-advisory-parser"
+    },
+    {
+      "id": "permission-manifest-inference",
+      "priority": "p1",
+      "missing": true,
+      "description": "Generate a reviewable permission manifest from env/header requirements, filesystem path flags, network domains, process/browser capabilities and tool effects.",
+      "why": "Concurrency policy and security policy should be tied to the same evidence.",
+      "status": "still-needed"
+    },
+    {
+      "id": "multi-registry-corpus",
+      "priority": "p1",
+      "missing": true,
+      "description": "Expand random sweeps beyond npm to PyPI, OCI/Docker, NuGet and MCPB metadata where available.",
+      "why": "Current random-500 evidence is heavily npm-biased.",
+      "status": "still-needed"
+    },
+    {
+      "id": "rug-pull-and-drift-detection",
+      "priority": "p1",
+      "missing": true,
+      "description": "Cache package version, dist integrity, registry metadata hash and tools/list fingerprint; downgrade policy when any of them changes.",
+      "why": "A server can change metadata or tool surface after approval.",
+      "status": "still-needed"
+    },
+    {
+      "id": "fast-parallel-metadata-fetcher",
+      "priority": "p2",
+      "missing": true,
+      "description": "Use bounded concurrent metadata fetch with per-package timeout, cache and resume files for 500+ sweeps.",
+      "why": "Sequential npm pack/download was slow and sometimes hung in sandbox.",
+      "status": "still-needed"
+    }
+  ],
+  "completionDefinition": {
+    "usableNow": [
+      "mcpace auto can choose safe conservative defaults without asking the user for server type",
+      "weak/unknown random servers are routed to needs-safe-probe or plan-only instead of guessed policies",
+      "mcpace lab probe provides the live safe probe path for configured servers"
+    ],
+    "notFinishedUntil": [
+      "permission manifest inference is connected to auto-install review",
+      "drift/rug-pull detection downgrades policy when package or tools/list fingerprints change",
+      "Rust fmt/clippy/test/build pass in a Rust-capable environment"
+    ]
+  },
+  "finalAutoPipeline": "eval/final-auto-pipeline.json"
+}

@@ -1,0 +1,807 @@
+{
+  "schema": "mcpace.randomLiveNpmSweep.v1",
+  "seed": "mcpace-heldout-live-2026-05-26-v2",
+  "totalCandidates": 202,
+  "sampleCount": 20,
+  "selectedFrom": "live npm search --json \"mcp\" --searchlimit=250; sha256 seed; excluding existing corpus",
+  "executedForeignCode": false,
+  "fetchedMetadataOnly": true,
+  "commandOnlyUnknown": 4,
+  "withProfileHintsUnknown": 2,
+  "needsProfileHints": 6,
+  "records": [
+    {
+      "name": "@benborla29/mcp-server-mysql",
+      "version": "2.0.8",
+      "description": "MCP server for interacting with MySQL databases with write operations support",
+      "keywords": [
+        "node",
+        "mcp",
+        "ai",
+        "cursor",
+        "mcp-server",
+        "modelcontextprotocol",
+        "smithery",
+        "mcp-get",
+        "mcp-put",
+        "mcp-post",
+        "mcp-delete",
+        "mcp-patch",
+        "mcp-options",
+        "mcp-head"
+      ],
+      "bin": {
+        "mcp-server-mysql": "dist/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "database",
+          "network-database"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "database-connection",
+        "confidence": "high"
+      },
+      "withProfileHints": {
+        "signals": [
+          "database",
+          "mutable-tools",
+          "network-database"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "database-connection",
+        "confidence": "high"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "mcp-atlassian",
+      "version": "2.1.0",
+      "description": "MCP server for Atlassian (Confluence and Jira) integration",
+      "keywords": [
+        "mcp",
+        "atlassian",
+        "confluence",
+        "jira",
+        "model-context-protocol",
+        "ai-assistant",
+        "claude"
+      ],
+      "bin": {
+        "mcp-atlassian": "dist/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@currents/mcp",
+      "version": "2.3.1",
+      "description": "Currents MCP server",
+      "keywords": [
+        "currents",
+        "mcp-server",
+        "playwright",
+        "dashboard",
+        "reporting"
+      ],
+      "bin": {
+        "mcp": "dist/index.mjs"
+      },
+      "commandOnly": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "network-or-external-api",
+          "readonly-tools"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@pandacss/mcp",
+      "version": "1.11.1",
+      "description": "MCP server for Panda CSS AI assistants",
+      "keywords": [],
+      "bin": null,
+      "commandOnly": {
+        "signals": [
+          "project-analysis"
+        ],
+        "runtimeType": "stateful",
+        "stateClass": "project-stateful",
+        "effectClass": "read-only",
+        "concurrencyPolicy": "isolated-per-project",
+        "routingGroup": "project-analysis",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "project-analysis"
+        ],
+        "runtimeType": "stateful",
+        "stateClass": "project-stateful",
+        "effectClass": "read-only",
+        "concurrencyPolicy": "isolated-per-project",
+        "routingGroup": "project-analysis",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@knip/mcp",
+      "version": "0.0.29",
+      "description": "Knip MCP Server",
+      "keywords": [
+        "knip",
+        "mcp",
+        "model-context-protocol"
+      ],
+      "bin": {
+        "knip-mcp": "./src/cli.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "project-analysis"
+        ],
+        "runtimeType": "stateful",
+        "stateClass": "project-stateful",
+        "effectClass": "read-only",
+        "concurrencyPolicy": "isolated-per-project",
+        "routingGroup": "project-analysis",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "project-analysis"
+        ],
+        "runtimeType": "stateful",
+        "stateClass": "project-stateful",
+        "effectClass": "read-only",
+        "concurrencyPolicy": "isolated-per-project",
+        "routingGroup": "project-analysis",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@taazkareem/clickup-mcp-server",
+      "version": "0.14.4",
+      "description": "ClickUp MCP Server - Powering AI Agents with full ClickUp task, document, and chat management capabilities.",
+      "keywords": [
+        "clickup",
+        "mcp",
+        "ai",
+        "tasks",
+        "project-management",
+        "model-context-protocol",
+        "mcp-server",
+        "claude",
+        "claude-desktop",
+        "gemini",
+        "gemini-cli",
+        "cursor",
+        "cursor-ide",
+        "n8n",
+        "cline",
+        "windsurf",
+        "zed",
+        "supermaven",
+        "clickup-server",
+        "clickup-mcp-server",
+        "task-management",
+        "productivity",
+        "automation",
+        "workflow",
+        "team-collaboration",
+        "artificial-intelligence",
+        "project-tracking",
+        "task-tracking",
+        "project-planning",
+        "clickup-integration",
+        "clickup-api",
+        "clickup-automation",
+        "task-organization",
+        "project-organization"
+      ],
+      "bin": {
+        "clickup-mcp-server": "build/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "mutable-tools",
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "needs-profile-hints"
+    },
+    {
+      "name": "@transcend-io/mcp-server-admin",
+      "version": "0.3.7",
+      "description": "Transcend MCP Server  Admin tools.",
+      "keywords": [],
+      "bin": {
+        "transcend-mcp-admin": "dist/cli.mjs"
+      },
+      "commandOnly": {
+        "signals": [
+          "mutable-tools",
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "mutable-tools",
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@transcend-io/mcp-server-dsr",
+      "version": "0.3.8",
+      "description": "Transcend MCP Server  DSR Automation tools.",
+      "keywords": [],
+      "bin": {
+        "transcend-mcp-dsr": "dist/cli.mjs"
+      },
+      "commandOnly": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "mutable-tools",
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "needs-profile-hints"
+    },
+    {
+      "name": "@z_ai/mcp-server",
+      "version": "0.1.4",
+      "description": "MCP Server for Z.AI - A Model Context Protocol server that provides AI capabilities",
+      "keywords": [
+        "zai",
+        "mcp",
+        "vision"
+      ],
+      "bin": {
+        "zai-mcp-server": "build/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "unknown-side-effects"
+        ],
+        "runtimeType": "unknown",
+        "stateClass": "unknown-conservative",
+        "effectClass": "unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "unknown-source",
+        "confidence": "low"
+      },
+      "withProfileHints": {
+        "signals": [
+          "unknown-side-effects"
+        ],
+        "runtimeType": "unknown",
+        "stateClass": "unknown-conservative",
+        "effectClass": "unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "unknown-source",
+        "confidence": "low"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "mcp-searxng",
+      "version": "1.0.5",
+      "description": "MCP server for SearXNG integration",
+      "keywords": [
+        "mcp",
+        "modelcontextprotocol",
+        "searxng",
+        "search",
+        "web-search",
+        "claude",
+        "ai",
+        "pagination",
+        "smithery",
+        "url-reader"
+      ],
+      "bin": {
+        "mcp-searxng": "dist/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "external-read-api"
+        ],
+        "runtimeType": "stateless",
+        "stateClass": "stateless",
+        "effectClass": "external-read",
+        "concurrencyPolicy": "multi-reader",
+        "routingGroup": "external-read",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "external-read-api",
+          "network-fetch",
+          "readonly-tools"
+        ],
+        "runtimeType": "stateless",
+        "stateClass": "stateless",
+        "effectClass": "external-read",
+        "concurrencyPolicy": "multi-reader",
+        "routingGroup": "external-read",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@extentos/mcp-server",
+      "version": "0.1.0",
+      "description": "Extentos MCP server  deterministic tools for building Meta-glasses apps.",
+      "keywords": [
+        "mcp",
+        "model-context-protocol",
+        "meta-glasses",
+        "ray-ban",
+        "extentos",
+        "ai-agents",
+        "claude-code"
+      ],
+      "bin": {
+        "extentos-mcp": "dist/cli.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "unknown-side-effects"
+        ],
+        "runtimeType": "unknown",
+        "stateClass": "unknown-conservative",
+        "effectClass": "unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "unknown-source",
+        "confidence": "low"
+      },
+      "withProfileHints": {
+        "signals": [
+          "unknown-side-effects"
+        ],
+        "runtimeType": "unknown",
+        "stateClass": "unknown-conservative",
+        "effectClass": "unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "unknown-source",
+        "confidence": "low"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@midscene/android-mcp",
+      "version": "1.8.5",
+      "description": "Midscene MCP Server for Android automation",
+      "keywords": [],
+      "bin": {
+        "android-mcp": "dist/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "browser-or-desktop"
+        ],
+        "runtimeType": "interactive",
+        "stateClass": "host-stateful",
+        "effectClass": "host-mutating",
+        "concurrencyPolicy": "single-session",
+        "routingGroup": "browser",
+        "confidence": "high"
+      },
+      "withProfileHints": {
+        "signals": [
+          "browser-or-desktop",
+          "mutable-tools"
+        ],
+        "runtimeType": "interactive",
+        "stateClass": "host-stateful",
+        "effectClass": "host-mutating",
+        "concurrencyPolicy": "single-session",
+        "routingGroup": "browser",
+        "confidence": "high"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@onozaty/redmine-mcp-server",
+      "version": "1.2.0",
+      "description": "MCP server for Redmine",
+      "keywords": [
+        "mcp",
+        "modelcontextprotocol",
+        "redmine"
+      ],
+      "bin": {
+        "redmine-mcp-server": "dist/server.mjs"
+      },
+      "commandOnly": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@salesforce/mcp",
+      "version": "0.30.12",
+      "description": "MCP Server for interacting with Salesforce instances",
+      "keywords": [],
+      "bin": {
+        "sf-mcp-server": "bin/run.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@motiffcom/motiff-mcp-server",
+      "version": "0.0.19",
+      "description": "MCP server for motiff",
+      "keywords": [],
+      "bin": {
+        "motiff-mcp-server": "dist/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "@piotr-agier/google-drive-mcp",
+      "version": "2.2.0",
+      "description": "Google Drive MCP Server - Model Context Protocol server providing secure access to Google Drive, Docs, Sheets, and Slides through MCP clients e.g. Claude Desktop",
+      "keywords": [
+        "mcp",
+        "model-context-protocol",
+        "claude",
+        "google-drive",
+        "google-docs",
+        "google-sheets",
+        "google-slides",
+        "google-workspace",
+        "ai",
+        "llm",
+        "integration",
+        "oauth2",
+        "file-management",
+        "document-automation"
+      ],
+      "bin": {
+        "google-drive-mcp": "dist/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "credentials-or-auth",
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "credentials-or-auth",
+          "documentation-lookup",
+          "mutable-tools",
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "needs-profile-hints"
+    },
+    {
+      "name": "@esaio/esa-mcp-server",
+      "version": "0.10.1",
+      "description": "Official MCP server for esa.io - STDIO transport version",
+      "keywords": [
+        "mcp",
+        "model-context-protocol",
+        "esa",
+        "esa.io",
+        "documentation",
+        "knowledge-base"
+      ],
+      "bin": {
+        "esa-mcp-server": "bin/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "documentation-lookup",
+          "network-or-external-api",
+          "readonly-tools"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "same"
+    },
+    {
+      "name": "supergateway",
+      "version": "3.4.3",
+      "description": "Run MCP stdio servers over SSE, Streamable HTTP or visa versa",
+      "keywords": [
+        "mcp",
+        "stdio",
+        "sse",
+        "gateway",
+        "proxy",
+        "bridge"
+      ],
+      "bin": {
+        "supergateway": "dist/index.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "unknown-side-effects"
+        ],
+        "runtimeType": "unknown",
+        "stateClass": "unknown-conservative",
+        "effectClass": "unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "unknown-source",
+        "confidence": "low"
+      },
+      "withProfileHints": {
+        "signals": [
+          "network-fetch",
+          "transport-gateway"
+        ],
+        "runtimeType": "stateless",
+        "stateClass": "stateless",
+        "effectClass": "read-only",
+        "concurrencyPolicy": "multi-reader",
+        "routingGroup": "transport-gateway",
+        "confidence": "medium"
+      },
+      "verdict": "needs-profile-hints"
+    },
+    {
+      "name": "kai-mcp",
+      "version": "0.32.10",
+      "description": "MCP server for Kai  semantic code intelligence for AI coding assistants",
+      "keywords": [
+        "mcp",
+        "model-context-protocol",
+        "kai",
+        "semantic",
+        "code-intelligence",
+        "claude",
+        "cursor"
+      ],
+      "bin": {
+        "kai-mcp": "bin/kai-mcp.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "unknown-side-effects"
+        ],
+        "runtimeType": "unknown",
+        "stateClass": "unknown-conservative",
+        "effectClass": "unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "unknown-source",
+        "confidence": "low"
+      },
+      "withProfileHints": {
+        "signals": [
+          "project-analysis"
+        ],
+        "runtimeType": "stateful",
+        "stateClass": "project-stateful",
+        "effectClass": "read-only",
+        "concurrencyPolicy": "isolated-per-project",
+        "routingGroup": "project-analysis",
+        "confidence": "medium"
+      },
+      "verdict": "needs-profile-hints"
+    },
+    {
+      "name": "@netlify/mcp",
+      "version": "1.15.1",
+      "description": "[Netlify MCP Server](https://docs.netlify.com/welcome/build-with-ai/netlify-mcp-server/) follows the [Model Context Protocol (MCP)](https://modelcontextprotocol.org) to enable code agents to use the Netlify API and CLIso they can create new projects, bui",
+      "keywords": [],
+      "bin": {
+        "netlify-mcp": "dist/netlify-mcp.js"
+      },
+      "commandOnly": {
+        "signals": [
+          "cloud-admin",
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-unknown",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "withProfileHints": {
+        "signals": [
+          "cloud-admin",
+          "documentation-lookup",
+          "mutable-tools",
+          "network-fetch",
+          "network-or-external-api"
+        ],
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "routingGroup": "credential-provider",
+        "confidence": "medium"
+      },
+      "verdict": "needs-profile-hints"
+    }
+  ]
+}

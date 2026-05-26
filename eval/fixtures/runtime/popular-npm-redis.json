@@ -1,0 +1,70 @@
+{
+  "id": "popular-npm-redis",
+  "suite": "popular-servers",
+  "category": "database-stateful",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Redis server is database-connection scoped",
+  "objective": "Treat Redis as a shared mutable data service, not as a stateless utility.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@modelcontextprotocol/server-redis@2025.4.25",
+    "serverPolicies": [
+      "single-writer",
+      "credential-or-db-lock"
+    ],
+    "signals": [
+      "stdio",
+      "redis",
+      "database",
+      "network-database",
+      "delete",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "approved-sandbox-probe"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-redis 2025.4.25"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "package description says Redis",
+    "database connection is the conflict domain"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

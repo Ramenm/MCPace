@@ -1,0 +1,74 @@
+{
+  "id": "random-npm-mapbox-read",
+  "suite": "random-npm-heldout",
+  "category": "external-read-api",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "@mapbox/mcp-server is external map/geocode read API",
+  "objective": "Random external location APIs should use read/budget semantics instead of local browser or project state.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@mapbox/mcp-server@0.11.0",
+    "serverPolicies": [
+      "multi-reader",
+      "provider-budget",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "external-read-api",
+      "mapbox",
+      "maps",
+      "geocode",
+      "api-key"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateless",
+    "stateClass": "stateless",
+    "effectClass": "external-read",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @mapbox/mcp-server@0.11.0",
+    "random held-out package metadata sample"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command",
+    "trust-catalog-rating"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals from name, description, keywords and bin",
+    "separate browser-control, browser-observation, browser-data and external API signals",
+    "apply trust gate before install or probe",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says Mapbox MCP server",
+    "maps/geocode signals imply external read API",
+    "not cluster/admin/browser"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "random-heldout-corpus"
+  ]
+}

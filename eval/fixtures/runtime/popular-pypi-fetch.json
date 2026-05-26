@@ -1,0 +1,69 @@
+{
+  "id": "popular-pypi-fetch",
+  "suite": "popular-servers",
+  "category": "stateless-external-read",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Fetch server is multi-reader with provider budget limits",
+  "objective": "Allow parallel fetch reads while preserving budget/rate-limit protection.",
+  "traffic": {
+    "clientArchetype": "gemini-cli",
+    "serverArchetype": "mcp-server-fetch@2025.4.7",
+    "serverPolicies": [
+      "multi-reader",
+      "rate-limited"
+    ],
+    "signals": [
+      "stdio",
+      "fetch",
+      "url",
+      "web",
+      "external-read",
+      "readonly-tools"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateless",
+    "stateClass": "stateless",
+    "effectClass": "external-read",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "pip-download mcp-server-fetch 2025.4.7"
+  ],
+  "checks": [
+    "PyPI summary says fetch/convert web content",
+    "tool surface contains fetch(url)"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "pypi-metadata",
+    "entry-points",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

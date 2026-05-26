@@ -1,0 +1,69 @@
+{
+  "id": "registry-remote-auth-ads",
+  "suite": "random-registry",
+  "category": "remote-auth-mutating",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": true,
+  "title": "Remote ads/accounting server with auth stays credential scoped",
+  "objective": "Headers marked secret/required mean MCPace cannot auto-run without user credential profile.",
+  "traffic": {
+    "clientArchetype": "claude-api-connector",
+    "serverArchetype": "registry remote ads/accounting auth sample",
+    "serverPolicies": [
+      "single-writer",
+      "credential-scoped"
+    ],
+    "signals": [
+      "streamable-http",
+      "authorization-header",
+      "ads",
+      "accounting",
+      "external-mutating",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "plan-only-until-credential-approved",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "MCP Registry /v0/servers sample"
+  ],
+  "checks": [
+    "registry sample includes required secret Authorization header",
+    "business account APIs can mutate external state"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "mcp-registry-server-json",
+    "transport-metadata",
+    "package-type-metadata",
+    "trust-catalog-rating",
+    "semantic-name-description-signals"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

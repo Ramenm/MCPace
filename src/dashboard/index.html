@@ -270,6 +270,8 @@
       .client-list,
       .activity-list,
       .policy-list,
+      .concurrency-list,
+      .audit-list,
       .log-list {
         display: grid;
         gap: 12px;
@@ -280,6 +282,8 @@
       .client-item,
       .activity-item,
       .policy-item,
+      .concurrency-item,
+      .audit-item,
       .log-item {
         border-radius: 18px;
         border: 1px solid var(--line);
@@ -291,6 +295,8 @@
       .client-top,
       .activity-top,
       .policy-top,
+      .concurrency-top,
+      .audit-top,
       .log-top {
         display: flex;
         align-items: center;
@@ -302,6 +308,8 @@
       .client-name,
       .activity-name,
       .policy-name,
+      .concurrency-name,
+      .audit-name,
       .log-name {
         font-size: 16px;
         font-weight: 650;
@@ -312,6 +320,8 @@
       .client-meta,
       .activity-meta,
       .policy-meta,
+      .concurrency-meta,
+      .audit-meta,
       .log-meta,
       .warning-item {
         color: var(--muted);
@@ -322,7 +332,9 @@
       .server-tags,
       .client-tags,
       .activity-tags,
-      .policy-tags {
+      .policy-tags,
+      .concurrency-tags,
+      .audit-tags {
         display: flex;
         flex-wrap: wrap;
         gap: 8px;
@@ -468,12 +480,31 @@
           </article>
 
           <article class="card">
+            <h2>Concurrency map</h2>
+            <p class="section-note">
+              Planned process/session lanes. This is the UI surface for seeing
+              which chats share safely, which servers serialize, and which
+              stateful stdio servers get isolated instances.
+            </p>
+            <div class="concurrency-list" id="concurrency-list"></div>
+          </article>
+
+          <article class="card">
             <h2>Policy Review</h2>
             <p class="section-note">
               Minimal review queue for server isolation, default trust, and
               stateful/concurrency policy. Unknown servers stay conservative.
             </p>
             <div class="policy-list" id="policy-review-list"></div>
+          </article>
+
+          <article class="card">
+            <h2>Audit trail</h2>
+            <p class="section-note">
+              Tool-call audit events with server, tool, lease, pool, and trace
+              metadata. Arguments are fingerprinted instead of displayed raw.
+            </p>
+            <div class="audit-list" id="audit-list"></div>
           </article>
 
           <article class="card">
@@ -566,6 +597,8 @@
         clientList: document.getElementById("client-list"),
         activityList: document.getElementById("activity-list"),
         policyReviewList: document.getElementById("policy-review-list"),
+        concurrencyList: document.getElementById("concurrency-list"),
+        auditList: document.getElementById("audit-list"),
         logList: document.getElementById("log-list"),
         serverSearch: document.getElementById("server-search"),
         toggleEnabledFilter: document.getElementById("toggle-enabled-filter"),
@@ -651,7 +684,7 @@
           const requestOptions = controller ? { signal: controller.signal } : {};
           const [overviewResult, logsResult] = await Promise.allSettled([
             fetchJson(overviewUrl, requestOptions),
-            fetchJson("/api/logs?tail=18", requestOptions)
+            fetchJson("/api/logs?tail=60", requestOptions)
           ]);
 
           if (refreshId !== state.refreshSeq) {
@@ -744,6 +777,8 @@
         const clients = Array.isArray(clientCatalog.targets) ? clientCatalog.targets : [];
         const leases = overview.leases || {};
         const leaseItems = Array.isArray(leases.leases) ? leases.leases : Array.isArray(leases.activeLeases) ? leases.activeLeases : [];
+        const instanceEnvelope = overview.instances || {};
+        const plannedInstances = Array.isArray(instanceEnvelope.instances) ? instanceEnvelope.instances : [];
         const policyReviews = buildPolicyReviews(servers);
         const warnings = [
           ...(Array.isArray(hub.warnings) ? hub.warnings : []),
@@ -799,9 +834,13 @@
         const enabledCount = servers.filter(server => server.effectiveEnabled).length;
         const requiredCount = servers.filter(server => server.required).length;
         const projectLocalCount = servers.filter(server => server.scopeClass === "project-local").length;
+        const statelessCount = servers.filter(server => server.runtimeType === "stateless").length;
+        const statefulCount = servers.filter(server => ["stateful", "external", "interactive", "side-effecting"].includes(server.runtimeType)).length;
         els.serverSummaryChips.innerHTML = [
           chip(`${enabledCount} enabled`, enabledCount > 0 ? "good" : "warn"),
           chip(`${requiredCount} required`, requiredCount > 0 ? "warn" : "good"),
+          chip(`${statelessCount} stateless`, statelessCount > 0 ? "good" : "warn"),
+          chip(`${statefulCount} stateful/effectful`, statefulCount > 0 ? "warn" : "good"),
           chip(`${projectLocalCount} project-local`, projectLocalCount > 0 ? "warn" : "good"),
           chip(`${servers.length} total`, "warn")
         ].join("");
@@ -814,14 +853,19 @@
         ].join("");
 
         renderServers(servers);
+        renderConcurrencyMap(servers, leaseItems, overview, plannedInstances);
         renderPolicyReviews(policyReviews);
         renderActivity(leaseItems, overview);
         renderWarnings(warnings);
         renderClients(clients);
+        renderAuditTrail(state.logs);
         renderLogs(state.logs);
       }
 
       function humanPolicy(server) {
+        if (server.runtimeType === "stateless") return `Stateless · ${server.effectClass || "read-only"}`;
+        if (server.runtimeType === "external") return `External · ${server.stateClass || "credential/session"}`;
+        if (server.runtimeType === "side-effecting") return `Side-effecting · ${server.effectClass || "review"}`;
         if (server.hostLock && server.hostLock !== "none") return `Browser/host lock · ${server.hostLock}`;
         if (server.scopeClass === "project-local") return "Project isolated";
         if (server.concurrencyPolicy === "single-session") return "Single user at a time";
@@ -883,6 +927,112 @@
         `).join("");
       }
 
+      function renderConcurrencyMap(servers, leases, overview, plannedInstances = []) {
+        if (!Array.isArray(servers) || !servers.length) {
+          els.concurrencyList.innerHTML = `<div class="empty">No servers configured yet.</div>`;
+          return;
+        }
+        const context = overview.context || {};
+        const rows = servers
+          .filter(server => server.effectiveEnabled || server.required)
+          .slice(0, 14)
+          .map(server => buildConcurrencyRow(server, leases, context, plannedInstances));
+        if (!rows.length) {
+          els.concurrencyList.innerHTML = `<div class="empty">No enabled server lanes yet.</div>`;
+          return;
+        }
+        els.concurrencyList.innerHTML = rows.map(row => `
+          <article class="concurrency-item">
+            <div class="concurrency-top">
+              <div class="concurrency-name">${escapeHtml(row.server)}</div>
+              <span class="chip"><span class="dot ${row.tone}"></span>${escapeHtml(row.mode)}</span>
+            </div>
+            <div class="concurrency-meta">${escapeHtml(row.trace)}</div>
+            <div class="concurrency-tags">
+              <span class="tag">${escapeHtml(row.schedulerLane)}</span>
+              <span class="tag">${escapeHtml(row.requestStrategy)}</span>
+              <span class="tag">workers ${escapeHtml(row.workers)}</span>
+              <span class="tag">in-flight ${escapeHtml(row.inFlight)}</span>
+              <span class="tag">leases ${escapeHtml(row.leaseCount)}</span>
+            </div>
+          </article>
+        `).join("");
+      }
+
+      function buildConcurrencyRow(server, leases, context, plannedInstances = []) {
+        const mode = inferExecutionMode(server);
+        const tone = mode === "shared" || mode === "pool" ? "good" : mode === "serialized" ? "warn" : "warn";
+        const matchingLeases = Array.isArray(leases)
+          ? leases.filter(lease => (lease.server || lease.serverName || "") === server.name)
+          : [];
+        const planned = plannedInstances.find(item => item.server === server.name) || {};
+        const left = mode.includes("session")
+          ? `chat=${context.sessionId || context.sessionLeaseId || "current"}`
+          : mode.includes("project")
+            ? `project=${context.projectRoot || "current-project"}`
+            : `client=${context.clientId || "local-client"}`;
+        const seed = `${server.name}|${server.conflictDomain || ""}|${server.workerPoolKey || ""}|${server.scopeClass || ""}`;
+        return {
+          server: server.name,
+          mode: planned.mode || mode,
+          tone,
+          trace: planned.trace || `${left} -> ${server.name}#${stableShortId(seed)}`,
+          schedulerLane: server.schedulerLane || server.routingGroup || server.scopeClass || "lane",
+          requestStrategy: server.requestStrategy || server.concurrencyPolicy || "strategy",
+          workers: server.maxWorkers ?? server.parallelismLimit ?? 1,
+          inFlight: server.maxInFlightPerWorker ?? 1,
+          leaseCount: matchingLeases.length
+        };
+      }
+
+      function inferExecutionMode(server) {
+        if (server.concurrencyPolicy === "single-session" || server.scopeClass === "state-profile") return "session-isolated";
+        if (server.concurrencyPolicy === "isolated-per-project" || server.scopeClass === "project-local") return "project-isolated";
+        if (server.concurrencyPolicy === "multi-reader" && ((server.maxWorkers ?? 1) > 1 || String(server.defaultPoolModel || "").includes("pool"))) return "pool";
+        if (server.concurrencyPolicy === "multi-reader") return "shared";
+        return "serialized";
+      }
+
+      function stableShortId(value) {
+        let hash = 2166136261;
+        const text = String(value || "");
+        for (let index = 0; index < text.length; index += 1) {
+          hash ^= text.charCodeAt(index);
+          hash = Math.imul(hash, 16777619);
+        }
+        return (hash >>> 0).toString(16).padStart(8, "0").slice(0, 8);
+      }
+
+      function renderAuditTrail(logs) {
+        const audits = Array.isArray(logs)
+          ? logs.filter(entry => entry.event === "tool_call_audit" || entry.event === "tool_batch_audit").slice().reverse()
+          : [];
+        if (!audits.length) {
+          els.auditList.innerHTML = `<div class="empty">No tool-call audit entries yet. Calls will appear here after clients invoke upstream tools.</div>`;
+          return;
+        }
+        els.auditList.innerHTML = audits.slice(0, 12).map(entry => {
+          const title = entry.event === "tool_batch_audit"
+            ? `${entry.server || "server"} · batch x${entry.callCount ?? "?"}`
+            : `${entry.server || "server"} · ${entry.tool || "tool"}`;
+          const ok = entry.bridgeOk && entry.upstreamOk;
+          return `
+            <article class="audit-item">
+              <div class="audit-top">
+                <div class="audit-name">${escapeHtml(title)}</div>
+                <span class="chip"><span class="dot ${ok ? "good" : "warn"}"></span>${ok ? "ok" : "attention"}</span>
+              </div>
+              <div class="audit-meta">${escapeHtml(entry.trace || "no trace")} · ${formatDate(entry.tsMs)}</div>
+              <div class="audit-tags">
+                <span class="tag">${entry.pooled ? "pooled" : "direct"}</span>
+                <span class="tag">lease ${escapeHtml(entry.leaseId || "none")}</span>
+                <span class="tag">${escapeHtml(entry.argumentsFingerprint || "batch")}</span>
+              </div>
+            </article>
+          `;
+        }).join("");
+      }
+
       function renderActivity(leases, overview) {
         const runtime = overview.runtime || {};
         const http = runtime.http || {};
@@ -921,6 +1071,9 @@
             server.name,
             server.kind,
             server.scopeClass,
+            server.runtimeType,
+            server.stateClass,
+            server.effectClass,
             server.transportPreference
           ].join(" ").toLowerCase().includes(query);
         });
@@ -939,11 +1092,12 @@
                 <span class="chip"><span class="dot ${tone}"></span>${server.effectiveEnabled ? "enabled" : "disabled"}</span>
               </div>
               <div class="server-meta">
-                ${escapeHtml(server.kind)} · scope ${escapeHtml(server.scopeClass)} · concurrency ${escapeHtml(server.concurrencyPolicy)}
+                ${escapeHtml(server.kind)} · type ${escapeHtml(server.runtimeType || "unknown")} · state ${escapeHtml(server.stateClass || "unknown")} · concurrency ${escapeHtml(server.concurrencyPolicy)}
               </div>
               <div class="server-tags">
                 <span class="tag">${server.required ? "required" : "optional"}</span>
                 <span class="tag">${escapeHtml(server.transportPreference || "stdio-default")}</span>
+                <span class="tag">${escapeHtml(server.effectClass || "effect-unknown")}</span>
                 <span class="tag">${escapeHtml(server.stateBinding)}</span>
                 <span class="tag">${escapeHtml(server.credentialBinding)}</span>
               </div>

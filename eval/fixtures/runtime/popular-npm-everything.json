@@ -1,0 +1,71 @@
+{
+  "id": "popular-npm-everything",
+  "suite": "popular-servers",
+  "category": "mixed-protocol",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": true,
+  "title": "Everything test server remains conservative",
+  "objective": "Protocol exercise servers expose many primitives and should not be relaxed from name alone.",
+  "traffic": {
+    "clientArchetype": "claude-code",
+    "serverArchetype": "@modelcontextprotocol/server-everything@2026.1.26",
+    "serverPolicies": [
+      "single-writer",
+      "unknown-conservative"
+    ],
+    "signals": [
+      "stdio",
+      "everything",
+      "tools",
+      "resources",
+      "prompts",
+      "sampling",
+      "mixed-surface"
+    ]
+  },
+  "expected": {
+    "runtimeType": "unknown",
+    "stateClass": "unknown-conservative",
+    "effectClass": "unknown",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-everything 2026.1.26"
+  ],
+  "checks": [
+    "package description says exercises all MCP protocol features",
+    "held as mixed-surface regression"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

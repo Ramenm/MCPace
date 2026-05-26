@@ -10,6 +10,9 @@
     "transportStatus",
     "launcher",
     "parallelSafetyClass",
+    "runtimeType",
+    "stateClass",
+    "effectClass",
     "defaultPoolModel",
     "maxWorkers",
     "maxInFlightPerWorker",
@@ -17,19 +20,46 @@
     "evidence"
   ],
   "properties": {
-    "serverId": { "type": "string", "minLength": 1 },
-    "version": { "type": "string" },
+    "serverId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string"
+    },
     "transport": {
       "type": "string",
-      "enum": ["stdio", "streamable-http", "sse-legacy", "custom"]
+      "enum": [
+        "stdio",
+        "streamable-http",
+        "sse-legacy",
+        "custom"
+      ]
     },
     "transportStatus": {
       "type": "string",
-      "enum": ["stable", "legacy-compat", "custom", "inferred"]
+      "enum": [
+        "stable",
+        "legacy-compat",
+        "custom",
+        "inferred"
+      ]
     },
     "launcher": {
       "type": "string",
-      "enum": ["npx", "uvx", "npm", "pypi", "nuget", "oci", "mcpb", "remote-url", "local-command", "unspecified", "custom"]
+      "enum": [
+        "npx",
+        "uvx",
+        "npm",
+        "pypi",
+        "nuget",
+        "oci",
+        "mcpb",
+        "remote-url",
+        "local-command",
+        "unspecified",
+        "custom"
+      ]
     },
     "parallelSafetyClass": {
       "type": "string",
@@ -57,30 +87,105 @@
         "legacy-disabled"
       ]
     },
-    "maxWorkers": { "type": "integer", "minimum": 0 },
-    "maxInFlightPerWorker": { "type": "integer", "minimum": 0 },
+    "maxWorkers": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "maxInFlightPerWorker": {
+      "type": "integer",
+      "minimum": 0
+    },
     "lockDomains": {
       "type": "array",
-      "items": { "type": "string", "minLength": 1 },
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
       "uniqueItems": true
     },
     "evidence": {
       "type": "array",
-      "items": { "$ref": "#/$defs/evidenceRecord" }
+      "items": {
+        "$ref": "#/$defs/evidenceRecord"
+      }
+    },
+    "runtimeType": {
+      "type": "string",
+      "enum": [
+        "stateless",
+        "stateful",
+        "external",
+        "interactive",
+        "side-effecting",
+        "legacy",
+        "package-artifact",
+        "unknown"
+      ]
+    },
+    "stateClass": {
+      "type": "string",
+      "enum": [
+        "stateless",
+        "session-stateful",
+        "project-stateful",
+        "credential-stateful",
+        "host-stateful",
+        "remote-session-stateful",
+        "unknown-stateful",
+        "legacy-transport",
+        "not-a-server",
+        "unknown-conservative"
+      ]
+    },
+    "effectClass": {
+      "type": "string",
+      "enum": [
+        "read-only",
+        "ephemeral-state",
+        "project-mutating",
+        "external-read",
+        "external-mutating",
+        "external-unknown",
+        "host-mutating",
+        "process-exec",
+        "unknown-mutating",
+        "not-runnable",
+        "unknown"
+      ]
     }
   },
   "$defs": {
     "evidenceRecord": {
       "type": "object",
-      "required": ["kind", "confidence", "summary"],
+      "required": [
+        "kind",
+        "confidence",
+        "summary"
+      ],
       "properties": {
         "kind": {
           "type": "string",
-          "enum": ["static", "handshake", "annotation", "safe-probe", "runtime", "policy"]
+          "enum": [
+            "static",
+            "handshake",
+            "annotation",
+            "safe-probe",
+            "runtime",
+            "policy"
+          ]
         },
-        "confidence": { "type": "number", "minimum": 0, "maximum": 1 },
-        "summary": { "type": "string", "minLength": 1 },
-        "data": { "type": "object" }
+        "confidence": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "data": {
+          "type": "object"
+        }
       },
       "additionalProperties": false
     }

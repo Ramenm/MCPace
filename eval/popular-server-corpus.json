@@ -1,0 +1,164 @@
+{
+  "generatedFrom": "sandbox package metadata only; packages were downloaded for inspection but not executed and are not included in the release bundle",
+  "npmPack": [
+    {
+      "name": "@modelcontextprotocol/server-filesystem",
+      "version": "2026.1.14",
+      "description": "MCP server for filesystem access",
+      "bin": "mcp-server-filesystem"
+    },
+    {
+      "name": "@modelcontextprotocol/server-memory",
+      "version": "2026.1.26",
+      "description": "MCP server for enabling memory for Claude through a knowledge graph",
+      "bin": "mcp-server-memory"
+    },
+    {
+      "name": "@modelcontextprotocol/server-sequential-thinking",
+      "version": "2025.12.18",
+      "description": "MCP server for sequential thinking and problem solving",
+      "bin": "mcp-server-sequential-thinking"
+    },
+    {
+      "name": "@modelcontextprotocol/server-github",
+      "version": "2025.4.8",
+      "description": "MCP server for using the GitHub API",
+      "bin": "mcp-server-github"
+    },
+    {
+      "name": "@modelcontextprotocol/server-postgres",
+      "version": "0.6.2",
+      "description": "MCP server for interacting with PostgreSQL databases",
+      "bin": "mcp-server-postgres"
+    },
+    {
+      "name": "@modelcontextprotocol/server-puppeteer",
+      "version": "2025.5.12",
+      "description": "MCP server for browser automation using Puppeteer",
+      "bin": "mcp-server-puppeteer"
+    },
+    {
+      "name": "@modelcontextprotocol/server-brave-search",
+      "version": "0.6.2",
+      "description": "MCP server for Brave Search API integration",
+      "bin": "mcp-server-brave-search"
+    },
+    {
+      "name": "@modelcontextprotocol/server-slack",
+      "version": "2025.4.25",
+      "description": "MCP server for interacting with Slack",
+      "bin": "mcp-server-slack"
+    },
+    {
+      "name": "@modelcontextprotocol/server-google-maps",
+      "version": "0.6.2",
+      "description": "MCP server for using the Google Maps API",
+      "bin": "mcp-server-google-maps"
+    },
+    {
+      "name": "@modelcontextprotocol/server-everything",
+      "version": "2026.1.26",
+      "description": "MCP server that exercises all the features of the MCP protocol",
+      "bin": "mcp-server-everything"
+    }
+  ],
+  "pipDownload": [
+    {
+      "name": "mcp-server-fetch",
+      "version": "2025.4.7",
+      "summary": "fetch and convert web content",
+      "toolsSeen": [
+        "fetch"
+      ]
+    },
+    {
+      "name": "mcp-server-time",
+      "version": "2026.1.26",
+      "summary": "time queries and timezone conversions"
+    },
+    {
+      "name": "mcp-server-git",
+      "version": "2026.1.14",
+      "summary": "read, search, and manipulate Git repositories"
+    },
+    {
+      "name": "mcp-server-sqlite",
+      "version": "2025.4.25",
+      "summary": "SQLite MCP server",
+      "toolsSeen": [
+        "read_query",
+        "write_query",
+        "create_table",
+        "list_tables",
+        "describe_table"
+      ]
+    }
+  ],
+  "registrySamples": [
+    {
+      "name": "ac.inference.sh/mcp",
+      "transport": "streamable-http",
+      "classification": "remote-session-stateful until probe"
+    },
+    {
+      "name": "ai.adadvisor/mcp-server",
+      "transport": "streamable-http",
+      "headers": [
+        "Authorization required secret"
+      ],
+      "classification": "credential-stateful external-mutating"
+    },
+    {
+      "name": "ai.adeu/adeu",
+      "packages": [
+        "pypi",
+        "npm"
+      ],
+      "classification": "package metadata plan plus probe"
+    }
+  ],
+  "expandedMetadataSweep": {
+    "npmRecordCount": 37,
+    "pypiRecordCount": 4,
+    "classifierBucketCounts": {
+      "remote-browser-session": 2,
+      "local-browser-session": 10,
+      "unknown-conservative": 2,
+      "stateless-external-read": 6,
+      "project-filesystem": 1,
+      "credential-external-mutating": 11,
+      "session-stateful": 2,
+      "database-stateful": 4,
+      "project-readonly-analysis": 1,
+      "documentation-external-read": 1,
+      "project-git": 1
+    },
+    "browserRandomPackages": [
+      "@browserbasehq/mcp-server-browserbase",
+      "chrome-devtools-mcp",
+      "@executeautomation/playwright-mcp-server",
+      "@playwright/mcp",
+      "@browserstack/mcp-server",
+      "mcpbrowser",
+      "sessionmcp",
+      "@n8n/mcp-browser",
+      "@mcp-browser-kit/server",
+      "@kazuph/mcp-browser-tabs",
+      "@pipeworx/mcp-caniuse",
+      "@linatang/playwright-browser-manager-mcp"
+    ],
+    "sandboxArtifactsExcluded": true
+  },
+  "randomHeldOutAudit": {
+    "recordCount": 8,
+    "file": "eval/random-server-audit.json",
+    "purpose": "deterministic random MCP package audit for classifier correctness without executing foreign code"
+  },
+  "randomLiveNpmSweep": {
+    "path": "eval/random-live-npm-sweep.json",
+    "sampleCount": 20,
+    "selection": "live npm search --json \"mcp\" --searchlimit=250; sha256 seed; excluding existing corpus",
+    "executedForeignCode": false,
+    "result": "command-only leaves some random packages unknown; profile hints reduce unknown classifications and preserve conservative fallback for weak evidence"
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "schema": "mcpace.approvedCatalog.v1",
+  "description": "Local approved catalog for reviewed MCP servers. MCPace may auto-add approved/trusted entries during a no-query discovery sweep, then probe and isolate them before use. Teams can downgrade entries to review or blocked.",
+  "servers": {
+    "filesystem": {
+      "trustLevel": "approved",
+      "recommendedMode": "session-isolated",
+      "affinity": [
+        "client",
+        "project",
+        "chat"
+      ],
+      "permissionManifest": "manifests/filesystem.permissions.json",
+      "notes": "Path-scoped filesystem servers are useful but can leak or mutate files; isolate by client/project/chat unless proven read-only.",
+      "title": "Filesystem",
+      "description": "Path-scoped local filesystem MCP server for reading and writing project files.",
+      "installSpec": "@modelcontextprotocol/server-filesystem",
+      "type": "stdio",
+      "paths": [
+        "."
+      ],
+      "approvalReason": "Curated starter entry: safe to auto-add to MCPace config, still probed and isolated before use; not a blanket guarantee about upstream package code."
+    },
+    "fetch": {
+      "trustLevel": "approved",
+      "recommendedMode": "pool",
+      "affinity": [
+        "client"
+      ],
+      "notes": "Usually stateless, but still review network egress and credential handling.",
+      "title": "Fetch",
+      "description": "Network fetch MCP server for retrieving web/API resources.",
+      "installSpec": "@modelcontextprotocol/server-fetch",
+      "type": "stdio",
+      "approvalReason": "Curated starter entry: safe to auto-add to MCPace config, still probed and isolated before use; not a blanket guarantee about upstream package code."
+    },
+    "time": {
+      "title": "Time",
+      "description": "Small stateless time/date utility MCP server.",
+      "trustLevel": "approved",
+      "recommendedMode": "shared",
+      "affinity": [
+        "client"
+      ],
+      "installSpec": "pypi:mcp-server-time",
+      "type": "stdio",
+      "notes": "Usually stateless; review package/source before enabling automatic install.",
+      "approvalReason": "Curated starter entry: safe to auto-add to MCPace config, still probed and isolated before use; not a blanket guarantee about upstream package code."
+    },
+    "sequential-thinking": {
+      "title": "Sequential Thinking",
+      "description": "Stateful reasoning scratchpad-style MCP server; isolate per chat/session.",
+      "trustLevel": "approved",
+      "recommendedMode": "session-isolated",
+      "affinity": [
+        "client",
+        "chat"
+      ],
+      "installSpec": "@modelcontextprotocol/server-sequential-thinking",
+      "type": "stdio",
+      "notes": "Treat as stateful until live tools/list and usage evidence prove otherwise.",
+      "approvalReason": "Curated starter entry: safe to auto-add to MCPace config, still probed and isolated before use; not a blanket guarantee about upstream package code."
+    }
+  }
+}

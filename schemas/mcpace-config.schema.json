@@ -95,7 +95,34 @@
     },
     "servers": {
       "type": "object",
-      "additionalProperties": true
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          },
+          "defaultEnabled": {
+            "type": "boolean"
+          },
+          "policy": {
+            "$ref": "#/$defs/serverPolicy"
+          },
+          "execution": {
+            "$ref": "#/$defs/executionPolicy"
+          },
+          "toolPolicies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      }
     },
     "clientCatalog": {
       "type": "object",
@@ -134,6 +161,330 @@
         },
         "stateRules": {
           "type": "string"
+        }
+      }
+    },
+    "uiSurface": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "surface": {
+          "type": "string",
+          "enum": [
+            "dashboard-http",
+            "desktop-tray",
+            "headless"
+          ]
+        },
+        "refreshIntervalMs": {
+          "type": "integer",
+          "minimum": 1000
+        },
+        "showConcurrencyMap": {
+          "type": "boolean"
+        },
+        "showAuditTrail": {
+          "type": "boolean"
+        },
+        "auditTail": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "localOnly": {
+          "type": "boolean"
+        }
+      }
+    },
+    "approvedCatalog": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "requireApprovalForUnknown": {
+          "type": "boolean"
+        },
+        "trustLevelDefault": {
+          "type": "string",
+          "enum": [
+            "trusted",
+            "review",
+            "blocked"
+          ]
+        }
+      }
+    },
+    "executionDefaults": {
+      "$ref": "#/$defs/executionPolicy"
+    },
+    "dynamicDiscovery": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "catalog-plan-first",
+            "registry-cache",
+            "off"
+          ]
+        },
+        "registryEndpoints": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "catalogPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "registryCachePath": {
+          "type": "string"
+        },
+        "refreshRegistryOnDiscover": {
+          "type": "boolean"
+        },
+        "autoInstall": {
+          "type": "string",
+          "enum": [
+            "off",
+            "trusted-only",
+            "review"
+          ],
+          "description": "trusted-only installs approved/trusted catalog entries automatically; review requires explicit review opt-in; off only produces plans."
+        },
+        "installUnknown": {
+          "type": "string",
+          "enum": [
+            "never",
+            "plan-only"
+          ],
+          "description": "Unknown registry candidates are never executed blindly; plan-only keeps install plans visible without writing server config."
+        },
+        "probeAfterInstall": {
+          "type": "boolean"
+        },
+        "description": {
+          "type": "string"
+        },
+        "maxAutoInstallsPerRun": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum number of trusted/approved candidates mcpace auto may add during an automatic sweep."
+        },
+        "autoRefreshRegistry": {
+          "type": "boolean",
+          "description": "When true, mcpace auto refreshes the registry cache automatically when missing or older than registryCacheTtlHours."
+        },
+        "registryCacheTtlHours": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Age after which mcpace auto refreshes the registry cache. 0 means refresh every auto run."
+        },
+        "defaultCommand": {
+          "type": "string",
+          "enum": [
+            "auto",
+            "plan-only"
+          ],
+          "description": "User-facing default. auto means use mcpace auto for discovery/setup/probe; plan-only keeps discover read-only unless advanced flags are passed."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "executionPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "protocol": {
+          "type": "string",
+          "const": "mcpace.execution.v1"
+        },
+        "mode": {
+          "type": "string",
+          "enum": [
+            "shared",
+            "serialized",
+            "session-isolated",
+            "project-isolated",
+            "pool",
+            "disabled"
+          ]
+        },
+        "affinity": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": [
+              "client",
+              "project",
+              "chat",
+              "session",
+              "credential",
+              "transport-session",
+              "client-instance"
+            ]
+          }
+        },
+        "queueTimeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "reusePolicy": {
+          "type": "string",
+          "enum": [
+            "shared",
+            "sticky",
+            "sticky-session",
+            "sticky-project",
+            "least-busy",
+            "ttl",
+            "never"
+          ]
+        },
+        "maxWorkers": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "maxInFlightPerWorker": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "serverPolicy": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "scopeClass": {
+          "type": "string"
+        },
+        "concurrencyPolicy": {
+          "type": "string",
+          "enum": [
+            "multi-reader",
+            "single-writer",
+            "single-session",
+            "isolated-per-project",
+            "read-only",
+            "readonly",
+            "plan-only"
+          ]
+        },
+        "stateBinding": {
+          "type": "string"
+        },
+        "credentialBinding": {
+          "type": "string"
+        },
+        "parallelismLimit": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxWorkers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "maxInFlightPerWorker": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "conflictDomain": {
+          "type": "string"
+        },
+        "projectRootMode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "optional",
+            "required"
+          ]
+        },
+        "worktreeBinding": {
+          "type": "string"
+        },
+        "stateProfileMode": {
+          "type": "string",
+          "enum": [
+            "none",
+            "optional",
+            "required"
+          ]
+        },
+        "hostLock": {
+          "type": "string"
+        },
+        "startupStrategy": {
+          "type": "string"
+        },
+        "routingGroup": {
+          "type": "string"
+        },
+        "discoveryRequiresLease": {
+          "type": "boolean"
+        },
+        "runtimeType": {
+          "type": "string",
+          "enum": [
+            "stateless",
+            "stateful",
+            "external",
+            "interactive",
+            "side-effecting",
+            "legacy",
+            "package-artifact",
+            "unknown"
+          ],
+          "description": "MCPace-inferred or operator-overridden broad runtime behavior class."
+        },
+        "stateClass": {
+          "type": "string",
+          "enum": [
+            "stateless",
+            "session-stateful",
+            "project-stateful",
+            "credential-stateful",
+            "host-stateful",
+            "remote-session-stateful",
+            "unknown-stateful",
+            "legacy-transport",
+            "not-a-server",
+            "unknown-conservative"
+          ],
+          "description": "State partition class used by the adaptive scheduler: stateless, session, project, credential, host, remote-session, or conservative unknown."
+        },
+        "effectClass": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "ephemeral-state",
+            "project-mutating",
+            "external-read",
+            "external-mutating",
+            "external-unknown",
+            "host-mutating",
+            "process-exec",
+            "unknown-mutating",
+            "not-runnable",
+            "unknown"
+          ],
+          "description": "Side-effect class used to decide whether shared, serialized, isolated, or reviewed execution is safest."
         }
       }
     }

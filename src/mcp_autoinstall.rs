@@ -20,6 +20,7 @@ pub struct McpAutoInstallOptions {
     pub dry_run: bool,
     pub force: bool,
     pub disabled: bool,
+    pub profile_hints: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -56,7 +57,7 @@ pub fn install_auto(
     root_path: &Path,
     options: McpAutoInstallOptions,
 ) -> Result<McpAutoInstallResult, String> {
-    let plan = build_auto_install_plan(&options)?;
+    let plan = plan_auto_install(&options)?;
     let write = mcp_sources::write_mcp_server_entry(
         root_path,
         McpServerWriteOptions {
@@ -71,9 +72,14 @@ pub fn install_auto(
             enabled: !options.disabled,
             dry_run: options.dry_run,
             force: options.force,
+            profile_hints: options.profile_hints,
         },
     )?;
     Ok(McpAutoInstallResult { plan, write })
+}
+
+pub fn plan_auto_install(options: &McpAutoInstallOptions) -> Result<McpAutoInstallPlan, String> {
+    build_auto_install_plan(options)
 }
 
 fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoInstallPlan, String> {
@@ -247,6 +253,10 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
                 next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
             })
         }
+        "nuget" | "mcpb" => Err(format!(
+            "server install type '{}' is recognized from the MCP Registry but not executable by MCPace yet; it remains plan-only until a safe launcher is implemented",
+            method
+        )),
         other => Err(format!(
             "unsupported server install type '{}'; use npm:, pypi:, oci:, an https:// URL, or a command such as npx/uvx/docker run",
             other
@@ -573,35 +583,44 @@ fn normalize_install_type(value: &str) -> Result<String, String> {
         "npm" | "npx" | "node" => Ok("npm".to_string()),
         "pypi" | "python" | "uvx" | "uv" => Ok("pypi".to_string()),
         "oci" | "docker" | "container" => Ok("oci".to_string()),
+        "nuget" => Ok("nuget".to_string()),
+        "mcpb" => Ok("mcpb".to_string()),
         "filesystem" | "fs" | "path" | "directory" | "dir" => Ok("filesystem".to_string()),
         "stdio" | "command" | "local" | "local-command" => Ok("stdio".to_string()),
         "http" | "streamable-http" | "streamable_http" | "remote" | "url" => {
             Ok("streamable-http".to_string())
         }
         other => Err(format!(
-            "unsupported server install type '{}'; use auto, npm, pypi, oci, filesystem, stdio, or streamable-http",
+            "unsupported server install type '{}'; use auto, npm, pypi, oci, filesystem, stdio, streamable-http, or keep nuget/mcpb as plan-only until supported",
             other
         )),
     }
 }
 
 fn choose_package_method(spec: &str, explicit_type: Option<&str>) -> String {
+    let lower = spec.trim().to_ascii_lowercase();
+    let inferred_from_spec = if lower.starts_with("npm:") {
+        Some("npm")
+    } else if lower.starts_with("pypi:") || lower.starts_with("uvx:") {
+        Some("pypi")
+    } else if lower.starts_with("oci:") || lower.starts_with("docker:") {
+        Some("oci")
+    } else if lower.starts_with("nuget:") {
+        Some("nuget")
+    } else if lower.starts_with("mcpb:") {
+        Some("mcpb")
+    } else {
+        None
+    };
     if let Some(kind) = explicit_type {
         if kind == "stdio" {
-            return "npm".to_string();
+            return inferred_from_spec.unwrap_or("npm").to_string();
         }
         if !kind.is_empty() {
             return kind.to_string();
         }
     }
-    let lower = spec.trim().to_ascii_lowercase();
-    if lower.starts_with("pypi:") || lower.starts_with("uvx:") {
-        return "pypi".to_string();
-    }
-    if lower.starts_with("oci:") || lower.starts_with("docker:") {
-        return "oci".to_string();
-    }
-    "npm".to_string()
+    inferred_from_spec.unwrap_or("npm").to_string()
 }
 
 fn resolve_name(options: &McpAutoInstallOptions, fallback: impl FnOnce() -> String) -> String {

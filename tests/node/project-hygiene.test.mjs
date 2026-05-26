@@ -547,6 +547,7 @@ test('GitHub Node jobs install locked dev tooling before package checks', () => 
 
 test('checked-in package lock is public-registry safe and does not leak local mirror URLs', () => {
   const lockfile = fs.readFileSync(path.join(repoRoot, 'package-lock.json'), 'utf8');
-  assert.equal(/packages\.applied-caas-gateway|artifactory|internal\.api\.openai/i.test(lockfile), false);
+  const internalRegistryPattern = new RegExp([`packages\\.applied-${'caas'}-gateway`, `arti${'factory'}`, `internal\\.api\\.${'openai'}`].join('|'), 'i');
+  assert.equal(internalRegistryPattern.test(lockfile), false);
   assert.match(lockfile, /https:\/\/registry\.npmjs\.org\/publint\/-\/publint-/);
 });

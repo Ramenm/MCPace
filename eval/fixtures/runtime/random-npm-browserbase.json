@@ -1,0 +1,70 @@
+{
+  "id": "random-npm-browserbase",
+  "suite": "browser-random-sweep",
+  "category": "remote-browser-session",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": true,
+  "title": "Browserbase is remote browser/session state",
+  "objective": "Remote browser providers should be credential-scoped sessions, not local host locks.",
+  "traffic": {
+    "clientArchetype": "cursor-cloud-agents",
+    "serverArchetype": "@browserbasehq/mcp-server-browserbase@2.4.3",
+    "serverPolicies": [
+      "single-session",
+      "credential-lock"
+    ],
+    "signals": [
+      "stdio",
+      "browserbase",
+      "stagehand",
+      "remote-browser-session",
+      "credentials-or-auth",
+      "browser-automation"
+    ]
+  },
+  "expected": {
+    "runtimeType": "interactive",
+    "stateClass": "remote-session-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "review-or-unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @browserbasehq/mcp-server-browserbase 2.4.3"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "package description says Browserbase/Stagehand",
+    "remote browser signal avoids host-desktop lock"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

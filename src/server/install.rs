@@ -32,6 +32,7 @@ pub(super) fn run(
             dry_run: parsed.dry_run,
             force: parsed.force,
             disabled: parsed.disabled,
+            profile_hints: Vec::new(),
         },
     ) {
         Ok(result) => result,

@@ -1,0 +1,69 @@
+{
+  "id": "random-npm-sessionmcp",
+  "suite": "browser-random-sweep",
+  "category": "local-browser-session",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "sessionmcp attaches to an existing Chrome session",
+  "objective": "Existing browser-session bridges need host/profile isolation, not shared multi-reader.",
+  "traffic": {
+    "clientArchetype": "claude-code",
+    "serverArchetype": "sessionmcp@0.3.2",
+    "serverPolicies": [
+      "single-session",
+      "host-lock",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "sessionmcp",
+      "browser-or-desktop",
+      "chrome",
+      "existing-session",
+      "host-profile"
+    ]
+  },
+  "expected": {
+    "runtimeType": "interactive",
+    "stateClass": "host-stateful",
+    "effectClass": "host-mutating",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view sessionmcp 0.3.2"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says existing Chrome session",
+    "random package is plan-only"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

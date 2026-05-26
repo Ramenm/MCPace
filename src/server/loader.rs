@@ -24,6 +24,22 @@ struct GenericSourcePolicy {
     discovery_requires_lease: bool,
 }
 
+#[derive(Debug, Clone)]
+struct RuntimeClassification {
+    runtime_type: &'static str,
+    state_class: &'static str,
+    effect_class: &'static str,
+}
+
+#[derive(Debug, Clone)]
+struct EvidenceDecision {
+    score: f64,
+    level: &'static str,
+    automatic_action: &'static str,
+    next_step: &'static str,
+    sources: Vec<&'static str>,
+}
+
 pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String> {
     let config_path = root_path.join("mcpace.config.json");
     let config = json_helpers::read_json_file(&config_path)?;
@@ -91,6 +107,22 @@ fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServe
             .to_string();
         let args =
             json_helpers::strings_from_array(value.get("args").and_then(JsonValue::as_array));
+        let mut profile_hints = json_helpers::strings_from_array(
+            value
+                .get("mcpaceProfileHints")
+                .or_else(|| value.get("profileHints"))
+                .and_then(JsonValue::as_array),
+        );
+        if let Some(description) = value
+            .get("description")
+            .and_then(JsonValue::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            profile_hints.push(description.to_string());
+        }
+        profile_hints.sort();
+        profile_hints.dedup();
         let source_type = infer_source_type(&raw_source_type, &command, &url);
         map.insert(
             entry.normalized_name.clone(),
@@ -101,6 +133,7 @@ fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServe
                 command,
                 url,
                 args,
+                profile_hints,
             },
         );
     }
@@ -117,6 +150,7 @@ fn generic_source_server_record(
         &source_record.url,
     );
     let policy = infer_generic_source_policy(normalized_name, source_record, &source_type);
+    let signal_args = source_signal_args(&source_record.args, &source_record.profile_hints);
     let kind = format!("source-{}", source_type);
     let display_name = if source_record.name.trim().is_empty() {
         normalized_name
@@ -133,6 +167,17 @@ fn generic_source_server_record(
     } else {
         format!("{}:{}", policy.conflict_domain_prefix, normalized_name)
     };
+    let runtime_classification = infer_runtime_classification(
+        &source_type,
+        policy.scope_class,
+        policy.concurrency_policy,
+        policy.state_binding,
+        policy.credential_binding,
+        &source_record.command,
+        &source_record.url,
+        &signal_args,
+        &[],
+    );
 
     ServerRecord {
         name: display_name.to_string(),
@@ -160,9 +205,12 @@ fn generic_source_server_record(
             policy.credential_binding,
             &source_record.command,
             &source_record.url,
-            &source_record.args,
-            &Vec::new(),
+            &signal_args,
+            &[],
         ),
+        runtime_type: runtime_classification.runtime_type.to_string(),
+        state_class: runtime_classification.state_class.to_string(),
+        effect_class: runtime_classification.effect_class.to_string(),
         default_pool_model: infer_default_pool_model(
             &source_type,
             policy.scope_class,
@@ -197,9 +245,12 @@ fn generic_source_server_record(
             concurrency_policy: policy.concurrency_policy,
             state_binding: policy.state_binding,
             credential_binding: policy.credential_binding,
+            runtime_type: runtime_classification.runtime_type,
+            state_class: runtime_classification.state_class,
+            effect_class: runtime_classification.effect_class,
             command: &source_record.command,
             url: &source_record.url,
-            args: &source_record.args,
+            args: &signal_args,
         }),
         conflict_domain,
         project_root_mode: policy.project_root_mode.to_string(),
@@ -222,21 +273,105 @@ fn generic_source_server_record(
     }
 }
 
+fn source_signal_args(args: &[String], profile_hints: &[String]) -> Vec<String> {
+    let mut signal_args: Vec<String> = args
+        .iter()
+        .filter(|value| raw_arg_is_semantic_signal(value))
+        .cloned()
+        .collect();
+    signal_args.extend(
+        profile_hints
+            .iter()
+            .map(|value| value.trim())
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned),
+    );
+    signal_args.sort();
+    signal_args.dedup();
+    signal_args
+}
+
+fn raw_arg_is_semantic_signal(value: &str) -> bool {
+    let normalized = value.trim().to_ascii_lowercase();
+    if normalized.is_empty() {
+        return false;
+    }
+    let exact_signals = [
+        "stdio",
+        "http",
+        "https",
+        "sse",
+        "streamable-http",
+        "read-only",
+        "readonly",
+        "no-write",
+    ];
+    if exact_signals.contains(&normalized.as_str()) {
+        return true;
+    }
+    if !normalized.starts_with('-') {
+        return false;
+    }
+    let semantic_flags = [
+        "--transport",
+        "--stdio",
+        "--http",
+        "--sse",
+        "--streamable-http",
+        "--read-only",
+        "--readonly",
+        "--no-write",
+        "--write",
+        "--allow-read",
+        "--allow-write",
+        "--workspace",
+        "--project",
+        "--root",
+        "--path",
+        "--db",
+        "--database",
+        "--browser-profile",
+        "--profile",
+    ];
+    semantic_flags
+        .iter()
+        .any(|flag| normalized == *flag || normalized.starts_with(&format!("{}=", flag)))
+}
+
 fn infer_generic_source_policy(
     normalized_name: &str,
     source_record: &SourceServerRecord,
     source_type: &str,
 ) -> GenericSourcePolicy {
+    let signal_args = source_signal_args(&source_record.args, &source_record.profile_hints);
     let signals = source_signals(
         normalized_name,
         &source_record.name,
         &source_record.command,
         &source_record.url,
-        &source_record.args,
+        &signal_args,
     );
     let remote = source_type == "streamable-http"
         || source_type == "http"
         || !source_record.url.trim().is_empty();
+
+    if signals.contains("sdk-or-example") {
+        return GenericSourcePolicy {
+            scope_class: "not-runnable",
+            concurrency_policy: "plan-only",
+            state_binding: "none",
+            credential_binding: "none",
+            parallelism_limit: 0,
+            conflict_domain_prefix: "not-runnable",
+            project_root_mode: "none",
+            worktree_binding: "none",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "disabled",
+            routing_group: "sdk-or-example",
+            discovery_requires_lease: false,
+        };
+    }
 
     if remote {
         return GenericSourcePolicy {
@@ -252,6 +387,42 @@ fn infer_generic_source_policy(
             host_lock: "none",
             startup_strategy: "lazy-shared",
             routing_group: "remote-mcp",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("remote-browser-session") {
+        return GenericSourcePolicy {
+            scope_class: "credential-scoped",
+            concurrency_policy: "single-session",
+            state_binding: "remote-browser-session",
+            credential_binding: "credential-profile",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "remote-browser",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "optional",
+            host_lock: "none",
+            startup_strategy: "lazy-per-profile",
+            routing_group: "remote-browser",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("browser-observation") {
+        return GenericSourcePolicy {
+            scope_class: "host-readonly",
+            concurrency_policy: "multi-reader",
+            state_binding: "host-readonly",
+            credential_binding: "browser-profile",
+            parallelism_limit: 2,
+            conflict_domain_prefix: "browser-readonly",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "optional",
+            host_lock: "browser-profile-read",
+            startup_strategy: "lazy-shared",
+            routing_group: "browser-observation",
             discovery_requires_lease: true,
         };
     }
@@ -329,15 +500,28 @@ fn infer_generic_source_policy(
     }
 
     if signals.contains("database") {
+        if signals.contains("network-database") || signals.contains("credentials-or-auth") {
+            return GenericSourcePolicy {
+                scope_class: "credential-scoped",
+                concurrency_policy: "single-writer",
+                state_binding: "db-connection",
+                credential_binding: "database-connection",
+                parallelism_limit: 1,
+                conflict_domain_prefix: "database-connection",
+                project_root_mode: "optional",
+                worktree_binding: "none",
+                state_profile_mode: "optional",
+                host_lock: "none",
+                startup_strategy: "lazy-per-profile",
+                routing_group: "database-connection",
+                discovery_requires_lease: true,
+            };
+        }
         return GenericSourcePolicy {
             scope_class: "project-local",
             concurrency_policy: "single-writer",
             state_binding: "db",
-            credential_binding: if signals.contains("credentials-or-auth") {
-                "database-connection"
-            } else {
-                "none"
-            },
+            credential_binding: "none",
             parallelism_limit: 1,
             conflict_domain_prefix: "database",
             project_root_mode: "required",
@@ -346,6 +530,30 @@ fn infer_generic_source_policy(
             host_lock: "none",
             startup_strategy: "lazy-per-project",
             routing_group: "project-database",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("project-analysis")
+        && !signals.contains("network-or-external-api")
+        && !signals.contains("credentials-or-auth")
+        && !signals.contains("cloud-admin")
+        && !signals.contains("external-read-api")
+        && !signals.contains("documentation-lookup")
+    {
+        return GenericSourcePolicy {
+            scope_class: "project-local",
+            concurrency_policy: "isolated-per-project",
+            state_binding: "project-index",
+            credential_binding: "none",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "project-analysis",
+            project_root_mode: "required",
+            worktree_binding: "project-root",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-per-project",
+            routing_group: "project-analysis",
             discovery_requires_lease: true,
         };
     }
@@ -365,6 +573,56 @@ fn infer_generic_source_policy(
             startup_strategy: "lazy-per-project",
             routing_group: "project-filesystem",
             discovery_requires_lease: true,
+        };
+    }
+
+    if signals.contains("transport-gateway") {
+        return GenericSourcePolicy {
+            scope_class: "stateless-local",
+            concurrency_policy: "multi-reader",
+            state_binding: "none",
+            credential_binding: "none",
+            parallelism_limit: 2,
+            conflict_domain_prefix: "transport-gateway",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-shared",
+            routing_group: "transport-gateway",
+            discovery_requires_lease: false,
+        };
+    }
+
+    if (signals.contains("documentation-lookup") || signals.contains("external-read-api"))
+        && !signals.contains("mutable-tools")
+        && !signals.contains("cloud-admin")
+        && !signals.contains("identity-admin")
+        && !signals.contains("cluster-control")
+        && !signals.contains("secrets-manager")
+        && !signals.contains("payments-financial")
+        && !signals.contains("blockchain-wallet")
+    {
+        return GenericSourcePolicy {
+            scope_class: "credential-scoped",
+            concurrency_policy: "multi-reader",
+            state_binding: "none",
+            credential_binding: if signals.contains("credentials-or-auth")
+                || signals.contains("network-or-external-api")
+            {
+                "provider-budget"
+            } else {
+                "none"
+            },
+            parallelism_limit: 2,
+            conflict_domain_prefix: "external-read",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "none",
+            host_lock: "none",
+            startup_strategy: "lazy-shared",
+            routing_group: "external-read",
+            discovery_requires_lease: false,
         };
     }
 
@@ -454,139 +712,725 @@ fn source_signals(
     url: &str,
     args: &[String],
 ) -> BTreeSet<String> {
+    let _identity = (normalized_name, display_name);
     let haystack = format!(
-        "{} {} {} {} {}",
-        normalized_name,
-        display_name,
-        command,
+        "{} {} {}",
+        command_semantic_signal(command),
         url,
         args.join(" ")
     )
     .to_ascii_lowercase();
+    let tokens = signal_tokens(&haystack);
     let mut signals = BTreeSet::new();
-    if haystack.contains("filesystem")
-        || haystack.contains("file-system")
-        || haystack.contains("server-filesystem")
-        || haystack.contains("read_file")
-        || haystack.contains("write_file")
+    let remote_file_api = has_any_substring(
+        &haystack,
+        &[
+            "google-drive",
+            "google drive",
+            "google-docs",
+            "google docs",
+            "google-sheets",
+            "google sheets",
+            "google-slides",
+            "google slides",
+            "google-workspace",
+            "google workspace",
+            "onedrive",
+            "dropbox",
+            "sharepoint",
+        ],
+    ) || (tokens.contains("google")
+        && (tokens.contains("drive")
+            || tokens.contains("docs")
+            || tokens.contains("sheets")
+            || tokens.contains("slides")
+            || tokens.contains("workspace")));
+
+    if !remote_file_api
+        && (has_any_token(
+            &tokens,
+            &[
+                "filesystem",
+                "file-system",
+                "file",
+                "files",
+                "directory",
+                "directories",
+                "folder",
+                "path",
+                "read_file",
+                "write_file",
+            ],
+        ) || has_any_substring(
+            &haystack,
+            &[
+                "server-filesystem",
+                "@modelcontextprotocol/server-filesystem",
+            ],
+        ))
     {
         signals.insert("filesystem".to_string());
     }
-    if haystack.contains("git") || haystack.contains("repository") || haystack.contains("worktree")
+    if remote_file_api {
+        signals.insert("network-or-external-api".to_string());
+        signals.insert("credentials-or-auth".to_string());
+    }
+
+    let runnable_server_marker =
+        has_any_token(
+            &tokens,
+            &["server", "mcp-server", "stdio", "streamable", "sse"],
+        ) || has_any_substring(&haystack, &["mcp server", "model context protocol server"]);
+    let explicit_sdk_or_framework = has_any_token(
+        &tokens,
+        &[
+            "sdk",
+            "framework",
+            "middleware",
+            "inspector-client",
+            "inspector-cli",
+            "eval",
+            "evaluation",
+            "instrumentation",
+            "fastmcp",
+            "nestjs",
+            "genkit",
+        ],
+    ) || has_any_substring(
+        &haystack,
+        &[
+            "mcp-framework",
+            "shared utilities",
+            "client-side application",
+            "model context protocol inspector",
+            "mcp apps middleware",
+            "mcp sdk",
+            "mcp utilities",
+        ],
+    );
+    let weak_library_signal = has_any_token(
+        &tokens,
+        &["plugin", "module", "library", "utils", "utilities"],
+    ) && !runnable_server_marker;
+    let example_or_demo = has_any_token(
+        &tokens,
+        &["demo", "example", "starter", "sample", "basic", "preact"],
+    ) || has_any_substring(
+        &haystack,
+        &[
+            "cohort heatmap",
+            "budget allocator",
+            "customer segmentation",
+            "basic mcp app",
+            "mcp app server example",
+        ],
+    );
+    if explicit_sdk_or_framework
+        || weak_library_signal
+        || (example_or_demo && !runnable_server_marker)
+    {
+        signals.insert("sdk-or-example".to_string());
+    }
+
+    let code_hosting_api = has_any_token(
+        &tokens,
+        &["github", "gitlab", "gitea", "bitbucket", "sourcegraph"],
+    );
+    if (has_any_token(
+        &tokens,
+        &[
+            "git",
+            "worktree",
+            "branch",
+            "commit",
+            "diff",
+            "checkout",
+            "repo-path",
+            "repository-root",
+        ],
+    ) || has_any_substring(&haystack, &["server-git", "mcp-server-git"]))
+        && !code_hosting_api
     {
         signals.insert("git-repository".to_string());
     }
-    if haystack.contains("sqlite")
-        || haystack.contains("postgres")
-        || haystack.contains("database")
-        || haystack.contains("sql")
-        || haystack.contains("db-path")
-    {
+
+    let network_database = has_any_token(
+        &tokens,
+        &[
+            "postgres",
+            "postgresql",
+            "mysql",
+            "mssql",
+            "mariadb",
+            "redis",
+            "supabase",
+        ],
+    );
+    let file_database = has_any_token(&tokens, &["sqlite", "duckdb", "db-path", "database-file"]);
+    if has_any_token(
+        &tokens,
+        &[
+            "sqlite",
+            "postgres",
+            "postgresql",
+            "mysql",
+            "mssql",
+            "mariadb",
+            "redis",
+            "duckdb",
+            "database",
+            "sql",
+            "db",
+            "db-path",
+            "table",
+        ],
+    ) {
         signals.insert("database".to_string());
     }
-    if haystack.contains("playwright")
-        || haystack.contains("puppeteer")
-        || haystack.contains("chrome")
-        || haystack.contains("browser")
-        || haystack.contains("desktop")
-    {
-        signals.insert("browser-or-desktop".to_string());
+    if network_database {
+        signals.insert("network-database".to_string());
     }
-    if haystack.contains("memory")
-        || haystack.contains("sequential-thinking")
-        || haystack.contains("context-store")
-        || haystack.contains("knowledge")
-        || haystack.contains("thinking")
-    {
+    if file_database {
+        signals.insert("file-database".to_string());
+    }
+
+    let browser_data_only = has_any_token(
+        &tokens,
+        &[
+            "caniuse",
+            "compat",
+            "compatibility",
+            "browserslist",
+            "feature-table",
+        ],
+    ) || has_any_substring(
+        &haystack,
+        &["browser feature", "browser support", "compat-data"],
+    );
+    let browser_observation_surface = has_any_token(
+        &tokens,
+        &[
+            "browser",
+            "chrome",
+            "chromium",
+            "extension",
+            "tab",
+            "tabs",
+            "bookmark",
+            "bookmarks",
+            "history",
+        ],
+    ) || has_any_substring(
+        &haystack,
+        &["browser tabs", "chrome tabs", "browser bookmarks"],
+    );
+    let browser_observation_only = !browser_data_only
+        && browser_observation_surface
+        && has_any_token(
+            &tokens,
+            &[
+                "tab",
+                "tabs",
+                "bookmark",
+                "bookmarks",
+                "history",
+                "active-tab",
+                "open-tabs",
+            ],
+        )
+        && !has_any_token(
+            &tokens,
+            &[
+                "click",
+                "navigate",
+                "automation",
+                "automate",
+                "playwright",
+                "puppeteer",
+                "webdriver",
+                "safaridriver",
+                "stagehand",
+            ],
+        );
+    let remote_browser_provider = has_any_token(
+        &tokens,
+        &[
+            "browserbase",
+            "browserstack",
+            "apify",
+            "stagehand",
+            "remote-browser",
+            "cloud-browser",
+        ],
+    ) || has_any_substring(
+        &haystack,
+        &[
+            "browserbase",
+            "browserstack",
+            "remote browser",
+            "cloud browser",
+        ],
+    );
+    let browser_control_action = has_any_token(
+        &tokens,
+        &[
+            "playwright",
+            "puppeteer",
+            "screenshot",
+            "click",
+            "navigate",
+            "devtools",
+            "cdp",
+            "webdriver",
+            "safaridriver",
+            "stagehand",
+            "android",
+            "adb",
+            "ios",
+            "simulator",
+            "mobile-automation",
+        ],
+    ) || has_any_substring(
+        &haystack,
+        &[
+            "browser automation",
+            "control browser",
+            "automate browser",
+            "mcpbrowser",
+            "sessionmcp",
+            "mcp-browser",
+            "browser-kit",
+            "chrome-devtools",
+        ],
+    );
+    let chrome_control = has_any_token(&tokens, &["chrome", "chromium"])
+        && has_any_token(
+            &tokens,
+            &["devtools", "cdp", "extension", "debug", "debugger"],
+        );
+    let browser_automation = remote_browser_provider || browser_control_action || chrome_control;
+    if browser_observation_only {
+        signals.insert("browser-observation".to_string());
+    } else if browser_automation && !browser_data_only {
+        if remote_browser_provider {
+            signals.insert("remote-browser-session".to_string());
+        } else {
+            signals.insert("browser-or-desktop".to_string());
+        }
+    }
+
+    if has_any_token(
+        &tokens,
+        &[
+            "memory",
+            "sequential-thinking",
+            "context-store",
+            "thinking",
+            "remember",
+            "notes",
+            "note",
+        ],
+    ) {
         signals.insert("memory-or-context".to_string());
     }
-    if haystack.contains("time") || haystack.contains("timezone") || haystack.contains("calculator")
-    {
+
+    if has_any_token(
+        &tokens,
+        &[
+            "time",
+            "timezone",
+            "clock",
+            "date",
+            "calculator",
+            "calculate",
+            "math",
+        ],
+    ) {
         signals.insert("local-utility".to_string());
     }
-    if haystack.contains("fetch")
-        || haystack.contains("http")
-        || haystack.contains("url")
-        || haystack.contains("web")
+
+    if has_any_token(
+        &tokens,
+        &[
+            "fetch", "http", "https", "url", "web", "scrape", "crawler", "search",
+        ],
+    ) || !url.trim().is_empty()
     {
         signals.insert("network-fetch".to_string());
     }
-    if haystack.contains("context7")
-        || haystack.contains("docs")
-        || haystack.contains("documentation")
-        || haystack.contains("github")
-        || haystack.contains("notion")
-        || haystack.contains("sentry")
-        || haystack.contains("slack")
-        || haystack.contains("maps")
-        || haystack.contains("api")
+    if (has_any_token(&tokens, &["gateway", "proxy", "bridge"])
+        || has_any_substring(
+            &haystack,
+            &[
+                "stdio to",
+                "stdio over",
+                "over sse",
+                "streamable http bridge",
+            ],
+        ))
+        && !signals.contains("browser-or-desktop")
+        && !signals.contains("remote-browser-session")
+    {
+        signals.insert("transport-gateway".to_string());
+    }
+
+    if has_any_token(
+        &tokens,
+        &[
+            "context7",
+            "docs",
+            "documentation",
+            "caniuse",
+            "reference",
+            "manual",
+            "knowledgebase",
+            "knowledge-base",
+            "browser-compat",
+            "design-system",
+            "components",
+            "shadcn",
+            "magicui",
+            "magic-ui",
+            "primer",
+            "primevue",
+            "excalidraw",
+        ],
+    ) || has_any_substring(
+        &haystack,
+        &[
+            "feature support",
+            "support tables",
+            "developer docs",
+            "design system",
+            "component references",
+        ],
+    ) {
+        signals.insert("documentation-lookup".to_string());
+    }
+
+    if has_any_token(
+        &tokens,
+        &[
+            "eslint",
+            "lint",
+            "linter",
+            "tsserver",
+            "language-server",
+            "code-index",
+            "code-intelligence",
+            "knip",
+            "pandacss",
+            "panda",
+            "semantic",
+            "lsp",
+            "theia",
+        ],
+    ) || has_any_substring(
+        &haystack,
+        &[
+            "static analysis",
+            "code analysis",
+            "semantic code",
+            "language server protocol",
+        ],
+    ) {
+        signals.insert("project-analysis".to_string());
+    }
+
+    if has_any_token(
+        &tokens,
+        &[
+            "brave",
+            "search",
+            "firecrawl",
+            "scrape",
+            "scraper",
+            "scraping",
+            "crawl",
+            "crawler",
+            "maps",
+            "mapbox",
+            "geocode",
+            "geocoding",
+            "weather",
+            "lookup",
+            "worldbank",
+            "airbnb",
+            "openbnb",
+            "dataforseo",
+        ],
+    ) {
+        signals.insert("external-read-api".to_string());
+    }
+
+    if code_hosting_api
+        || has_any_token(
+            &tokens,
+            &[
+                "notion",
+                "sentry",
+                "slack",
+                "linear",
+                "jira",
+                "confluence",
+                "atlassian",
+                "clickup",
+                "redmine",
+                "google-drive",
+                "google-docs",
+                "google-sheets",
+                "google-slides",
+                "google-workspace",
+                "salesforce",
+                "netlify",
+                "currents",
+                "motiff",
+                "esa",
+                "hubspot",
+                "asana",
+                "shortcut",
+                "contentful",
+                "bitrix24",
+                "resend",
+                "databricks",
+                "mediawiki",
+                "vendure",
+                "microsoft",
+                "workiq",
+                "descope",
+                "freee",
+                "firehydrant",
+                "postman",
+                "targetprocess",
+                "transkribus",
+                "trustpager",
+                "z_ai",
+                "zai",
+                "variflight",
+                "langwatch",
+                "transcend",
+                "supabase",
+                "heroku",
+                "azure-devops",
+                "apify",
+                "browserstack",
+                "datadog",
+                "dynatrace",
+                "transcend",
+                "rancher",
+                "boondmanager",
+                "appflowy",
+                "shortcut",
+                "appnest",
+                "openfec",
+                "pipedrive",
+                "ramp",
+                "retellai",
+                "deploysapp",
+                "octopusdeploy",
+                "api",
+                "rest",
+                "graphql",
+                "contentful",
+                "ramp",
+                "wordpress",
+                "outlook",
+                "calendar",
+                "mail",
+                "crm",
+                "canvas",
+                "lms",
+                "gohighlevel",
+                "ghl",
+            ],
+        )
     {
         signals.insert("network-or-external-api".to_string());
     }
-    if haystack.contains("azure")
-        || haystack.contains("aws")
-        || haystack.contains("gcp")
-        || haystack.contains("cloudflare")
-        || haystack.contains("terraform")
-        || haystack.contains("pulumi")
-    {
+
+    if has_any_token(
+        &tokens,
+        &[
+            "azure",
+            "aws",
+            "gcp",
+            "cloudflare",
+            "terraform",
+            "pulumi",
+            "heroku",
+        ],
+    ) {
         signals.insert("cloud-admin".to_string());
     }
-    if haystack.contains("kubernetes") || haystack.contains("k8s") || haystack.contains("kubectl") {
+    if has_any_token(&tokens, &["kubernetes", "k8s", "kubectl", "helm"]) {
         signals.insert("cluster-control".to_string());
     }
-    if haystack.contains("okta")
-        || haystack.contains("auth0")
-        || haystack.contains("entra")
+    if has_any_token(&tokens, &["okta", "auth0", "entra", "identity", "scim"])
         || haystack.contains("active directory")
-        || haystack.contains("identity")
-        || haystack.contains("scim")
     {
         signals.insert("identity-admin".to_string());
     }
-    if haystack.contains("vault")
-        || haystack.contains("secret manager")
-        || haystack.contains("1password")
-        || haystack.contains("bitwarden")
-        || haystack.contains("keychain")
+    if has_any_token(
+        &tokens,
+        &[
+            "vault",
+            "1password",
+            "bitwarden",
+            "keychain",
+            "secret",
+            "secrets",
+        ],
+    ) || haystack.contains("secret manager")
     {
         signals.insert("secrets-manager".to_string());
     }
-    if haystack.contains("stripe")
-        || haystack.contains("paypal")
-        || haystack.contains("billing")
-        || haystack.contains("payment")
-    {
+    if has_any_token(
+        &tokens,
+        &["stripe", "paypal", "billing", "payment", "payments"],
+    ) {
         signals.insert("payments-financial".to_string());
     }
-    if haystack.contains("wallet")
-        || haystack.contains("ethereum")
-        || haystack.contains("blockchain")
-        || haystack.contains("web3")
-    {
+    if has_any_token(
+        &tokens,
+        &[
+            "wallet",
+            "phantom",
+            "ethereum",
+            "blockchain",
+            "web3",
+            "crypto",
+        ],
+    ) {
         signals.insert("blockchain-wallet".to_string());
     }
-    if haystack.contains("token")
-        || haystack.contains("api_key")
-        || haystack.contains("apikey")
-        || haystack.contains("auth")
-        || haystack.contains("oauth")
-        || haystack.contains("bearer")
-    {
+    if has_any_token(
+        &tokens,
+        &[
+            "token",
+            "tokens",
+            "api_key",
+            "apikey",
+            "auth",
+            "oauth",
+            "bearer",
+            "credential",
+            "credentials",
+        ],
+    ) {
         signals.insert("credentials-or-auth".to_string());
     }
-    if haystack.contains("shell")
-        || haystack.contains("terminal")
-        || haystack.contains("exec")
-        || haystack.contains("command-runner")
-        || haystack.contains("code-runner")
-    {
+    if has_any_token(
+        &tokens,
+        &[
+            "shell",
+            "terminal",
+            "exec",
+            "execute",
+            "command-runner",
+            "code-runner",
+            "run_command",
+            "ssh",
+            "sftp",
+        ],
+    ) {
         signals.insert("shell-or-process".to_string());
     }
+
+    let mutation_terms = [
+        "write",
+        "delete",
+        "remove",
+        "rm",
+        "rmdir",
+        "mkdir",
+        "create",
+        "update",
+        "insert",
+        "modify",
+        "move",
+        "rename",
+        "upload",
+        "send",
+        "post",
+        "commit",
+        "push",
+        "apply",
+        "drop",
+        "truncate",
+        "deploy",
+        "publish",
+        "execute",
+        "run_command",
+        "patch",
+        "edit",
+        "upsert",
+        "append",
+        "add",
+    ];
+    let readonly_terms = [
+        "read",
+        "list",
+        "search",
+        "query",
+        "find",
+        "get",
+        "lookup",
+        "inspect",
+        "schema",
+        "describe",
+        "status",
+        "weather",
+        "time",
+        "calculate",
+        "calculator",
+        "show",
+        "view",
+    ];
+    let has_mutation_terms = has_any_token(&tokens, &mutation_terms);
+    let has_readonly_terms = has_any_token(&tokens, &readonly_terms);
+    if has_mutation_terms {
+        signals.insert("mutable-tools".to_string());
+    }
+    if has_readonly_terms && !has_mutation_terms {
+        signals.insert("readonly-tools".to_string());
+    }
+
     if signals.is_empty() {
         signals.insert("unknown-side-effects".to_string());
     }
     signals
+}
+
+fn command_semantic_signal(command: &str) -> String {
+    let command_name = command
+        .trim()
+        .rsplit(['/', '\\'])
+        .next()
+        .unwrap_or("")
+        .trim_matches(|character: char| character == '"' || character == '\'')
+        .to_ascii_lowercase();
+    match command_name.as_str() {
+        "sh" | "bash" | "zsh" | "fish" | "cmd" | "cmd.exe" | "powershell" | "powershell.exe"
+        | "pwsh" | "pwsh.exe" | "ssh" | "ssh.exe" | "sftp" | "sftp.exe" | "terminal" => {
+            command_name
+        }
+        _ => String::new(),
+    }
+}
+
+fn signal_tokens(text: &str) -> BTreeSet<String> {
+    text.split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+        .filter(|part| !part.is_empty())
+        .map(ToOwned::to_owned)
+        .collect()
+}
+
+fn has_any_token(tokens: &BTreeSet<String>, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| tokens.contains(*needle))
+}
+
+fn has_any_substring(haystack: &str, needles: &[&str]) -> bool {
+    needles.iter().any(|needle| haystack.contains(needle))
 }
 
 fn infer_source_type(raw_source_type: &str, command: &str, url: &str) -> String {
@@ -641,48 +1485,7 @@ fn normalize_server_record(
     let platform_supported = platform_utils::supports_current_platform(&platforms);
     let effective_enabled = profile_enabled && source_enabled && platform_supported;
 
-    let scope_class = policy_string(policy, "scopeClass", "");
-    let concurrency_policy = policy_string(policy, "concurrencyPolicy", "");
-    let state_binding = policy_string(policy, "stateBinding", "");
-    let credential_binding = policy_string(policy, "credentialBinding", "");
-    let parallelism_limit = policy_usize(
-        policy,
-        "parallelismLimit",
-        default_parallelism_limit(&concurrency_policy),
-    );
-    let conflict_domain = policy_string(policy, "conflictDomain", name);
-    let project_root_mode = policy_string(
-        policy,
-        "projectRootMode",
-        default_project_root_mode(&scope_class, &concurrency_policy),
-    );
-    let worktree_binding = policy_string(
-        policy,
-        "worktreeBinding",
-        default_worktree_binding(&scope_class, &state_binding),
-    );
-    let state_profile_mode = policy_string(policy, "stateProfileMode", "none");
-    let host_lock = policy_string(
-        policy,
-        "hostLock",
-        default_host_lock(&scope_class, &state_binding),
-    );
-    let startup_strategy = policy_string(
-        policy,
-        "startupStrategy",
-        default_startup_strategy(&scope_class, &concurrency_policy, &state_binding),
-    );
-    let routing_group = policy_string(
-        policy,
-        "routingGroup",
-        default_routing_group(&scope_class, &state_binding, &state_profile_mode),
-    );
-    let discovery_requires_lease = policy_bool(
-        policy,
-        "discoveryRequiresLease",
-        default_discovery_requires_lease(&scope_class, &concurrency_policy, &state_binding),
-    );
-    let source_type = source_record
+    let raw_source_type = source_record
         .map(|record| record.source_type.clone())
         .unwrap_or_default();
     let source_command = source_record
@@ -691,9 +1494,91 @@ fn normalize_server_record(
     let source_url = source_record
         .map(|record| record.url.clone())
         .unwrap_or_default();
+    let source_type = infer_source_type(&raw_source_type, &source_command, &source_url);
     let source_args = source_record
         .map(|record| record.args.clone())
         .unwrap_or_default();
+    let mut source_profile_hints = source_record
+        .map(|record| record.profile_hints.clone())
+        .unwrap_or_default();
+    source_profile_hints.extend(json_helpers::strings_from_array(
+        object
+            .get("mcpaceProfileHints")
+            .or_else(|| object.get("profileHints"))
+            .and_then(JsonValue::as_array),
+    ));
+    source_profile_hints.sort();
+    source_profile_hints.dedup();
+    let signal_args = source_signal_args(&source_args, &source_profile_hints);
+    let inferred_source_record = SourceServerRecord {
+        name: if source_record
+            .map(|record| record.name.trim().is_empty())
+            .unwrap_or(true)
+        {
+            name.trim().to_string()
+        } else {
+            source_record
+                .map(|record| record.name.clone())
+                .unwrap_or_else(|| name.trim().to_string())
+        },
+        enabled: source_enabled,
+        source_type: source_type.clone(),
+        command: source_command.clone(),
+        url: source_url.clone(),
+        args: source_args.clone(),
+        profile_hints: source_profile_hints.clone(),
+    };
+    let normalized_name_for_policy = name.trim().to_ascii_lowercase();
+    let inferred_policy = infer_generic_source_policy(
+        &normalized_name_for_policy,
+        &inferred_source_record,
+        &source_type,
+    );
+
+    let scope_class = policy_string(policy, "scopeClass", inferred_policy.scope_class);
+    let concurrency_policy = policy_string(
+        policy,
+        "concurrencyPolicy",
+        inferred_policy.concurrency_policy,
+    );
+    let state_binding = policy_string(policy, "stateBinding", inferred_policy.state_binding);
+    let credential_binding = policy_string(
+        policy,
+        "credentialBinding",
+        inferred_policy.credential_binding,
+    );
+    let parallelism_limit = policy_usize(
+        policy,
+        "parallelismLimit",
+        inferred_policy.parallelism_limit,
+    );
+    let default_conflict_domain = if inferred_policy.conflict_domain_prefix.is_empty() {
+        name.trim().to_string()
+    } else {
+        format!(
+            "{}:{}",
+            inferred_policy.conflict_domain_prefix, normalized_name_for_policy
+        )
+    };
+    let conflict_domain = policy_string(policy, "conflictDomain", &default_conflict_domain);
+    let project_root_mode =
+        policy_string(policy, "projectRootMode", inferred_policy.project_root_mode);
+    let worktree_binding =
+        policy_string(policy, "worktreeBinding", inferred_policy.worktree_binding);
+    let state_profile_mode = policy_string(
+        policy,
+        "stateProfileMode",
+        inferred_policy.state_profile_mode,
+    );
+    let host_lock = policy_string(policy, "hostLock", inferred_policy.host_lock);
+    let startup_strategy =
+        policy_string(policy, "startupStrategy", inferred_policy.startup_strategy);
+    let routing_group = policy_string(policy, "routingGroup", inferred_policy.routing_group);
+    let discovery_requires_lease = policy_bool(
+        policy,
+        "discoveryRequiresLease",
+        inferred_policy.discovery_requires_lease,
+    );
     let kind = object
         .get("kind")
         .and_then(JsonValue::as_str)
@@ -725,9 +1610,23 @@ fn normalize_server_record(
         &credential_binding,
         &source_command,
         &source_url,
-        &source_args,
+        &signal_args,
         &tool_policies,
     );
+    let runtime_classification = infer_runtime_classification(
+        &source_type,
+        &scope_class,
+        &concurrency_policy,
+        &state_binding,
+        &credential_binding,
+        &source_command,
+        &source_url,
+        &signal_args,
+        &tool_policies,
+    );
+    let runtime_type = policy_string(policy, "runtimeType", runtime_classification.runtime_type);
+    let state_class = policy_string(policy, "stateClass", runtime_classification.state_class);
+    let effect_class = policy_string(policy, "effectClass", runtime_classification.effect_class);
     let default_pool_model = infer_default_pool_model(
         &source_type,
         &scope_class,
@@ -735,12 +1634,14 @@ fn normalize_server_record(
         &state_binding,
         &credential_binding,
     );
-    let max_workers = infer_max_workers(
+    let inferred_max_workers = infer_max_workers(
         &source_type,
         &scope_class,
         &concurrency_policy,
         parallelism_limit,
     );
+    let max_workers = policy_usize(policy, "maxWorkers", inferred_max_workers).max(1);
+    let max_in_flight_per_worker = policy_usize(policy, "maxInFlightPerWorker", 1).max(1);
     let lock_domains = infer_lock_domains(
         &scope_class,
         &concurrency_policy,
@@ -754,9 +1655,12 @@ fn normalize_server_record(
         concurrency_policy: &concurrency_policy,
         state_binding: &state_binding,
         credential_binding: &credential_binding,
+        runtime_type: &runtime_type,
+        state_class: &state_class,
+        effect_class: &effect_class,
         command: &source_command,
         url: &source_url,
-        args: &source_args,
+        args: &signal_args,
     });
 
     Some(ServerRecord {
@@ -792,9 +1696,12 @@ fn normalize_server_record(
         credential_binding,
         parallelism_limit,
         parallel_safety_class,
+        runtime_type,
+        state_class,
+        effect_class,
         default_pool_model,
         max_workers,
-        max_in_flight_per_worker: 1,
+        max_in_flight_per_worker,
         transport_status: transport_status_for_source_type(&source_type),
         launcher_kind: infer_launcher_kind(
             &source_command,
@@ -906,6 +1813,258 @@ fn infer_launcher_kind(
 }
 
 #[allow(clippy::too_many_arguments)]
+fn infer_runtime_classification(
+    source_type: &str,
+    scope_class: &str,
+    concurrency_policy: &str,
+    state_binding: &str,
+    credential_binding: &str,
+    command: &str,
+    url: &str,
+    args: &[String],
+    tool_policies: &[JsonValue],
+) -> RuntimeClassification {
+    let signals = source_signals("", "", command, url, args);
+    let remote =
+        source_type == "streamable-http" || source_type == "http" || !url.trim().is_empty();
+    let explicit_stateless = policy_is_explicit_stateless(concurrency_policy, state_binding);
+    let read_only_tools = tool_policies.iter().any(policy_mentions_readonly)
+        || signals.contains("readonly-tools")
+        || signals.contains("local-utility");
+    let destructive_tools =
+        tool_policies.iter().any(policy_mentions_destructive) || signals.contains("mutable-tools");
+
+    if source_type == "sse-legacy" || source_type == "sse" {
+        return RuntimeClassification {
+            runtime_type: "legacy",
+            state_class: "legacy-transport",
+            effect_class: "unknown",
+        };
+    }
+
+    if signals.contains("sdk-or-example")
+        || scope_class == "not-runnable"
+        || concurrency_policy == "plan-only"
+    {
+        return RuntimeClassification {
+            runtime_type: "package-artifact",
+            state_class: "not-a-server",
+            effect_class: "not-runnable",
+        };
+    }
+
+    if signals.contains("shell-or-process") {
+        return RuntimeClassification {
+            runtime_type: "side-effecting",
+            state_class: "host-stateful",
+            effect_class: "process-exec",
+        };
+    }
+
+    if signals.contains("remote-browser-session") {
+        return RuntimeClassification {
+            runtime_type: "interactive",
+            state_class: "remote-session-stateful",
+            effect_class: "external-mutating",
+        };
+    }
+
+    if signals.contains("browser-observation") || state_binding == "host-readonly" {
+        return RuntimeClassification {
+            runtime_type: "stateful",
+            state_class: "host-stateful",
+            effect_class: "read-only",
+        };
+    }
+
+    if signals.contains("browser-or-desktop") {
+        return RuntimeClassification {
+            runtime_type: "interactive",
+            state_class: "host-stateful",
+            effect_class: "host-mutating",
+        };
+    }
+
+    if signals.contains("network-database") || state_binding == "db-connection" {
+        return RuntimeClassification {
+            runtime_type: "external",
+            state_class: "credential-stateful",
+            effect_class: "external-mutating",
+        };
+    }
+
+    if signals.contains("project-analysis")
+        && !signals.contains("network-or-external-api")
+        && !signals.contains("credentials-or-auth")
+        && !signals.contains("cloud-admin")
+        && !signals.contains("external-read-api")
+        && !signals.contains("documentation-lookup")
+    {
+        return RuntimeClassification {
+            runtime_type: "stateful",
+            state_class: "project-stateful",
+            effect_class: "read-only",
+        };
+    }
+
+    if scope_class == "project-local"
+        || concurrency_policy == "isolated-per-project"
+        || matches!(
+            state_binding,
+            "repo"
+                | "repo-path"
+                | "file"
+                | "file-path"
+                | "db"
+                | "db-file-path"
+                | "project"
+                | "project-index"
+        )
+        || signals.contains("filesystem")
+        || signals.contains("git-repository")
+        || signals.contains("database")
+    {
+        return RuntimeClassification {
+            runtime_type: "stateful",
+            state_class: "project-stateful",
+            effect_class: "project-mutating",
+        };
+    }
+
+    if scope_class == "state-profile"
+        || concurrency_policy == "single-session"
+        || matches!(state_binding, "context-store" | "memory" | "host-session")
+        || signals.contains("memory-or-context")
+    {
+        return RuntimeClassification {
+            runtime_type: "stateful",
+            state_class: "session-stateful",
+            effect_class: "ephemeral-state",
+        };
+    }
+
+    if signals.contains("transport-gateway") && !destructive_tools {
+        return RuntimeClassification {
+            runtime_type: "stateless",
+            state_class: "stateless",
+            effect_class: "read-only",
+        };
+    }
+
+    if (signals.contains("documentation-lookup")
+        || signals.contains("external-read-api")
+        || (signals.contains("network-fetch") && !destructive_tools))
+        && !signals.contains("network-or-external-api")
+        && !signals.contains("credentials-or-auth")
+        && !signals.contains("cloud-admin")
+        && !signals.contains("cluster-control")
+    {
+        return RuntimeClassification {
+            runtime_type: "stateless",
+            state_class: "stateless",
+            effect_class: "external-read",
+        };
+    }
+
+    if remote {
+        if read_only_tools && !destructive_tools && explicit_stateless {
+            return RuntimeClassification {
+                runtime_type: "stateless",
+                state_class: "stateless",
+                effect_class: "external-read",
+            };
+        }
+        return RuntimeClassification {
+            runtime_type: "external",
+            state_class: "remote-session-stateful",
+            effect_class: if destructive_tools {
+                "external-mutating"
+            } else {
+                "external-unknown"
+            },
+        };
+    }
+
+    if scope_class == "credential-scoped"
+        || (!credential_binding.trim().is_empty() && credential_binding != "none")
+        || signals.contains("cloud-admin")
+        || signals.contains("identity-admin")
+        || signals.contains("cluster-control")
+        || signals.contains("secrets-manager")
+        || signals.contains("payments-financial")
+        || signals.contains("blockchain-wallet")
+        || signals.contains("network-or-external-api")
+    {
+        if signals.contains("network-fetch") && read_only_tools && !destructive_tools {
+            return RuntimeClassification {
+                runtime_type: "stateless",
+                state_class: "stateless",
+                effect_class: "external-read",
+            };
+        }
+        return RuntimeClassification {
+            runtime_type: "external",
+            state_class: "credential-stateful",
+            effect_class: if destructive_tools {
+                "external-mutating"
+            } else {
+                "external-unknown"
+            },
+        };
+    }
+
+    if explicit_stateless
+        || (concurrency_policy == "multi-reader"
+            && matches!(state_binding, "" | "none" | "stateless")
+            && (read_only_tools || signals.contains("network-fetch")))
+    {
+        return RuntimeClassification {
+            runtime_type: "stateless",
+            state_class: "stateless",
+            effect_class: if signals.contains("network-fetch") {
+                "external-read"
+            } else {
+                "read-only"
+            },
+        };
+    }
+
+    if destructive_tools {
+        return RuntimeClassification {
+            runtime_type: "side-effecting",
+            state_class: "unknown-stateful",
+            effect_class: "unknown-mutating",
+        };
+    }
+
+    RuntimeClassification {
+        runtime_type: "unknown",
+        state_class: "unknown-conservative",
+        effect_class: "unknown",
+    }
+}
+
+fn policy_mentions_destructive(value: &JsonValue) -> bool {
+    let Some(object) = value.as_object() else {
+        return false;
+    };
+    object
+        .get("destructiveHint")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false)
+        || object
+            .get("readOnlyHint")
+            .and_then(JsonValue::as_bool)
+            .map(|value| !value)
+            .unwrap_or(false)
+        || object
+            .get("readOnly")
+            .and_then(JsonValue::as_bool)
+            .map(|value| !value)
+            .unwrap_or(false)
+}
+
+#[allow(clippy::too_many_arguments)]
 fn infer_parallel_safety_class(
     source_type: &str,
     scope_class: &str,
@@ -921,9 +2080,14 @@ fn infer_parallel_safety_class(
     if source_type == "sse-legacy" || source_type == "sse" {
         return "PX_legacy_compat".to_string();
     }
+    if signals.contains("browser-observation") || state_binding == "host-readonly" {
+        return "P1_host_readonly_candidate".to_string();
+    }
     if scope_class == "shared-exclusive"
         || state_binding == "host-desktop"
+        || state_binding == "remote-browser-session"
         || signals.contains("browser-or-desktop")
+        || signals.contains("remote-browser-session")
         || signals.contains("shell-or-process")
     {
         return "PX_forbidden".to_string();
@@ -952,7 +2116,12 @@ fn infer_parallel_safety_class(
     {
         return "P3_project_safe".to_string();
     }
-    if signals.contains("network-fetch") || signals.contains("local-utility") {
+    if signals.contains("network-fetch")
+        || signals.contains("documentation-lookup")
+        || signals.contains("external-read-api")
+        || signals.contains("local-utility")
+        || signals.contains("transport-gateway")
+    {
         return "P1_readonly_candidate".to_string();
     }
     if concurrency_policy == "multi-reader" {
@@ -999,6 +2168,12 @@ fn infer_default_pool_model(
     if source_type == "sse-legacy" || source_type == "sse" {
         return "legacy-disabled".to_string();
     }
+    if scope_class == "not-runnable" || concurrency_policy == "plan-only" {
+        return "disabled".to_string();
+    }
+    if state_binding == "host-readonly" && concurrency_policy == "multi-reader" {
+        return "host-readonly-pool".to_string();
+    }
     if scope_class == "shared-exclusive"
         || state_binding == "host-desktop"
         || concurrency_policy == "single-session"
@@ -1032,7 +2207,14 @@ fn infer_max_workers(
     if source_type == "sse-legacy" || source_type == "sse" {
         return 0;
     }
-    if concurrency_policy == "single-session" || scope_class == "shared-exclusive" {
+    if scope_class == "not-runnable" || concurrency_policy == "plan-only" {
+        return 0;
+    }
+    if concurrency_policy == "single-session"
+        || concurrency_policy == "single-writer"
+        || concurrency_policy == "isolated-per-project"
+        || scope_class == "shared-exclusive"
+    {
         return 1;
     }
     if parallelism_limit > 1 {
@@ -1041,9 +2223,7 @@ fn infer_max_workers(
     if source_type == "streamable-http" || source_type == "http" {
         return 8;
     }
-    if source_type == "stdio"
-        && (concurrency_policy == "multi-reader" || scope_class == "project-local")
-    {
+    if source_type == "stdio" && concurrency_policy == "multi-reader" {
         return 4;
     }
     1
@@ -1068,6 +2248,7 @@ fn infer_lock_domains(
         "file" | "file-path" => domains.push("file".to_string()),
         "db" | "db-file-path" => domains.push("db".to_string()),
         "host-desktop" => domains.push("browser-or-desktop-session".to_string()),
+        "host-readonly" => domains.push("browser-readonly-session".to_string()),
         "host-session" => domains.push("host-session".to_string()),
         "remote-session" => domains.push("transport-session".to_string()),
         "context-store" | "memory" => domains.push("context-store".to_string()),
@@ -1091,21 +2272,147 @@ struct ProfileEvidenceInput<'a> {
     concurrency_policy: &'a str,
     state_binding: &'a str,
     credential_binding: &'a str,
+    runtime_type: &'a str,
+    state_class: &'a str,
+    effect_class: &'a str,
     command: &'a str,
     url: &'a str,
     args: &'a [String],
 }
 
+fn evidence_decision(
+    input: &ProfileEvidenceInput<'_>,
+    signals: &BTreeSet<String>,
+) -> EvidenceDecision {
+    let mut score = 0.20_f64;
+    let mut sources = Vec::new();
+    if !input.source_type.trim().is_empty() {
+        score += 0.10;
+        sources.push("transport-shape");
+    }
+    if !input.command.trim().is_empty() || !input.url.trim().is_empty() {
+        score += 0.10;
+        sources.push("launcher-shape");
+    }
+    if !input.args.is_empty() {
+        score += 0.15;
+        sources.push("profile-hints-or-safe-flags");
+    }
+    if !signals.contains("unknown-side-effects") {
+        score += 0.20;
+        sources.push("indirect-runtime-signals");
+    }
+    if input.credential_binding != "none" && !input.credential_binding.trim().is_empty() {
+        score += 0.10;
+        sources.push("credential-binding");
+    }
+    if policy_is_explicit_stateless(input.concurrency_policy, input.state_binding)
+        || matches!(
+            input.concurrency_policy,
+            "single-writer" | "single-session" | "isolated-per-project" | "plan-only"
+        )
+    {
+        score += 0.10;
+        sources.push("conservative-policy-binding");
+    }
+    if input.source_type == "sse" || input.source_type == "sse-legacy" {
+        score += 0.05;
+        sources.push("legacy-transport-detection");
+    }
+    if !signals.contains("unknown-side-effects")
+        && (input.runtime_type == "stateless" || input.effect_class == "read-only")
+    {
+        score += 0.10;
+        sources.push("read-only-or-stateless-evidence");
+    }
+    if score > 0.95 {
+        score = 0.95;
+    }
+
+    if input.scope_class == "not-runnable" || input.concurrency_policy == "plan-only" {
+        return EvidenceDecision {
+            score: score.max(0.70),
+            level: "high",
+            automatic_action: "plan-only",
+            next_step: "do not run as an MCP server unless a package entrypoint and safe probe prove it is runnable",
+            sources,
+        };
+    }
+    if signals.contains("shell-or-process") {
+        return EvidenceDecision {
+            score: score.max(0.85),
+            level: "high",
+            automatic_action: "blocked-high-risk",
+            next_step:
+                "require explicit local approval and sandboxing before any live probe or tool call",
+            sources,
+        };
+    }
+    if signals.contains("unknown-side-effects") || input.state_class == "unknown-conservative" {
+        return EvidenceDecision {
+            score: score.min(0.49),
+            level: "low",
+            automatic_action: "needs-safe-probe",
+            next_step: "run mcpace lab probe to collect initialize and tools/list evidence before widening policy",
+            sources,
+        };
+    }
+    if input.runtime_type == "external"
+        || input.state_class == "credential-stateful"
+        || input.credential_binding != "none"
+    {
+        return EvidenceDecision {
+            score: score.max(0.65),
+            level: "medium",
+            automatic_action: "static-safe-policy",
+            next_step: "keep conservative credential-scoped policy until safe probe and tool schema review prove read-only behavior",
+            sources,
+        };
+    }
+    if input.runtime_type == "interactive" || input.state_class == "host-stateful" {
+        return EvidenceDecision {
+            score: score.max(0.70),
+            level: "medium",
+            automatic_action: "static-safe-policy",
+            next_step: "keep single-session or host lock policy; safe probe may confirm tools but must not call actions",
+            sources,
+        };
+    }
+
+    EvidenceDecision {
+        score: score.max(0.60),
+        level: if score >= 0.75 { "high" } else { "medium" },
+        automatic_action: "static-safe-policy",
+        next_step:
+            "use static conservative policy now; optional safe probe can raise evidence confidence",
+        sources,
+    }
+}
+
 fn profile_evidence_records(input: ProfileEvidenceInput<'_>) -> Vec<JsonValue> {
     let mut records = Vec::new();
     let signals = source_signals("", "", input.command, input.url, input.args);
+    let decision = evidence_decision(&input, &signals);
     let signal_values: Vec<JsonValue> = signals.iter().cloned().map(JsonValue::string).collect();
+    let evidence_sources = decision
+        .sources
+        .iter()
+        .copied()
+        .map(JsonValue::string)
+        .collect::<Vec<_>>();
     records.push(JsonValue::object([
         ("kind", JsonValue::string("static")),
-        ("confidence", JsonValue::number(0.45)),
+        ("confidence", JsonValue::number(decision.score)),
+        ("evidenceScore", JsonValue::number(decision.score)),
+        ("evidenceLevel", JsonValue::string(decision.level)),
+        (
+            "automaticAction",
+            JsonValue::string(decision.automatic_action),
+        ),
+        ("nextStep", JsonValue::string(decision.next_step)),
         (
             "summary",
-            JsonValue::string("Initial adaptive profile inferred from local config, transport, source command/url, and policy fields; runtime probes can only lower or raise this with evidence."),
+            JsonValue::string("Initial adaptive profile inferred from indirect config, transport, package hints, source command semantics and policy fields; weak evidence must be confirmed with a safe live probe before widening concurrency."),
         ),
         (
             "data",
@@ -1124,6 +2431,9 @@ fn profile_evidence_records(input: ProfileEvidenceInput<'_>) -> Vec<JsonValue> {
                     "credentialBinding",
                     JsonValue::string(input.credential_binding.to_string()),
                 ),
+                ("runtimeType", JsonValue::string(input.runtime_type.to_string())),
+                ("stateClass", JsonValue::string(input.state_class.to_string())),
+                ("effectClass", JsonValue::string(input.effect_class.to_string())),
                 (
                     "hasCommand",
                     JsonValue::bool(!input.command.trim().is_empty()),
@@ -1131,6 +2441,7 @@ fn profile_evidence_records(input: ProfileEvidenceInput<'_>) -> Vec<JsonValue> {
                 ("hasUrl", JsonValue::bool(!input.url.trim().is_empty())),
                 ("argCount", JsonValue::number(input.args.len())),
                 ("sourceSignals", JsonValue::array(signal_values)),
+                ("evidenceSources", JsonValue::array(evidence_sources)),
             ]),
         ),
     ]));
@@ -1145,94 +2456,4 @@ fn profile_evidence_records(input: ProfileEvidenceInput<'_>) -> Vec<JsonValue> {
         ]));
     }
     records
-}
-
-fn default_parallelism_limit(concurrency_policy: &str) -> usize {
-    match concurrency_policy {
-        "multi-reader" => 0,
-        "isolated-per-project" | "single-writer" | "single-session" => 1,
-        _ => 1,
-    }
-}
-
-fn default_project_root_mode<'a>(scope_class: &'a str, concurrency_policy: &'a str) -> &'a str {
-    if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
-        "required"
-    } else {
-        "optional"
-    }
-}
-
-fn default_worktree_binding<'a>(scope_class: &'a str, state_binding: &'a str) -> &'a str {
-    if scope_class == "project-local" || matches!(state_binding, "repo" | "file" | "db" | "project")
-    {
-        "project-root"
-    } else {
-        "none"
-    }
-}
-
-fn default_host_lock<'a>(scope_class: &'a str, state_binding: &'a str) -> &'a str {
-    if scope_class == "shared-exclusive" || state_binding == "host-desktop" {
-        "host-session"
-    } else if state_binding == "host-session" {
-        "instance"
-    } else {
-        "none"
-    }
-}
-
-fn default_startup_strategy<'a>(
-    scope_class: &'a str,
-    concurrency_policy: &'a str,
-    state_binding: &'a str,
-) -> &'a str {
-    if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
-        "lazy-per-project"
-    } else if scope_class == "shared-exclusive" || state_binding == "host-desktop" {
-        "singleton-host"
-    } else if state_binding == "host-session" {
-        "lazy-per-profile"
-    } else {
-        "lazy-shared"
-    }
-}
-
-fn default_discovery_requires_lease(
-    scope_class: &str,
-    concurrency_policy: &str,
-    state_binding: &str,
-) -> bool {
-    scope_class == "shared-exclusive"
-        || scope_class == "project-local"
-        || scope_class == "state-profile"
-        || concurrency_policy == "single-session"
-        || concurrency_policy == "single-writer"
-        || concurrency_policy == "isolated-per-project"
-        || matches!(
-            state_binding,
-            "host-desktop"
-                | "host-session"
-                | "repo"
-                | "file"
-                | "db"
-                | "database-file"
-                | "context-store"
-        )
-}
-
-fn default_routing_group<'a>(
-    scope_class: &'a str,
-    state_binding: &'a str,
-    state_profile_mode: &'a str,
-) -> &'a str {
-    if state_binding == "host-session" || state_profile_mode != "none" {
-        "stateful"
-    } else if scope_class == "shared-exclusive" || state_binding == "host-desktop" {
-        "desktop"
-    } else if scope_class == "project-local" {
-        "project"
-    } else {
-        "shared"
-    }
 }

@@ -1,0 +1,69 @@
+{
+  "id": "popular-npm-chrome-devtools",
+  "suite": "browser-random-sweep",
+  "category": "local-browser-session",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Chrome DevTools MCP is local browser/devtools state",
+  "objective": "DevTools sessions share browser tab/profile state and should be serialized per profile.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "chrome-devtools-mcp@1.0.1",
+    "serverPolicies": [
+      "single-session",
+      "host-lock"
+    ],
+    "signals": [
+      "stdio",
+      "chrome",
+      "devtools",
+      "browser-or-desktop",
+      "host-profile"
+    ]
+  },
+  "expected": {
+    "runtimeType": "interactive",
+    "stateClass": "host-stateful",
+    "effectClass": "host-mutating",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "approved-sandbox-probe"
+  },
+  "evidenceSources": [
+    "npm-pack chrome-devtools-mcp 1.0.1"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "package description says Chrome DevTools",
+    "devtools/browser signal wins over docs/search noise"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

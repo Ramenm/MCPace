@@ -1,48 +1,29 @@
 # Full validation pass
 
-This pass re-ran the project from a clean source bundle and checked Node/package install behavior, release artifact creation, local load-test prerequisites, static Rust hygiene, and Windows-sensitive launcher paths.
-
-## Environment inventory
-
-- OS: Debian GNU/Linux 13 (trixie), Linux x86_64.
-- Node.js: 22.16.0.
-- npm: 10.9.2.
-- Rust toolchain: not available in this sandbox (`cargo`, `rustc`, and `rustup` were not installed).
-- Archive tools: `zip` and `unzip` are present, but the project release builder uses the Node-only ZIP writer.
-
-## Additional fixes in this pass
-
-- `npm run load:local` now honors the same explicit binary environment contract as the npm launcher: `MCPACE_BINARY_PATH` and `MCPACE_DEV_BINARY`, while still accepting the script-specific `MCPACE_BINARY`.
-- The load-test script now rejects missing, directory, and non-executable binary paths with clearer messages and reports both default candidate paths.
-- The npm launcher no longer treats an arbitrary consumer project's `target/release/mcpace` or `dist/mcpace` as a development MCPace binary. Local dev binaries are considered only when the resolved root is the MCPace source workspace.
-- `serve` resource forwarding now uses the centralized `resources::append_serve_resource_args` helper instead of keeping a separate local copy.
-- Added regression coverage for load-test env alignment, accidental consumer-project target binaries, and the retired local `serve_resource_args` duplicate.
-
-## Commands run
-
-Passed:
+Completed on Windows after the v0.6.9 runtime/classification update:
 
 ```bash
-npm install --ignore-scripts
-npm run check
-npm run pack:npm:dry-run
-npm run release:dry-run
-npm run build:release-artifacts
-node scripts/load-test-local.mjs --help
-```
-
-Expected blocked checks in this sandbox:
-
-```bash
+npm run check:ci
+npm run check:rust
 npm run build
-npm run test:rust
-cargo fmt --check
-cargo test
-npm run load:local -- --duration-ms 100 --concurrency 1
+npm run load:local -- --binary ./target/release/mcpace.exe --duration-ms 5000 --concurrency 64
+npm run pack:npm:dry-run
+npm publish --workspace @mcpace/cli --dry-run --json
+npm run build:release-artifacts
 ```
 
-Reason: a Rust-capable host is still required. The local load test now fails with an explicit missing-binary message instead of pointing only at `target/debug` or ignoring the standard MCPace binary env vars.
+Results:
 
-## Install notes
+- Node lint passed.
+- 89 Node tests passed.
+- `publint packages/npm/cli` passed.
+- Release artifact dry-run passed.
+- Rust format check passed.
+- Clippy passed with `-D warnings`.
+- 113 Rust tests passed.
+- Release build passed.
+- Local serve load test passed at 5 seconds / concurrency 64 with zero failed requests.
+- npm pack dry-run and npm publish dry-run passed for `@mcpace/cli@0.6.9`.
+- Source ZIP generation passed with 296 entries and no missing/extra/outside-root paths.
 
-`npm install --ignore-scripts` succeeds and was used only as an install smoke test. Generated `node_modules` and package-lock output are intentionally not part of the source ZIP.
+Real npm publication was not performed because this machine is not authenticated to npm (`npm whoami` returned 401).

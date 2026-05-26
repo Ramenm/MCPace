@@ -1,0 +1,69 @@
+{
+  "id": "popular-npm-memory",
+  "suite": "popular-servers",
+  "category": "session-stateful",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Memory knowledge graph is session/profile isolated",
+  "objective": "Avoid one chat leaking memory graph updates into another chat unless user intentionally shares a profile.",
+  "traffic": {
+    "clientArchetype": "claude-code",
+    "serverArchetype": "@modelcontextprotocol/server-memory@2026.1.26",
+    "serverPolicies": [
+      "single-session",
+      "session-isolated"
+    ],
+    "signals": [
+      "stdio",
+      "memory",
+      "knowledge",
+      "ephemeral-state",
+      "mutable-tools"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateful",
+    "stateClass": "session-stateful",
+    "effectClass": "ephemeral-state",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-memory 2026.1.26"
+  ],
+  "checks": [
+    "package description mentions memory knowledge graph",
+    "state profile required"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

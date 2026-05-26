@@ -1,0 +1,75 @@
+{
+  "id": "random-npm-eslint-project-readonly",
+  "suite": "random-npm-heldout",
+  "category": "project-analysis",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "@eslint/mcp is project-local read-only analysis",
+  "objective": "Static analysis tools need project affinity but should not be treated like filesystem writers when evidence is read-only.",
+  "traffic": {
+    "clientArchetype": "vscode-local",
+    "serverArchetype": "@eslint/mcp@0.3.5",
+    "serverPolicies": [
+      "isolated-per-project",
+      "read-only",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "project-analysis",
+      "eslint",
+      "lint",
+      "typescript",
+      "code-analysis",
+      "read-only"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateful",
+    "stateClass": "project-stateful",
+    "effectClass": "read-only",
+    "concurrencyPolicy": "isolated-per-project",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @eslint/mcp@0.3.5",
+    "random held-out package metadata sample"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command",
+    "trust-catalog-rating"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals from name, description, keywords and bin",
+    "separate browser-control, browser-observation, browser-data and external API signals",
+    "apply trust gate before install or probe",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says ESLint",
+    "project-analysis implies project affinity",
+    "read-only effect prevents filesystem-writer classification"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "random-heldout-corpus"
+  ]
+}

@@ -1,0 +1,67 @@
+{
+  "id": "popular-npm-supabase",
+  "suite": "popular-servers",
+  "category": "credential-external-mutating",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": false,
+  "title": "Supabase is external database/admin state",
+  "objective": "Supabase can read and mutate database/project resources, so auto policy remains credential-scoped single-writer.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@supabase/mcp-server-supabase@0.8.1",
+    "serverPolicies": [
+      "single-writer",
+      "credential-or-db-lock"
+    ],
+    "signals": [
+      "stdio",
+      "supabase",
+      "network-database",
+      "external-api",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "approved-sandbox-probe"
+  },
+  "evidenceSources": [
+    "npm-view @supabase/mcp-server-supabase 0.8.1"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says interacting with Supabase",
+    "database/admin conflict domain"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

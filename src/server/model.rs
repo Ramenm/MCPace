@@ -20,6 +20,9 @@ pub struct ServerRecord {
     pub credential_binding: String,
     pub parallelism_limit: usize,
     pub parallel_safety_class: String,
+    pub runtime_type: String,
+    pub state_class: String,
+    pub effect_class: String,
     pub default_pool_model: String,
     pub max_workers: usize,
     pub max_in_flight_per_worker: usize,
@@ -55,6 +58,7 @@ pub(super) struct SourceServerRecord {
     pub(super) command: String,
     pub(super) url: String,
     pub(super) args: Vec<String>,
+    pub(super) profile_hints: Vec<String>,
 }
 
 impl ServerRecord {
@@ -96,6 +100,9 @@ impl ServerRecord {
                 "parallelSafetyClass",
                 JsonValue::string(self.parallel_safety_class.clone()),
             ),
+            ("runtimeType", JsonValue::string(self.runtime_type.clone())),
+            ("stateClass", JsonValue::string(self.state_class.clone())),
+            ("effectClass", JsonValue::string(self.effect_class.clone())),
             (
                 "defaultPoolModel",
                 JsonValue::string(self.default_pool_model.clone()),
@@ -211,6 +218,9 @@ impl ServerRecord {
                         "parallelSafetyClass",
                         JsonValue::string(self.parallel_safety_class.clone()),
                     ),
+                    ("runtimeType", JsonValue::string(self.runtime_type.clone())),
+                    ("stateClass", JsonValue::string(self.state_class.clone())),
+                    ("effectClass", JsonValue::string(self.effect_class.clone())),
                     (
                         "defaultPoolModel",
                         JsonValue::string(self.default_pool_model.clone()),

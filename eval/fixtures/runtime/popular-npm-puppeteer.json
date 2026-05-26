@@ -1,0 +1,71 @@
+{
+  "id": "popular-npm-puppeteer",
+  "suite": "popular-servers",
+  "category": "interactive-host-state",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Puppeteer is host/browser session stateful",
+  "objective": "Do not share a browser page/profile between concurrent chats by default.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@modelcontextprotocol/server-puppeteer@2025.5.12",
+    "serverPolicies": [
+      "single-session",
+      "host-lock"
+    ],
+    "signals": [
+      "stdio",
+      "puppeteer",
+      "browser",
+      "navigate",
+      "click",
+      "screenshot",
+      "host-state"
+    ]
+  },
+  "expected": {
+    "runtimeType": "interactive",
+    "stateClass": "host-stateful",
+    "effectClass": "host-mutating",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-puppeteer 2025.5.12"
+  ],
+  "checks": [
+    "tool names include navigate/click/fill/evaluate",
+    "browser profile lock required"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

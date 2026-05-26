@@ -22,6 +22,8 @@
     "docs/security.md",
     "docs/supported-clients.md",
     "docs/troubleshooting.md",
+    "docs/lab-harness.md",
+    "eval",
     "examples",
     "mcp_settings.d",
     "mcp_settings.json",
@@ -47,7 +49,9 @@
     "scripts/lib/zip-writer.mjs",
     "scripts/lib/process.mjs",
     "src",
-    "tests/node"
+    "tests/node",
+    "catalog",
+    "manifests"
   ],
   "runtimeDirectories": [
     "backups",

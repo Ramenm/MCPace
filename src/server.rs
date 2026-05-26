@@ -1,9 +1,12 @@
 mod add;
 mod args;
+mod discover;
 mod import;
 mod install;
+mod instances;
 mod loader;
 mod model;
+mod policy;
 mod query;
 mod remove;
 mod render;
@@ -48,6 +51,26 @@ pub fn run(
     }
     if action == "sources" {
         return sources::run(&parsed, default_root, stdout, stderr);
+    }
+    if action == "discover" || action == "auto" {
+        return discover::run(&parsed, default_root, stdout, stderr);
+    }
+    if action == "set-policy" {
+        return policy::run(&parsed, default_root, stdout, stderr);
+    }
+    if action == "instances" {
+        return instances::run(&parsed, default_root, stdout, stderr);
+    }
+    if action == "leases" {
+        let mut forwarded = vec!["lease".to_string(), "list".to_string()];
+        if parsed.json_output {
+            forwarded.push("--json".to_string());
+        }
+        if let Some(root) = &parsed.root_override {
+            forwarded.push("--root".to_string());
+            forwarded.push(root.display().to_string());
+        }
+        return crate::hub::run(&forwarded, default_root, stdout, stderr);
     }
     if action == "add" {
         return add::run(&parsed, default_root, stdout, stderr);

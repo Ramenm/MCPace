@@ -1,0 +1,76 @@
+{
+  "id": "random-npm-firecrawl-ambiguous",
+  "suite": "random-npm-heldout",
+  "category": "web-crawl-ambiguous",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "firecrawl-mcp is web retrieval but needs tools/list before relaxing trust",
+  "objective": "Search/scrape/crawl packages look read-oriented, but page interaction and API-key budget mean the scheduler should require approval/probe before auto-run.",
+  "traffic": {
+    "clientArchetype": "vscode-local",
+    "serverArchetype": "firecrawl-mcp@3.17.0",
+    "serverPolicies": [
+      "multi-reader",
+      "provider-budget",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "network-fetch",
+      "firecrawl",
+      "search",
+      "scrape",
+      "crawl",
+      "api-key",
+      "external-read-api"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateless",
+    "stateClass": "stateless",
+    "effectClass": "external-read",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "package-artifact-plus-description",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view firecrawl-mcp@3.17.0",
+    "random held-out package metadata sample"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command",
+    "trust-catalog-rating"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals from name, description, keywords and bin",
+    "separate browser-control, browser-observation, browser-data and external API signals",
+    "apply trust gate before install or probe",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says search/scrape/crawl web content",
+    "provider budget prevents unbounded fanout",
+    "not treated as browser host automation"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "random-heldout-corpus"
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "id": "popular-npm-kubernetes",
+  "suite": "popular-servers",
+  "category": "cluster-control",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": false,
+  "title": "Kubernetes MCP controls a cluster",
+  "objective": "kubectl/cluster-control servers are credential scoped and should never be multi-reader by default.",
+  "traffic": {
+    "clientArchetype": "claude-code",
+    "serverArchetype": "mcp-server-kubernetes@3.8.0",
+    "serverPolicies": [
+      "single-writer",
+      "credential-lock",
+      "cluster-lock"
+    ],
+    "signals": [
+      "stdio",
+      "kubernetes",
+      "kubectl",
+      "cluster-control",
+      "external-mutating"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "review-or-unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view mcp-server-kubernetes 3.8.0"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says Kubernetes clusters via kubectl",
+    "cluster control is external mutating"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

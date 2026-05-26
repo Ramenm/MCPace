@@ -1,0 +1,71 @@
+{
+  "id": "popular-npm-postgres",
+  "suite": "popular-servers",
+  "category": "database-stateful",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Postgres server is database-connection scoped",
+  "objective": "Avoid concurrent DDL/write operations against the same configured database connection, even when the server process is local stdio.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@modelcontextprotocol/server-postgres@0.6.2",
+    "serverPolicies": [
+      "single-writer",
+      "credential-or-db-lock"
+    ],
+    "signals": [
+      "stdio",
+      "postgres",
+      "database",
+      "query",
+      "credentials-or-auth",
+      "network-database",
+      "database-connection"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-postgres 0.6.2"
+  ],
+  "checks": [
+    "package description says PostgreSQL databases",
+    "database connection is a conflict domain"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

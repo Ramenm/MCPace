@@ -1,0 +1,70 @@
+{
+  "id": "popular-npm-brave-search",
+  "suite": "popular-servers",
+  "category": "stateless-external-read",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Brave Search is external-read multi-reader",
+  "objective": "Allow read-only search concurrency with API-key budget limits.",
+  "traffic": {
+    "clientArchetype": "windsurf",
+    "serverArchetype": "@modelcontextprotocol/server-brave-search@0.6.2",
+    "serverPolicies": [
+      "multi-reader",
+      "rate-limited"
+    ],
+    "signals": [
+      "stdio",
+      "brave-search",
+      "search",
+      "web",
+      "external-read",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateless",
+    "stateClass": "stateless",
+    "effectClass": "external-read",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-brave-search 0.6.2"
+  ],
+  "checks": [
+    "tool names brave_web_search/brave_local_search",
+    "search-only surface"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

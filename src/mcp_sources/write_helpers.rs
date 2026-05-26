@@ -39,6 +39,21 @@ pub(super) fn build_server_entry(
     {
         object.insert("url".to_string(), JsonValue::string(url.to_string()));
     }
+    let mut profile_hints = options
+        .profile_hints
+        .iter()
+        .map(|value| value.trim())
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .collect::<Vec<String>>();
+    profile_hints.sort();
+    profile_hints.dedup();
+    if !profile_hints.is_empty() {
+        object.insert(
+            "mcpaceProfileHints".to_string(),
+            JsonValue::array(profile_hints.into_iter().map(JsonValue::string)),
+        );
+    }
     if !env.is_empty() {
         object.insert(
             "env".to_string(),

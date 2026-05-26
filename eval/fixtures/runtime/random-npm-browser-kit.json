@@ -1,0 +1,74 @@
+{
+  "id": "random-npm-browser-kit",
+  "suite": "random-npm-heldout",
+  "category": "local-browser-session",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "@mcp-browser-kit/server is local browser control",
+  "objective": "Browser kit packages should be classified as interactive host-stateful control even when the name is generic.",
+  "traffic": {
+    "clientArchetype": "cursor-local",
+    "serverArchetype": "@mcp-browser-kit/server@8.0.0",
+    "serverPolicies": [
+      "single-session",
+      "host-lock",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "browser-or-desktop",
+      "mcp-browser",
+      "browser-kit",
+      "local-browsers",
+      "host-profile"
+    ]
+  },
+  "expected": {
+    "runtimeType": "interactive",
+    "stateClass": "host-stateful",
+    "effectClass": "host-mutating",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @mcp-browser-kit/server@8.0.0",
+    "random held-out package metadata sample"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command",
+    "trust-catalog-rating"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals from name, description, keywords and bin",
+    "separate browser-control, browser-observation, browser-data and external API signals",
+    "apply trust gate before install or probe",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says interact with local browsers",
+    "browser-kit substring is bounded as browser control",
+    "unknown package stays plan-only"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "random-heldout-corpus"
+  ]
+}

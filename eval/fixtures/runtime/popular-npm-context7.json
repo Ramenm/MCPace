@@ -1,0 +1,70 @@
+{
+  "id": "popular-npm-context7",
+  "suite": "popular-servers",
+  "category": "documentation-external-read",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Context7 is documentation lookup, not SaaS writer",
+  "objective": "Docs/read-only surfaces should use budgeted multi-reader instead of single-writer.",
+  "traffic": {
+    "clientArchetype": "windsurf",
+    "serverArchetype": "@upstash/context7-mcp@3.0.0",
+    "serverPolicies": [
+      "multi-reader",
+      "provider-budget"
+    ],
+    "signals": [
+      "stdio",
+      "context7",
+      "documentation-lookup",
+      "external-read-api",
+      "docs",
+      "search"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateless",
+    "stateClass": "stateless",
+    "effectClass": "external-read",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "approved-sandbox-probe"
+  },
+  "evidenceSources": [
+    "npm-pack @upstash/context7-mcp 3.0.0"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "package description says Context7",
+    "documentation/search surface with no project mutations"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

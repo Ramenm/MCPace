@@ -741,6 +741,9 @@ fn server_topology_item(record: &ServerRecord) -> JsonValue {
         ),
         ("stateBinding", JsonValue::string(&record.state_binding)),
         ("scopeClass", JsonValue::string(&record.scope_class)),
+        ("runtimeType", JsonValue::string(&record.runtime_type)),
+        ("stateClass", JsonValue::string(&record.state_class)),
+        ("effectClass", JsonValue::string(&record.effect_class)),
         ("hostLock", JsonValue::string(&record.host_lock)),
         (
             "batchRecommended",
@@ -767,12 +770,12 @@ fn conflict_groups_json(groups: BTreeMap<String, Vec<String>>) -> JsonValue {
 }
 
 fn server_is_stateful(record: &ServerRecord) -> bool {
-    !matches!(record.state_binding.as_str(), "" | "none" | "stateless")
+    record.runtime_type != "stateless"
+        || !matches!(record.state_binding.as_str(), "" | "none" | "stateless")
         || matches!(
             record.concurrency_policy.as_str(),
             "single-session" | "single-writer"
         )
-        || record.parallelism_limit <= 1
 }
 
 fn server_requires_serialization(record: &ServerRecord) -> bool {

@@ -317,6 +317,9 @@ impl ServerCoordinationPlan {
                 "parallelSafetyClass",
                 JsonValue::string(self.parallel_safety_class.clone()),
             ),
+            ("runtimeType", JsonValue::string(self.runtime_type.clone())),
+            ("stateClass", JsonValue::string(self.state_class.clone())),
+            ("effectClass", JsonValue::string(self.effect_class.clone())),
             (
                 "defaultPoolModel",
                 JsonValue::string(self.default_pool_model.clone()),

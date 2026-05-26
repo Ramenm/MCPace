@@ -8,6 +8,8 @@ pub(super) struct ParsedArgs {
     pub(super) help: bool,
     pub(super) id_filter: Option<String>,
     pub(super) root_override: Option<PathBuf>,
+    pub(super) timeout_ms: Option<u64>,
+    pub(super) refresh: bool,
     pub(super) error: Option<String>,
 }
 
@@ -17,7 +19,7 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
 
     while index < args.len() {
         match args[index].trim().to_ascii_lowercase().as_str() {
-            "list" | "matrix" | "show" | "coverage" | "gaps" | "report" | "run" => {
+            "list" | "matrix" | "show" | "coverage" | "gaps" | "report" | "run" | "probe" => {
                 if parsed.action.is_some() {
                     parsed.error = Some("lab accepts only one action".to_string());
                     return parsed;
@@ -36,6 +38,26 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
                 };
                 parsed.root_override = Some(PathBuf::from(value));
                 index += 2;
+            }
+            "--timeout-ms" | "-timeout-ms" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("lab probe requires a number after --timeout-ms".to_string());
+                    return parsed;
+                };
+                match value.trim().parse::<u64>() {
+                    Ok(value) if value > 0 => parsed.timeout_ms = Some(value),
+                    _ => {
+                        parsed.error =
+                            Some("lab probe --timeout-ms must be a positive integer".to_string());
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--refresh" | "-refresh" => {
+                parsed.refresh = true;
+                index += 1;
             }
             "--id" | "-id" | "--name" | "-name" => {
                 let Some(value) = args.get(index + 1) else {
@@ -65,10 +87,11 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
 pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace lab <list|matrix|coverage|gaps|report|show> [options]"
+        "Usage: mcpace lab [report|list|matrix|coverage|gaps|show|probe] [options]"
     );
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Implemented now:");
+    let _ = writeln!(stdout, "Default action: report. Implemented now:");
+    let _ = writeln!(stdout, "  mcpace lab [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace lab list [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace lab matrix [--json] [--root <path>]");
     let _ = writeln!(stdout, "  mcpace lab coverage [--json] [--root <path>]");
@@ -78,6 +101,10 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "  mcpace lab show --id <scenario> [--json] [--root <path>]"
     );
+    let _ = writeln!(
+        stdout,
+        "  mcpace lab probe [--id <server>] [--timeout-ms <ms>] [--refresh] [--json] [--root <path>]"
+    );
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "lab reads runtime fixtures plus a capability inventory and turns them into a concrete backlog: what is covered now, what is only partially covered, and what is still blocked.");
+    let _ = writeln!(stdout, "lab reads runtime fixtures plus a capability inventory and turns them into an evidence report: server -> evidence -> runtimeType/stateClass/effectClass -> concurrencyPolicy. The probe action performs a safe live MCP handshake (initialize + notifications/initialized + tools/list only) and never calls tools/call.");
 }

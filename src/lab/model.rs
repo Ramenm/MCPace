@@ -11,6 +11,18 @@ pub(super) struct LabScenarioRecord {
     pub(super) title: String,
     pub(super) objective: String,
     pub(super) client_archetype: String,
+    pub(super) server_archetype: String,
+    pub(super) expected_runtime_type: String,
+    pub(super) expected_state_class: String,
+    pub(super) expected_effect_class: String,
+    pub(super) expected_concurrency_policy: String,
+    pub(super) expected_auto_action: String,
+    pub(super) confidence: String,
+    pub(super) trust_boundary: String,
+    pub(super) safe_probe_mode: String,
+    pub(super) evidence_sources: Vec<String>,
+    pub(super) metadata_layers: Vec<String>,
+    pub(super) decision_trace: Vec<String>,
     pub(super) server_policies: Vec<String>,
     pub(super) signals: Vec<String>,
     pub(super) checks: Vec<String>,
@@ -71,6 +83,10 @@ impl LabScenarioRecord {
                         JsonValue::string(self.client_archetype.clone()),
                     ),
                     (
+                        "serverArchetype",
+                        JsonValue::string(self.server_archetype.clone()),
+                    ),
+                    (
                         "serverPolicies",
                         JsonValue::array(
                             self.server_policies.iter().cloned().map(JsonValue::string),
@@ -81,6 +97,52 @@ impl LabScenarioRecord {
                         JsonValue::array(self.signals.iter().cloned().map(JsonValue::string)),
                     ),
                 ]),
+            ),
+            (
+                "expected",
+                JsonValue::object([
+                    (
+                        "runtimeType",
+                        JsonValue::string(self.expected_runtime_type.clone()),
+                    ),
+                    (
+                        "stateClass",
+                        JsonValue::string(self.expected_state_class.clone()),
+                    ),
+                    (
+                        "effectClass",
+                        JsonValue::string(self.expected_effect_class.clone()),
+                    ),
+                    (
+                        "concurrencyPolicy",
+                        JsonValue::string(self.expected_concurrency_policy.clone()),
+                    ),
+                    (
+                        "autoAction",
+                        JsonValue::string(self.expected_auto_action.clone()),
+                    ),
+                    ("confidence", JsonValue::string(self.confidence.clone())),
+                    (
+                        "trustBoundary",
+                        JsonValue::string(self.trust_boundary.clone()),
+                    ),
+                    (
+                        "safeProbeMode",
+                        JsonValue::string(self.safe_probe_mode.clone()),
+                    ),
+                ]),
+            ),
+            (
+                "evidenceSources",
+                JsonValue::array(self.evidence_sources.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "metadataLayers",
+                JsonValue::array(self.metadata_layers.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "decisionTrace",
+                JsonValue::array(self.decision_trace.iter().cloned().map(JsonValue::string)),
             ),
             (
                 "checks",

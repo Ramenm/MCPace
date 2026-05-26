@@ -25,6 +25,7 @@ pub fn getrandom(bytes: &mut [u8]) -> Result<(), Error> {
 #[cfg(windows)]
 fn fill_os_random(bytes: &mut [u8]) -> Result<(), Error> {
     use std::ffi::c_void;
+    use std::sync::Mutex;
 
     #[link(name = "bcrypt")]
     extern "system" {
@@ -38,7 +39,11 @@ fn fill_os_random(bytes: &mut [u8]) -> Result<(), Error> {
 
     const BCRYPT_USE_SYSTEM_PREFERRED_RNG: u32 = 0x0000_0002;
     const STATUS_SUCCESS: i32 = 0;
+    static WINDOWS_RANDOM_LOCK: Mutex<()> = Mutex::new(());
 
+    let _guard = WINDOWS_RANDOM_LOCK
+        .lock()
+        .map_err(|_| Error::new("Windows random generator lock is poisoned"))?;
     for chunk in bytes.chunks_mut(u32::MAX as usize) {
         let status = unsafe {
             BCryptGenRandom(

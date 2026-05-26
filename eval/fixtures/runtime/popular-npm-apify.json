@@ -1,0 +1,69 @@
+{
+  "id": "popular-npm-apify",
+  "suite": "popular-servers",
+  "category": "external-job-runner",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": false,
+  "title": "Apify actors run external jobs",
+  "objective": "Actor/task execution can spend credits and mutate external state, so keep credential-scoped single-writer.",
+  "traffic": {
+    "clientArchetype": "windsurf",
+    "serverArchetype": "@apify/actors-mcp-server@0.10.8",
+    "serverPolicies": [
+      "single-writer",
+      "credential-lock",
+      "job-budget"
+    ],
+    "signals": [
+      "stdio",
+      "apify",
+      "external-api",
+      "cloud-admin",
+      "execute",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "review-or-unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @apify/actors-mcp-server 0.10.8"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says Apify Actors MCP Server",
+    "actor execution is external side-effecting"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

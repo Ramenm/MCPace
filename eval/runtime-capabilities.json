@@ -1,0 +1,269 @@
+{
+  "features": [
+    {
+      "id": "registry-metadata-ingest",
+      "area": "discovery",
+      "title": "Read MCP Registry and local catalog metadata",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Normalizes remotes, packages, headers, registryType and transport without requiring users to choose a server type.",
+      "evidence": [
+        "src/server/discover.rs",
+        "catalog/approved-servers.json"
+      ],
+      "nextStep": "Keep registry parsing covered with held-out registry fixtures."
+    },
+    {
+      "id": "package-artifact-metadata-corpus",
+      "area": "lab",
+      "title": "Downloaded package metadata corpus for popular MCP servers",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Uses npm pack and pip download metadata in sandbox to produce stable golden scenarios without executing foreign server code.",
+      "evidence": [
+        "eval/fixtures/runtime",
+        "reports/summary.md"
+      ],
+      "nextStep": "Refresh corpus versions before release trains; do not ship downloaded tarballs/wheels."
+    },
+    {
+      "id": "tools-list-evidence-model",
+      "area": "probe",
+      "title": "Model initialize/tools-list evidence as classifier input",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Auto mode records tool names, annotations, resources/prompts and transport capability hints as evidence for runtime classification.",
+      "evidence": [
+        "src/mcp_server/tool_surface.rs",
+        "src/server/test.rs"
+      ],
+      "nextStep": "Extend lab with live subprocess sandbox traces when a safe OS sandbox is present."
+    },
+    {
+      "id": "runtime-type-classifier",
+      "area": "classification",
+      "title": "Infer runtimeType automatically",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Classifies stateless, stateful, external, interactive, side-effecting, legacy and unknown surfaces from metadata plus probe evidence.",
+      "evidence": [
+        "src/server/loader.rs",
+        "schemas/mcpace-server-profile.schema.json"
+      ],
+      "nextStep": "Reject policy relaxations unless a golden fixture demonstrates the evidence."
+    },
+    {
+      "id": "state-class-classifier",
+      "area": "classification",
+      "title": "Infer stateClass automatically",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Separates stateless, session-stateful, project-stateful, credential-stateful, remote-session-stateful, host-stateful and unknown-conservative.",
+      "evidence": [
+        "src/server/loader.rs",
+        "tests/node/runtime-state-classification.test.mjs"
+      ],
+      "nextStep": "Add more credential-scoped SaaS fixtures as registry coverage grows."
+    },
+    {
+      "id": "effect-class-classifier",
+      "area": "classification",
+      "title": "Infer effectClass automatically",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Separates read-only, external-read, ephemeral-state, project-mutating, external-mutating, host-mutating, process-exec and unknown.",
+      "evidence": [
+        "src/server/loader.rs",
+        "tests/node/runtime-classification-guardrails.test.mjs"
+      ],
+      "nextStep": "Treat untrusted tool annotations as hints only; keep conservative fallbacks."
+    },
+    {
+      "id": "concurrency-policy-planner",
+      "area": "scheduler",
+      "title": "Plan safe concurrency policy from inferred classes",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Maps state/effect evidence into multi-reader, single-session, single-writer, isolated-per-project or plan-only behavior.",
+      "evidence": [
+        "src/server/loader.rs",
+        "src/server/instances.rs"
+      ],
+      "nextStep": "Keep maxWorkers=1 for single-writer/project-isolated policies."
+    },
+    {
+      "id": "trust-gated-autoinstall",
+      "area": "security",
+      "title": "Auto-install only approved/trusted candidates",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Approved/trusted servers can be installed automatically; review/unknown/blocked remain plan-only unless policy explicitly allows them.",
+      "evidence": [
+        "src/server/discover.rs",
+        "SECURITY.md"
+      ],
+      "nextStep": "Wire optional signatures/SBOM checks when registry metadata exposes them consistently."
+    },
+    {
+      "id": "unknown-plan-only-gate",
+      "area": "security",
+      "title": "Random unknown servers stay plan-only",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Unknown random registry or command candidates are discovered and classified conservatively but not silently executed.",
+      "evidence": [
+        "src/server/discover.rs",
+        "docs/security.md"
+      ],
+      "nextStep": "Add an explicit local sandbox executor before any unknown-code dry run is allowed."
+    },
+    {
+      "id": "post-install-probe-hook",
+      "area": "probe",
+      "title": "Probe after approved install",
+      "status": "implemented",
+      "priority": "p1",
+      "summary": "When enabled, auto mode refreshes live tool evidence after adding a server so scheduling is based on observed surfaces.",
+      "evidence": [
+        "mcpace.config.json",
+        "src/server/discover.rs"
+      ],
+      "nextStep": "Persist probe failure reasons in the dashboard."
+    },
+    {
+      "id": "lab-evidence-report",
+      "area": "lab",
+      "title": "Human-readable lab evidence report",
+      "status": "implemented",
+      "priority": "p1",
+      "summary": "mcpace lab defaults to report and shows server -> evidence -> inferred classes -> policy.",
+      "evidence": [
+        "src/lab",
+        "eval/fixtures/runtime"
+      ],
+      "nextStep": "Render the same evidence matrix in the dashboard."
+    },
+    {
+      "id": "sandbox-leak-check",
+      "area": "release",
+      "title": "No sandbox package/download artifacts in release bundle",
+      "status": "implemented",
+      "priority": "p1",
+      "summary": "Release includes fixtures and reports, not npm tarballs, PyPI wheels, caches, mirrors or sandbox-specific URLs.",
+      "evidence": [
+        "release-manifest.json",
+        "tests/node/project-hygiene.test.mjs"
+      ],
+      "nextStep": "Keep package downloads outside the repository tree."
+    },
+    {
+      "id": "metadata-sweep-corpus",
+      "area": "lab",
+      "title": "Wide npm/PyPI metadata sweep for popular and random MCP servers",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Records 37 npm packages and 4 PyPI distributions as metadata-only evidence buckets, including browser, SaaS, database, documentation, cluster and wallet classes.",
+      "evidence": [
+        "eval/package-metadata-sweep.json",
+        "eval/popular-server-corpus.json"
+      ],
+      "nextStep": "Refresh the sweep before releases and keep downloaded packages outside the repository."
+    },
+    {
+      "id": "multi-source-evidence-ledger",
+      "area": "classification",
+      "title": "Use multiple metadata layers before choosing runtime type",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Each lab scenario records the metadata layers used: registry server.json, package registry metadata, package artifact manifests, README/keyword scans, safe tools/list probes and explicit trust boundaries.",
+      "evidence": [
+        "src/lab/model.rs",
+        "src/lab/render.rs",
+        "eval/fixtures/runtime"
+      ],
+      "nextStep": "Persist the same evidence ledger from live mcpace auto runs into the dashboard."
+    },
+    {
+      "id": "browser-session-classifier",
+      "area": "classification",
+      "title": "Separate local browser sessions, remote browser sessions and browser data lookup",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Classifies Playwright/Puppeteer/Chrome/DevTools/local browser bridges as host-stateful, Browserbase/BrowserStack-style providers as remote-session-stateful, and caniuse/docs as external-read.",
+      "evidence": [
+        "src/server/loader.rs",
+        "eval/fixtures/runtime/random-npm-caniuse.json",
+        "eval/fixtures/runtime/random-npm-browserbase.json"
+      ],
+      "nextStep": "Add live sandbox startup traces when an OS-level sandbox is available."
+    },
+    {
+      "id": "external-read-vs-saas-admin-split",
+      "area": "classification",
+      "title": "Split external read APIs from SaaS/admin mutating APIs",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Docs/search/maps/caniuse/context lookup use budgeted multi-reader, while Notion/Sentry/Slack/GitHub/Kubernetes/Heroku/Azure/Wallet APIs remain credential-scoped single-writer.",
+      "evidence": [
+        "src/server/loader.rs",
+        "eval/fixtures/runtime/popular-npm-context7.json",
+        "eval/fixtures/runtime/popular-npm-heroku.json"
+      ],
+      "nextStep": "Add registry-provided tool annotations as hints only when the server is trusted."
+    },
+    {
+      "id": "database-connection-scope",
+      "area": "classification",
+      "title": "Separate file/project databases from network database connections",
+      "status": "implemented",
+      "priority": "p1",
+      "summary": "SQLite/file DB remains project-scoped; Postgres/Redis/Supabase-style connections become credential/database scoped single-writer.",
+      "evidence": [
+        "src/server/loader.rs",
+        "eval/fixtures/runtime/popular-npm-postgres.json",
+        "eval/fixtures/runtime/popular-npm-redis.json"
+      ],
+      "nextStep": "Expose database connection conflict domains in mcpace server instances output."
+    },
+    {
+      "id": "project-readonly-analysis-classifier",
+      "area": "classification",
+      "title": "Handle project-local read-only analysis tools",
+      "status": "implemented",
+      "priority": "p1",
+      "summary": "Tools like ESLint are project-scoped because config/files matter, but their default effect class is read-only rather than project-mutating.",
+      "evidence": [
+        "src/server/loader.rs",
+        "eval/fixtures/runtime/popular-npm-eslint.json"
+      ],
+      "nextStep": "Add language-server/indexer fixtures when package metadata is available."
+    },
+    {
+      "id": "random-browser-negative-set",
+      "area": "lab",
+      "title": "Held-out random browser package negative set",
+      "status": "implemented",
+      "priority": "p1",
+      "summary": "Random browser packages from npm search are metadata-classified but plan-only, proving auto mode detects type without silently executing unknown code.",
+      "evidence": [
+        "eval/fixtures/runtime/random-npm-mcpbrowser.json",
+        "eval/fixtures/runtime/random-npm-sessionmcp.json",
+        "eval/fixtures/runtime/random-npm-browser-tabs.json"
+      ],
+      "nextStep": "Rotate held-out random samples periodically."
+    },
+    {
+      "id": "random-500-heldout-sweep",
+      "area": "lab",
+      "title": "Random 500 npm MCP metadata sweep",
+      "status": "implemented",
+      "priority": "p0",
+      "summary": "Records a deterministic held-out sweep of 500 npm MCP candidates. The sweep separates cases that can be classified from search/package metadata from cases that must remain unknown-conservative until a safe initialize/tools-list probe is available.",
+      "evidence": [
+        "eval/random-500-npm-sweep.json",
+        "eval/runtime-evidence-sources.json"
+      ],
+      "nextStep": "Use safe MCP initialize/tools-list probes to reduce the unknown-conservative bucket instead of guessing from package names."
+    }
+  ]
+}

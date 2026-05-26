@@ -457,6 +457,7 @@ pub(super) fn build_overview_json(root_path: &Path) -> Result<JsonValue, String>
             ("hub", vec!["hub", "status", "--json"]),
             ("readiness", vec!["verify", "readiness", "--json"]),
             ("servers", vec!["server", "list", "--json"]),
+            ("instances", vec!["server", "instances", "--json"]),
             ("clients", vec!["client", "list", "--json"]),
             ("leases", vec!["hub", "lease", "list", "--json"]),
         ],
@@ -475,6 +476,10 @@ pub(super) fn build_overview_json(root_path: &Path) -> Result<JsonValue, String>
             take_parallel_result(&mut results, "readiness")?,
         ),
         ("servers", take_parallel_result(&mut results, "servers")?),
+        (
+            "instances",
+            take_parallel_result(&mut results, "instances")?,
+        ),
         ("clients", take_parallel_result(&mut results, "clients")?),
         ("leases", take_parallel_result(&mut results, "leases")?),
     ]))

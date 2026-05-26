@@ -1,0 +1,72 @@
+{
+  "id": "popular-npm-github",
+  "suite": "popular-servers",
+  "category": "credential-external",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "GitHub API is credential scoped, not local git",
+  "objective": "Avoid false-positive git substring classification and serialize mutating repo/API calls per credential.",
+  "traffic": {
+    "clientArchetype": "codex",
+    "serverArchetype": "@modelcontextprotocol/server-github@2025.4.8",
+    "serverPolicies": [
+      "single-writer",
+      "credential-scoped"
+    ],
+    "signals": [
+      "stdio",
+      "github",
+      "api",
+      "create_issue",
+      "push_files",
+      "mutable-tools",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-github 2025.4.8"
+  ],
+  "checks": [
+    "package description says GitHub API",
+    "tool names include create/update/push/merge",
+    "must not match local git token path"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

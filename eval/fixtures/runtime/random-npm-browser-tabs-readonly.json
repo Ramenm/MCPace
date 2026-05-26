@@ -1,0 +1,74 @@
+{
+  "id": "random-npm-browser-tabs-readonly",
+  "suite": "random-npm-heldout",
+  "category": "local-browser-observation",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "@kazuph/mcp-browser-tabs reads browser tabs without automation control",
+  "objective": "Read-only local browser observation should not be misclassified as click/navigate automation, but still binds to host browser state.",
+  "traffic": {
+    "clientArchetype": "windsurf",
+    "serverArchetype": "@kazuph/mcp-browser-tabs@1.2.1",
+    "serverPolicies": [
+      "multi-reader",
+      "host-readonly-lock",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "browser-observation",
+      "chrome",
+      "tabs",
+      "read-only",
+      "host-profile"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateful",
+    "stateClass": "host-stateful",
+    "effectClass": "read-only",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @kazuph/mcp-browser-tabs@1.2.1",
+    "random held-out package metadata sample"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command",
+    "trust-catalog-rating"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals from name, description, keywords and bin",
+    "separate browser-control, browser-observation, browser-data and external API signals",
+    "apply trust gate before install or probe",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says retrieving Chrome browser tabs information",
+    "tabs/read-only signal chooses host-readonly instead of host-mutating",
+    "not executed in lab"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "random-heldout-corpus"
+  ]
+}

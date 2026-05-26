@@ -22,15 +22,29 @@ pub(crate) struct ParsedArgs {
     pub(crate) timeout_ms: Option<u64>,
     pub(crate) dry_run: bool,
     pub(crate) force: bool,
+    pub(crate) auto_install: bool,
+    pub(crate) auto_mode: bool,
+    pub(crate) allow_review_install: bool,
     pub(crate) disabled: bool,
     pub(crate) refresh: bool,
+    pub(crate) execution_mode: Option<String>,
+    pub(crate) affinity: Vec<String>,
+    pub(crate) queue_timeout_ms: Option<u64>,
+    pub(crate) reuse_policy: Option<String>,
+    pub(crate) max_workers: Option<usize>,
+    pub(crate) max_in_flight_per_worker: Option<usize>,
+    pub(crate) client_id: Option<String>,
+    pub(crate) session_id: Option<String>,
+    pub(crate) project_root: Option<String>,
+    pub(crate) transport: Option<String>,
+    pub(crate) metadata_json: Option<String>,
     pub(crate) error: Option<String>,
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace server <install|import|list|test|remove|enable|disable|sources> [options]"
+        "Usage: mcpace server <auto|install|discover|import|list|test|remove|enable|disable|sources|set-policy|instances|leases> [options]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Common commands:");
@@ -43,11 +57,22 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         stdout,
         "  mcpace server test [<name>|--name <server>] [--refresh]"
     );
+    let _ = writeln!(stdout, "  mcpace server auto [query] [--json] [--dry-run]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace server discover [query] [--json] [--auto] [advanced flags]"
+    );
     let _ = writeln!(stdout, "  mcpace server list [--json]");
+    let _ = writeln!(stdout, "  mcpace server instances [--client-id <id>] [--session-id <chat>] [--project-root <path>] [--json]");
+    let _ = writeln!(stdout, "  mcpace server leases [--json]");
     let _ = writeln!(stdout, "  mcpace server sources [--json]");
     let _ = writeln!(
         stdout,
         "  mcpace server remove|enable|disable <name> [--dry-run]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace server set-policy <name> --mode <shared|serialized|session-isolated|project-isolated|pool> [--affinity client,project,chat] [--queue-timeout-ms <ms>] [--reuse-policy <sticky|ttl|never>] [--max-workers <n>] [--dry-run]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -77,7 +102,26 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Import accepts either top-level mcpServers (Claude/Cursor style) or servers (VS Code style), skips MCPace's own client entry, preserves unrelated fields, and auto-fills enabled/type when possible.");
-    let _ = writeln!(stdout, "Advanced still available: capabilities, candidates, add, --settings, --force, --disabled, --env, --header, --type. Local path input such as . or /repo auto-installs the filesystem server only when you explicitly run install/up with that path.");
+    let _ = writeln!(stdout, "Advanced still available: capabilities, candidates, add, --settings, --force, --disabled, --env, --header, --type.");
+    let _ = writeln!(stdout, "Dynamic discovery examples:");
+    let _ = writeln!(stdout, "  mcpace server auto --dry-run              # one-command auto mode: refresh when needed, install approved/trusted, probe");
+    let _ = writeln!(stdout, "  mcpace server auto filesystem --json      # auto-select one server without choosing its type");
+    let _ = writeln!(
+        stdout,
+        "  mcpace server discover filesystem --json  # advanced plan-only search"
+    );
+    let _ = writeln!(stdout, "Concurrency policy examples:");
+    let _ = writeln!(stdout, "  mcpace server set-policy filesystem --mode session-isolated --affinity client,project,chat");
+    let _ = writeln!(
+        stdout,
+        "  mcpace server set-policy fetch --mode pool --max-workers 4 --queue-timeout-ms 5000"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace server instances --client-id cursor --session-id chat-a --project-root ."
+    );
+    let _ = writeln!(stdout, "  mcpace server leases --json");
+    let _ = writeln!(stdout, "Local path input such as . or /repo auto-installs the filesystem server only when you explicitly run install/up with that path.");
 }
 
 pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
@@ -106,8 +150,9 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
                     Some("-- is only supported for server install command specs".to_string());
                 return parsed;
             }
-            "list" | "capabilities" | "sources" | "candidates" | "add" | "install" | "import"
-            | "remove" | "enable" | "disable" | "test" => {
+            "list" | "capabilities" | "sources" | "candidates" | "discover" | "auto" | "add"
+            | "install" | "import" | "remove" | "enable" | "disable" | "test" | "set-policy"
+            | "instances" | "leases" => {
                 if parsed.action.is_some() {
                     parsed.error = Some("server accepts only one action".to_string());
                     return parsed;
@@ -234,8 +279,159 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
                 }
                 index += 2;
             }
-            "--refresh" => {
+            "--mode" | "-mode" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("server set-policy requires a value after --mode".to_string());
+                    return parsed;
+                };
+                parsed.execution_mode = Some(value.to_string());
+                index += 2;
+            }
+            "--affinity" | "-affinity" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some(
+                        "server set-policy requires a comma-separated list after --affinity"
+                            .to_string(),
+                    );
+                    return parsed;
+                };
+                parsed.affinity.extend(
+                    value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|item| !item.is_empty())
+                        .map(str::to_string),
+                );
+                index += 2;
+            }
+            "--queue-timeout-ms" | "-queue-timeout-ms" | "--queue-timeout" | "-queue-timeout" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some(
+                        "server set-policy requires a positive integer after --queue-timeout-ms"
+                            .to_string(),
+                    );
+                    return parsed;
+                };
+                match value.trim().parse::<u64>() {
+                    Ok(timeout) if timeout > 0 => parsed.queue_timeout_ms = Some(timeout),
+                    _ => {
+                        parsed.error = Some(
+                            "server set-policy --queue-timeout-ms must be a positive integer"
+                                .to_string(),
+                        );
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--reuse-policy" | "-reuse-policy" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("server set-policy requires a value after --reuse-policy".to_string());
+                    return parsed;
+                };
+                parsed.reuse_policy = Some(value.to_string());
+                index += 2;
+            }
+            "--max-workers" | "-max-workers" | "--workers" | "-workers" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some(
+                        "server set-policy requires a positive integer after --max-workers"
+                            .to_string(),
+                    );
+                    return parsed;
+                };
+                match value.trim().parse::<usize>() {
+                    Ok(count) if count > 0 => parsed.max_workers = Some(count),
+                    _ => {
+                        parsed.error = Some(
+                            "server set-policy --max-workers must be a positive integer"
+                                .to_string(),
+                        );
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--max-in-flight-per-worker"
+            | "-max-in-flight-per-worker"
+            | "--in-flight"
+            | "-in-flight" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some("server set-policy requires a positive integer after --max-in-flight-per-worker".to_string());
+                    return parsed;
+                };
+                match value.trim().parse::<usize>() {
+                    Ok(count) if count > 0 => parsed.max_in_flight_per_worker = Some(count),
+                    _ => {
+                        parsed.error = Some("server set-policy --max-in-flight-per-worker must be a positive integer".to_string());
+                        return parsed;
+                    }
+                }
+                index += 2;
+            }
+            "--client-id" | "-client-id" | "--client" | "-client" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("server instances requires a value after --client-id".to_string());
+                    return parsed;
+                };
+                parsed.client_id = Some(value.to_string());
+                index += 2;
+            }
+            "--session-id" | "-session-id" | "--chat" | "-chat" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("server instances requires a value after --session-id".to_string());
+                    return parsed;
+                };
+                parsed.session_id = Some(value.to_string());
+                index += 2;
+            }
+            "--project-root" | "-project-root" | "--project" | "-project" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("server instances requires a value after --project-root".to_string());
+                    return parsed;
+                };
+                parsed.project_root = Some(value.to_string());
+                index += 2;
+            }
+            "--transport" | "-transport" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error =
+                        Some("server instances requires a value after --transport".to_string());
+                    return parsed;
+                };
+                parsed.transport = Some(value.to_string());
+                index += 2;
+            }
+            "--metadata-json" | "-metadata-json" => {
+                let Some(value) = args.get(index + 1) else {
+                    parsed.error = Some(
+                        "server instances requires a JSON value after --metadata-json".to_string(),
+                    );
+                    return parsed;
+                };
+                parsed.metadata_json = Some(value.to_string());
+                index += 2;
+            }
+            "--refresh" | "--refresh-registry" | "-refresh-registry" => {
                 parsed.refresh = true;
+                index += 1;
+            }
+            "--auto" | "--auto-mode" => {
+                parsed.auto_mode = true;
+                parsed.auto_install = true;
+                index += 1;
+            }
+            "--auto-install" | "--apply" => {
+                parsed.auto_install = true;
+                index += 1;
+            }
+            "--allow-review" | "--review-ok" => {
+                parsed.allow_review_install = true;
                 index += 1;
             }
             "--dry-run" => {
@@ -260,7 +456,10 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
                     index += 1;
                     continue;
                 }
-                if parsed.action.as_deref() == Some("install") {
+                if matches!(
+                    parsed.action.as_deref(),
+                    Some("install") | Some("discover") | Some("auto")
+                ) {
                     let value = match parsed.name_filter.take() {
                         Some(existing) if !existing.trim().is_empty() => {
                             format!("{} {}", existing, args[index])
@@ -273,7 +472,12 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
                 }
                 if matches!(
                     parsed.action.as_deref(),
-                    Some("add") | Some("remove") | Some("enable") | Some("disable") | Some("test")
+                    Some("add")
+                        | Some("remove")
+                        | Some("enable")
+                        | Some("disable")
+                        | Some("test")
+                        | Some("set-policy")
                 ) && parsed.name_filter.is_none()
                 {
                     parsed.name_filter = Some(args[index].to_string());

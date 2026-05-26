@@ -1,0 +1,68 @@
+{
+  "id": "popular-npm-sequential-thinking",
+  "suite": "popular-servers",
+  "category": "session-stateful",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Sequential-thinking is chat/session stateful",
+  "objective": "Clone or serialize thinking state per chat to prevent concurrent reasoning traces from mixing.",
+  "traffic": {
+    "clientArchetype": "claude-code",
+    "serverArchetype": "@modelcontextprotocol/server-sequential-thinking@2025.12.18",
+    "serverPolicies": [
+      "single-session",
+      "session-isolated"
+    ],
+    "signals": [
+      "stdio",
+      "sequential-thinking",
+      "thinking",
+      "memory-or-context"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateful",
+    "stateClass": "session-stateful",
+    "effectClass": "ephemeral-state",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-sequential-thinking 2025.12.18"
+  ],
+  "checks": [
+    "package bin=mcp-server-sequential-thinking",
+    "name signals session scratchpad"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

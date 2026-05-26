@@ -1,0 +1,67 @@
+{
+  "id": "popular-npm-heroku",
+  "suite": "popular-servers",
+  "category": "cloud-admin",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": false,
+  "title": "Heroku platform MCP is cloud-admin state",
+  "objective": "Platform/admin APIs are credential-scoped single-writer.",
+  "traffic": {
+    "clientArchetype": "cursor-cloud-agents",
+    "serverArchetype": "@heroku/mcp-server@1.2.2",
+    "serverPolicies": [
+      "single-writer",
+      "credential-lock"
+    ],
+    "signals": [
+      "stdio",
+      "heroku",
+      "cloud-admin",
+      "external-api",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "review-or-unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @heroku/mcp-server 1.2.2"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says Heroku Platform MCP Server",
+    "cloud platform state can mutate apps/config"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

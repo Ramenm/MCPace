@@ -17,7 +17,8 @@ use crate::hub::leases::{self, RuntimeLeaseAcquireResult, RuntimeLeaseRequest};
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_sources;
-use std::collections::BTreeSet;
+use std::collections::{hash_map::DefaultHasher, BTreeSet};
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicBool, AtomicUsize, Ordering},
@@ -250,8 +251,8 @@ pub fn call_tool_with_context(
         ("name", JsonValue::string(tool_name)),
         ("arguments", arguments.clone()),
     ]);
-    let result = if server.source_type == "http" {
-        run_http_request(server, "tools/call", Some(call_params), effective_timeout)?
+    let result = match if server.source_type == "http" {
+        run_http_request(server, "tools/call", Some(call_params), effective_timeout)
     } else {
         run_stdio_request(
             root_path,
@@ -260,11 +261,43 @@ pub fn call_tool_with_context(
             Some(call_params),
             effective_timeout,
             heartbeat_lost,
-        )?
+        )
+    } {
+        Ok(value) => value,
+        Err(error) => {
+            log_tool_call_audit(
+                root_path,
+                server_name,
+                tool_name,
+                arguments,
+                context,
+                false,
+                false,
+                false,
+                None,
+                None,
+                Some(&error),
+            );
+            return Err(error);
+        }
     };
     let lease_outcome = finalize_upstream_lease(lease)?;
+    let lease_id_for_audit = lease_outcome.lease_id.clone();
     let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
     let upstream_ok = !upstream_is_error;
+    log_tool_call_audit(
+        root_path,
+        server_name,
+        tool_name,
+        arguments,
+        context,
+        true,
+        upstream_ok,
+        false,
+        lease_id_for_audit.as_deref(),
+        None,
+        None,
+    );
 
     let mut entries = vec![
         ("ok".to_string(), JsonValue::bool(upstream_ok)),
@@ -323,6 +356,7 @@ pub fn call_tool_with_pooled_context(
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
     let pool_key = upstream_session_key(root_path, server, context);
+    let audit_pool_key = pool_key.clone();
     let (result, pool_outcome) = {
         let mut pool = pool
             .lock()
@@ -338,7 +372,7 @@ pub fn call_tool_with_pooled_context(
             &pool_key,
             &mut pool,
         )?;
-        let (result, mut outcome) = pool.call_tool(
+        let (result, mut outcome) = match pool.call_tool(
             UpstreamPoolInvocation {
                 root_path,
                 server,
@@ -348,13 +382,45 @@ pub fn call_tool_with_pooled_context(
             },
             tool_name,
             arguments,
-        )?;
+        ) {
+            Ok(value) => value,
+            Err(error) => {
+                log_tool_call_audit(
+                    root_path,
+                    server_name,
+                    tool_name,
+                    arguments,
+                    context,
+                    false,
+                    false,
+                    true,
+                    None,
+                    Some(&audit_pool_key),
+                    Some(&error),
+                );
+                return Err(error);
+            }
+        };
         outcome.hit = initial_pool_hit;
         (result, outcome)
     };
     let lease_outcome = finalize_upstream_lease(lease)?;
+    let lease_id_for_audit = lease_outcome.lease_id.clone();
     let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
     let upstream_ok = !upstream_is_error;
+    log_tool_call_audit(
+        root_path,
+        server_name,
+        tool_name,
+        arguments,
+        context,
+        true,
+        upstream_ok,
+        true,
+        lease_id_for_audit.as_deref(),
+        Some(&audit_pool_key),
+        None,
+    );
 
     let mut entries = vec![
         ("ok".to_string(), JsonValue::bool(upstream_ok)),
@@ -413,7 +479,7 @@ pub fn call_tools_with_context(
     let results = if server.source_type == "http" {
         let mut results = Vec::new();
         for (index, call) in calls.iter().enumerate() {
-            let result = run_http_request(
+            let result = match run_http_request(
                 server,
                 "tools/call",
                 Some(JsonValue::object([
@@ -421,7 +487,25 @@ pub fn call_tools_with_context(
                     ("arguments", call.arguments.clone()),
                 ])),
                 effective_timeout,
-            )?;
+            ) {
+                Ok(value) => value,
+                Err(error) => {
+                    log_tool_batch_audit(
+                        root_path,
+                        server_name,
+                        calls,
+                        context,
+                        false,
+                        false,
+                        None,
+                        None,
+                        0,
+                        calls.len(),
+                        Some(&error),
+                    );
+                    return Err(error);
+                }
+            };
             let upstream_is_error =
                 json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
             let upstream_ok = !upstream_is_error;
@@ -436,15 +520,47 @@ pub fn call_tools_with_context(
         }
         results
     } else {
-        run_stdio_tool_calls(root_path, server, calls, effective_timeout, heartbeat_lost)?
+        match run_stdio_tool_calls(root_path, server, calls, effective_timeout, heartbeat_lost) {
+            Ok(value) => value,
+            Err(error) => {
+                log_tool_batch_audit(
+                    root_path,
+                    server_name,
+                    calls,
+                    context,
+                    false,
+                    false,
+                    None,
+                    None,
+                    0,
+                    calls.len(),
+                    Some(&error),
+                );
+                return Err(error);
+            }
+        }
     };
     let lease_outcome = finalize_upstream_lease(lease)?;
+    let lease_id_for_audit = lease_outcome.lease_id.clone();
     let upstream_ok_count = results
         .iter()
         .filter(|item| json_helpers::bool_at_path(item, &["upstreamOk"]).unwrap_or(false))
         .count();
     let upstream_failed_count = results.len().saturating_sub(upstream_ok_count);
     let upstream_ok = upstream_failed_count == 0;
+    log_tool_batch_audit(
+        root_path,
+        server_name,
+        calls,
+        context,
+        true,
+        false,
+        lease_id_for_audit.as_deref(),
+        None,
+        upstream_ok_count,
+        upstream_failed_count,
+        None,
+    );
 
     let mut entries = vec![
         ("ok".to_string(), JsonValue::bool(upstream_ok)),
@@ -498,6 +614,7 @@ pub fn call_tools_with_pooled_context(
     let lease = acquire_upstream_lease(root_path, server_name, context, effective_timeout)?;
     let heartbeat_lost = lease.heartbeat_lost_flag();
     let pool_key = upstream_session_key(root_path, server, context);
+    let audit_pool_key = pool_key.clone();
     let (results, pool_outcome) = {
         let mut pool = pool
             .lock()
@@ -513,7 +630,7 @@ pub fn call_tools_with_pooled_context(
             &pool_key,
             &mut pool,
         )?;
-        let (results, mut outcome) = pool.call_tools(
+        let (results, mut outcome) = match pool.call_tools(
             UpstreamPoolInvocation {
                 root_path,
                 server,
@@ -522,17 +639,49 @@ pub fn call_tools_with_pooled_context(
                 lease_lost: heartbeat_lost,
             },
             calls,
-        )?;
+        ) {
+            Ok(value) => value,
+            Err(error) => {
+                log_tool_batch_audit(
+                    root_path,
+                    server_name,
+                    calls,
+                    context,
+                    false,
+                    true,
+                    None,
+                    Some(&audit_pool_key),
+                    0,
+                    calls.len(),
+                    Some(&error),
+                );
+                return Err(error);
+            }
+        };
         outcome.hit = initial_pool_hit;
         (results, outcome)
     };
     let lease_outcome = finalize_upstream_lease(lease)?;
+    let lease_id_for_audit = lease_outcome.lease_id.clone();
     let upstream_ok_count = results
         .iter()
         .filter(|item| json_helpers::bool_at_path(item, &["upstreamOk"]).unwrap_or(false))
         .count();
     let upstream_failed_count = results.len().saturating_sub(upstream_ok_count);
     let upstream_ok = upstream_failed_count == 0;
+    log_tool_batch_audit(
+        root_path,
+        server_name,
+        calls,
+        context,
+        true,
+        true,
+        lease_id_for_audit.as_deref(),
+        Some(&audit_pool_key),
+        upstream_ok_count,
+        upstream_failed_count,
+        None,
+    );
 
     let mut entries = vec![
         ("ok".to_string(), JsonValue::bool(upstream_ok)),
@@ -982,6 +1131,189 @@ fn wildcard_match(pattern: &str, value: &str) -> bool {
     }
 
     pattern.ends_with('*') || rest.is_empty()
+}
+
+#[allow(clippy::too_many_arguments)]
+fn log_tool_call_audit(
+    root_path: &Path,
+    server_name: &str,
+    tool_name: &str,
+    arguments: &JsonValue,
+    context: Option<&UpstreamLeaseContext>,
+    bridge_ok: bool,
+    upstream_ok: bool,
+    pooled: bool,
+    lease_id: Option<&str>,
+    pool_key: Option<&UpstreamSessionKey>,
+    error: Option<&str>,
+) {
+    let upstream_is_error = bridge_ok && !upstream_ok;
+    let level = if bridge_ok && upstream_ok {
+        "info"
+    } else {
+        "warn"
+    };
+    let trace = upstream_session_trace(server_name, context, pool_key);
+    let _ = crate::hub::runtime::append_log(
+        root_path,
+        level,
+        "tool_call_audit",
+        &[
+            ("server", JsonValue::string(server_name)),
+            ("tool", JsonValue::string(tool_name)),
+            ("bridgeOk", JsonValue::bool(bridge_ok)),
+            ("upstreamOk", JsonValue::bool(upstream_ok)),
+            ("upstreamIsError", JsonValue::bool(upstream_is_error)),
+            ("pooled", JsonValue::bool(pooled)),
+            (
+                "leaseId",
+                optional_json_string(lease_id.map(str::to_string)),
+            ),
+            ("trace", JsonValue::string(trace)),
+            (
+                "argumentsFingerprint",
+                JsonValue::string(argument_fingerprint(arguments)),
+            ),
+            ("clientId", context_field(context, "client_id")),
+            ("sessionId", context_field(context, "session_id")),
+            ("projectRoot", context_field(context, "project_root")),
+            ("transport", context_field(context, "transport")),
+            ("error", optional_json_string(error.map(str::to_string))),
+        ],
+    );
+}
+
+#[allow(clippy::too_many_arguments)]
+fn log_tool_batch_audit(
+    root_path: &Path,
+    server_name: &str,
+    calls: &[UpstreamToolCall],
+    context: Option<&UpstreamLeaseContext>,
+    bridge_ok: bool,
+    pooled: bool,
+    lease_id: Option<&str>,
+    pool_key: Option<&UpstreamSessionKey>,
+    upstream_ok_count: usize,
+    upstream_failed_count: usize,
+    error: Option<&str>,
+) {
+    let upstream_ok = bridge_ok && upstream_failed_count == 0;
+    let level = if bridge_ok && upstream_ok {
+        "info"
+    } else {
+        "warn"
+    };
+    let trace = upstream_session_trace(server_name, context, pool_key);
+    let tools = calls
+        .iter()
+        .map(|call| JsonValue::string(call.tool.clone()));
+    let fingerprints = calls
+        .iter()
+        .map(|call| JsonValue::string(argument_fingerprint(&call.arguments)));
+    let _ = crate::hub::runtime::append_log(
+        root_path,
+        level,
+        "tool_batch_audit",
+        &[
+            ("server", JsonValue::string(server_name)),
+            ("bridgeOk", JsonValue::bool(bridge_ok)),
+            ("upstreamOk", JsonValue::bool(upstream_ok)),
+            ("upstreamOkCount", JsonValue::number(upstream_ok_count)),
+            (
+                "upstreamFailedCount",
+                JsonValue::number(upstream_failed_count),
+            ),
+            ("callCount", JsonValue::number(calls.len())),
+            ("tools", JsonValue::array(tools)),
+            ("argumentsFingerprints", JsonValue::array(fingerprints)),
+            ("pooled", JsonValue::bool(pooled)),
+            (
+                "leaseId",
+                optional_json_string(lease_id.map(str::to_string)),
+            ),
+            ("trace", JsonValue::string(trace)),
+            ("clientId", context_field(context, "client_id")),
+            ("sessionId", context_field(context, "session_id")),
+            ("projectRoot", context_field(context, "project_root")),
+            ("transport", context_field(context, "transport")),
+            ("error", optional_json_string(error.map(str::to_string))),
+        ],
+    );
+}
+
+fn argument_fingerprint(arguments: &JsonValue) -> String {
+    let compact = arguments.to_compact_string();
+    let mut hasher = DefaultHasher::new();
+    compact.hash(&mut hasher);
+    format!("len{}-{:016x}", compact.len(), hasher.finish())
+}
+
+fn upstream_session_trace(
+    server_name: &str,
+    context: Option<&UpstreamLeaseContext>,
+    pool_key: Option<&UpstreamSessionKey>,
+) -> String {
+    if let Some(key) = pool_key {
+        return format!(
+            "chat={} project={} client={} -> {}#{}",
+            compact_trace_value(&key.session_id),
+            compact_trace_value(&key.project_root),
+            compact_trace_value(&key.client_id),
+            server_name,
+            short_hash(&format!(
+                "{}|{}|{}|{}",
+                key.server_name, key.session_id, key.project_root, key.metadata_fingerprint
+            ))
+        );
+    }
+    let client = context
+        .and_then(|value| value.client_id.as_ref())
+        .map(String::as_str)
+        .unwrap_or("mcpace-upstream-bridge");
+    let session = context
+        .and_then(|value| value.session_id.as_ref())
+        .map(String::as_str)
+        .unwrap_or("anonymous-session");
+    let project = context
+        .and_then(|value| value.project_root.as_ref())
+        .map(String::as_str)
+        .unwrap_or("unresolved-project");
+    format!(
+        "chat={} project={} client={} -> {}#{}",
+        compact_trace_value(session),
+        compact_trace_value(project),
+        compact_trace_value(client),
+        server_name,
+        short_hash(&format!("{}|{}|{}", server_name, session, project))
+    )
+}
+
+fn short_hash(value: &str) -> String {
+    let mut hasher = DefaultHasher::new();
+    value.hash(&mut hasher);
+    format!("{:08x}", hasher.finish() & 0xffff_ffff)
+}
+
+fn compact_trace_value(value: &str) -> String {
+    let value = value.trim();
+    let mut chars = value.chars();
+    let prefix = chars.by_ref().take(48).collect::<String>();
+    if chars.next().is_some() {
+        format!("{}…", prefix)
+    } else {
+        prefix
+    }
+}
+
+fn context_field(context: Option<&UpstreamLeaseContext>, key: &str) -> JsonValue {
+    let value = match key {
+        "client_id" => context.and_then(|context| context.client_id.clone()),
+        "session_id" => context.and_then(|context| context.session_id.clone()),
+        "project_root" => context.and_then(|context| context.project_root.clone()),
+        "transport" => context.and_then(|context| context.transport.clone()),
+        _ => None,
+    };
+    optional_json_string(value)
 }
 
 fn acquire_upstream_lease(

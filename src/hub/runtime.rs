@@ -248,7 +248,7 @@ pub(super) fn write_health_metadata(
     )
 }
 
-pub(super) fn append_log(
+pub(crate) fn append_log(
     root_path: &Path,
     level: &str,
     event: &str,

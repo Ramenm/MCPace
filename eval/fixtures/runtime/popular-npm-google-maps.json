@@ -1,0 +1,70 @@
+{
+  "id": "popular-npm-google-maps",
+  "suite": "popular-servers",
+  "category": "stateless-external-read",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Google Maps is external-read with credential budget",
+  "objective": "Treat maps/geocode/directions as external read surface unless write tools appear.",
+  "traffic": {
+    "clientArchetype": "windsurf",
+    "serverArchetype": "@modelcontextprotocol/server-google-maps@0.6.2",
+    "serverPolicies": [
+      "multi-reader",
+      "rate-limited"
+    ],
+    "signals": [
+      "stdio",
+      "google-maps",
+      "maps_geocode",
+      "maps_directions",
+      "external-read",
+      "credentials-or-auth"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateless",
+    "stateClass": "stateless",
+    "effectClass": "external-read",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-pack @modelcontextprotocol/server-google-maps 0.6.2"
+  ],
+  "checks": [
+    "tool names are geocode/search/directions/elevation",
+    "no create/update/delete signals"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

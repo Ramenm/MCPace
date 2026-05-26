@@ -23,6 +23,7 @@ pub struct McpServerWriteOptions {
     pub enabled: bool,
     pub dry_run: bool,
     pub force: bool,
+    pub profile_hints: Vec<String>,
 }
 
 #[derive(Clone, Debug)]

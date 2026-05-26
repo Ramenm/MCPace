@@ -1,0 +1,66 @@
+{
+  "id": "popular-pypi-time",
+  "suite": "popular-servers",
+  "category": "stateless-local",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Time server is stateless local utility",
+  "objective": "Share workers because time/timezone queries do not mutate server state.",
+  "traffic": {
+    "clientArchetype": "gemini-cli",
+    "serverArchetype": "mcp-server-time@2026.1.26",
+    "serverPolicies": [
+      "multi-reader"
+    ],
+    "signals": [
+      "stdio",
+      "time",
+      "timezone",
+      "date",
+      "readonly-tools"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateless",
+    "stateClass": "stateless",
+    "effectClass": "read-only",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "pip-download mcp-server-time 2026.1.26"
+  ],
+  "checks": [
+    "PyPI summary says time queries/timezone conversions"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "pypi-metadata",
+    "entry-points",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}

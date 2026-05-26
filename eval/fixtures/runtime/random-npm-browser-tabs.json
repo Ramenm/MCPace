@@ -1,0 +1,68 @@
+{
+  "id": "random-npm-browser-tabs",
+  "suite": "browser-random-sweep",
+  "category": "local-browser-session",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": true,
+  "title": "Browser tabs reader still touches host browser state",
+  "objective": "Even read-ish browser tab inventory depends on live host browser state.",
+  "traffic": {
+    "clientArchetype": "kiro-cli",
+    "serverArchetype": "@kazuph/mcp-browser-tabs@1.2.1",
+    "serverPolicies": [
+      "single-session",
+      "host-lock",
+      "plan-only"
+    ],
+    "signals": [
+      "stdio",
+      "browser-or-desktop",
+      "chrome",
+      "tabs",
+      "host-profile"
+    ]
+  },
+  "expected": {
+    "runtimeType": "interactive",
+    "stateClass": "host-stateful",
+    "effectClass": "host-mutating",
+    "concurrencyPolicy": "single-session",
+    "autoAction": "plan-only-unless-approved-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "npm-view @kazuph/mcp-browser-tabs 1.2.1"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says Chrome browser tabs",
+    "host browser state is shared"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

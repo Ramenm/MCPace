@@ -1,0 +1,67 @@
+{
+  "id": "popular-npm-mapbox",
+  "suite": "popular-servers",
+  "category": "stateless-external-read",
+  "proofLayer": "npm-view-metadata-only",
+  "heldOut": false,
+  "title": "Mapbox is external-read geospatial lookup",
+  "objective": "Map/geocoding APIs are budgeted multi-reader unless tools show mutations.",
+  "traffic": {
+    "clientArchetype": "windsurf",
+    "serverArchetype": "@mapbox/mcp-server@0.11.0",
+    "serverPolicies": [
+      "multi-reader",
+      "provider-budget"
+    ],
+    "signals": [
+      "stdio",
+      "mapbox",
+      "maps",
+      "geocoding",
+      "external-read-api"
+    ]
+  },
+  "expected": {
+    "runtimeType": "stateless",
+    "stateClass": "stateless",
+    "effectClass": "external-read",
+    "concurrencyPolicy": "multi-reader",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "npm-view-metadata-only",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "approved-sandbox-probe"
+  },
+  "evidenceSources": [
+    "npm-view @mapbox/mcp-server 0.11.0"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-view-manifest",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "description says Mapbox MCP server",
+    "map lookup is external-read"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

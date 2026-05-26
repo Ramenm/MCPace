@@ -23,6 +23,9 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
             return run_server_with_action("install", &args[1..], root_path, stdout, stderr)
         }
         "servers" => return run_server_with_action("list", &args[1..], root_path, stdout, stderr),
+        "auto" | "autodiscover" | "server-auto" => {
+            return run_server_with_action("auto", &args[1..], root_path, stdout, stderr)
+        }
         "capabilities" | "server-capabilities" => {
             return run_server_with_action("capabilities", &args[1..], root_path, stdout, stderr)
         }
@@ -164,7 +167,10 @@ fn run_planned(name: &str, stderr: &mut dyn Write) -> i32 {
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "MCPace");
-    let _ = writeln!(stdout, "One MCP endpoint for all your AI clients.");
+    let _ = writeln!(
+        stdout,
+        "Local MCP process scheduler for concurrent AI agents."
+    );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Usage:");
     let _ = writeln!(stdout, "  mcpace up");
@@ -172,13 +178,21 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "  mcpace install <path|package|url|command...> [--as <name>] [--dry-run]"
     );
+    let _ = writeln!(
+        stdout,
+        "  mcpace auto [query] [--dry-run]        # one-command server discovery/setup/probe"
+    );
     let _ = writeln!(stdout, "  mcpace serve [start|stop|status]");
     let _ = writeln!(
         stdout,
-        "  mcpace server <list|test|remove|enable|disable|sources>"
+        "  mcpace server <auto|list|test|remove|enable|disable|sources>"
     );
     let _ = writeln!(stdout, "  mcpace client <install|export|list|restore>");
     let _ = writeln!(stdout, "  mcpace connect [client]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace lab [--json]               # evidence corpus for auto-classifier decisions"
+    );
     let _ = writeln!(stdout, "  mcpace doctor [--json]");
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Quickstart:");

@@ -3,7 +3,7 @@ mod launcher;
 pub(crate) mod leases;
 mod lifecycle;
 mod model;
-mod runtime;
+pub(crate) mod runtime;
 mod status;
 
 use self::args::{parse_args, write_help};

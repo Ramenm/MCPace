@@ -11,7 +11,8 @@ const REQUIRED_DOCS = new Set([
   'configuration.md',
   'security.md',
   'supported-clients.md',
-  'troubleshooting.md'
+  'troubleshooting.md',
+  'lab-harness.md'
 ]);
 const REMOVED_ROOT_DOCS = [
   'CITATION.cff',
@@ -83,8 +84,9 @@ test('root README is a short landing page and detailed docs live under docs/', (
   const lines = readme.trimEnd().split(/\r?\n/);
   assert.ok(lines.length <= 60, `README should stay compact, got ${lines.length} lines`);
   assert.match(readme, /^# MCPace$/m);
-  assert.match(readme, /One MCP endpoint for all your AI clients\./);
+  assert.match(readme, /MCPace runs MCP servers at the right concurrency\./);
   assert.match(readme, /mcpace up/);
+  assert.match(readme, /server set-policy/);
   assert.match(readme, /does \*\*not\*\* add a filesystem server/);
   assert.doesNotMatch(readme, /UpstreamSessionPool|proof gate|release harness|operator manual/i);
 });
@@ -118,7 +120,7 @@ test('source bundle excludes stale public-repo docs and heavyweight artifacts', 
 
 test('release manifest matches the normalized bundle contract', () => {
   const manifest = JSON.parse(readText('release-manifest.json'));
-  for (const required of ['README.md', 'docs/README.md', 'reports/summary.md', 'tests/node', 'packages/npm/cli', 'scripts/check-node-syntax.mjs']) {
+  for (const required of ['README.md', 'docs/README.md', 'docs/lab-harness.md', 'reports/summary.md', 'tests/node', 'packages/npm/cli', 'catalog', 'manifests', 'eval', 'scripts/check-node-syntax.mjs']) {
     assert.ok(manifest.includePaths.includes(required), `manifest missing ${required}`);
   }
   for (const removed of [...REMOVED_ROOT_DOCS, ...REMOVED_LEGACY_CONFIGS]) {

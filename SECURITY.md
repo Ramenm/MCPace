@@ -51,6 +51,17 @@ Security-sensitive upstream concerns include:
 - tool-risk allow flags;
 - malicious or compromised upstream packages.
 
+## Dynamic discovery and install safety
+
+`mcpace auto` may search local catalogs and a cached/refreshable MCP Registry response, but auto mode is trust-gated. MCPace must not silently execute a random public MCP server package just because it matched a query.
+
+Default install rules:
+
+- `mcpace auto` refreshes stale registry metadata, then installs only `trusted` or `approved` candidates;
+- `review` matches require a local catalog/config trust decision or an advanced review flag;
+- unknown, blocked, deprecated, deleted, or ambiguous candidates stay plan-only;
+- after any trusted install, auto mode runs the same live `initialize`/`tools/list` probe path used by `mcpace server test <name> --refresh` unless run with `--dry-run`.
+
 ## Logging and diagnostics
 
 Diagnostics should remain bounded and should redact likely secrets such as tokens, API keys, passwords, bearer values, private keys, and authorization headers. If you find unredacted secret material in logs, reports, dashboard output, or CLI diagnostics, report it privately.

@@ -92,6 +92,60 @@ fn normalize_scenario_record(value: &JsonValue) -> Option<LabScenarioRecord> {
             &["traffic", "clientArchetype"],
         ))
         .unwrap_or_else(|| "unknown".to_string()),
+        server_archetype: clean_string(json_helpers::string_at_path(
+            value,
+            &["traffic", "serverArchetype"],
+        ))
+        .unwrap_or_else(|| "unknown-mcp-server".to_string()),
+        expected_runtime_type: clean_string(json_helpers::string_at_path(
+            value,
+            &["expected", "runtimeType"],
+        ))
+        .unwrap_or_else(|| "unknown".to_string()),
+        expected_state_class: clean_string(json_helpers::string_at_path(
+            value,
+            &["expected", "stateClass"],
+        ))
+        .unwrap_or_else(|| "unknown-conservative".to_string()),
+        expected_effect_class: clean_string(json_helpers::string_at_path(
+            value,
+            &["expected", "effectClass"],
+        ))
+        .unwrap_or_else(|| "unknown".to_string()),
+        expected_concurrency_policy: clean_string(json_helpers::string_at_path(
+            value,
+            &["expected", "concurrencyPolicy"],
+        ))
+        .unwrap_or_else(|| "single-writer".to_string()),
+        expected_auto_action: clean_string(json_helpers::string_at_path(
+            value,
+            &["expected", "autoAction"],
+        ))
+        .unwrap_or_else(|| "plan-only".to_string()),
+        confidence: clean_string(json_helpers::string_at_path(
+            value,
+            &["expected", "confidence"],
+        ))
+        .unwrap_or_else(|| "metadata-only".to_string()),
+        trust_boundary: clean_string(json_helpers::string_at_path(
+            value,
+            &["expected", "trustBoundary"],
+        ))
+        .unwrap_or_else(|| "unknown-code-is-plan-only".to_string()),
+        safe_probe_mode: clean_string(json_helpers::string_at_path(
+            value,
+            &["expected", "safeProbeMode"],
+        ))
+        .unwrap_or_else(|| "metadata-only-no-exec".to_string()),
+        evidence_sources: json_helpers::strings_from_array(
+            value.get("evidenceSources").and_then(JsonValue::as_array),
+        ),
+        metadata_layers: json_helpers::strings_from_array(
+            value.get("metadataLayers").and_then(JsonValue::as_array),
+        ),
+        decision_trace: json_helpers::strings_from_array(
+            value.get("decisionTrace").and_then(JsonValue::as_array),
+        ),
         server_policies: json_helpers::strings_from_array(json_helpers::array_at_path(
             value,
             &["traffic", "serverPolicies"],

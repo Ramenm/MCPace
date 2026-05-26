@@ -8,6 +8,9 @@
     "serverId",
     "source",
     "parallelSafetyClass",
+    "runtimeType",
+    "stateClass",
+    "effectClass",
     "poolModel",
     "workerPoolKey",
     "maxWorkers",
@@ -145,6 +148,50 @@
     "parallelSafetyClass": {
       "type": "string",
       "minLength": 1
+    },
+    "runtimeType": {
+      "type": "string",
+      "enum": [
+        "stateless",
+        "stateful",
+        "external",
+        "interactive",
+        "side-effecting",
+        "legacy",
+        "package-artifact",
+        "unknown"
+      ]
+    },
+    "stateClass": {
+      "type": "string",
+      "enum": [
+        "stateless",
+        "session-stateful",
+        "project-stateful",
+        "credential-stateful",
+        "host-stateful",
+        "remote-session-stateful",
+        "unknown-stateful",
+        "legacy-transport",
+        "not-a-server",
+        "unknown-conservative"
+      ]
+    },
+    "effectClass": {
+      "type": "string",
+      "enum": [
+        "read-only",
+        "ephemeral-state",
+        "project-mutating",
+        "external-read",
+        "external-mutating",
+        "external-unknown",
+        "host-mutating",
+        "process-exec",
+        "unknown-mutating",
+        "not-runnable",
+        "unknown"
+      ]
     }
   },
   "additionalProperties": false

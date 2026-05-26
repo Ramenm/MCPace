@@ -1,0 +1,123 @@
+{
+  "schema": "mcpace.indirectEvidenceModel.v1",
+  "generatedAt": "2026-05-26T00:00:00Z",
+  "principle": "Package/server names are identity, not semantic truth. MCPace may use names only as weak candidate-search evidence; policy decisions require indirect evidence or safe MCP probes.",
+  "nameEvidencePolicy": {
+    "packageName": "weak-index-only",
+    "serverDisplayName": "weak-index-only",
+    "installSpec": "launcher-only-not-policy",
+    "toolName": "action-surface-hint-only; combine with description, inputSchema, annotations and transport",
+    "neverRelaxFromNameOnly": true
+  },
+  "indirectEvidenceRanked": [
+    {
+      "rank": 1,
+      "id": "observed-initialize",
+      "source": "safe initialize probe",
+      "whyStrong": "proves the process is an MCP server and exposes serverInfo/capabilities/listChanged without calling tools",
+      "canRelaxPolicy": "only when combined with tools/resources surface"
+    },
+    {
+      "rank": 2,
+      "id": "observed-tools-list",
+      "source": "safe tools/list probe",
+      "whyStrong": "exposes actual tool surface, descriptions, JSON Schemas and annotations without executing tools",
+      "canRelaxPolicy": "yes for read-only/stateless when schemas and annotations agree; annotations remain untrusted hints"
+    },
+    {
+      "rank": 3,
+      "id": "entrypoint-and-package-shape",
+      "source": "package.json/pyproject/PKG-INFO/bin/exports/main/file list",
+      "whyStrong": "separates runnable server from SDK/example/library and identifies launcher shape",
+      "canRelaxPolicy": "no; useful for plan-only vs runnable"
+    },
+    {
+      "rank": 4,
+      "id": "transport-and-auth-shape",
+      "source": "stdio/http/url/env/header requirements/registry package type",
+      "whyStrong": "distinguishes local process, remote HTTP, OAuth/API-token and credential-bound servers",
+      "canRelaxPolicy": "no; choose conservative binding first"
+    },
+    {
+      "rank": 5,
+      "id": "dependency-families",
+      "source": "manifest dependencies grouped by family, not individual dependency names",
+      "whyStrong": "playwright/puppeteer/sql drivers/ssh/kubectl SDKs reveal runtime family",
+      "canRelaxPolicy": "no; dependencies are supporting evidence only"
+    },
+    {
+      "rank": 6,
+      "id": "resource-prompt-surface",
+      "source": "resources/list and prompts/list",
+      "whyStrong": "detects data/context surfaces without action tools",
+      "canRelaxPolicy": "sometimes, if tools are absent or read-only"
+    },
+    {
+      "rank": 7,
+      "id": "runtime-observations",
+      "source": "sandbox startup, timeout, stderr class, list_changed notifications",
+      "whyStrong": "detects unstable, dynamic or host-coupled behavior",
+      "canRelaxPolicy": "yes downward; upward only with tools/list evidence"
+    },
+    {
+      "rank": 8,
+      "id": "readme-description",
+      "source": "README and package description",
+      "whyStrong": "semantic clue when it mentions actual operations, auth scopes, required env, examples",
+      "canRelaxPolicy": "no; text can be stale or misleading"
+    }
+  ],
+  "decisionRules": [
+    "If evidence is name-only, set automaticAction=needs-safe-probe or unknown-conservative.",
+    "If package shape says SDK/client/example and there is no runnable bin/command, set plan-only.",
+    "If transport is remote HTTP with auth/env/header requirements, default credential-scoped until session behavior is observed.",
+    "If tools/list shows only read/get/list/search/query and schemas have no write/delete/update/create/send/deploy-like arguments, allow multi-reader with low maxInFlight first.",
+    "If tools/list shows write/delete/update/create/send/deploy/execute or env secrets/tenant/admin scopes, use single-writer or single-session.",
+    "If browser/device automation deps or tools show navigate/click/screenshot/evaluate, use host/remote session isolation.",
+    "If tool surface changes via listChanged, re-run classification and never widen policy during an active lease without fresh evidence."
+  ],
+  "random500SecondPassEvidence": {
+    "sampleCount": 500,
+    "automaticActions": {
+      "plan-only": 67,
+      "static-safe-policy": 236,
+      "needs-safe-probe": 188,
+      "blocked-high-risk": 9
+    },
+    "routingGroups": {
+      "sdk-or-example": 67,
+      "credential-provider": 127,
+      "transport-gateway": 30,
+      "project-filesystem": 13,
+      "external-read": 51,
+      "project-git": 8,
+      "dangerous-process": 9,
+      "database-connection": 33,
+      "browser": 26,
+      "project-analysis": 17,
+      "memory-context": 23,
+      "unknown-source": 88,
+      "project-database": 6,
+      "stateless-local": 1,
+      "browser-observation": 1
+    },
+    "evidenceSourceCounts": {
+      "npm-search": 500,
+      "npm-pack-dry-run-file-manifest": 130,
+      "npm-pack-tarball": 49,
+      "package.json": 49,
+      "readme": 48,
+      "file-list": 49
+    },
+    "nameOnlyOrWeakMetadataCount": 276,
+    "finding": "Metadata-only is useful for triage, but naming is too noisy. The classifier should treat direct names as search/display identifiers and depend on safe probes plus indirect runtime/package evidence for policy."
+  },
+  "minimalAutomaticPipeline": [
+    "search/catalog gives candidates, not policy",
+    "download/inspect manifest only in sandbox/cache",
+    "derive package shape, launcher, transport, auth/env hints, dependency families",
+    "if weak/conflicting, start server only in probe sandbox and call initialize + tools/list/resources/list/prompts/list",
+    "score evidence, pick simple user action, store detailed internal runtimeType/stateClass/effectClass",
+    "keep unknown conservative until observed evidence proves safe parallelism"
+  ]
+}

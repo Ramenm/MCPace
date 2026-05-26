@@ -1,0 +1,232 @@
+{
+  "schema": "mcpace.randomMcpAudit.v1",
+  "seed": "260526-random-heldout",
+  "method": "metadata-only random/held-out sample from npm-view/package artifact records; no random MCP code executed",
+  "sourceFiles": [
+    "eval/package-metadata-sweep.json",
+    "eval/fixtures/runtime/*.json"
+  ],
+  "sampleCount": 8,
+  "resultCounts": {
+    "interactive|host-stateful|host-mutating|single-session": 3,
+    "stateful|host-stateful|read-only|multi-reader": 1,
+    "stateless|stateless|external-read|multi-reader": 2,
+    "external|credential-stateful|external-mutating|single-writer": 1,
+    "stateful|project-stateful|read-only|isolated-per-project": 1
+  },
+  "records": [
+    {
+      "id": "random-npm-n8n-browser",
+      "serverArchetype": "@n8n/mcp-browser@0.5.0",
+      "signals": [
+        "stdio",
+        "browser-or-desktop",
+        "playwright",
+        "webdriver",
+        "safaridriver",
+        "automation",
+        "host-profile"
+      ],
+      "inferred": {
+        "runtimeType": "interactive",
+        "stateClass": "host-stateful",
+        "effectClass": "host-mutating",
+        "concurrencyPolicy": "single-session",
+        "autoAction": "plan-only-unless-approved-probe",
+        "confidence": "npm-view-metadata-only"
+      },
+      "looksCorrectBecause": [
+        "description says browser automation MCP tools",
+        "Playwright/WebDriver/SafariDriver signals imply host/browser session state",
+        "random package is not executed"
+      ],
+      "safety": "unknown-code-is-plan-only"
+    },
+    {
+      "id": "random-npm-browser-kit",
+      "serverArchetype": "@mcp-browser-kit/server@8.0.0",
+      "signals": [
+        "stdio",
+        "browser-or-desktop",
+        "mcp-browser",
+        "browser-kit",
+        "local-browsers",
+        "host-profile"
+      ],
+      "inferred": {
+        "runtimeType": "interactive",
+        "stateClass": "host-stateful",
+        "effectClass": "host-mutating",
+        "concurrencyPolicy": "single-session",
+        "autoAction": "plan-only-unless-approved-probe",
+        "confidence": "npm-view-metadata-only"
+      },
+      "looksCorrectBecause": [
+        "description says interact with local browsers",
+        "browser-kit substring is bounded as browser control",
+        "unknown package stays plan-only"
+      ],
+      "safety": "unknown-code-is-plan-only"
+    },
+    {
+      "id": "random-npm-browser-tabs-readonly",
+      "serverArchetype": "@kazuph/mcp-browser-tabs@1.2.1",
+      "signals": [
+        "stdio",
+        "browser-observation",
+        "chrome",
+        "tabs",
+        "read-only",
+        "host-profile"
+      ],
+      "inferred": {
+        "runtimeType": "stateful",
+        "stateClass": "host-stateful",
+        "effectClass": "read-only",
+        "concurrencyPolicy": "multi-reader",
+        "autoAction": "plan-only-unless-approved-probe",
+        "confidence": "npm-view-metadata-only"
+      },
+      "looksCorrectBecause": [
+        "description says retrieving Chrome browser tabs information",
+        "tabs/read-only signal chooses host-readonly instead of host-mutating",
+        "not executed in lab"
+      ],
+      "safety": "unknown-code-is-plan-only"
+    },
+    {
+      "id": "random-npm-playwright-browser-manager",
+      "serverArchetype": "@linatang/playwright-browser-manager-mcp@0.3.0",
+      "signals": [
+        "stdio",
+        "browser-or-desktop",
+        "playwright",
+        "multi-session",
+        "profile-isolation",
+        "auto-healing"
+      ],
+      "inferred": {
+        "runtimeType": "interactive",
+        "stateClass": "host-stateful",
+        "effectClass": "host-mutating",
+        "concurrencyPolicy": "single-session",
+        "autoAction": "plan-only-unless-approved-probe",
+        "confidence": "npm-view-metadata-only"
+      },
+      "looksCorrectBecause": [
+        "description says Playwright browser manager",
+        "profile isolation is evidence for session partitioning, not shared stateless execution",
+        "random package is plan-only"
+      ],
+      "safety": "unknown-code-is-plan-only"
+    },
+    {
+      "id": "random-npm-firecrawl-ambiguous",
+      "serverArchetype": "firecrawl-mcp@3.17.0",
+      "signals": [
+        "stdio",
+        "network-fetch",
+        "firecrawl",
+        "search",
+        "scrape",
+        "crawl",
+        "api-key",
+        "external-read-api"
+      ],
+      "inferred": {
+        "runtimeType": "stateless",
+        "stateClass": "stateless",
+        "effectClass": "external-read",
+        "concurrencyPolicy": "multi-reader",
+        "autoAction": "plan-only-unless-approved-probe",
+        "confidence": "package-artifact-plus-description"
+      },
+      "looksCorrectBecause": [
+        "description says search/scrape/crawl web content",
+        "provider budget prevents unbounded fanout",
+        "not treated as browser host automation"
+      ],
+      "safety": "unknown-code-is-plan-only"
+    },
+    {
+      "id": "random-npm-mapbox-read",
+      "serverArchetype": "@mapbox/mcp-server@0.11.0",
+      "signals": [
+        "stdio",
+        "external-read-api",
+        "mapbox",
+        "maps",
+        "geocode",
+        "api-key"
+      ],
+      "inferred": {
+        "runtimeType": "stateless",
+        "stateClass": "stateless",
+        "effectClass": "external-read",
+        "concurrencyPolicy": "multi-reader",
+        "autoAction": "plan-only-unless-approved-probe",
+        "confidence": "npm-view-metadata-only"
+      },
+      "looksCorrectBecause": [
+        "description says Mapbox MCP server",
+        "maps/geocode signals imply external read API",
+        "not cluster/admin/browser"
+      ],
+      "safety": "unknown-code-is-plan-only"
+    },
+    {
+      "id": "random-npm-kubernetes-admin",
+      "serverArchetype": "mcp-server-kubernetes@3.8.0",
+      "signals": [
+        "stdio",
+        "cluster-control",
+        "kubernetes",
+        "kubectl",
+        "helm",
+        "credential-profile",
+        "external-mutating"
+      ],
+      "inferred": {
+        "runtimeType": "external",
+        "stateClass": "credential-stateful",
+        "effectClass": "external-mutating",
+        "concurrencyPolicy": "single-writer",
+        "autoAction": "plan-only-unless-approved-probe",
+        "confidence": "npm-view-metadata-only"
+      },
+      "looksCorrectBecause": [
+        "description says interacting with Kubernetes clusters via kubectl",
+        "cluster-control signal dominates read-only list/query hints",
+        "random package is not executed"
+      ],
+      "safety": "unknown-code-is-plan-only"
+    },
+    {
+      "id": "random-npm-eslint-project-readonly",
+      "serverArchetype": "@eslint/mcp@0.3.5",
+      "signals": [
+        "stdio",
+        "project-analysis",
+        "eslint",
+        "lint",
+        "typescript",
+        "code-analysis",
+        "read-only"
+      ],
+      "inferred": {
+        "runtimeType": "stateful",
+        "stateClass": "project-stateful",
+        "effectClass": "read-only",
+        "concurrencyPolicy": "isolated-per-project",
+        "autoAction": "plan-only-unless-approved-probe",
+        "confidence": "npm-view-metadata-only"
+      },
+      "looksCorrectBecause": [
+        "description says ESLint",
+        "project-analysis implies project affinity",
+        "read-only effect prevents filesystem-writer classification"
+      ],
+      "safety": "unknown-code-is-plan-only"
+    }
+  ]
+}

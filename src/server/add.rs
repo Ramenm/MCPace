@@ -33,6 +33,7 @@ pub(super) fn run(
             enabled: !parsed.disabled,
             dry_run: parsed.dry_run,
             force: parsed.force,
+            profile_hints: Vec::new(),
         },
     ) {
         Ok(value) => value,

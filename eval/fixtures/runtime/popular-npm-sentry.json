@@ -1,0 +1,69 @@
+{
+  "id": "popular-npm-sentry",
+  "suite": "popular-servers",
+  "category": "credential-external-mutating",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Sentry is remote credential-scoped observability",
+  "objective": "Observability APIs can include issue updates, comments or assignments; keep single-writer until tools prove read-only.",
+  "traffic": {
+    "clientArchetype": "codex",
+    "serverArchetype": "@sentry/mcp-server@0.35.0",
+    "serverPolicies": [
+      "single-writer",
+      "credential-lock"
+    ],
+    "signals": [
+      "stdio",
+      "sentry",
+      "external-api",
+      "credentials-or-auth",
+      "observability"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "credential-stateful",
+    "effectClass": "external-mutating",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "approved-auto-install-then-probe",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "approved-catalog-can-probe",
+    "safeProbeMode": "approved-sandbox-probe"
+  },
+  "evidenceSources": [
+    "npm-pack @sentry/mcp-server 0.35.0"
+  ],
+  "metadataLayers": [
+    "registry-package-metadata",
+    "npm-package-json",
+    "npm-pack-file-list",
+    "readme-keyword-scan",
+    "semantic-name-description-signals",
+    "launcher-transport-command"
+  ],
+  "decisionTrace": [
+    "normalize package/transport metadata",
+    "extract bounded semantic signals",
+    "apply trust gate",
+    "map runtime classes to scheduler policy"
+  ],
+  "checks": [
+    "package name is Sentry MCP server",
+    "remote SaaS token is conflict domain"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report"
+  ]
+}

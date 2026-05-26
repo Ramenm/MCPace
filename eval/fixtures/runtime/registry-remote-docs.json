@@ -1,0 +1,68 @@
+{
+  "id": "registry-remote-docs",
+  "suite": "random-registry",
+  "category": "remote-read-mostly",
+  "proofLayer": "fixture-plus-package-metadata",
+  "heldOut": false,
+  "title": "Remote docs MCP is remote-session until probe proves stateless",
+  "objective": "Do not assume arbitrary Streamable HTTP docs servers are safe shared workers before initialize/tools-list.",
+  "traffic": {
+    "clientArchetype": "claude-api-connector",
+    "serverArchetype": "registry remote docs server sample",
+    "serverPolicies": [
+      "single-writer",
+      "remote-session"
+    ],
+    "signals": [
+      "streamable-http",
+      "docs",
+      "documentation",
+      "remote",
+      "tools-list-required"
+    ]
+  },
+  "expected": {
+    "runtimeType": "external",
+    "stateClass": "remote-session-stateful",
+    "effectClass": "external-unknown",
+    "concurrencyPolicy": "single-writer",
+    "autoAction": "plan-only-or-remote-connect",
+    "confidence": "package-metadata-fixture",
+    "trustBoundary": "unknown-code-is-plan-only",
+    "safeProbeMode": "metadata-only-no-exec"
+  },
+  "evidenceSources": [
+    "MCP Registry /v0/servers sample"
+  ],
+  "checks": [
+    "registry sample exposes remotes type=streamable-http",
+    "remote sessions can be many-client but still auth/session dependent"
+  ],
+  "requires": [
+    "registry-metadata-ingest",
+    "package-artifact-metadata-corpus",
+    "tools-list-evidence-model",
+    "runtime-type-classifier",
+    "state-class-classifier",
+    "effect-class-classifier",
+    "concurrency-policy-planner",
+    "trust-gated-autoinstall",
+    "unknown-plan-only-gate",
+    "lab-evidence-report",
+    "metadata-sweep-corpus",
+    "multi-source-evidence-ledger"
+  ],
+  "metadataLayers": [
+    "mcp-registry-server-json",
+    "transport-metadata",
+    "package-type-metadata",
+    "trust-catalog-rating",
+    "semantic-name-description-signals"
+  ],
+  "decisionTrace": [
+    "normalize transport/package metadata",
+    "extract bounded semantic signals",
+    "combine with trust boundary",
+    "choose conservative concurrency policy unless read-only evidence is strong"
+  ]
+}
