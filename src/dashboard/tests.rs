@@ -130,6 +130,63 @@ fn json_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn assert_dashboard_html_lacks(parts: &[&str]) {
+    let marker = parts.concat();
+    assert!(
+        !super::DASHBOARD_HTML.contains(&marker),
+        "dashboard HTML still contains removed marker: {}",
+        marker
+    );
+}
+
+#[test]
+fn dashboard_ui_exposes_production_cockpit_without_probe_loop_copy() {
+    assert!(super::DASHBOARD_HTML.contains("Production cockpit"));
+    assert!(super::DASHBOARD_HTML.contains("backend-check-button"));
+    assert!(super::DASHBOARD_HTML.contains("server-fleet-board"));
+    assert!(super::DASHBOARD_HTML.contains("function serverVerdict"));
+    assert!(super::DASHBOARD_HTML.contains("function serverDecision"));
+    assert!(super::DASHBOARD_HTML.contains("function serverViewModel"));
+    assert!(super::DASHBOARD_HTML.contains("function serverBucket"));
+    assert!(super::DASHBOARD_HTML.contains("function serverSensitivity"));
+    assert!(super::DASHBOARD_HTML.contains("reset group filter"));
+    assert!(super::DASHBOARD_HTML.contains("Run Test first"));
+    assert!(super::DASHBOARD_HTML.contains("server-guide"));
+    assert!(super::DASHBOARD_HTML.contains("function serverToolEvidence"));
+    assert!(super::DASHBOARD_HTML.contains("function normalizeProbeEvidence"));
+    assert!(super::DASHBOARD_HTML.contains("function serverEvidenceSummary"));
+    assert_dashboard_html_lacks(&["SERVER", "_USE", "_GUIDANCE"]);
+    assert_dashboard_html_lacks(&["function server", "Use", "Guidance"]);
+    assert_dashboard_html_lacks(&["Browser", " QA"]);
+    assert_dashboard_html_lacks(&["Sentry", " issues"]);
+    assert_dashboard_html_lacks(&["Example MCP", " sandbox"]);
+    assert!(super::DASHBOARD_HTML.contains("function serverSettingProfile"));
+    assert!(super::DASHBOARD_HTML.contains("function serverHumanSummary"));
+    assert!(super::DASHBOARD_HTML.contains("server-human-card"));
+    assert!(super::DASHBOARD_HTML.contains("Live evidence"));
+    assert!(super::DASHBOARD_HTML.contains("Current state"));
+    assert!(super::DASHBOARD_HTML.contains("Tools not checked"));
+    assert!(super::DASHBOARD_HTML.contains("No live tools evidence"));
+    assert!(super::DASHBOARD_HTML.contains("Tool evidence"));
+    assert!(super::DASHBOARD_HTML.contains("Best setting"));
+    assert!(super::DASHBOARD_HTML.contains("Routing and workers"));
+    assert!(super::DASHBOARD_HTML.contains("Policy after on"));
+    assert!(super::DASHBOARD_HTML.contains("Manual override: routing and workers"));
+    assert!(super::DASHBOARD_HTML.contains("Recommended next step"));
+    assert!(super::DASHBOARD_HTML.contains("allowHidden"));
+    assert!(super::DASHBOARD_HTML
+        .contains("refreshDashboard({ allowHidden: true, reason: \"initial\" })"));
+    assert!(super::DASHBOARD_HTML.contains("const MAX_SERVER_ROWS = 64"));
+    assert!(super::DASHBOARD_HTML.contains("server-autotune"));
+    assert!(!super::DASHBOARD_HTML.contains("Auto</strong> ${tuned ? \"OK\""));
+    assert_dashboard_html_lacks(&["mcpace lab", " probe"]);
+    assert_dashboard_html_lacks(&["cannot safely", " prove"]);
+    assert_dashboard_html_lacks(&["before increasing", " workers"]);
+    assert_dashboard_html_lacks(&["auto", "-safe"]);
+    assert_dashboard_html_lacks(&["Safety", " Automatic"]);
+    assert_dashboard_html_lacks(&["Safe", " On"]);
+}
+
 fn response_header(response: &str, name: &str) -> Option<String> {
     response.lines().find_map(|line| {
         let (candidate, value) = line.split_once(':')?;
@@ -1562,6 +1619,172 @@ fn dashboard_actions_reject_cross_origin_posts() {
         response.contains("not allowed for local MCPace serve mode"),
         "action response: {}",
         response
+    );
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn dashboard_server_toggle_action_updates_source_enabled_flag() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_fake_upstream_config(&root);
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_root = root.clone();
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(
+            listener,
+            test_config(server_root, Some(1), super::ServeSurface::Dashboard),
+            &mut stderr,
+        )
+    });
+
+    let body = r#"{"server":"fake"}"#;
+    let mut response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /api/actions/server-disable HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        body.len(),
+        body
+    )
+    .unwrap();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(
+        response.starts_with("HTTP/1.1 200 OK"),
+        "toggle response: {}",
+        response
+    );
+    assert!(response.contains("\"action\": \"server-disable\""));
+
+    let settings = json_helpers::read_json_file(&root.join("mcp_settings.json")).unwrap();
+    assert_eq!(
+        json_helpers::bool_at_path(&settings, &["mcpServers", "fake", "enabled"]),
+        Some(false)
+    );
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn dashboard_server_policy_action_updates_workers_and_mode() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_fake_upstream_config(&root);
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_root = root.clone();
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(
+            listener,
+            test_config(server_root, Some(1), super::ServeSurface::Dashboard),
+            &mut stderr,
+        )
+    });
+
+    let body = r#"{"server":"fake","mode":"pool","maxWorkers":3,"maxInFlightPerWorker":2}"#;
+    let mut response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /api/actions/server-policy HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        body.len(),
+        body
+    )
+    .unwrap();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(
+        response.starts_with("HTTP/1.1 200 OK"),
+        "policy response: {}",
+        response
+    );
+    assert!(response.contains("\"action\": \"server-policy\""));
+
+    let config = json_helpers::read_json_file(&root.join("mcpace.config.json")).unwrap();
+    assert_eq!(
+        json_helpers::string_at_path(&config, &["servers", "fake", "execution", "mode"]),
+        Some("pool")
+    );
+    assert_eq!(
+        json_helpers::value_at_path(&config, &["servers", "fake", "execution", "maxWorkers"])
+            .and_then(JsonValue::as_i64),
+        Some(3)
+    );
+    assert_eq!(
+        json_helpers::value_at_path(
+            &config,
+            &["servers", "fake", "execution", "maxInFlightPerWorker"]
+        )
+        .and_then(JsonValue::as_i64),
+        Some(2)
+    );
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn dashboard_server_autotune_action_batches_policy_updates() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_fake_upstream_config(&root);
+
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let server_root = root.clone();
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(
+            listener,
+            test_config(server_root, Some(1), super::ServeSurface::Dashboard),
+            &mut stderr,
+        )
+    });
+
+    let body = r#"{"changes":[{"server":"fake","mode":"serialized","maxWorkers":1,"maxInFlightPerWorker":1}]}"#;
+    let mut response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /api/actions/server-autotune HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        body.len(),
+        body
+    )
+    .unwrap();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(
+        response.starts_with("HTTP/1.1 200 OK"),
+        "autotune response: {}",
+        response
+    );
+    assert!(response.contains("\"action\": \"server-autotune\""));
+    assert!(response.contains("\"updated\": 1"));
+
+    let config = json_helpers::read_json_file(&root.join("mcpace.config.json")).unwrap();
+    assert_eq!(
+        json_helpers::string_at_path(&config, &["servers", "fake", "execution", "mode"]),
+        Some("serialized")
+    );
+    assert_eq!(
+        json_helpers::value_at_path(&config, &["servers", "fake", "execution", "maxWorkers"])
+            .and_then(JsonValue::as_i64),
+        Some(1)
     );
 
     assert_eq!(handle.join().unwrap(), 0);

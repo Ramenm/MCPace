@@ -4,750 +4,1324 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>MCPace dashboard</title>
+    <meta name="theme-color" content="#081019">
     <style>
       :root {
         color-scheme: dark;
-        --bg: #09111d;
-        --panel: rgba(18, 27, 43, 0.88);
-        --panel-strong: rgba(10, 18, 31, 0.96);
-        --line: rgba(148, 163, 184, 0.14);
-        --text: #ebf2ff;
-        --muted: #97a6bf;
-        --accent: #6ee7f9;
-        --accent-2: #7c3aed;
-        --good: #34d399;
-        --warn: #fbbf24;
-        --bad: #fb7185;
-        --shadow: 0 22px 60px rgba(0, 0, 0, 0.34);
-        --radius: 22px;
+        --bg: #081019;
+        --panel: rgba(15, 23, 34, 0.94);
+        --panel-soft: rgba(12, 19, 29, 0.72);
+        --line: rgba(148, 163, 184, 0.16);
+        --line-strong: rgba(148, 163, 184, 0.28);
+        --text: #eef5ff;
+        --muted: #9aa9ba;
+        --muted-strong: #c5d0dd;
+        --accent: #8bd3ff;
+        --good: #35d49b;
+        --warn: #f6c453;
+        --bad: #f97085;
+        --radius: 16px;
+        --shadow: 0 18px 44px rgba(0, 0, 0, 0.22);
         --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
-        --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-          "Segoe UI", sans-serif;
+        --sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
 
       * { box-sizing: border-box; }
-      html, body { margin: 0; padding: 0; background:
-        radial-gradient(circle at top left, rgba(124, 58, 237, 0.18), transparent 34%),
-        radial-gradient(circle at top right, rgba(110, 231, 249, 0.16), transparent 28%),
-        var(--bg); color: var(--text); font-family: var(--sans); }
+      html, body { margin: 0; padding: 0; }
+      body {
+        min-height: 100vh;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        overflow-x: hidden;
+        touch-action: manipulation;
+        -webkit-tap-highlight-color: rgba(139, 211, 255, 0.22);
+      }
 
-      body { min-height: 100vh; }
       .shell {
-        max-width: 1400px;
+        max-width: 1120px;
         margin: 0 auto;
-        padding: 36px 24px 80px;
+        padding: 14px 16px 48px;
       }
 
-      .hero {
-        position: relative;
-        overflow: hidden;
-        background: linear-gradient(135deg, rgba(14, 24, 38, 0.98), rgba(20, 29, 46, 0.92));
-        border: 1px solid var(--line);
-        border-radius: 28px;
-        box-shadow: var(--shadow);
-        padding: 28px 28px 24px;
-        margin-bottom: 22px;
-      }
-
-      .hero::after {
-        content: "";
+      .skip-link {
         position: absolute;
-        inset: auto -10% -60% auto;
-        width: 420px;
-        height: 420px;
-        background: radial-gradient(circle, rgba(110, 231, 249, 0.18), transparent 62%);
-        pointer-events: none;
+        left: 16px;
+        top: 10px;
+        z-index: 10;
+        transform: translateY(-150%);
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        background: #101b2a;
+        color: var(--text);
+        padding: 8px 10px;
+      }
+      .skip-link:focus { transform: translateY(0); }
+
+      .command-bar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        margin-bottom: 10px;
+        min-height: 40px;
       }
 
-      .eyebrow {
-        color: var(--accent);
-        text-transform: uppercase;
-        letter-spacing: 0.24em;
-        font-size: 12px;
-        margin-bottom: 12px;
+      .command-title {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 8px 12px;
+        min-width: 0;
       }
 
       h1 {
         margin: 0;
-        font-size: clamp(32px, 5vw, 52px);
-        line-height: 0.95;
-        letter-spacing: -0.04em;
+        font-size: 17px;
+        line-height: 1.1;
+        letter-spacing: -0.035em;
+        text-wrap: balance;
       }
 
-      .subhead {
-        margin: 14px 0 0;
-        max-width: 780px;
-        color: var(--muted);
-        font-size: 15px;
-        line-height: 1.65;
-      }
-
-      .hero-meta,
-      .action-row,
-      .metric-grid,
-      .layout {
-        display: grid;
-        gap: 16px;
-      }
-
-      .hero-meta {
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        margin-top: 22px;
-      }
-
-      .meta-card,
-      .card {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: var(--radius);
-        box-shadow: var(--shadow);
-      }
-
-      .meta-card {
-        padding: 16px 18px;
-      }
-
-      .meta-label {
-        color: var(--muted);
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.18em;
-        margin-bottom: 10px;
-      }
-
-      .meta-value {
-        font-size: 20px;
-        font-weight: 650;
-        letter-spacing: -0.03em;
-      }
-
-      .meta-value code {
-        font-family: var(--mono);
-        font-size: 14px;
-        color: var(--accent);
-      }
-
-      .action-row {
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        margin: 18px 0 22px;
-      }
-
-      button,
-      input {
-        font: inherit;
-      }
-
-      button {
-        appearance: none;
-        border: 1px solid rgba(110, 231, 249, 0.28);
-        background: linear-gradient(135deg, rgba(33, 48, 72, 0.96), rgba(20, 29, 46, 0.96));
-        color: var(--text);
-        border-radius: 16px;
-        padding: 14px 16px;
-        cursor: pointer;
-        transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
-      }
-
-      button:hover {
-        transform: translateY(-1px);
-        border-color: rgba(110, 231, 249, 0.56);
-      }
-
-      button:active { transform: translateY(0); }
-      button:disabled {
-        cursor: not-allowed;
-        opacity: 0.58;
-        transform: none;
-      }
-      button.accent {
-        background: linear-gradient(135deg, rgba(14, 165, 233, 0.28), rgba(124, 58, 237, 0.34));
-      }
-
-      .metric-grid {
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        margin-bottom: 22px;
-      }
-
-      .metric {
-        padding: 18px;
-      }
-
-      .metric h2 {
-        margin: 0 0 10px;
-        color: var(--muted);
-        font-size: 12px;
-        text-transform: uppercase;
-        letter-spacing: 0.16em;
-      }
-
-      .metric-value {
-        font-size: 34px;
-        font-weight: 700;
-        letter-spacing: -0.05em;
-      }
-
-      .metric-note {
-        margin-top: 10px;
-        color: var(--muted);
-        font-size: 13px;
-      }
-
-      .layout {
-        grid-template-columns: 1.25fr 0.95fr;
-        align-items: start;
-      }
-
-      .stack {
-        display: grid;
-        gap: 16px;
-      }
-
-      .card {
-        padding: 22px;
-      }
-
-      .card h2 {
-        margin: 0;
-        font-size: 22px;
-        letter-spacing: -0.03em;
-      }
-
-      .card p.section-note {
-        margin: 10px 0 0;
-        color: var(--muted);
-        font-size: 14px;
-        line-height: 1.6;
-      }
-
-      .toolbar {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-        margin: 18px 0 16px;
-      }
-
-      .toolbar input {
-        flex: 1 1 220px;
-        min-width: 200px;
-        border-radius: 14px;
-        border: 1px solid var(--line);
-        background: rgba(10, 18, 31, 0.88);
-        color: var(--text);
-        padding: 12px 14px;
-      }
-
-      .chip-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-
-      .chip {
+      .product {
         display: inline-flex;
         align-items: center;
         gap: 8px;
-        padding: 8px 12px;
-        border-radius: 999px;
-        background: rgba(12, 19, 31, 0.9);
-        border: 1px solid var(--line);
-        color: var(--muted);
-        font-size: 13px;
+        font-weight: 800;
       }
 
-      .dot {
+      .product::before {
+        content: "";
         width: 9px;
         height: 9px;
         border-radius: 50%;
-        background: var(--muted);
+        background: var(--accent);
+        box-shadow: 0 0 18px rgba(139, 211, 255, 0.52);
       }
 
+      .command-summary {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: flex-end;
+        gap: 8px;
+        align-items: start;
+      }
+
+      button,
+      input,
+      select { font: inherit; }
+
+      button {
+        appearance: none;
+        min-height: 36px;
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        background: rgba(17, 27, 40, 0.94);
+        color: var(--text);
+        padding: 8px 11px;
+        cursor: pointer;
+        transition: border-color 130ms ease, background 130ms ease, transform 130ms ease, opacity 130ms ease;
+      }
+
+      button:hover {
+        border-color: rgba(139, 211, 255, 0.62);
+        background: rgba(26, 39, 55, 0.98);
+        transform: translateY(-1px);
+      }
+
+      button:active { transform: translateY(0); }
+      button:disabled { opacity: 0.55; cursor: not-allowed; transform: none; }
+      button.primary { border-color: rgba(139, 211, 255, 0.42); background: rgba(14, 86, 116, 0.42); }
+      button.quiet { background: transparent; }
+      button.danger { border-color: rgba(249, 112, 133, 0.38); color: #ffe5ea; }
+
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid rgba(139, 211, 255, 0.44);
+        outline-offset: 3px;
+      }
+
+      .action-menu { position: relative; }
+      .action-menu > summary {
+        list-style: none;
+        min-height: 36px;
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        background: rgba(17, 27, 40, 0.94);
+        color: var(--text);
+        padding: 8px 11px;
+        cursor: pointer;
+      }
+      .action-menu > summary::-webkit-details-marker { display: none; }
+      .action-menu[open] > summary { border-color: rgba(139, 211, 255, 0.5); }
+      .action-menu-body {
+        position: absolute;
+        z-index: 4;
+        right: 0;
+        top: calc(100% + 8px);
+        display: grid;
+        gap: 8px;
+        min-width: 180px;
+        padding: 10px;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        background: rgba(12, 19, 29, 0.98);
+        box-shadow: var(--shadow);
+      }
+      .action-menu-body button { width: 100%; }
+
+      .signal-strip,
+      .layout,
+      .side-stack,
+      .main-stack,
+      .diagnostic-grid {
+        display: grid;
+        gap: 12px;
+      }
+
+      .signal-strip {
+        grid-template-columns: 1.25fr 0.9fr 0.9fr 0.9fr;
+        margin-bottom: 12px;
+      }
+      .layout { grid-template-columns: minmax(0, 900px); justify-content: center; align-items: start; }
+      .diagnostic-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+      .ops-cockpit {
+        display: grid;
+        grid-template-columns: minmax(0, 1.38fr) minmax(300px, 0.82fr);
+        gap: 12px;
+        margin: 0 0 12px;
+      }
+
+      .ops-card {
+        border: 1px solid var(--line);
+        border-radius: 18px;
+        background:
+          radial-gradient(circle at 18% 0%, rgba(139, 211, 255, 0.11), transparent 34%),
+          linear-gradient(145deg, rgba(15, 23, 34, 0.98), rgba(8, 14, 23, 0.86));
+        box-shadow: var(--shadow);
+        padding: 16px;
+        min-width: 0;
+      }
+
+      .ops-card.hero {
+        display: grid;
+        gap: 11px;
+      }
+
+      .ops-kicker {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 800;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .ops-title {
+        margin: 0;
+        font-size: clamp(24px, 4.4vw, 42px);
+        line-height: 0.98;
+        letter-spacing: -0.06em;
+      }
+
+      .ops-body {
+        max-width: 760px;
+        margin: 0;
+        color: var(--muted-strong);
+        font-size: 14px;
+        line-height: 1.55;
+      }
+
+      .ops-steps,
+      .backend-grid,
+      .fleet-board {
+        display: grid;
+        gap: 8px;
+      }
+
+      .ops-steps {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .ops-step,
+      .backend-readout,
+      .fleet-card {
+        min-width: 0;
+        border: 1px solid rgba(148, 163, 184, 0.13);
+        border-radius: 13px;
+        background: rgba(5, 10, 17, 0.45);
+        padding: 10px;
+      }
+
+      .ops-step strong,
+      .backend-state,
+      .fleet-card strong {
+        display: block;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.25;
+      }
+
+      .ops-step span,
+      .backend-readout span,
+      .fleet-card span {
+        display: block;
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
+
+      .backend-card {
+        display: grid;
+        gap: 12px;
+      }
+
+      .backend-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: start;
+        gap: 10px;
+      }
+
+      .backend-state {
+        font-size: 21px;
+        letter-spacing: -0.035em;
+      }
+
+      .backend-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .fleet-board {
+        grid-template-columns: repeat(auto-fit, minmax(145px, 1fr));
+        margin-top: 10px;
+      }
+
+      .fleet-card {
+        position: relative;
+        text-align: left;
+        width: 100%;
+        min-height: 78px;
+        cursor: pointer;
+        transform: none;
+      }
+      .fleet-card:hover {
+        border-color: rgba(139, 211, 255, 0.5);
+        background: rgba(10, 21, 33, 0.82);
+        transform: none;
+      }
+      .fleet-card[aria-pressed="true"] {
+        border-color: rgba(139, 211, 255, 0.72);
+        box-shadow: 0 0 0 1px rgba(139, 211, 255, 0.18) inset;
+      }
+      .fleet-card[aria-pressed="true"]::after {
+        content: "viewing";
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        border: 1px solid rgba(139, 211, 255, 0.24);
+        border-radius: 999px;
+        background: rgba(139, 211, 255, 0.08);
+        color: var(--accent);
+        padding: 2px 6px;
+        font-size: 9px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .fleet-card.good { border-color: rgba(53, 212, 155, 0.22); }
+      .backend-readout.good,
+      .ops-step.good { border-color: rgba(53, 212, 155, 0.22); }
+      .fleet-card.warn { border-color: rgba(246, 196, 83, 0.28); }
+      .backend-readout.warn,
+      .ops-step.warn { border-color: rgba(246, 196, 83, 0.28); }
+      .fleet-card.bad { border-color: rgba(249, 112, 133, 0.32); }
+      .backend-readout.bad,
+      .ops-step.bad { border-color: rgba(249, 112, 133, 0.32); }
+
+      .panel,
+      .signal,
+      .mini-panel {
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        background: var(--panel);
+        box-shadow: var(--shadow);
+      }
+
+      .panel { padding: 16px; }
+      .signal { padding: 12px 13px; min-width: 0; }
+      .mini-panel { padding: 13px; box-shadow: none; background: var(--panel-soft); min-width: 0; }
+
+      .label {
+        color: var(--muted);
+        font-size: 10px;
+        font-weight: 750;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+      }
+
+      .status-value {
+        margin-top: 5px;
+        font-size: 22px;
+        line-height: 1.1;
+        font-weight: 760;
+        letter-spacing: -0.045em;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .note,
+      .meta,
+      .empty,
+      .section-note {
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .note { margin-top: 6px; }
+      .section-note { margin: 7px 0 0; }
+      .empty { padding: 9px 0; }
+
+      .attention-meta {
+        margin-top: 8px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .panel-head,
+      .item-head,
+      .mini-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+
+      .panel h2,
+      .mini-panel h3 {
+        margin: 0;
+        letter-spacing: -0.028em;
+      }
+
+      .panel h2 { font-size: 18px; }
+      .mini-panel h3 { font-size: 15px; }
+
+      .toolbar,
+      .control-grid {
+        display: grid;
+        gap: 8px;
+      }
+
+      .toolbar { grid-template-columns: minmax(0, 1fr) auto auto auto; margin: 12px 0; }
+      .control-grid { grid-template-columns: 1fr; }
+
+      input,
+      select {
+        width: 100%;
+        min-width: 0;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background-color: rgba(7, 13, 22, 0.82);
+        color: var(--text);
+        padding: 9px 10px;
+      }
+
+      .field { display: grid; gap: 6px; }
+      .field label {
+        color: var(--muted);
+        font-size: 10px;
+        letter-spacing: 0.13em;
+        text-transform: uppercase;
+      }
+
+      .list { display: grid; gap: 8px; margin-top: 11px; }
+      .list.tight { margin-top: 8px; }
+
+      .item {
+        border: 1px solid rgba(148, 163, 184, 0.13);
+        border-radius: 13px;
+        background: rgba(8, 14, 23, 0.66);
+        padding: 12px;
+        min-width: 0;
+      }
+
+      .item.warn { border-color: rgba(246, 196, 83, 0.28); }
+      .item.bad { border-color: rgba(249, 112, 133, 0.34); }
+      .item.good { border-color: rgba(53, 212, 155, 0.22); }
+
+      #server-list .item {
+        border-color: rgba(148, 163, 184, 0.13);
+        border-left-width: 3px;
+      }
+      #server-list .item.bad { border-left-color: var(--bad); }
+      #server-list .item.warn { border-left-color: var(--warn); }
+      #server-list .item.good { border-left-color: var(--good); }
+
+      .server-guide {
+        margin-top: 10px;
+        border: 1px solid rgba(139, 211, 255, 0.18);
+        border-radius: 13px;
+        background: rgba(8, 18, 29, 0.62);
+        padding: 10px 12px;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .server-guide strong { color: var(--text); }
+
+      .server-auto-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 14px;
+        align-items: center;
+        margin-top: 12px;
+        border: 1px solid rgba(53, 212, 155, 0.2);
+        border-radius: 15px;
+        background: linear-gradient(135deg, rgba(20, 63, 52, 0.46), rgba(8, 18, 29, 0.72));
+        padding: 13px;
+      }
+
+      .server-auto-copy {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+      }
+      .server-auto-copy strong {
+        font-size: 15px;
+        letter-spacing: -0.02em;
+      }
+      .server-auto-copy p {
+        margin: 0;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+
+      .server-auto-stats,
+      .server-auto-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        align-items: center;
+      }
+      .server-auto-actions { justify-content: flex-end; }
+
+      .server-row {
+        display: grid;
+        gap: 10px;
+        padding: 12px;
+        border-radius: 14px;
+        background:
+          linear-gradient(90deg, rgba(148, 163, 184, 0.08), transparent 28%),
+          rgba(8, 14, 23, 0.66);
+      }
+      .server-row[data-enabled="false"] {
+        background: rgba(5, 10, 17, 0.48);
+      }
+      .server-row[data-enabled="false"] .server-purpose {
+        color: rgba(154, 169, 186, 0.72);
+      }
+
+      .server-main {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+      }
+
+      .server-id {
+        min-width: 0;
+      }
+
+      .server-title-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+      }
+
+      .server-purpose {
+        margin-top: 4px;
+        color: var(--muted);
+        font-size: 12px;
+        line-height: 1.45;
+        overflow-wrap: anywhere;
+      }
+
+      .server-decision {
+        display: grid;
+        gap: 3px;
+        margin-top: 8px;
+        border: 1px solid rgba(139, 211, 255, 0.14);
+        border-radius: 12px;
+        background: rgba(4, 11, 18, 0.48);
+        padding: 8px 10px;
+      }
+      .server-decision strong {
+        color: var(--text);
+        font-size: 12px;
+      }
+      .server-decision span {
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.35;
+      }
+
+      .server-human-card {
+        display: grid;
+        grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
+        gap: 8px;
+        margin-top: 9px;
+      }
+      .server-human-card section {
+        min-width: 0;
+        border: 1px solid rgba(139, 211, 255, 0.13);
+        border-radius: 12px;
+        background: rgba(4, 11, 18, 0.48);
+        padding: 9px 10px;
+      }
+      .server-human-card strong {
+        display: block;
+        color: var(--text);
+        font-size: 12px;
+        line-height: 1.3;
+      }
+      .server-human-card p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.38;
+      }
+
+      .server-quick-controls,
+      .server-dialog-actions {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+
+      .server-toggle {
+        min-width: 92px;
+        font-weight: 800;
+      }
+      .server-toggle.on {
+        border-color: rgba(53, 212, 155, 0.42);
+        background: rgba(23, 99, 76, 0.46);
+        color: #dffdf0;
+      }
+      .server-toggle.off {
+        border-color: rgba(148, 163, 184, 0.22);
+        background: rgba(7, 13, 22, 0.72);
+        color: var(--muted-strong);
+      }
+
+      .server-mode-select {
+        width: auto;
+        min-width: 156px;
+        min-height: 36px;
+        padding-block: 7px;
+      }
+
+      .worker-stepper {
+        display: inline-grid;
+        grid-template-columns: 34px minmax(74px, auto) 34px;
+        align-items: stretch;
+        min-height: 36px;
+        border: 1px solid var(--line-strong);
+        border-radius: 10px;
+        overflow: hidden;
+        background: rgba(7, 13, 22, 0.74);
+      }
+      .worker-stepper button {
+        min-height: 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        padding: 0;
+        font-size: 17px;
+        font-weight: 800;
+      }
+      .worker-stepper button:hover { background: rgba(139, 211, 255, 0.1); transform: none; }
+      .worker-count {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-inline: 1px solid rgba(148, 163, 184, 0.16);
+        padding: 0 10px;
+        color: var(--muted-strong);
+        font-size: 12px;
+        font-weight: 750;
+        white-space: nowrap;
+      }
+
+      .server-fast-facts {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .fact {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        border-radius: 999px;
+        background: rgba(5, 10, 17, 0.42);
+        color: var(--muted-strong);
+        padding: 4px 7px;
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      .fact strong { color: var(--text); }
+
+      .server-action-note {
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        border-radius: 11px;
+        background: rgba(5, 10, 17, 0.38);
+        color: var(--muted-strong);
+        padding: 8px 10px;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .server-action-note strong { color: var(--text); }
+
+      .server-dialog {
+        width: min(760px, calc(100vw - 28px));
+        max-height: min(86vh, 760px);
+        border: 0;
+        border-radius: 18px;
+        padding: 0;
+        background: transparent;
+        color: var(--text);
+      }
+      .server-dialog::backdrop {
+        background: rgba(0, 0, 0, 0.62);
+        backdrop-filter: blur(4px);
+      }
+      .server-dialog-card {
+        display: grid;
+        gap: 14px;
+        max-height: min(86vh, 760px);
+        overflow: auto;
+        border: 1px solid var(--line-strong);
+        border-radius: 18px;
+        background: rgba(10, 17, 27, 0.98);
+        box-shadow: 0 28px 80px rgba(0, 0, 0, 0.48);
+        padding: 16px;
+      }
+      .server-dialog-head {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: start;
+      }
+      .server-dialog-title {
+        margin: 0;
+        font-size: 20px;
+        letter-spacing: -0.035em;
+      }
+      .server-dialog-body {
+        display: grid;
+        gap: 12px;
+      }
+      .server-dialog-summary {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 12px;
+        align-items: center;
+        border: 1px solid rgba(139, 211, 255, 0.18);
+        border-radius: 14px;
+        background: linear-gradient(135deg, rgba(18, 48, 67, 0.58), rgba(5, 10, 17, 0.5));
+        padding: 12px;
+      }
+      .server-dialog-summary strong {
+        display: block;
+        font-size: 15px;
+        letter-spacing: -0.02em;
+      }
+      .server-dialog-summary p {
+        margin: 5px 0 0;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .server-setting-brief {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .server-setting-card {
+        min-width: 0;
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        border-radius: 13px;
+        background: rgba(5, 10, 17, 0.4);
+        padding: 11px;
+      }
+      .server-setting-card strong {
+        display: block;
+        margin-top: 5px;
+        color: var(--text);
+        font-size: 13px;
+        line-height: 1.3;
+      }
+      .server-setting-card p {
+        margin: 6px 0 0;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.45;
+      }
+      .server-settings-grid,
+      .server-explain-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+      }
+      .server-explain-box,
+      .server-setting-box {
+        border: 1px solid rgba(148, 163, 184, 0.11);
+        border-radius: 11px;
+        background: rgba(5, 10, 17, 0.36);
+        padding: 10px;
+        min-width: 0;
+      }
+      .server-explain-box p,
+      .server-checklist {
+        margin: 6px 0 0;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.55;
+      }
+      .server-checklist { padding-left: 18px; }
+      .server-checklist li + li { margin-top: 4px; }
+      .setting-inline {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        gap: 8px;
+        align-items: end;
+      }
+      .setting-inline input { min-height: 36px; }
+
+      .name {
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: -0.018em;
+      }
+
+      .chips,
+      .tags { display: flex; flex-wrap: wrap; gap: 6px; }
+      .tags { margin-top: 8px; }
+
+      .chip,
+      .tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        min-width: 0;
+        border-radius: 999px;
+        border: 1px solid var(--line);
+        background: rgba(7, 13, 22, 0.72);
+        color: var(--muted-strong);
+        font-size: 11px;
+        line-height: 1.2;
+      }
+
+      .chip { padding: 5px 8px; }
+      .tag { padding: 4px 7px; color: var(--muted); }
+
+      .dot {
+        flex: 0 0 auto;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--muted);
+      }
       .dot.good { background: var(--good); }
       .dot.warn { background: var(--warn); }
       .dot.bad { background: var(--bad); }
 
-      .server-list,
-      .warning-list,
-      .client-list,
-      .activity-list,
-      .policy-list,
-      .concurrency-list,
-      .audit-list,
-      .log-list {
-        display: grid;
-        gap: 12px;
-      }
-
-      .server-item,
-      .warning-item,
-      .client-item,
-      .activity-item,
-      .policy-item,
-      .concurrency-item,
-      .audit-item,
-      .log-item {
-        border-radius: 18px;
-        border: 1px solid var(--line);
-        background: rgba(10, 18, 31, 0.88);
-        padding: 16px;
-      }
-
-      .server-top,
-      .client-top,
-      .activity-top,
-      .policy-top,
-      .concurrency-top,
-      .audit-top,
-      .log-top {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 12px;
-      }
-
-      .server-name,
-      .client-name,
-      .activity-name,
-      .policy-name,
-      .concurrency-name,
-      .audit-name,
-      .log-name {
-        font-size: 16px;
-        font-weight: 650;
-        letter-spacing: -0.02em;
-      }
-
-      .server-meta,
-      .client-meta,
-      .activity-meta,
-      .policy-meta,
-      .concurrency-meta,
-      .audit-meta,
-      .log-meta,
-      .warning-item {
-        color: var(--muted);
-        font-size: 13px;
-        line-height: 1.55;
-      }
-
-      .server-tags,
-      .client-tags,
-      .activity-tags,
-      .policy-tags,
-      .concurrency-tags,
-      .audit-tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 8px;
-        margin-top: 12px;
-      }
-
-      .tag {
-        border-radius: 999px;
-        padding: 6px 10px;
-        font-size: 12px;
-        color: var(--text);
-        background: rgba(110, 231, 249, 0.09);
-        border: 1px solid rgba(110, 231, 249, 0.16);
-      }
-
-      details {
-        margin-top: 14px;
-        border-top: 1px solid rgba(148, 163, 184, 0.12);
-        padding-top: 12px;
-      }
-
-      summary {
+      details.clean { border: 0; padding: 0; background: transparent; box-shadow: none; }
+      details.clean > summary {
+        position: relative;
         cursor: pointer;
-        color: var(--muted);
+        list-style: none;
+        border: 1px solid var(--line);
+        border-radius: var(--radius);
+        padding: 14px 78px 14px 16px;
+        background: var(--panel);
+        box-shadow: var(--shadow);
       }
+      details.clean > summary::-webkit-details-marker { display: none; }
+      details.clean > summary::after {
+        content: "Show";
+        position: absolute;
+        right: 16px;
+        top: 18px;
+        color: var(--accent);
+        font-size: 12px;
+        font-weight: 750;
+      }
+      details.clean[open] > summary::after { content: "Hide"; }
+      details.clean .details-body { padding-top: 12px; }
+
+      .server-settings {
+        margin-top: 10px;
+        border-top: 1px solid rgba(148, 163, 184, 0.13);
+        padding-top: 9px;
+      }
+      .server-settings summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+      .manual-settings {
+        border: 1px solid rgba(148, 163, 184, 0.12);
+        border-radius: 13px;
+        background: rgba(5, 10, 17, 0.34);
+        padding: 10px;
+      }
+      .manual-settings > summary {
+        cursor: pointer;
+        color: var(--muted-strong);
+        font-size: 12px;
+        font-weight: 760;
+      }
+      .manual-settings[open] > summary { margin-bottom: 10px; }
+      .detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 9px; }
+      .detail-box { border: 1px solid rgba(148, 163, 184, 0.11); border-radius: 10px; padding: 8px; background: rgba(5, 10, 17, 0.44); }
+      .detail-value { margin-top: 4px; font-family: var(--mono); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
 
       pre {
+        margin: 8px 0 0;
         white-space: pre-wrap;
         word-break: break-word;
-        margin: 12px 0 0;
         font-family: var(--mono);
-        font-size: 12px;
-        line-height: 1.65;
-        color: #d7e6ff;
+        font-size: 11px;
+        line-height: 1.55;
+        color: #d9e9ff;
       }
 
-      .empty {
-        color: var(--muted);
-        padding: 14px 0;
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
       }
 
-      .footer-note {
-        margin-top: 18px;
-        color: var(--muted);
-        font-size: 13px;
-      }
+      body[data-density="compact"] .panel,
+      body[data-density="compact"] .signal,
+      body[data-density="compact"] .mini-panel,
+      body[data-density="compact"] .item { padding: 10px; }
+      body[data-density="compact"] .server-row { padding: 10px; }
+      body[data-density="compact"] .status-value { font-size: 21px; }
+      body[data-density="compact"] .list { gap: 6px; }
 
-      @media (max-width: 1040px) {
+      @media (max-width: 900px) {
+        .command-bar,
         .layout { grid-template-columns: 1fr; }
+        .actions { justify-content: flex-start; }
+        .signal-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .ops-cockpit { grid-template-columns: 1fr; }
+        .ops-steps,
+        .fleet-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .diagnostic-grid { grid-template-columns: 1fr; }
+        .server-main { grid-template-columns: 1fr; }
+        .server-quick-controls { justify-content: flex-start; }
+        .server-auto-panel { grid-template-columns: 1fr; }
+        .server-auto-actions { justify-content: flex-start; }
+        .server-explain-grid,
+        .server-settings-grid { grid-template-columns: 1fr 1fr; }
+      }
+
+      @media (max-width: 560px) {
+        .shell { padding: 12px 10px 36px; }
+        .signal-strip,
+        .ops-steps,
+        .backend-grid,
+        .fleet-board,
+        .toolbar { grid-template-columns: 1fr; }
+        .actions button,
+        .toolbar button,
+        .action-menu,
+        .action-menu > summary { width: 100%; }
+        .action-menu-body { position: static; margin-top: 8px; }
+        .command-title { display: grid; gap: 5px; }
+        .detail-grid { grid-template-columns: 1fr; }
+        .server-quick-controls,
+        .server-dialog-actions,
+        .server-auto-actions { display: grid; grid-template-columns: 1fr; }
+        .server-mode-select,
+        .server-quick-controls button,
+        .server-dialog-actions button,
+        .server-auto-actions button { width: 100%; }
+        .worker-stepper { grid-template-columns: 44px minmax(0, 1fr) 44px; width: 100%; }
+        .server-explain-grid,
+        .server-settings-grid,
+        .server-human-card,
+        .server-setting-brief,
+        .server-dialog-summary,
+        .setting-inline { grid-template-columns: 1fr; }
+        .server-dialog-card { padding: 12px; }
       }
     </style>
   </head>
   <body>
-    <main class="shell">
-      <section class="hero">
-        <div class="eyebrow">MCPace local control surface</div>
-        <h1>Operational visibility without<br>leaving the terminal-era stack.</h1>
-        <p class="subhead">
-          This dashboard stays local-only. It reuses MCPace's native JSON read
-          paths and a few safe lifecycle actions, so you can inspect runtime
-          health, server coverage, and client surfaces from one polished panel.
-        </p>
-        <div class="hero-meta">
-          <div class="meta-card">
-            <div class="meta-label">Workspace root</div>
-            <div class="meta-value"><code id="root-path">—</code></div>
-          </div>
-          <div class="meta-card">
-            <div class="meta-label">Last refresh</div>
-            <div class="meta-value" id="last-refresh">—</div>
-          </div>
-          <div class="meta-card">
-            <div class="meta-label">Refresh mode</div>
-            <div class="meta-value" id="refresh-mode">initializing</div>
-          </div>
-          <div class="meta-card">
-            <div class="meta-label">Hub state</div>
-            <div class="meta-value" id="hero-hub-state">—</div>
-          </div>
-          <div class="meta-card">
-            <div class="meta-label">Warnings</div>
-            <div class="meta-value" id="warning-count">—</div>
-          </div>
-          <div class="meta-card">
-            <div class="meta-label">Overview cache</div>
-            <div class="meta-value" id="overview-cache">—</div>
-          </div>
-          <div class="meta-card">
-            <div class="meta-label">HTTP workers</div>
-            <div class="meta-value" id="runtime-workers">—</div>
-          </div>
-          <div class="meta-card">
-            <div class="meta-label">Upstream pool</div>
-            <div class="meta-value" id="upstream-pool">—</div>
-          </div>
+    <a class="skip-link" href="#dashboard-content">Skip to dashboard</a>
+    <main class="shell" id="dashboard-content" aria-busy="false">
+      <header class="command-bar" aria-label="Dashboard command bar">
+        <div class="command-title">
+          <h1 class="product">MCPace</h1>
+          <div class="command-summary">Local operator view. Fix the top action first; diagnostics stay folded.</div>
         </div>
+        <nav class="actions" aria-label="Dashboard actions">
+          <button class="primary" id="refresh-button" type="button">Refresh</button>
+          <details class="action-menu">
+            <summary>Hub</summary>
+            <div class="action-menu-body">
+              <button id="hub-up-button" type="button">Start hub</button>
+              <button class="danger" id="hub-down-button" type="button">Stop hub</button>
+              <button id="repair-button" type="button">Repair</button>
+            </div>
+          </details>
+        </nav>
+      </header>
+
+      <section class="signal-strip" aria-label="Runtime overview" role="status" aria-live="polite">
+        <article class="signal">
+          <div class="label">Status</div>
+          <div class="status-value" id="system-state">—</div>
+          <div class="note" id="system-note">Waiting for overview.</div>
+        </article>
+        <article class="signal">
+          <div class="label">Action Needed</div>
+          <div class="status-value" id="attention-count">—</div>
+          <div class="note" id="attention-note">Trust, blockers, or active locks.</div>
+        </article>
+        <article class="signal">
+          <div class="label">Servers</div>
+          <div class="status-value" id="server-count">—</div>
+          <div class="note" id="server-note">Enabled / total.</div>
+        </article>
+        <article class="signal">
+          <div class="label">Backend link</div>
+          <div class="status-value" id="load-state">—</div>
+          <div class="note" id="load-note">Overview/logs/action API.</div>
+        </article>
       </section>
 
-      <section class="action-row">
-        <button class="accent" id="refresh-button">Refresh dashboard</button>
-        <button id="hub-up-button">Hub up</button>
-        <button id="hub-down-button">Hub down</button>
-        <button id="repair-button">Repair runtime</button>
-      </section>
-
-      <section class="metric-grid">
-        <article class="card metric">
-          <h2>Runtime readiness</h2>
-          <div class="metric-value" id="runtime-ready">—</div>
-          <div class="metric-note" id="runtime-ready-note">—</div>
+      <section class="ops-cockpit" aria-label="Production cockpit">
+        <article class="ops-card hero" aria-labelledby="ops-title">
+          <div class="ops-kicker"><span class="dot warn" id="ops-dot"></span>Production cockpit</div>
+          <h2 class="ops-title" id="ops-title">Connecting to backend…</h2>
+          <p class="ops-body" id="ops-body">The dashboard is loading live runtime, server policy, logs, and action endpoints.</p>
+          <div class="ops-steps" id="ops-steps"></div>
         </article>
-        <article class="card metric">
-          <h2>Enabled servers</h2>
-          <div class="metric-value" id="enabled-servers">—</div>
-          <div class="metric-note" id="enabled-servers-note">—</div>
-        </article>
-        <article class="card metric">
-          <h2>Required servers</h2>
-          <div class="metric-value" id="required-servers">—</div>
-          <div class="metric-note" id="required-servers-note">—</div>
-        </article>
-        <article class="card metric">
-          <h2>Client surfaces</h2>
-          <div class="metric-value" id="client-surfaces">—</div>
-          <div class="metric-note" id="client-surfaces-note">—</div>
+        <article class="ops-card backend-card" aria-labelledby="backend-link-title">
+          <div class="backend-head">
+            <div>
+              <div class="label">Backend link</div>
+              <div class="backend-state" id="backend-link-title">Checking API…</div>
+            </div>
+            <button class="quiet" id="backend-check-button" type="button">Check link</button>
+          </div>
+          <div class="backend-grid" id="backend-grid"></div>
         </article>
       </section>
 
       <section class="layout">
-        <div class="stack">
-          <article class="card">
-            <h2>Servers</h2>
-            <p class="section-note">
-              Filter by name and focus on the currently effective set. Each
-              entry keeps the transport, policy, and scope data visible.
-            </p>
-            <div class="toolbar">
-              <input id="server-search" type="search" placeholder="Search servers by name, kind, or scope">
-              <button id="toggle-enabled-filter">Show enabled only</button>
+        <div class="main-stack">
+          <article class="panel" aria-labelledby="attention-title">
+            <div class="panel-head">
+              <div>
+                <h2 id="attention-title">Action Needed</h2>
+                <p class="section-note">Only real blockers appear here. Server capability text is shown only from source state or tools/list evidence.</p>
+              </div>
+              <span class="chip" id="refresh-chip"><span class="dot warn"></span>initializing</span>
             </div>
-            <div class="chip-row" id="server-summary-chips"></div>
-            <div class="server-list" id="server-list"></div>
+            <div class="list" id="attention-list"></div>
           </article>
 
-          <article class="card">
-            <h2>Concurrency map</h2>
-            <p class="section-note">
-              Planned process/session lanes. This is the UI surface for seeing
-              which chats share safely, which servers serialize, and which
-              stateful stdio servers get isolated instances.
-            </p>
-            <div class="concurrency-list" id="concurrency-list"></div>
+          <article class="panel" aria-labelledby="servers-title">
+            <div class="panel-head">
+              <div>
+                <h2 id="servers-title">Servers</h2>
+                <p class="section-note">Fleet view first. Click a group to filter; rows expose Test, Turn on/off, policy fixes, and Details.</p>
+              </div>
+              <span class="chip" id="server-filter-chip"><span class="dot good"></span>enabled only</span>
+            </div>
+            <div class="toolbar">
+              <label class="sr-only" for="server-search">Search servers</label>
+              <input id="server-search" name="server-search" type="search" placeholder="Search servers…" autocomplete="off">
+              <button class="quiet" id="clear-search" type="button">Clear</button>
+              <button id="toggle-enabled" type="button" aria-pressed="true">Show All</button>
+            </div>
+            <div class="server-auto-panel" id="server-auto-panel">
+              <div class="server-auto-copy">
+                <div class="label">Auto setup</div>
+                <strong id="server-auto-title">MCPace will keep server policy safe.</strong>
+                <p id="server-auto-body">Loading server plan…</p>
+                <div class="server-auto-stats" id="server-auto-stats"></div>
+              </div>
+              <div class="server-auto-actions">
+                <button class="primary" id="auto-tune-visible" type="button">Apply safe plan</button>
+              </div>
+            </div>
+            <div class="chips" id="server-chips"></div>
+            <div class="fleet-board" id="server-fleet-board"></div>
+            <div class="server-guide" id="server-guide">Read each row as <strong>Live evidence</strong>, <strong>Current state</strong>, then buttons. Open <strong>Details</strong> only for technical overrides.</div>
+            <div class="list" id="server-list"></div>
+            <div class="note" id="server-overflow-note"></div>
           </article>
 
-          <article class="card">
-            <h2>Policy Review</h2>
-            <p class="section-note">
-              Minimal review queue for server isolation, default trust, and
-              stateful/concurrency policy. Unknown servers stay conservative.
-            </p>
-            <div class="policy-list" id="policy-review-list"></div>
-          </article>
-
-          <article class="card">
-            <h2>Audit trail</h2>
-            <p class="section-note">
-              Tool-call audit events with server, tool, lease, pool, and trace
-              metadata. Arguments are fingerprinted instead of displayed raw.
-            </p>
-            <div class="audit-list" id="audit-list"></div>
-          </article>
-
-          <article class="card">
-            <h2>Hub logs</h2>
-            <p class="section-note">
-              Recent lifecycle events from the local runtime log.
-            </p>
-            <div class="log-list" id="log-list"></div>
-          </article>
-        </div>
-
-        <div class="stack">
-          <article class="card">
-            <h2>Runtime posture</h2>
-            <p class="section-note">
-              A compact operational read across doctor, readiness, and hub
-              status.
-            </p>
-            <div class="chip-row" id="runtime-chip-row"></div>
-            <div class="footer-note" id="runtime-summary">—</div>
-          </article>
-
-          <article class="card">
-            <h2>Activity</h2>
-            <p class="section-note">
-              Active leases, blocked work, and recent runtime pressure points.
-              This is the fast view before opening raw JSON or logs.
-            </p>
-            <div class="activity-list" id="activity-list"></div>
-          </article>
-
-          <article class="card">
-            <h2>Warnings</h2>
-            <p class="section-note">
-              Lifecycle or readiness warnings that deserve attention before a
-              client session starts routing through the hub.
-            </p>
-            <div class="warning-list" id="warning-list"></div>
-          </article>
-
-          <article class="card">
-            <h2>Client surfaces</h2>
-            <p class="section-note">
-              The documented client catalog, grouped by family and surface
-              class. This helps you see where MCPace already has a believable
-              connection story.
-            </p>
-            <div class="chip-row" id="client-summary-chips"></div>
-            <div class="client-list" id="client-list"></div>
-          </article>
+          <details class="clean" id="deep-diagnostics">
+            <summary>
+              <h2>Advanced Diagnostics</h2>
+              <p class="section-note">Routing plan, runtime internals, capacity, telemetry gaps, clients, audit, and raw logs.</p>
+            </summary>
+            <div class="details-body diagnostic-grid">
+              <section class="mini-panel">
+                <div class="mini-head"><h3>Routing Plan</h3><span class="chip" id="instance-chip"><span class="dot warn"></span>—</span></div>
+                <div class="list tight" id="instance-list"></div>
+              </section>
+              <section class="mini-panel">
+                <div class="mini-head"><h3>Runtime</h3><span class="chip" id="runtime-chip"><span class="dot warn"></span>—</span></div>
+                <div class="list tight" id="runtime-list"></div>
+              </section>
+              <section class="mini-panel">
+                <div class="mini-head"><h3>Trust & Routing</h3><span class="chip" id="policy-chip"><span class="dot warn"></span>—</span></div>
+                <div class="list tight" id="policy-list"></div>
+              </section>
+              <section class="mini-panel">
+                <div class="mini-head"><h3>Capacity</h3><span class="chip" id="capacity-chip"><span class="dot warn"></span>—</span></div>
+                <div class="list tight" id="capacity-list"></div>
+              </section>
+              <section class="mini-panel">
+                <div class="mini-head"><h3>Telemetry Gaps</h3><span class="chip" id="telemetry-chip"><span class="dot warn"></span>honest gaps</span></div>
+                <div class="list tight" id="telemetry-list"></div>
+              </section>
+              <section class="mini-panel">
+                <div class="mini-head"><h3>Activity & Locks</h3><span class="chip" id="activity-chip"><span class="dot warn"></span>—</span></div>
+                <div class="list tight" id="activity-list"></div>
+              </section>
+              <section class="mini-panel">
+                <div class="mini-head"><h3>Client surfaces</h3><span class="chip" id="client-chip"><span class="dot warn"></span>—</span></div>
+                <div class="list tight" id="client-list"></div>
+              </section>
+              <section class="mini-panel">
+                <div class="mini-head"><h3>Audit & logs</h3><span class="chip" id="log-chip"><span class="dot warn"></span>—</span></div>
+                <div class="list tight" id="audit-list"></div>
+                <div class="list tight" id="log-list"></div>
+              </section>
+            </div>
+          </details>
+          <details class="clean" id="view-context">
+            <summary>
+              <h2>View & Context</h2>
+              <p class="section-note">Local display preferences and workspace/runtime context.</p>
+            </summary>
+            <div class="details-body diagnostic-grid">
+              <section class="mini-panel">
+                <h3>View</h3>
+                <p class="section-note">Local-only preferences. These do not change server policy.</p>
+                <div class="control-grid" style="margin-top: 12px;">
+                  <div class="field">
+                    <label for="refresh-select">Auto refresh</label>
+                    <select id="refresh-select">
+                      <option value="30">30 seconds</option>
+                      <option value="60">60 seconds</option>
+                      <option value="15">15 seconds</option>
+                      <option value="paused">Paused</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="server-sort">Server sort</label>
+                    <select id="server-sort">
+                      <option value="risk">Risk first</option>
+                      <option value="name">Name</option>
+                      <option value="instances">Instances</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="server-scope">Server list</label>
+                    <select id="server-scope">
+                      <option value="normal">Normal</option>
+                      <option value="attention">Needs attention only</option>
+                    </select>
+                  </div>
+                  <div class="field">
+                    <label for="density-select">Density</label>
+                    <select id="density-select">
+                      <option value="comfortable">Comfortable</option>
+                      <option value="compact">Compact</option>
+                    </select>
+                  </div>
+                </div>
+              </section>
+              <section class="mini-panel">
+                <h3>Context</h3>
+                <div class="list tight" id="context-list"></div>
+              </section>
+            </div>
+          </details>
         </div>
       </section>
     </main>
+    <dialog class="server-dialog" id="server-dialog" aria-labelledby="server-dialog-title">
+      <section class="server-dialog-card">
+        <header class="server-dialog-head">
+          <div>
+            <h2 class="server-dialog-title" id="server-dialog-title">Server settings</h2>
+            <p class="section-note" id="server-dialog-subtitle">Pick a server to change policy and review evidence.</p>
+          </div>
+          <button class="quiet" id="server-dialog-close" type="button" aria-label="Close server settings">Close</button>
+        </header>
+        <div class="server-dialog-body" id="server-dialog-body"></div>
+      </section>
+    </dialog>
 
     <script>
+      const PREF = "mcpace.dashboard.slim.";
+      const REFRESH_MS = { "15": 15000, "30": 30000, "60": 60000, paused: 0 };
+      const MAX_SERVER_ROWS = 64;
+      const HIDDEN_REFRESH_MS = 60000;
+      const ROUTING_MODES = [
+        ["serialized", "Safe queue"],
+        ["shared", "Shared"],
+        ["pool", "Worker pool"],
+        ["session-isolated", "Per chat"],
+        ["project-isolated", "Per project"]
+      ];
+
       const state = {
         overview: null,
         logs: [],
-        enabledOnly: true,
-        serverQuery: "",
-        refreshSeq: 0,
-        activeRefreshController: null,
-        refreshInFlight: false,
-        autoRefreshTimer: null,
-        lastRefreshError: null
+        query: "",
+        enabledOnly: readPref("enabledOnly", "true", ["true", "false"]) === "true",
+        refreshMode: readPref("refreshMode", "30", Object.keys(REFRESH_MS)),
+        sort: readPref("sort", "risk", ["risk", "name", "instances"]),
+        scope: readPref("scope", "normal", ["normal", "attention"]),
+        bucket: readPref("bucket", "all", ["all", "blocked", "protected", "ready", "off"]),
+        density: readPref("density", "comfortable", ["comfortable", "compact"]),
+        selectedServer: null,
+        backend: {
+          overview: null,
+          logs: null,
+          action: null,
+          checkedAt: 0
+        },
+        timer: null,
+        seq: 0,
+        controller: null,
+        refreshing: false,
+        serverTests: {},
+        lastError: null
       };
 
-      const REFRESH_INTERVAL_MS = 15000;
-      const HIDDEN_REFRESH_INTERVAL_MS = 60000;
-
+      const $ = id => document.getElementById(id);
       const els = {
-        rootPath: document.getElementById("root-path"),
-        lastRefresh: document.getElementById("last-refresh"),
-        refreshMode: document.getElementById("refresh-mode"),
-        heroHubState: document.getElementById("hero-hub-state"),
-        warningCount: document.getElementById("warning-count"),
-        overviewCache: document.getElementById("overview-cache"),
-        runtimeWorkers: document.getElementById("runtime-workers"),
-        upstreamPool: document.getElementById("upstream-pool"),
-        runtimeReady: document.getElementById("runtime-ready"),
-        runtimeReadyNote: document.getElementById("runtime-ready-note"),
-        enabledServers: document.getElementById("enabled-servers"),
-        enabledServersNote: document.getElementById("enabled-servers-note"),
-        requiredServers: document.getElementById("required-servers"),
-        requiredServersNote: document.getElementById("required-servers-note"),
-        clientSurfaces: document.getElementById("client-surfaces"),
-        clientSurfacesNote: document.getElementById("client-surfaces-note"),
-        serverList: document.getElementById("server-list"),
-        warningList: document.getElementById("warning-list"),
-        clientList: document.getElementById("client-list"),
-        activityList: document.getElementById("activity-list"),
-        policyReviewList: document.getElementById("policy-review-list"),
-        concurrencyList: document.getElementById("concurrency-list"),
-        auditList: document.getElementById("audit-list"),
-        logList: document.getElementById("log-list"),
-        serverSearch: document.getElementById("server-search"),
-        toggleEnabledFilter: document.getElementById("toggle-enabled-filter"),
-        runtimeChipRow: document.getElementById("runtime-chip-row"),
-        runtimeSummary: document.getElementById("runtime-summary"),
-        serverSummaryChips: document.getElementById("server-summary-chips"),
-        clientSummaryChips: document.getElementById("client-summary-chips")
+        shell: document.querySelector(".shell"),
+        refreshButton: $("refresh-button"),
+        startButton: $("hub-up-button"),
+        stopButton: $("hub-down-button"),
+        repairButton: $("repair-button"),
+        systemState: $("system-state"),
+        systemNote: $("system-note"),
+        opsDot: $("ops-dot"),
+        opsTitle: $("ops-title"),
+        opsBody: $("ops-body"),
+        opsSteps: $("ops-steps"),
+        backendCheckButton: $("backend-check-button"),
+        backendState: $("backend-link-title"),
+        backendGrid: $("backend-grid"),
+        attentionCount: $("attention-count"),
+        attentionNote: $("attention-note"),
+        serverCount: $("server-count"),
+        serverNote: $("server-note"),
+        loadState: $("load-state"),
+        loadNote: $("load-note"),
+        refreshChip: $("refresh-chip"),
+        attentionList: $("attention-list"),
+        serverSearch: $("server-search"),
+        clearSearch: $("clear-search"),
+        toggleEnabled: $("toggle-enabled"),
+        autoTuneVisible: $("auto-tune-visible"),
+        serverAutoTitle: $("server-auto-title"),
+        serverAutoBody: $("server-auto-body"),
+        serverAutoStats: $("server-auto-stats"),
+        serverFleetBoard: $("server-fleet-board"),
+        serverGuide: $("server-guide"),
+        serverFilterChip: $("server-filter-chip"),
+        serverChips: $("server-chips"),
+        serverList: $("server-list"),
+        serverOverflowNote: $("server-overflow-note"),
+        refreshSelect: $("refresh-select"),
+        serverSort: $("server-sort"),
+        serverScope: $("server-scope"),
+        densitySelect: $("density-select"),
+        serverDialog: $("server-dialog"),
+        serverDialogTitle: $("server-dialog-title"),
+        serverDialogSubtitle: $("server-dialog-subtitle"),
+        serverDialogBody: $("server-dialog-body"),
+        serverDialogClose: $("server-dialog-close"),
+        contextList: $("context-list"),
+        instanceChip: $("instance-chip"),
+        instanceList: $("instance-list"),
+        runtimeChip: $("runtime-chip"),
+        runtimeList: $("runtime-list"),
+        policyChip: $("policy-chip"),
+        policyList: $("policy-list"),
+        capacityChip: $("capacity-chip"),
+        capacityList: $("capacity-list"),
+        telemetryChip: $("telemetry-chip"),
+        telemetryList: $("telemetry-list"),
+        activityChip: $("activity-chip"),
+        activityList: $("activity-list"),
+        clientChip: $("client-chip"),
+        clientList: $("client-list"),
+        logChip: $("log-chip"),
+        auditList: $("audit-list"),
+        logList: $("log-list")
       };
 
-      function isDocumentHidden() {
-        return document.visibilityState === "hidden";
-      }
-
-      function updateRefreshMode(label) {
-        if (!els.refreshMode) return;
-        if (label) {
-          els.refreshMode.textContent = label;
-          return;
-        }
-        if (state.refreshInFlight) {
-          els.refreshMode.textContent = "refreshing";
-        } else if (isDocumentHidden()) {
-          els.refreshMode.textContent = "paused · hidden tab";
-        } else if (state.lastRefreshError) {
-          els.refreshMode.textContent = "degraded · retrying";
-        } else {
-          els.refreshMode.textContent = `auto · ${Math.round(REFRESH_INTERVAL_MS / 1000)}s`;
-        }
-      }
-
-      function setRefreshBusy(isBusy, reason = "") {
-        state.refreshInFlight = Boolean(isBusy);
-        const refreshButton = document.getElementById("refresh-button");
-        if (refreshButton) {
-          refreshButton.disabled = Boolean(isBusy);
-          refreshButton.textContent = isBusy ? "Refreshing…" : "Refresh dashboard";
-        }
-        updateRefreshMode(isBusy ? `refreshing · ${reason || "manual"}` : null);
-      }
-
-      function scheduleAutoRefresh() {
-        if (state.autoRefreshTimer !== null) {
-          window.clearTimeout(state.autoRefreshTimer);
-        }
-        const delay = isDocumentHidden() ? HIDDEN_REFRESH_INTERVAL_MS : REFRESH_INTERVAL_MS;
-        state.autoRefreshTimer = window.setTimeout(() => {
-          refreshDashboard({ reason: "auto" });
-        }, delay);
-        updateRefreshMode();
-      }
-
-      async function fetchJson(url, options = {}) {
-        const headers = {
-          accept: "application/json",
-          ...(options.headers || {})
-        };
-        const response = await fetch(url, { ...options, headers });
-        if (!response.ok) {
-          throw new Error(`${response.status} ${response.statusText}`);
-        }
-        return response.json();
-      }
-
-      async function refreshDashboard(options = {}) {
-        const force = Boolean(options.force);
-        const reason = options.reason || (force ? "manual-force" : "manual");
-        if (!force && isDocumentHidden()) {
-          scheduleAutoRefresh();
-          return;
-        }
-
-        const refreshId = state.refreshSeq + 1;
-        state.refreshSeq = refreshId;
-        if (state.activeRefreshController) {
-          state.activeRefreshController.abort();
-        }
-        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
-        state.activeRefreshController = controller;
-        setRefreshBusy(true, reason);
-
+      function readPref(key, fallback, allowed) {
         try {
-          const overviewUrl = force ? "/api/overview?refresh=1" : "/api/overview";
-          const requestOptions = controller ? { signal: controller.signal } : {};
-          const [overviewResult, logsResult] = await Promise.allSettled([
-            fetchJson(overviewUrl, requestOptions),
-            fetchJson("/api/logs?tail=60", requestOptions)
-          ]);
-
-          if (refreshId !== state.refreshSeq) {
-            return;
-          }
-          if (overviewResult.status === "rejected") {
-            throw overviewResult.reason;
-          }
-
-          state.overview = overviewResult.value;
-          if (logsResult.status === "fulfilled") {
-            state.logs = Array.isArray(logsResult.value) ? logsResult.value : [];
-          } else {
-            state.lastRefreshError = `Logs refresh failed: ${logsResult.reason?.message || logsResult.reason}`;
-          }
-          if (logsResult.status === "fulfilled") {
-            state.lastRefreshError = null;
-          }
-          render();
-        } catch (error) {
-          if (error?.name === "AbortError") {
-            return;
-          }
-          if (refreshId === state.refreshSeq) {
-            console.error(error);
-            state.lastRefreshError = error?.message || String(error);
-            els.runtimeSummary.textContent = `Dashboard refresh failed: ${state.lastRefreshError}`;
-            updateRefreshMode();
-          }
-        } finally {
-          if (refreshId === state.refreshSeq) {
-            state.activeRefreshController = null;
-            setRefreshBusy(false);
-            scheduleAutoRefresh();
-          }
-        }
+          const value = window.localStorage?.getItem(PREF + key);
+          if (value && (!allowed || allowed.includes(value))) return value;
+        } catch (_) {}
+        return fallback;
       }
 
-      async function runAction(path) {
-        try {
-          await fetchJson(path, { method: "POST" });
-          await refreshDashboard({ force: true, reason: "action" });
-        } catch (error) {
-          console.error(error);
-          state.lastRefreshError = error?.message || String(error);
-          els.runtimeSummary.textContent = `Action failed: ${state.lastRefreshError}`;
-          updateRefreshMode();
-        }
-      }
-
-      function chip(label, tone) {
-        const dotClass = tone || "warn";
-        return `<span class="chip"><span class="dot ${dotClass}"></span>${escapeHtml(label)}</span>`;
-      }
-
-      function toneForBoolean(value) {
-        return value ? "good" : "bad";
-      }
-
-      function toneForHub(status) {
-        if (status === "running" || status === "healthy") return "good";
-        if (status === "stopped" || status === "stopped-ready") return "warn";
-        return "bad";
+      function writePref(key, value) {
+        try { window.localStorage?.setItem(PREF + key, value); } catch (_) {}
       }
 
       function escapeHtml(value) {
@@ -758,439 +1332,1758 @@
           .replaceAll('"', "&quot;");
       }
 
-      function formatDate(value) {
-        if (value === null || value === undefined || value === "") return "—";
-        const date = typeof value === "number" ? new Date(value) : new Date(value);
-        return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString();
+      function num(value, fallback = 0) {
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : fallback;
+      }
+
+      function text(value, fallback = "—") {
+        return value === null || value === undefined || value === "" ? fallback : String(value);
+      }
+
+      function fmtDate(ms) {
+        if (!ms) return "—";
+        try { return new Date(Number(ms)).toLocaleString(); } catch (_) { return String(ms); }
+      }
+
+      function fmtMs(ms) {
+        const value = num(ms, 0);
+        if (!value) return "0ms";
+        if (value < 1000) return `${value}ms`;
+        const seconds = value / 1000;
+        if (seconds < 60) return `${seconds.toFixed(seconds < 10 ? 1 : 0)}s`;
+        const minutes = seconds / 60;
+        return `${minutes.toFixed(minutes < 10 ? 1 : 0)}m`;
+      }
+
+      function fmtBytes(bytes) {
+        const value = num(bytes, 0);
+        if (!value) return "0 B";
+        const units = ["B", "KB", "MB", "GB"];
+        let size = value;
+        let unit = 0;
+        while (size >= 1024 && unit < units.length - 1) { size /= 1024; unit += 1; }
+        return `${size.toFixed(size >= 10 || unit === 0 ? 0 : 1)} ${units[unit]}`;
+      }
+
+      function dot(tone) { return `<span class="dot ${escapeHtml(tone || "warn")}"></span>`; }
+      function chip(label, tone = "warn") { return `<span class="chip">${dot(tone)}${escapeHtml(label)}</span>`; }
+      function tags(items) { return items.filter(Boolean).map(item => `<span class="tag">${escapeHtml(item)}</span>`).join(""); }
+      function itemClass(tone) { return tone === "bad" ? "item bad" : tone === "warn" ? "item warn" : tone === "good" ? "item good" : "item"; }
+      function setChip(element, label, tone) { if (element) element.innerHTML = `${dot(tone)}${escapeHtml(label)}`; }
+
+      function normalizeServers(value) {
+        if (Array.isArray(value)) return value;
+        if (Array.isArray(value?.servers)) return value.servers;
+        if (Array.isArray(value?.items)) return value.items;
+        return [];
+      }
+
+      function normalizeInstances(value) {
+        if (Array.isArray(value)) return value;
+        if (Array.isArray(value?.instances)) return value.instances;
+        if (Array.isArray(value?.items)) return value.items;
+        return [];
+      }
+
+      function normalizeClients(value) {
+        if (Array.isArray(value)) return value;
+        if (Array.isArray(value?.targets)) return value.targets;
+        if (Array.isArray(value?.clients)) return value.clients;
+        return [];
+      }
+
+      function normalizeLeases(value) {
+        if (Array.isArray(value)) return value;
+        if (Array.isArray(value?.leases)) return value.leases;
+        if (Array.isArray(value?.activeLeases)) return value.activeLeases;
+        return [];
+      }
+
+      function groupByServer(instances) {
+        const groups = new Map();
+        for (const instance of instances) {
+          const name = instance.server || instance.serverName || "server";
+          if (!groups.has(name)) groups.set(name, []);
+          groups.get(name).push(instance);
+        }
+        return groups;
+      }
+
+      function maxWorkers(server, instances) {
+        const fromInstances = instances.reduce((max, instance) => Math.max(max, num(instance.maxWorkers)), 0);
+        return num(server.maxWorkers, 0) || num(server.parallelismLimit, 0) || fromInstances || 1;
+      }
+
+      function maxInFlight(server, instances) {
+        const fromInstances = instances.reduce((max, instance) => Math.max(max, num(instance.maxInFlightPerWorker)), 0);
+        return num(server.maxInFlightPerWorker, 0) || fromInstances || 1;
+      }
+
+      function profileSourceMismatch(server) {
+        return Boolean((server?.profileEnabled || server?.defaultEnabled || server?.required) && server?.sourceEnabled === false);
+      }
+
+      function riskForServer(server, instances = []) {
+        const requiredDisabled = Boolean(server?.required && !server?.effectiveEnabled);
+        if (requiredDisabled || profileSourceMismatch(server)) return { tone: "bad", rank: 1, label: "needs setup" };
+        if (!server?.effectiveEnabled) return { tone: "warn", rank: 4, label: "off" };
+        const effect = String(server.effectClass || "").toLowerCase();
+        const stateClass = String(server.stateClass || "").toLowerCase();
+        const credential = String(server.credentialBinding || "").toLowerCase();
+        const scope = String(server.scopeClass || "").toLowerCase();
+        const routing = String(server.routingGroup || "").toLowerCase();
+        const concurrency = String(server.concurrencyPolicy || "").toLowerCase();
+        const runtime = String(server.runtimeType || "").toLowerCase();
+        const lock = String(server.hostLock || server.hostLockKey || "none").toLowerCase();
+        const locks = Array.isArray(server.lockDomains) ? server.lockDomains.filter(Boolean) : [];
+        const hasLiveTools = serverToolEvidence(server).checked;
+        const unknown = !scope || scope === "configured-source" || runtime === "unknown" || stateClass === "unknown-conservative" || effect === "external-unknown";
+        const exclusive = ["single-session", "single-writer", "isolated-per-project"].includes(concurrency)
+          || lock !== "none"
+          || locks.length > 0
+          || instances.some(instance => instance.mode === "serialized");
+        const sensitive = /write|mutation|external|host|remote|credential|stateful|session/.test(`${effect} ${stateClass} ${credential} ${scope} ${routing}`);
+        if (sensitive || exclusive || server.discoveryRequiresLease) return { tone: "warn", rank: hasLiveTools ? 3 : 2, label: hasLiveTools ? "guarded" : "unchecked" };
+        if (unknown) return { tone: "warn", rank: 2, label: "unchecked" };
+        return { tone: "good", rank: 5, label: "ready" };
+      }
+
+      function compactField(value, fallback = "unknown") {
+        const raw = String(value || "").trim();
+        return raw || fallback;
+      }
+
+      function humanizeKey(value) {
+        const words = String(value || "")
+          .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+          .replace(/[_./:-]+/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        return words || "tools";
+      }
+
+      function normalizeToolNames(value) {
+        const items = Array.isArray(value) ? value : [];
+        return items.map(item => {
+          if (typeof item === "string") return item;
+          return item?.name || item?.title || item?.qualifiedName || "";
+        }).map(item => String(item || "").trim()).filter(Boolean);
+      }
+
+      function normalizeTools(value) {
+        const items = Array.isArray(value) ? value : [];
+        return items.map(item => typeof item === "string" ? { name: item } : item).filter(item => item && (item.name || item.title || item.qualifiedName));
+      }
+
+      function topToolNames(names, limit = 4) {
+        const unique = [...new Set(normalizeToolNames(names))];
+        const visible = unique.slice(0, limit);
+        const suffix = unique.length > limit ? `, +${unique.length - limit} more` : "";
+        return `${visible.join(", ")}${suffix}`;
+      }
+
+      function commonToolNamespace(names) {
+        const prefixes = normalizeToolNames(names)
+          .map(name => String(name).split(/[_.:-]/)[0])
+          .map(prefix => prefix.trim())
+          .filter(prefix => prefix.length > 1);
+        if (!prefixes.length) return "";
+        const counts = prefixes.reduce((map, prefix) => map.set(prefix, (map.get(prefix) || 0) + 1), new Map());
+        const [prefix, count] = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0] || ["", 0];
+        return count >= 2 ? prefix : "";
+      }
+
+      function resultPayload(value) {
+        if (value?.action && value?.result) return value.result;
+        return value?.result || value || {};
+      }
+
+      function probeResultForServer(name, value) {
+        const payload = resultPayload(value);
+        const rows = Array.isArray(payload.results) ? payload.results : [];
+        if (!rows.length) return payload?.name ? payload : null;
+        return rows.find(row => String(row.name || "") === String(name || "")) || rows[0];
+      }
+
+      function normalizeProbeEvidence(name, value) {
+        const payload = resultPayload(value);
+        const row = probeResultForServer(name, value) || {};
+        const tools = normalizeTools(row.tools || payload.tools || []);
+        const toolNames = normalizeToolNames(row.toolNames || row.tools || payload.toolNames || payload.tools || []);
+        const toolCount = num(row.toolCount ?? row.returnedToolCount ?? payload.toolCount ?? payload.returnedToolCount, toolNames.length || tools.length || 0);
+        const ok = row.ok === true || (payload.ok === true && row.ok !== false);
+        const error = row.error || payload.error || "";
+        return {
+          checked: true,
+          checkedAtMs: Date.now(),
+          ok,
+          status: row.status || payload.status || (ok ? "listed-tools" : "failed"),
+          toolCount,
+          toolNames: toolNames.length ? toolNames : normalizeToolNames(tools),
+          tools,
+          error: String(error || ""),
+          elapsedMs: row.elapsedMs ?? payload.elapsedMs,
+          sourceType: row.sourceType || payload.sourceType || "",
+          runtimeCallable: row.runtimeCallable ?? payload.runtimeCallable
+        };
+      }
+
+      function serverToolEvidence(server) {
+        const name = String(server?.name || "");
+        const cached = state.serverTests?.[name];
+        if (cached) return cached;
+        const tools = normalizeTools(server?.tools || server?.topTools || []);
+        const toolNames = normalizeToolNames(server?.toolNames || server?.tools || server?.topTools || []);
+        const directCount = num(server?.toolCount ?? server?.returnedToolCount, 0);
+        if (directCount || toolNames.length || tools.length) {
+          return {
+            checked: true,
+            ok: server?.toolsOk !== false,
+            status: server?.toolsStatus || "listed-tools",
+            toolCount: directCount || toolNames.length || tools.length,
+            toolNames: toolNames.length ? toolNames : normalizeToolNames(tools),
+            tools,
+            error: String(server?.toolsError || ""),
+            checkedAtMs: server?.toolsListedAtMs || server?.toolsCheckedAtMs || 0
+          };
+        }
+        if (server?.sourceEnabled === false) {
+          return {
+            checked: false,
+            ok: false,
+            status: "source-disabled",
+            toolCount: 0,
+            toolNames: [],
+            tools: [],
+            error: "source disabled",
+            checkedAtMs: 0
+          };
+        }
+        return {
+          checked: false,
+          ok: false,
+          status: "not-checked",
+          toolCount: 0,
+          toolNames: [],
+          tools: [],
+          error: "",
+          checkedAtMs: 0
+        };
+      }
+
+      function serverCategory(server) {
+        const source = compactField(server.sourceType || server.transportPreference, "transport unknown");
+        const kind = compactField(server.kind, "configured server");
+        const runtime = compactField(server.runtimeType, "runtime unknown");
+        return `${kind} · ${source} · ${runtime}`;
+      }
+
+      function serverImpact(server) {
+        const effect = compactField(server.effectClass, "effect unknown");
+        const stateClass = compactField(server.stateClass, "state unknown");
+        const credential = compactField(server.credentialBinding, "credential unknown");
+        return `${effect} · ${stateClass} · ${credential}`;
+      }
+
+      function serverEvidenceSummary(server) {
+        const evidence = serverToolEvidence(server);
+        if (evidence.checked && evidence.ok && evidence.toolCount > 0) {
+          const namespace = commonToolNamespace(evidence.toolNames);
+          const title = namespace ? `${humanizeKey(namespace)} tools` : `${evidence.toolCount} tool${evidence.toolCount === 1 ? "" : "s"} listed`;
+          const body = evidence.toolNames.length
+            ? `Live tools/list: ${topToolNames(evidence.toolNames)}.`
+            : `Live tools/list reported ${evidence.toolCount} tool${evidence.toolCount === 1 ? "" : "s"}.`;
+          return { title, body, evidence };
+        }
+        if (evidence.checked && !evidence.ok) {
+          return {
+            title: "Probe failed",
+            body: evidence.error ? `Last tools/list check failed: ${evidence.error}` : "Last tools/list check failed.",
+            evidence
+          };
+        }
+        if (profileSourceMismatch(server)) {
+          return {
+            title: "Selected but source off",
+            body: "Profile selects this server, but the MCP settings source has it disabled. No tools/list evidence is available while it is off.",
+            evidence
+          };
+        }
+        if (!server.effectiveEnabled) {
+          return {
+            title: "No live tools evidence",
+            body: "This server is not effectively enabled, so MCPace has not listed its tools in this dashboard view.",
+            evidence
+          };
+        }
+        return {
+          title: "Tools not checked",
+          body: "Click Test to run initialize and tools/list before trusting what this server exposes.",
+          evidence
+        };
+      }
+
+      function serverVerdict(server, risk, related = []) {
+        const recommendation = recommendedPolicy(server, related);
+        const evidence = serverToolEvidence(server);
+        if (risk.rank === 1) return { tone: "bad", label: "Needs setup", summary: "Selected or required, but not usable." };
+        if (!server.effectiveEnabled) return { tone: "warn", label: "Off", summary: "Not active. No live tools listed." };
+        if (evidence.checked && !evidence.ok) return { tone: "bad", label: "Test failed", summary: "Latest tools/list check failed." };
+        if (policyNeedsTuning(server, related, recommendation)) return { tone: "warn", label: "Fix policy", summary: "A lower-resource policy is available." };
+        if (!evidence.checked) return { tone: "warn", label: "Unchecked", summary: "Run Test to list tools." };
+        if (risk.rank <= 3) return { tone: "warn", label: "Guarded", summary: "Usable with conservative policy." };
+        return { tone: "good", label: "Ready", summary: "Live tools are listed." };
+      }
+
+      function serverBucket(server, risk) {
+        if (risk.rank <= 1) return "blocked";
+        if (!server.effectiveEnabled) return "off";
+        if (risk.rank <= 3) return "protected";
+        return "ready";
+      }
+
+      function serverViewModel(server, related = []) {
+        const risk = riskForServer(server, related);
+        const recommendation = recommendedPolicy(server, related);
+        return {
+          server,
+          related,
+          name: server.name || "server",
+          risk,
+          evidence: serverToolEvidence(server),
+          evidenceSummary: serverEvidenceSummary(server),
+          verdict: serverVerdict(server, risk, related),
+          bucket: serverBucket(server, risk),
+          decision: serverDecision(server, risk, related),
+          settings: serverSettingProfile(server, risk, related),
+          human: serverHumanSummary(server, risk, related),
+          nextStep: serverNextStep(server, risk, related),
+          category: serverCategory(server),
+          impact: serverImpact(server),
+          routeMode: serverMode(server, related),
+          workers: maxWorkers(server, related),
+          inFlight: maxInFlight(server, related),
+          recommendation,
+          needsTuning: policyNeedsTuning(server, related, recommendation),
+          facts: serverFacts(server, risk, related)
+        };
+      }
+
+      function serverDecision(server, risk, related = []) {
+        const recommendation = recommendedPolicy(server, related);
+        const guidance = serverEvidenceSummary(server);
+        const evidence = guidance.evidence || serverToolEvidence(server);
+        if (profileSourceMismatch(server)) {
+          return {
+            title: "Fix source enablement",
+            body: "The active profile selects this server, but its source is disabled. Turn it on or remove it from the profile."
+          };
+        }
+        if (!server.effectiveEnabled) {
+          return {
+            title: "Off; no live tools listed",
+            body: "Turn on only if the current workflow needs this MCP source, then run Test to list tools."
+          };
+        }
+        if (evidence.checked && !evidence.ok) {
+          return {
+            title: "Retry tools/list",
+            body: evidence.error || "The last check failed; run Test again to collect fresh evidence."
+          };
+        }
+        if (!evidence.checked) {
+          return {
+            title: "Run Test first",
+            body: "The dashboard will not guess capabilities. Test runs initialize + tools/list and shows real tool evidence."
+          };
+        }
+        if (policyNeedsTuning(server, related, recommendation)) {
+          return {
+            title: "Apply recommended policy",
+            body: "MCPace has a lower-resource setting ready. Tool evidence stays unchanged."
+          };
+        }
+        return {
+          title: "Evidence available",
+          body: `${guidance.title}: ${firstSentence(guidance.body)}`
+        };
+      }
+
+      function serverSettingProfile(server, risk, related = []) {
+        const recommendation = recommendedPolicy(server, related);
+        const guidance = serverEvidenceSummary(server);
+        const current = `${routeLabel(serverMode(server, related))} / ${maxWorkers(server, related)}×${maxInFlight(server, related)}`;
+        const recommended = `${recommendation.label}`;
+        if (!server.effectiveEnabled) {
+          const stateTitle = profileSourceMismatch(server) ? "Profile/source mismatch" : "Off";
+          const stateBody = profileSourceMismatch(server)
+            ? "The profile selects this server, but the settings source is disabled. No live tools can be listed until it is enabled."
+            : "The server is not active, so the dashboard will not invent capabilities.";
+          return {
+            stateTitle,
+            stateBody,
+            routeTitle: recommended,
+            routeBody: "When enabled, MCPace will start from the current inferred conservative policy.",
+            useTitle: guidance.title,
+            useBody: guidance.body,
+            current
+          };
+        }
+        if (policyNeedsTuning(server, related, recommendation)) {
+          return {
+            stateTitle: "On, policy differs",
+            stateBody: "The server is usable, but the current policy differs from MCPace's inferred low-resource recommendation.",
+            routeTitle: recommended,
+            routeBody: `Current is ${current}. Apply only if you want the recommended policy.`,
+            useTitle: guidance.title,
+            useBody: guidance.body,
+            current
+          };
+        }
+        return {
+          stateTitle: "On",
+          stateBody: "The visible capability text is based only on live/cached evidence or source state.",
+          routeTitle: recommended,
+          routeBody: `Current is ${current}. Worker controls stay in Advanced because they are not normal user decisions.`,
+          useTitle: guidance.title,
+          useBody: guidance.body,
+          current
+        };
+      }
+
+      function settingCard(label, title, body) {
+        return `<section class="server-setting-card"><div class="label">${escapeHtml(label)}</div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(body)}</p></section>`;
+      }
+
+      function firstSentence(textValue) {
+        const value = String(textValue || "").trim();
+        const match = value.match(/^.*?[.!?](?:\s|$)/);
+        return (match ? match[0] : value).trim();
+      }
+
+      function serverHumanSummary(server, risk, related = []) {
+        const guidance = serverEvidenceSummary(server);
+        const evidence = guidance.evidence || serverToolEvidence(server);
+        if (!server.effectiveEnabled) {
+          return {
+            capabilityTitle: guidance.title,
+            capabilityBody: firstSentence(guidance.body),
+            nowTitle: profileSourceMismatch(server) ? "Needs setup" : "Off",
+            nowBody: profileSourceMismatch(server) ? "Source is disabled while the profile selects this server." : "No live tools are listed while it is off."
+          };
+        }
+        if (evidence.checked && !evidence.ok) {
+          return {
+            capabilityTitle: guidance.title,
+            capabilityBody: firstSentence(guidance.body),
+            nowTitle: "Test failed",
+            nowBody: "Retry Test to collect fresh tools/list evidence."
+          };
+        }
+        if (!evidence.checked) {
+          return {
+            capabilityTitle: guidance.title,
+            capabilityBody: firstSentence(guidance.body),
+            nowTitle: "Unchecked",
+            nowBody: "Run Test before assuming capabilities."
+          };
+        }
+        if (policyNeedsTuning(server, related)) {
+          return {
+            capabilityTitle: guidance.title,
+            capabilityBody: firstSentence(guidance.body),
+            nowTitle: "Policy fix available",
+            nowBody: "Apply the recommended policy only if you want MCPace's inferred low-resource setting."
+          };
+        }
+        return {
+          capabilityTitle: guidance.title,
+          capabilityBody: firstSentence(guidance.body),
+          nowTitle: "Evidence listed",
+          nowBody: evidence.checkedAtMs ? `Checked ${fmtDate(evidence.checkedAtMs)}.` : "Tools/list evidence is available."
+        };
+      }
+
+      function profileEvidence(server) {
+        return Array.isArray(server.profileEvidence) && server.profileEvidence.length ? server.profileEvidence[0] : null;
+      }
+
+      function evidenceLine(server) {
+        const evidence = profileEvidence(server);
+        if (!evidence) return "No profile evidence was reported yet. Auto setup keeps this route conservative.";
+        const confidence = typeof evidence.confidence === "number" ? `${Math.round(evidence.confidence * 100)}%` : text(evidence.evidenceLevel, "unknown");
+        const confidenceValue = typeof evidence.confidence === "number" ? evidence.confidence : 0;
+        if (confidenceValue < 0.7 || /low|weak|unknown/i.test(String(evidence.evidenceLevel || ""))) {
+          return `${text(evidence.evidenceLevel, "evidence")} evidence · ${confidence} confidence. Auto setup keeps this route conservative.`;
+        }
+        return `${text(evidence.evidenceLevel, "evidence")} evidence · ${confidence} confidence. ${text(evidence.summary, "Auto setup keeps this route conservative.")}`;
+      }
+
+      function serverNextStep(server, risk, instances = []) {
+        if (risk.rank === 1) return "Fix the source/profile mismatch, then run Test to collect tools/list evidence.";
+        if (risk.rank === 2) return "Run Test to collect initialize + tools/list evidence before assuming capabilities.";
+        if (risk.rank === 3) return instances.length
+          ? "Evidence exists, but routing remains conservative because runtime state, credentials, or locks are present."
+          : "Evidence exists, but MCPace still keeps conservative routing from inferred policy fields.";
+        if (!server.effectiveEnabled) return "Disabled. Turn on only when a workflow asks for this source, then run Test.";
+        return "Ready from current evidence. Re-test if the source config changes.";
+      }
+
+      function routingPlain(server, risk, instances = []) {
+        if (risk.rank === 2) return "MCPace has no live tools/list evidence in the dashboard yet, so it keeps conservative routing.";
+        if (risk.rank === 3) return "Requests are serialized or isolated because this server has state/credentials/locks that should not be shared freely.";
+        if (server.runtimeType === "stateless") return "The server looks stateless, so MCPace can share it more safely across requests.";
+        if (instances.some(instance => instance.mode === "pool")) return "MCPace plans a pool, so multiple workers can serve traffic while respecting the configured limits.";
+        return "Routing follows the server policy fields and any planned instance/mutex hints returned by the runtime.";
+      }
+
+      function serverChecklist(server, risk) {
+        const checks = [];
+        if (risk.rank <= 2) {
+          checks.push("No capability is assumed without source state or tools/list evidence.");
+          checks.push("Use Test to collect initialize + tools/list evidence.");
+        } else if (risk.rank === 3) {
+          checks.push("This server is intentionally one-at-a-time because it has state, credentials, or locks.");
+          checks.push("Manual worker changes stay collapsed because they are advanced overrides.");
+        } else if (!server.effectiveEnabled) {
+          checks.push("No live tools are listed while the server is off.");
+          checks.push("After enabling, run Test before relying on capabilities.");
+        } else {
+          checks.push("Visible capability text is evidence-backed.");
+          checks.push("Re-test after changing source configuration.");
+        }
+        return checks;
+      }
+
+      function serverMetric(label, value) {
+        return `<div class="server-metric"><div class="label">${escapeHtml(label)}</div><div class="value">${escapeHtml(text(value))}</div></div>`;
+      }
+
+      function currentServers() {
+        return normalizeServers(state.overview?.servers);
+      }
+
+      function currentInstances() {
+        return normalizeInstances(state.overview?.instances);
+      }
+
+      function findServer(name) {
+        return currentServers().find(server => String(server.name || "") === String(name || ""));
+      }
+
+      function relatedInstances(name) {
+        return currentInstances().filter(instance => String(instance.server || instance.serverName || "") === String(name || ""));
+      }
+
+      function serverMode(server, instances = []) {
+        const instanceMode = instances.find(instance => instance.mode)?.mode;
+        const routingGroup = String(server.routingGroup || "");
+        const concurrency = String(server.concurrencyPolicy || "");
+        const startup = String(server.startupStrategy || "");
+        if (startup === "disabled" || routingGroup === "disabled") return "disabled";
+        if (instanceMode === "pool" || /pool/.test(routingGroup)) return "pool";
+        if (instanceMode === "shared" || /shared|parallel/.test(routingGroup) || concurrency === "multi-reader") return "shared";
+        if (/project/.test(routingGroup) || concurrency === "isolated-per-project") return "project-isolated";
+        if (/session/.test(routingGroup) || concurrency === "single-session") return "session-isolated";
+        return "serialized";
+      }
+
+      function modeOptions(selected) {
+        return ROUTING_MODES.map(([value, label]) => `<option value="${value}"${value === selected ? " selected" : ""}>${escapeHtml(label)}</option>`).join("");
+      }
+
+      function routeLabel(mode) {
+        return ROUTING_MODES.find(([value]) => value === mode)?.[1] || mode || "Safe queue";
+      }
+
+      function domId(value) {
+        return String(value || "server").replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 80) || "server";
+      }
+
+      function profileConfidence(server) {
+        const evidence = profileEvidence(server);
+        return typeof evidence?.confidence === "number" ? evidence.confidence : 0;
+      }
+
+      function recommendedPolicy(server, related = []) {
+        const risk = riskForServer(server, related);
+        const confidence = profileConfidence(server);
+        const effect = String(server.effectClass || "");
+        const stateClass = String(server.stateClass || "");
+        const credential = String(server.credentialBinding || "");
+        const currentWorkers = maxWorkers(server, related);
+        const isStateless = server.runtimeType === "stateless" || /stateless|read-only/.test(`${stateClass} ${effect}`);
+        const canShare = risk.rank >= 5 && confidence >= 0.7 && isStateless && !/credential|stateful|external-unknown|write|host/.test(`${credential} ${stateClass} ${effect}`);
+        if (canShare) {
+          return {
+            mode: "shared",
+            maxWorkers: 1,
+            maxInFlightPerWorker: 1,
+            label: "Shared / 1 worker",
+            reason: "High-confidence stateless server; one shared worker is the lowest-resource safe default."
+          };
+        }
+        if (serverMode(server, related) === "pool" && currentWorkers > 1 && risk.rank <= 3) {
+          return {
+            mode: "serialized",
+            maxWorkers: 1,
+            maxInFlightPerWorker: 1,
+            label: "Safe queue / 1 worker",
+            reason: "Auto setup reduces resource use for this stateful or low-evidence server."
+          };
+        }
+        return {
+          mode: "serialized",
+          maxWorkers: 1,
+          maxInFlightPerWorker: 1,
+          label: "Safe queue / 1 worker",
+          reason: risk.rank <= 2
+            ? "Auto setup keeps this server low-resource and one-at-a-time."
+            : "Conservative one-worker routing avoids extra idle upstream processes."
+        };
+      }
+
+      function policyNeedsTuning(server, related = [], recommendation = recommendedPolicy(server, related)) {
+        if (!server?.effectiveEnabled) return false;
+        return serverMode(server, related) !== recommendation.mode
+          || maxWorkers(server, related) !== recommendation.maxWorkers
+          || maxInFlight(server, related) !== recommendation.maxInFlightPerWorker;
+      }
+
+      function autoPolicyPlan(servers = currentServers(), instances = currentInstances()) {
+        const groups = groupByServer(instances);
+        const plan = {
+          enabled: 0,
+          disabled: 0,
+          already: 0,
+          protected: 0,
+          ready: 0,
+          changes: []
+        };
+        for (const server of servers) {
+          if (!server.effectiveEnabled) {
+            plan.disabled += 1;
+            continue;
+          }
+          plan.enabled += 1;
+          const related = groups.get(server.name) || [];
+          const risk = riskForServer(server, related);
+          const recommendation = recommendedPolicy(server, related);
+          if (risk.rank >= 5) plan.ready += 1;
+          if (risk.rank >= 2 && risk.rank <= 3) plan.protected += 1;
+          if (policyNeedsTuning(server, related, recommendation)) {
+            plan.changes.push({
+              ...actionPayloadForPolicy(server, related, recommendation),
+              label: recommendation.label,
+              reason: recommendation.reason
+            });
+          } else {
+            plan.already += 1;
+          }
+        }
+        return plan;
+      }
+
+      function renderAutoSetup(servers, instances) {
+        const plan = autoPolicyPlan(servers, instances);
+        const changeCount = plan.changes.length;
+        if (els.serverAutoTitle) {
+          els.serverAutoTitle.textContent = changeCount
+            ? `${changeCount} safe resource fix${changeCount === 1 ? "" : "es"} ready`
+            : "No server clicking needed";
+        }
+        if (els.serverAutoBody) {
+          els.serverAutoBody.textContent = changeCount
+            ? "Apply once and MCPace will set enabled servers to the safest low-resource routing available right now."
+            : "Enabled servers already have automatic safety limits. You do not need to understand workers unless you open Details on purpose.";
+        }
+        if (els.serverAutoStats) {
+          els.serverAutoStats.innerHTML = [
+            chip(`${plan.enabled} on`, plan.enabled ? "good" : "warn"),
+            chip(`${plan.protected} guarded`, plan.protected ? "warn" : "good"),
+            chip(`${plan.ready} ready`, plan.ready ? "good" : "warn"),
+            chip(`${changeCount} fixes`, changeCount ? "warn" : "good")
+          ].join("");
+        }
+        if (els.autoTuneVisible) {
+          els.autoTuneVisible.disabled = changeCount === 0;
+          els.autoTuneVisible.textContent = changeCount
+            ? `Apply ${changeCount} safe fix${changeCount === 1 ? "" : "es"}`
+            : "Safe plan active";
+        }
+      }
+
+      function serverSensitivity(server, risk) {
+        const fields = `${server.effectClass || ""} ${server.stateClass || ""} ${server.credentialBinding || ""} ${server.scopeClass || ""}`.toLowerCase();
+        if (/credential|external|remote|stateful|session|write|host/.test(fields)) return "Guarded";
+        if (risk.rank <= 3) return "Unchecked";
+        return "Low";
+      }
+
+      function serverFacts(server, risk, related) {
+        const recommendation = recommendedPolicy(server, related);
+        const tuned = !policyNeedsTuning(server, related, recommendation);
+        const evidence = serverToolEvidence(server);
+        const toolLabel = evidence.checked
+          ? evidence.ok
+            ? `${evidence.toolCount} listed`
+            : "failed"
+          : "not checked";
+        if (!server.effectiveEnabled) {
+          return [
+            `<span class="fact"><strong>Status</strong> ${profileSourceMismatch(server) ? "Needs setup" : "Off"}</span>`,
+            `<span class="fact"><strong>Tools</strong> ${escapeHtml(toolLabel)}</span>`,
+            `<span class="fact"><strong>Source</strong> ${server.sourceEnabled ? "on" : "off"}</span>`,
+            `<span class="fact"><strong>Policy</strong> ${escapeHtml(serverSensitivity(server, risk))}</span>`
+          ].join("");
+        }
+        return [
+          `<span class="fact"><strong>Status</strong> On</span>`,
+          `<span class="fact"><strong>Tools</strong> ${escapeHtml(toolLabel)}</span>`,
+          `<span class="fact"><strong>Policy</strong> ${escapeHtml(serverSensitivity(server, risk))}</span>`,
+          tuned ? "" : `<span class="fact"><strong>Fix</strong> Apply safe</span>`
+        ].filter(Boolean).join("");
+      }
+
+      function serverControls(server, related, placement = "row") {
+        const name = escapeHtml(server.name || "");
+        const enabled = Boolean(server.effectiveEnabled);
+        const recommendation = recommendedPolicy(server, related);
+        const needsTuning = policyNeedsTuning(server, related, recommendation);
+        if (placement === "row") {
+          if (!enabled) {
+            return `
+              <button class="primary" type="button" data-server-name="${name}" data-server-action="toggle">Turn on</button>
+              <button class="quiet" type="button" data-server-name="${name}" data-server-action="settings">Details</button>
+            `;
+          }
+          if (needsTuning) {
+            return `
+              <button class="primary" type="button" data-server-name="${name}" data-server-action="auto">Apply policy</button>
+              <button type="button" data-server-name="${name}" data-server-action="test">Test</button>
+              <button class="quiet" type="button" data-server-name="${name}" data-server-action="settings">Details</button>
+            `;
+          }
+          return `
+            <button class="primary" type="button" data-server-name="${name}" data-server-action="test">Test</button>
+            <button class="server-toggle on" type="button" aria-pressed="true" data-server-name="${name}" data-server-action="toggle">Turn off</button>
+            <button class="quiet" type="button" data-server-name="${name}" data-server-action="settings">Details</button>
+          `;
+        }
+        return `
+          <button class="server-toggle ${enabled ? "on" : "off"}" type="button" aria-pressed="${enabled}" data-server-name="${name}" data-server-action="toggle">
+            ${enabled ? "Turn off" : "Turn on"}
+          </button>
+          <button type="button" data-server-name="${name}" data-server-action="auto"${!enabled || !needsTuning ? " disabled" : ""}>${!enabled ? "Policy after on" : needsTuning ? "Apply policy" : "Policy active"}</button>
+          <button type="button" data-server-name="${name}" data-server-action="test">Test</button>
+        `;
+      }
+
+      function buildPolicyRows(servers, instances) {
+        const groups = groupByServer(instances);
+        return servers.map(server => {
+          const risk = riskForServer(server, groups.get(server.name) || []);
+          const policy = server.runtimeType === "stateless"
+            ? `Can share safely · ${server.effectClass || "read-only"}`
+            : `${server.runtimeType || "unknown"} · ${server.concurrencyPolicy || "routing unknown"}`;
+          return { server, risk, policy };
+        }).sort((a, b) => a.risk.rank - b.risk.rank || String(a.server.name || "").localeCompare(String(b.server.name || "")));
+      }
+
+      function shortNames(rows, limit = 6) {
+        const names = rows.map(row => row.server?.name || row.serverName || row.name || "server");
+        const visible = names.slice(0, limit).join(", ");
+        return names.length > limit ? `${visible}, +${names.length - limit} more` : visible;
+      }
+
+      function buildAttentionItems(hub, readiness, policyRows, leases) {
+        const items = [];
+        const hubWarnings = Array.isArray(hub.warnings) ? hub.warnings.map(String).filter(Boolean) : [];
+        if (hubWarnings.length) {
+          items.push({
+            title: "Runtime state can be repaired",
+            meta: `${hubWarnings.length} warning${hubWarnings.length === 1 ? "" : "s"}. Use Repair if runtime status looks stale; server auto policy is already handled separately.`,
+            tone: "warn",
+            tag: "repair"
+          });
+        }
+        if (Array.isArray(readiness.missingRequiredSourceEnablement)) {
+          for (const name of readiness.missingRequiredSourceEnablement) {
+            items.push({ title: "Required source is disabled", meta: String(name), tone: "bad", tag: "required" });
+          }
+        }
+        if (Array.isArray(readiness.missingRequiredCommands)) {
+          for (const command of readiness.missingRequiredCommands) {
+            items.push({ title: "Required command is missing", meta: String(command), tone: "bad", tag: "setup" });
+          }
+        }
+
+        const activePolicyRows = policyRows.filter(row => row.server?.effectiveEnabled || row.risk.rank <= 1);
+        const requiredDisabled = activePolicyRows.filter(row => row.risk.rank === 1);
+
+        if (requiredDisabled.length) {
+          items.push({
+            title: `${requiredDisabled.length} server${requiredDisabled.length === 1 ? "" : "s"} need source/profile setup`,
+            meta: `${shortNames(requiredDisabled)}. Fix enablement, then run Test to collect tools/list evidence.`,
+            tone: "bad",
+            tag: "setup"
+          });
+        }
+        const seen = new Set();
+        return items.filter(item => {
+          const key = `${item.title}\n${item.meta}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+      }
+
+      function updateRefreshChip() {
+        let label = "manual";
+        let tone = "warn";
+        if (state.refreshing) { label = "refreshing"; tone = "warn"; }
+        else if (state.lastError) { label = "refresh failed"; tone = "bad"; }
+        else if (state.refreshMode === "paused") { label = "paused"; tone = "warn"; }
+        else if (document.visibilityState === "hidden") { label = "background"; tone = "warn"; }
+        else { label = `auto ${Math.round((REFRESH_MS[state.refreshMode] || 0) / 1000)}s`; tone = "good"; }
+        setChip(els.refreshChip, label, tone);
+      }
+
+      function scheduleRefresh() {
+        if (state.timer !== null) window.clearTimeout(state.timer);
+        const base = REFRESH_MS[state.refreshMode] || 0;
+        if (!base) { state.timer = null; updateRefreshChip(); return; }
+        const delay = document.visibilityState === "hidden" ? Math.max(base, HIDDEN_REFRESH_MS) : base;
+        state.timer = window.setTimeout(() => refreshDashboard({ reason: "auto" }), delay);
+        updateRefreshChip();
+      }
+
+      function setBusy(value) {
+        state.refreshing = Boolean(value);
+        els.shell?.setAttribute("aria-busy", String(Boolean(value)));
+        if (els.refreshButton) {
+          els.refreshButton.disabled = Boolean(value);
+          els.refreshButton.textContent = value ? "Refreshing…" : "Refresh";
+        }
+        updateRefreshChip();
+      }
+
+      async function fetchJson(url, options = {}) {
+        const response = await fetch(url, { ...options, headers: { accept: "application/json", ...(options.headers || {}) } });
+        const raw = await response.text();
+        let payload = null;
+        if (raw) {
+          try { payload = JSON.parse(raw); } catch (_) { payload = { error: raw }; }
+        }
+        if (!response.ok) {
+          const message = payload?.error?.message || payload?.error || `${response.status} ${response.statusText}`;
+          throw new Error(message);
+        }
+        return payload;
+      }
+
+      async function timedFetchJson(url, options = {}) {
+        const started = performance.now();
+        try {
+          const value = await fetchJson(url, options);
+          return { ok: true, value, ms: Math.round(performance.now() - started), url, at: Date.now() };
+        } catch (error) {
+          return { ok: false, error, ms: Math.round(performance.now() - started), url, at: Date.now() };
+        }
+      }
+
+      async function refreshDashboard(options = {}) {
+        if (document.visibilityState === "hidden" && !options.force && !options.allowHidden) { scheduleRefresh(); return; }
+        const seq = state.seq + 1;
+        state.seq = seq;
+        if (state.controller) state.controller.abort();
+        const controller = typeof AbortController !== "undefined" ? new AbortController() : null;
+        state.controller = controller;
+        setBusy(true);
+        try {
+          const request = controller ? { signal: controller.signal } : {};
+          const overviewUrl = options.force ? "/api/overview?refresh=1" : "/api/overview";
+          const [overviewResult, logsResult] = await Promise.allSettled([
+            timedFetchJson(overviewUrl, request),
+            timedFetchJson("/api/logs?tail=40", request)
+          ]);
+          if (seq !== state.seq) return;
+          const overviewCheck = overviewResult.status === "fulfilled" ? overviewResult.value : { ok: false, error: overviewResult.reason, ms: 0, url: overviewUrl, at: Date.now() };
+          const logsCheck = logsResult.status === "fulfilled" ? logsResult.value : { ok: false, error: logsResult.reason, ms: 0, url: "/api/logs?tail=40", at: Date.now() };
+          state.backend.overview = overviewCheck;
+          state.backend.logs = logsCheck;
+          state.backend.checkedAt = Date.now();
+          if (!overviewCheck.ok) throw overviewCheck.error;
+          state.overview = overviewCheck.value;
+          if (logsCheck.ok) state.logs = Array.isArray(logsCheck.value) ? logsCheck.value : [];
+          state.lastError = logsCheck.ok ? null : `Logs: ${logsCheck.error?.message || logsCheck.error}`;
+          render();
+        } catch (error) {
+          if (error?.name !== "AbortError") {
+            state.lastError = error?.message || String(error);
+            renderError(state.lastError);
+          }
+        } finally {
+          if (seq === state.seq) {
+            state.controller = null;
+            setBusy(false);
+            scheduleRefresh();
+          }
+        }
+      }
+
+      function renderError(message) {
+        els.systemState.textContent = "Degraded";
+        els.systemNote.textContent = `Dashboard refresh failed: ${message}`;
+        if (els.opsDot) els.opsDot.className = "dot bad";
+        if (els.opsTitle) els.opsTitle.textContent = "Dashboard backend is not connected";
+        if (els.opsBody) els.opsBody.textContent = `Last refresh failed: ${message}`;
+        if (els.opsSteps) els.opsSteps.innerHTML = [
+          stepCard("Backend offline", message, "bad"),
+          stepCard("Runtime unknown", "No fresh overview", "warn"),
+          stepCard("Actions not verified", "Use Check link after backend is reachable", "warn")
+        ].join("");
+        if (els.backendState) els.backendState.textContent = "Backend not connected";
+        if (els.backendGrid) els.backendGrid.innerHTML = [
+          readout("/api/overview", "failed", message, "bad"),
+          readout("/api/logs", "unknown", "overview failed first", "warn"),
+          readout("action POST", state.backend.action?.ok ? "ok" : "not checked", state.backend.action ? `${fmtMs(state.backend.action.ms)} · ${fmtDate(state.backend.action.at)}` : "waiting", state.backend.action?.ok ? "good" : "warn"),
+          readout("HTTP runtime", "unknown", "no fresh counters", "warn")
+        ].join("");
+        els.loadState.textContent = "Failed";
+        els.loadNote.textContent = "Backend overview request failed.";
+        els.attentionCount.textContent = "1";
+        els.attentionNote.textContent = "Refresh failed.";
+        els.attentionList.innerHTML = `<article class="item bad"><div class="item-head"><div class="name">Dashboard refresh failed</div>${chip("error", "bad")}</div><div class="meta">${escapeHtml(message)}</div></article>`;
+        updateRefreshChip();
+      }
+
+      async function runAction(path, button, confirmMessage, busyLabel) {
+        if (confirmMessage && !window.confirm(confirmMessage)) return;
+        const original = button?.textContent || "";
+        try {
+          if (button) { button.disabled = true; button.textContent = busyLabel || "Working…"; }
+          await fetchJson(path, { method: "POST" });
+          await refreshDashboard({ force: true, reason: "action" });
+        } catch (error) {
+          state.lastError = error?.message || String(error);
+          renderError(state.lastError);
+        } finally {
+          if (button) { button.disabled = false; button.textContent = original; }
+        }
       }
 
       function render() {
         const overview = state.overview;
         if (!overview) return;
-
         const doctor = overview.doctor || {};
         const project = doctor.project || {};
         const hub = overview.hub || {};
         const readiness = overview.readiness || {};
-        const servers = Array.isArray(overview.servers) ? overview.servers : [];
-        const clientCatalog = overview.clients || {};
-        const clients = Array.isArray(clientCatalog.targets) ? clientCatalog.targets : [];
-        const leases = overview.leases || {};
-        const leaseItems = Array.isArray(leases.leases) ? leases.leases : Array.isArray(leases.activeLeases) ? leases.activeLeases : [];
-        const instanceEnvelope = overview.instances || {};
-        const plannedInstances = Array.isArray(instanceEnvelope.instances) ? instanceEnvelope.instances : [];
-        const policyReviews = buildPolicyReviews(servers);
-        const warnings = [
-          ...(Array.isArray(hub.warnings) ? hub.warnings : []),
-          ...(Array.isArray(readiness.missingRequiredSourceEnablement)
-            ? readiness.missingRequiredSourceEnablement.map(value => `Missing required source enablement: ${value}`)
-            : []),
-          ...(Array.isArray(readiness.missingRequiredCommands)
-            ? readiness.missingRequiredCommands.map(value => `Missing required command: ${value}`)
-            : []),
-          ...policyReviews.filter(item => item.severity === "bad").map(item => `Policy review required: ${item.name} · ${item.reason}`)
-        ];
-
-        els.rootPath.textContent = overview.rootPath || "—";
-        els.lastRefresh.textContent = formatDate(overview.generatedAtMs);
-        els.heroHubState.textContent = hub.status || hub.health || "unknown";
-        els.warningCount.textContent = String(warnings.length);
-        const cache = overview.cache || {};
-        const runtime = overview.runtime || {};
-        const http = runtime.http || {};
-        const upstreamPool = runtime.upstreamSessionPool || {};
-        els.overviewCache.textContent = cache.hit ? `hit · ${cache.ttlMs ?? "?"}ms` : cache.bypassed ? "fresh bypass" : "fresh";
-        els.runtimeWorkers.textContent = `${http.activeConnections ?? 0}/${http.maxConnections ?? "?"} active`;
-        els.upstreamPool.textContent = `${upstreamPool.size ?? 0}/${upstreamPool.maxSize ?? "?"} · ${upstreamPool.shardCount ?? 1} shard${(upstreamPool.shardCount ?? 1) === 1 ? "" : "s"}`;
-
-        els.runtimeReady.textContent = readiness.runtimePrerequisitesReady ? "Ready" : "Blocked";
-        els.runtimeReadyNote.textContent =
-          `Rust ${project.rustSourceReady ? "ok" : "missing"} · npm ${project.npmSurfaceReady ? "ok" : "missing"} · Docker ${project.containerToolingReady ? "ok" : "missing"}`;
-        els.enabledServers.textContent = String(readiness.effectiveEnabledServerCount ?? hub.effectiveEnabledServerCount ?? 0);
-        els.enabledServersNote.textContent =
-          `${readiness.sourceEnabledServerCount ?? 0} source-enabled · ${readiness.profileEnabledServerCount ?? 0} profile-enabled`;
-        els.requiredServers.textContent = String(readiness.requiredServerCount ?? hub.requiredServerCount ?? 0);
-        els.requiredServersNote.textContent =
-          `${readiness.requiredSourceEnabledCount ?? 0} required source-enabled`;
-        els.clientSurfaces.textContent = String(clients.length);
-        els.clientSurfacesNote.textContent =
-          `${Object.keys(clientCatalog.familyCounts || {}).length} client families`;
-
-        els.runtimeChipRow.innerHTML = [
-          chip(`Hub ${hub.status || "unknown"}`, toneForHub(hub.status || hub.health)),
-          chip(`Read-only ops ${hub.readyForReadOnlyOps ? "ready" : "blocked"}`, toneForBoolean(Boolean(hub.readyForReadOnlyOps))),
-          chip(`Runtime ops ${hub.readyForRuntimeOps ? "ready" : "blocked"}`, toneForBoolean(Boolean(hub.readyForRuntimeOps))),
-          chip(`HTTP ${http.activeConnections ?? 0}/${http.maxConnections ?? "?"}`, (http.activeConnections ?? 0) < (http.maxConnections ?? 1) ? "good" : "warn"),
-          chip(`Pool shards ${upstreamPool.shardCount ?? 1}`, "warn"),
-          chip(`${leaseItems.length} active leases`, leaseItems.length ? "warn" : "good"),
-          chip(`Profile ${hub.activeProfile || readiness.activeProfile || "unknown"}`, "warn"),
-          chip(`Client key ${clientCatalog.configuredClientKeyName || "none"}`, "warn")
-        ].join("");
-
-        els.runtimeSummary.textContent =
-          `Hub ${hub.status || "unknown"} · ${readiness.serverCount ?? 0} configured servers · generated ${formatDate(overview.generatedAtMs)}`;
-        updateRefreshMode();
-
-        const enabledCount = servers.filter(server => server.effectiveEnabled).length;
-        const requiredCount = servers.filter(server => server.required).length;
-        const projectLocalCount = servers.filter(server => server.scopeClass === "project-local").length;
-        const statelessCount = servers.filter(server => server.runtimeType === "stateless").length;
-        const statefulCount = servers.filter(server => ["stateful", "external", "interactive", "side-effecting"].includes(server.runtimeType)).length;
-        els.serverSummaryChips.innerHTML = [
-          chip(`${enabledCount} enabled`, enabledCount > 0 ? "good" : "warn"),
-          chip(`${requiredCount} required`, requiredCount > 0 ? "warn" : "good"),
-          chip(`${statelessCount} stateless`, statelessCount > 0 ? "good" : "warn"),
-          chip(`${statefulCount} stateful/effectful`, statefulCount > 0 ? "warn" : "good"),
-          chip(`${projectLocalCount} project-local`, projectLocalCount > 0 ? "warn" : "good"),
-          chip(`${servers.length} total`, "warn")
-        ].join("");
-
-        const familyCounts = clientCatalog.familyCounts || {};
-        const surfaceCounts = clientCatalog.surfaceClassCounts || {};
-        els.clientSummaryChips.innerHTML = [
-          ...Object.entries(surfaceCounts).map(([key, value]) => chip(`${value} ${key}`, key === "local" ? "good" : "warn")),
-          ...Object.entries(familyCounts).slice(0, 4).map(([key, value]) => chip(`${value} ${key}`, "warn"))
-        ].join("");
-
-        renderServers(servers);
-        renderConcurrencyMap(servers, leaseItems, overview, plannedInstances);
-        renderPolicyReviews(policyReviews);
-        renderActivity(leaseItems, overview);
-        renderWarnings(warnings);
-        renderClients(clients);
-        renderAuditTrail(state.logs);
-        renderLogs(state.logs);
-      }
-
-      function humanPolicy(server) {
-        if (server.runtimeType === "stateless") return `Stateless · ${server.effectClass || "read-only"}`;
-        if (server.runtimeType === "external") return `External · ${server.stateClass || "credential/session"}`;
-        if (server.runtimeType === "side-effecting") return `Side-effecting · ${server.effectClass || "review"}`;
-        if (server.hostLock && server.hostLock !== "none") return `Browser/host lock · ${server.hostLock}`;
-        if (server.scopeClass === "project-local") return "Project isolated";
-        if (server.concurrencyPolicy === "single-session") return "Single user at a time";
-        if (server.concurrencyPolicy === "single-writer") return "Single writer";
-        if (server.concurrencyPolicy === "multi-reader") return "Read-mostly candidate";
-        return server.concurrencyPolicy || "Unknown policy";
-      }
-
-      function buildPolicyReviews(servers) {
-        return servers.map(server => {
-          const isUnknown = !server.scopeClass || server.scopeClass === "configured-source" || server.routingGroup === "settings-only";
-          const dangerous = server.routingGroup === "dangerous-command-runner" || /shell|exec|terminal|process/i.test(`${server.name} ${server.kind} ${server.sourceCommand || ""}`);
-          const stateful = server.discoveryRequiresLease || ["single-session", "single-writer", "isolated-per-project"].includes(server.concurrencyPolicy) || server.hostLock !== "none";
-          let severity = "good";
-          let reason = "Explicit policy present";
-          if (dangerous) {
-            severity = "bad";
-            reason = "Command/host-power server needs explicit review";
-          } else if (isUnknown) {
-            severity = "bad";
-            reason = "Unknown source, conservative default";
-          } else if (stateful) {
-            severity = "warn";
-            reason = "Stateful or serialized server";
-          }
-          return {
-            name: server.name,
-            severity,
-            reason,
-            policy: humanPolicy(server),
-            transport: server.transportPreference || server.sourceType || "stdio",
-            routingGroup: server.routingGroup || "—",
-            enabled: server.effectiveEnabled,
-            discoveryRequiresLease: Boolean(server.discoveryRequiresLease)
-          };
-        }).sort((left, right) => {
-          const order = { bad: 0, warn: 1, good: 2 };
-          return (order[left.severity] ?? 9) - (order[right.severity] ?? 9) || left.name.localeCompare(right.name);
-        });
-      }
-
-      function renderPolicyReviews(items) {
-        if (!items.length) {
-          els.policyReviewList.innerHTML = `<div class="empty">No configured servers to review.</div>`;
-          return;
-        }
-        els.policyReviewList.innerHTML = items.map(item => `
-          <article class="policy-item">
-            <div class="policy-top">
-              <div class="policy-name">${escapeHtml(item.name)}</div>
-              <span class="chip"><span class="dot ${item.severity}"></span>${escapeHtml(item.reason)}</span>
-            </div>
-            <div class="policy-meta">${escapeHtml(item.policy)} · routing ${escapeHtml(item.routingGroup)} · transport ${escapeHtml(item.transport)}</div>
-            <div class="policy-tags">
-              <span class="tag">${item.enabled ? "enabled" : "disabled"}</span>
-              <span class="tag">${item.discoveryRequiresLease ? "discovery uses lease" : "discovery no lease"}</span>
-            </div>
-          </article>
-        `).join("");
-      }
-
-      function renderConcurrencyMap(servers, leases, overview, plannedInstances = []) {
-        if (!Array.isArray(servers) || !servers.length) {
-          els.concurrencyList.innerHTML = `<div class="empty">No servers configured yet.</div>`;
-          return;
-        }
-        const context = overview.context || {};
-        const rows = servers
-          .filter(server => server.effectiveEnabled || server.required)
-          .slice(0, 14)
-          .map(server => buildConcurrencyRow(server, leases, context, plannedInstances));
-        if (!rows.length) {
-          els.concurrencyList.innerHTML = `<div class="empty">No enabled server lanes yet.</div>`;
-          return;
-        }
-        els.concurrencyList.innerHTML = rows.map(row => `
-          <article class="concurrency-item">
-            <div class="concurrency-top">
-              <div class="concurrency-name">${escapeHtml(row.server)}</div>
-              <span class="chip"><span class="dot ${row.tone}"></span>${escapeHtml(row.mode)}</span>
-            </div>
-            <div class="concurrency-meta">${escapeHtml(row.trace)}</div>
-            <div class="concurrency-tags">
-              <span class="tag">${escapeHtml(row.schedulerLane)}</span>
-              <span class="tag">${escapeHtml(row.requestStrategy)}</span>
-              <span class="tag">workers ${escapeHtml(row.workers)}</span>
-              <span class="tag">in-flight ${escapeHtml(row.inFlight)}</span>
-              <span class="tag">leases ${escapeHtml(row.leaseCount)}</span>
-            </div>
-          </article>
-        `).join("");
-      }
-
-      function buildConcurrencyRow(server, leases, context, plannedInstances = []) {
-        const mode = inferExecutionMode(server);
-        const tone = mode === "shared" || mode === "pool" ? "good" : mode === "serialized" ? "warn" : "warn";
-        const matchingLeases = Array.isArray(leases)
-          ? leases.filter(lease => (lease.server || lease.serverName || "") === server.name)
-          : [];
-        const planned = plannedInstances.find(item => item.server === server.name) || {};
-        const left = mode.includes("session")
-          ? `chat=${context.sessionId || context.sessionLeaseId || "current"}`
-          : mode.includes("project")
-            ? `project=${context.projectRoot || "current-project"}`
-            : `client=${context.clientId || "local-client"}`;
-        const seed = `${server.name}|${server.conflictDomain || ""}|${server.workerPoolKey || ""}|${server.scopeClass || ""}`;
-        return {
-          server: server.name,
-          mode: planned.mode || mode,
-          tone,
-          trace: planned.trace || `${left} -> ${server.name}#${stableShortId(seed)}`,
-          schedulerLane: server.schedulerLane || server.routingGroup || server.scopeClass || "lane",
-          requestStrategy: server.requestStrategy || server.concurrencyPolicy || "strategy",
-          workers: server.maxWorkers ?? server.parallelismLimit ?? 1,
-          inFlight: server.maxInFlightPerWorker ?? 1,
-          leaseCount: matchingLeases.length
-        };
-      }
-
-      function inferExecutionMode(server) {
-        if (server.concurrencyPolicy === "single-session" || server.scopeClass === "state-profile") return "session-isolated";
-        if (server.concurrencyPolicy === "isolated-per-project" || server.scopeClass === "project-local") return "project-isolated";
-        if (server.concurrencyPolicy === "multi-reader" && ((server.maxWorkers ?? 1) > 1 || String(server.defaultPoolModel || "").includes("pool"))) return "pool";
-        if (server.concurrencyPolicy === "multi-reader") return "shared";
-        return "serialized";
-      }
-
-      function stableShortId(value) {
-        let hash = 2166136261;
-        const text = String(value || "");
-        for (let index = 0; index < text.length; index += 1) {
-          hash ^= text.charCodeAt(index);
-          hash = Math.imul(hash, 16777619);
-        }
-        return (hash >>> 0).toString(16).padStart(8, "0").slice(0, 8);
-      }
-
-      function renderAuditTrail(logs) {
-        const audits = Array.isArray(logs)
-          ? logs.filter(entry => entry.event === "tool_call_audit" || entry.event === "tool_batch_audit").slice().reverse()
-          : [];
-        if (!audits.length) {
-          els.auditList.innerHTML = `<div class="empty">No tool-call audit entries yet. Calls will appear here after clients invoke upstream tools.</div>`;
-          return;
-        }
-        els.auditList.innerHTML = audits.slice(0, 12).map(entry => {
-          const title = entry.event === "tool_batch_audit"
-            ? `${entry.server || "server"} · batch x${entry.callCount ?? "?"}`
-            : `${entry.server || "server"} · ${entry.tool || "tool"}`;
-          const ok = entry.bridgeOk && entry.upstreamOk;
-          return `
-            <article class="audit-item">
-              <div class="audit-top">
-                <div class="audit-name">${escapeHtml(title)}</div>
-                <span class="chip"><span class="dot ${ok ? "good" : "warn"}"></span>${ok ? "ok" : "attention"}</span>
-              </div>
-              <div class="audit-meta">${escapeHtml(entry.trace || "no trace")} · ${formatDate(entry.tsMs)}</div>
-              <div class="audit-tags">
-                <span class="tag">${entry.pooled ? "pooled" : "direct"}</span>
-                <span class="tag">lease ${escapeHtml(entry.leaseId || "none")}</span>
-                <span class="tag">${escapeHtml(entry.argumentsFingerprint || "batch")}</span>
-              </div>
-            </article>
-          `;
-        }).join("");
-      }
-
-      function renderActivity(leases, overview) {
+        const servers = normalizeServers(overview.servers);
+        const instances = normalizeInstances(overview.instances);
+        const clients = normalizeClients(overview.clients);
+        const leases = normalizeLeases(overview.leases);
         const runtime = overview.runtime || {};
         const http = runtime.http || {};
         const pool = runtime.upstreamSessionPool || {};
-        const rows = [];
-        rows.push({ name: "HTTP workers", tone: (http.activeConnections ?? 0) < (http.maxConnections ?? 1) ? "good" : "warn", meta: `${http.activeConnections ?? 0}/${http.maxConnections ?? "?"} active connections` });
-        rows.push({ name: "Upstream pool", tone: (pool.size ?? 0) > 0 ? "warn" : "good", meta: `${pool.size ?? 0}/${pool.maxSize ?? "?"} sessions · ${pool.shardCount ?? 1} shard(s)` });
-        if (leases.length) {
-          for (const lease of leases.slice(0, 8)) {
-            rows.push({
-              name: lease.server || lease.serverName || lease.id || "lease",
-              tone: "warn",
-              meta: `${lease.status || "active"} · ${lease.requestMutexKey || lease.mutexKey || lease.conflictDomain || "lease held"}`
-            });
-          }
-        } else {
-          rows.push({ name: "Leases", tone: "good", meta: "No active leases returned by hub lease list" });
-        }
-        els.activityList.innerHTML = rows.map(item => `
-          <article class="activity-item">
-            <div class="activity-top">
-              <div class="activity-name">${escapeHtml(item.name)}</div>
-              <span class="chip"><span class="dot ${item.tone}"></span>${escapeHtml(item.tone === "good" ? "ok" : "attention")}</span>
-            </div>
-            <div class="activity-meta">${escapeHtml(item.meta)}</div>
-          </article>
-        `).join("");
+        const sessionStore = runtime.httpSessionStore || {};
+        const cache = overview.cache || {};
+        const instanceSummary = overview.instances?.summary || {};
+        const groups = groupByServer(instances);
+        const policyRows = buildPolicyRows(servers, instances);
+        const attentionItems = buildAttentionItems(hub, readiness, policyRows, leases);
+        const activePolicyRows = policyRows.filter(row => row.server?.effectiveEnabled || row.risk.rank <= 1);
+        const active = num(http.activeConnections);
+        const max = num(http.maxConnections);
+        const failed = num(http.failedConnections);
+        const completed = num(http.completedConnections) || num(http.acceptedConnections);
+        const saturation = max ? Math.round((active / max) * 100) : 0;
+        const enabledCount = servers.filter(server => server.effectiveEnabled).length;
+        const requiredCount = servers.filter(server => server.required).length;
+        const statelessCount = servers.filter(server => server.runtimeType === "stateless").length;
+        const statefulCount = servers.filter(server => ["stateful", "external", "interactive", "side-effecting"].includes(server.runtimeType)).length;
+        const needsTrustCount = activePolicyRows.filter(row => row.risk.rank === 2).length;
+        const badPolicies = activePolicyRows.filter(row => row.risk.tone === "bad").length;
+        const warnPolicies = activePolicyRows.filter(row => row.risk.tone === "warn").length;
+        const attentionTotal = badPolicies + attentionItems.filter(item => item.tone !== "bad").length;
+
+        const runtimeReady = Boolean(readiness.runtimePrerequisitesReady ?? hub.readyForRuntimeOps);
+        const systemTone = !runtimeReady ? "bad" : attentionItems.length ? "warn" : "good";
+        els.systemState.textContent = !runtimeReady ? "Blocked" : attentionItems.length ? "Needs action" : "Ready";
+        els.systemNote.innerHTML = `${escapeHtml(hub.status || hub.health || "unknown")} · updated ${escapeHtml(fmtDate(overview.generatedAtMs))}`;
+        els.attentionCount.textContent = String(attentionTotal);
+        els.attentionNote.textContent = attentionItems.length ? `${badPolicies} blocker(s) · ${warnPolicies} guarded` : "No active action.";
+        els.serverCount.textContent = `${enabledCount}/${servers.length}`;
+        els.serverNote.textContent = `${needsTrustCount} guarded · ${statefulCount} stateful/effectful`;
+        const overviewMs = state.backend.overview?.ok ? fmtMs(state.backend.overview.ms) : "offline";
+        els.loadState.textContent = state.backend.overview?.ok ? overviewMs : "Check";
+        els.loadNote.textContent = `API ${state.backend.overview?.ok ? "connected" : "not connected"} · ${active}/${max || "?"} active HTTP`;
+
+        document.body.dataset.density = state.density;
+        const bucketLabel = state.bucket === "all" ? (state.enabledOnly ? "enabled only" : "all servers") : `${state.bucket} servers`;
+        setChip(els.serverFilterChip, bucketLabel, state.bucket === "blocked" ? "bad" : state.bucket === "protected" || state.bucket === "off" ? "warn" : "good");
+        els.toggleEnabled.textContent = state.enabledOnly ? "Show All" : "Show Enabled";
+        els.toggleEnabled.setAttribute("aria-pressed", String(state.enabledOnly));
+        els.clearSearch.disabled = !state.query;
+        updateRefreshChip();
+
+        renderOperations({
+          overview,
+          hub,
+          readiness,
+          servers,
+          instances,
+          attentionItems,
+          attentionTotal,
+          systemTone,
+          runtimeReady,
+          enabledCount,
+          active,
+          max,
+          completed,
+          failed,
+          saturation
+        });
+        renderAttention(attentionItems, systemTone);
+        renderAutoSetup(servers, instances);
+        renderFleetBoard(servers, instances);
+        renderServers(servers, instances, groups);
+        renderContext(overview, readiness, project, hub, cache, runtime);
+        renderInstances(instances, instanceSummary);
+        renderRuntime(runtime, hub, readiness, project);
+        renderPolicies(policyRows);
+        renderCapacity(runtime, cache, active, max, pool, sessionStore);
+        renderTelemetry(servers, instances, http, state.logs);
+        renderActivity(leases, http, pool, sessionStore);
+        renderClients(clients, overview.clients || {});
+        renderLogs(state.logs);
+        renderSummaryChips(enabledCount, requiredCount, statelessCount, statefulCount, needsTrustCount, servers.length);
+        if (els.serverDialog?.open && state.selectedServer) renderServerDialogByName(state.selectedServer);
       }
 
-      function renderServers(servers) {
-        const query = state.serverQuery.trim().toLowerCase();
-        const filtered = servers.filter(server => {
-          if (state.enabledOnly && !server.effectiveEnabled) return false;
-          if (!query) return true;
-          return [
-            server.name,
-            server.kind,
-            server.scopeClass,
-            server.runtimeType,
-            server.stateClass,
-            server.effectClass,
-            server.transportPreference
-          ].join(" ").toLowerCase().includes(query);
-        });
-
-        if (!filtered.length) {
-          els.serverList.innerHTML = `<div class="empty">No servers match the current filter.</div>`;
+      function renderAttention(items, systemTone) {
+        if (!items.length) {
+          els.attentionList.innerHTML = `<article class="item good"><div class="item-head"><div class="name">No Action Needed</div>${chip("ready", "good")}</div><div class="meta">Runtime, routing, and server inventory have no visible blockers. Advanced diagnostics can stay closed.</div></article>`;
           return;
         }
+        els.attentionList.innerHTML = items.slice(0, 5).map(item => `
+          <article class="${itemClass(item.tone || systemTone)}">
+            <div class="item-head"><div class="name">${escapeHtml(item.title)}</div>${chip(item.tag || "attention", item.tone || systemTone)}</div>
+            <div class="meta">${escapeHtml(item.meta)}</div>
+          </article>
+        `).join("") + (items.length > 5 ? `<div class="note">${items.length - 5} more grouped item(s) in Advanced diagnostics.</div>` : "");
+      }
 
-        els.serverList.innerHTML = filtered.map(server => {
-          const tone = server.effectiveEnabled ? "good" : server.required ? "warn" : "bad";
+      function renderSummaryChips(enabledCount, requiredCount, statelessCount, statefulCount, needsTrustCount, total) {
+        const offCount = Math.max(total - enabledCount, 0);
+        const lowRiskCount = Math.max(enabledCount - needsTrustCount, 0);
+        els.serverChips.innerHTML = [
+          chip(`${enabledCount} on`, enabledCount ? "good" : "warn"),
+          chip(`${offCount} parked`, offCount ? "warn" : "good"),
+          chip(`${needsTrustCount} guarded`, needsTrustCount ? "warn" : "good"),
+          chip(`${lowRiskCount} low-risk`, lowRiskCount ? "good" : "warn")
+        ].join("");
+      }
+
+      function readout(label, value, meta, tone = "warn") {
+        return `<div class="backend-readout ${escapeHtml(tone)}"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)} · ${escapeHtml(meta)}</span></div>`;
+      }
+
+      function stepCard(title, meta, tone = "warn") {
+        return `<div class="ops-step ${escapeHtml(tone)}"><strong>${escapeHtml(title)}</strong><span>${escapeHtml(meta)}</span></div>`;
+      }
+
+      function msTone(ms) {
+        const value = num(ms, 0);
+        if (!value) return "warn";
+        if (value < 250) return "good";
+        if (value < 1500) return "warn";
+        return "bad";
+      }
+
+      function renderOperations(context) {
+        const {
+          hub,
+          readiness,
+          attentionItems,
+          attentionTotal,
+          systemTone,
+          runtimeReady,
+          enabledCount,
+          active,
+          max,
+          completed,
+          failed,
+          saturation
+        } = context;
+        const overview = state.backend.overview;
+        const logs = state.backend.logs;
+        const action = state.backend.action;
+        const backendOk = Boolean(overview?.ok);
+        const logsOk = !logs || logs.ok;
+        const actionLabel = action ? (action.ok ? `${action.endpoint} ok` : `${action.endpoint} failed`) : "action not checked";
+        const actionTone = !action ? "warn" : action.ok ? "good" : "bad";
+
+        if (els.opsDot) els.opsDot.className = `dot ${systemTone}`;
+        if (els.opsTitle) {
+          els.opsTitle.textContent = !backendOk
+            ? "Dashboard backend is not connected"
+            : !runtimeReady
+              ? "Runtime needs setup"
+              : attentionTotal
+                ? `${attentionTotal} blocker${attentionTotal === 1 ? "" : "s"} need attention`
+                : "Ready for normal use";
+        }
+        if (els.opsBody) {
+          els.opsBody.textContent = !backendOk
+            ? "The UI is loaded, but live overview data did not return. Use Check link or Refresh to verify the local backend."
+            : attentionTotal
+              ? "Fix the watchlist first. Everything else is folded into fleet groups and advanced diagnostics."
+              : "No server-by-server tuning is required. Watch backend link, auto plan, and fleet groups; open Settings only for manual overrides.";
+        }
+        if (els.opsSteps) {
+          els.opsSteps.innerHTML = [
+            stepCard(backendOk ? "Backend connected" : "Backend offline", backendOk ? `/api/overview ${fmtMs(overview.ms)}` : text(overview?.error?.message || overview?.error, "waiting"), backendOk ? msTone(overview.ms) : "bad"),
+            stepCard(runtimeReady ? "Runtime usable" : "Runtime setup needed", `${hub.status || hub.health || "unknown"} · ${readiness.profileSelectionSource || "profile"}`, runtimeReady ? "good" : "bad"),
+            stepCard(attentionTotal ? "Watchlist has work" : "No visible blockers", attentionItems[0]?.title || `${enabledCount} enabled server(s) under auto plan`, attentionTotal ? "warn" : "good")
+          ].join("");
+        }
+        if (els.backendState) {
+          els.backendState.textContent = backendOk && logsOk ? "Live backend connected" : backendOk ? "Partial backend link" : "Backend not connected";
+        }
+        if (els.backendGrid) {
+          els.backendGrid.innerHTML = [
+            readout("/api/overview", backendOk ? fmtMs(overview.ms) : "failed", backendOk ? `updated ${fmtDate(overview.at)}` : text(overview?.error?.message || overview?.error, "waiting"), backendOk ? msTone(overview.ms) : "bad"),
+            readout("/api/logs", logs?.ok ? fmtMs(logs.ms) : logs ? "failed" : "pending", logs?.ok ? `updated ${fmtDate(logs.at)}` : text(logs?.error?.message || logs?.error, "waiting"), logs?.ok ? msTone(logs.ms) : "warn"),
+            readout("action POST", actionLabel, action ? `${fmtMs(action.ms)} · ${fmtDate(action.at)}` : "use Check link or any action", actionTone),
+            readout("HTTP runtime", max ? `${active}/${max}` : `${active}/?`, `${saturation}% saturation · ${completed} handled · ${failed} failed`, failed ? "warn" : "good")
+          ].join("");
+        }
+      }
+
+      function renderFleetBoard(servers, instances) {
+        const groups = groupByServer(instances);
+        const buckets = [
+          { key: "all", label: "All", tone: "good", rows: [...servers] },
+          { key: "blocked", label: "Blocked", tone: "bad", rows: [] },
+          { key: "protected", label: "Guarded", tone: "warn", rows: [] },
+          { key: "ready", label: "Ready", tone: "good", rows: [] },
+          { key: "off", label: "Off", tone: "warn", rows: [] }
+        ];
+        for (const server of servers) {
+          const risk = riskForServer(server, groups.get(server.name) || []);
+          const key = serverBucket(server, risk);
+          buckets.find(bucket => bucket.key === key)?.rows.push(server);
+        }
+        if (!els.serverFleetBoard) return;
+        const metaForBucket = bucket => {
+          if (bucket.key === "all") return "reset group filter";
+          if (bucket.key === "blocked") return bucket.rows.length ? "fix these first" : "no blockers";
+          if (bucket.key === "protected") return bucket.rows.length ? "on · conservative policy" : "none";
+          if (bucket.key === "ready") return bucket.rows.length ? "evidence listed" : "none";
+          if (bucket.key === "off") return bucket.rows.length ? "parked · enable when needed" : "none";
+          return "";
+        };
+        els.serverFleetBoard.innerHTML = buckets.map(bucket => {
+          const meta = metaForBucket(bucket);
+          const pressed = state.bucket === bucket.key;
+          return `<button class="fleet-card ${bucket.tone}" type="button" data-server-bucket="${bucket.key}" aria-pressed="${pressed}"><strong>${bucket.rows.length} ${bucket.label}</strong><span>${escapeHtml(meta)}</span></button>`;
+        }).join("");
+        if (els.serverGuide) {
+          const counts = Object.fromEntries(buckets.map(bucket => [bucket.key, bucket.rows.length]));
+          const allPrefix = counts.blocked
+            ? `${counts.blocked} blocked server${counts.blocked === 1 ? "" : "s"} need setup before use.`
+            : "No blocked servers right now.";
+          const guidance = {
+            all: ["Fleet brief", `${allPrefix} Read each row as: live evidence, current state, then buttons. Workers are hidden in Details.`],
+            blocked: ["Blocked view", "Fix source/profile setup first; then run Test to collect tools/list evidence."],
+            protected: ["Guarded view", "These are on with conservative policy or incomplete evidence. Run Test if tools are not listed."],
+            ready: ["Ready view", "These have live or cached tools/list evidence. Re-test after source changes."],
+            off: ["Off view", "These are parked. Turn one on only when a workflow explicitly needs that source, then run Test."]
+          }[state.bucket] || ["Fleet brief", allPrefix];
+          els.serverGuide.innerHTML = `<strong>${escapeHtml(guidance[0])}.</strong> ${escapeHtml(guidance[1])}`;
+        }
+      }
+
+      function renderServers(servers, instances, groups) {
+        const query = state.query.trim().toLowerCase();
+        let rows = servers.filter(server => {
+          const risk = riskForServer(server, groups.get(server.name) || []);
+          if (state.enabledOnly && !server.effectiveEnabled && risk.rank > 1) return false;
+          if (state.bucket !== "all" && serverBucket(server, risk) !== state.bucket) return false;
+          if (state.scope === "attention" && risk.rank > 3) return false;
+          if (!query) return true;
+          const evidence = serverToolEvidence(server);
+          return [server.name, server.kind, server.runtimeType, server.stateClass, server.effectClass, server.scopeClass, server.concurrencyPolicy, server.routingGroup, server.transportPreference, server.launcherKind, server.startupStrategy, evidence.status, ...(evidence.toolNames || [])]
+            .some(value => String(value || "").toLowerCase().includes(query));
+        });
+        rows = rows.sort((left, right) => {
+          const leftInstances = groups.get(left.name) || [];
+          const rightInstances = groups.get(right.name) || [];
+          if (state.sort === "name") return String(left.name || "").localeCompare(String(right.name || ""));
+          if (state.sort === "instances") return rightInstances.length - leftInstances.length || String(left.name || "").localeCompare(String(right.name || ""));
+          return riskForServer(left, leftInstances).rank - riskForServer(right, rightInstances).rank || String(left.name || "").localeCompare(String(right.name || ""));
+        });
+        if (!rows.length) {
+          els.serverList.innerHTML = `<div class="empty">No servers match this view.</div>`;
+          els.serverOverflowNote.textContent = "";
+          return;
+        }
+        const visible = rows.slice(0, MAX_SERVER_ROWS);
+        els.serverList.innerHTML = visible.map(server => {
+          const related = groups.get(server.name) || [];
+          const model = serverViewModel(server, related);
+          const risk = model.risk;
+          const verdict = model.verdict;
+          const human = model.human;
+          const showNext = risk.rank <= 1;
+          const name = escapeHtml(server.name || "server");
           return `
-            <article class="server-item">
-              <div class="server-top">
-                <div class="server-name">${escapeHtml(server.name)}</div>
-                <span class="chip"><span class="dot ${tone}"></span>${server.effectiveEnabled ? "enabled" : "disabled"}</span>
+            <article class="server-row ${itemClass(verdict.tone)}" data-server-name="${name}" data-server-bucket="${model.bucket}" data-enabled="${server.effectiveEnabled ? "true" : "false"}">
+              <div class="server-main">
+                <div class="server-id">
+                  <div class="server-title-row">
+                    <div class="name">${name}</div>
+                    ${chip(verdict.label, verdict.tone)}
+                  </div>
+                   <div class="server-purpose">${escapeHtml(model.category)} · ${escapeHtml(model.impact)}</div>
+                   <div class="server-human-card" aria-label="Plain-language setup for ${name}">
+                     <section>
+                       <div class="label">Live evidence</div>
+                       <strong>${escapeHtml(human.capabilityTitle)}</strong>
+                       <p>${escapeHtml(human.capabilityBody)}</p>
+                     </section>
+                     <section>
+                       <div class="label">Current state</div>
+                       <strong>${escapeHtml(human.nowTitle)}</strong>
+                       <p>${escapeHtml(human.nowBody)}</p>
+                     </section>
+                  </div>
+                </div>
+                <div class="server-quick-controls" aria-label="Actions for ${name}">
+                  ${serverControls(server, related, "row")}
+                </div>
               </div>
-              <div class="server-meta">
-                ${escapeHtml(server.kind)} · type ${escapeHtml(server.runtimeType || "unknown")} · state ${escapeHtml(server.stateClass || "unknown")} · concurrency ${escapeHtml(server.concurrencyPolicy)}
+              <div class="server-fast-facts" aria-label="Useful server facts">
+                ${model.facts}
               </div>
-              <div class="server-tags">
-                <span class="tag">${server.required ? "required" : "optional"}</span>
-                <span class="tag">${escapeHtml(server.transportPreference || "stdio-default")}</span>
-                <span class="tag">${escapeHtml(server.effectClass || "effect-unknown")}</span>
-                <span class="tag">${escapeHtml(server.stateBinding)}</span>
-                <span class="tag">${escapeHtml(server.credentialBinding)}</span>
-              </div>
+              ${showNext ? `<div class="server-action-note"><strong>Next</strong> ${escapeHtml(model.nextStep)} <br><strong>Auto</strong> ${escapeHtml(model.recommendation.reason)}</div>` : ""}
             </article>
           `;
         }).join("");
+        els.serverOverflowNote.textContent = rows.length > visible.length ? `${rows.length - visible.length} more server(s) hidden by the compact list. Search or change filters to narrow it.` : "";
       }
 
-      function renderWarnings(warnings) {
-        if (!warnings.length) {
-          els.warningList.innerHTML = `<div class="empty">No active readiness warnings.</div>`;
+      function detail(label, value) {
+        return `<div class="detail-box"><div class="label">${escapeHtml(label)}</div><div class="detail-value">${escapeHtml(text(value))}</div></div>`;
+      }
+
+      function openServerDialog(name) {
+        state.selectedServer = name;
+        renderServerDialogByName(name);
+        if (els.serverDialog && !els.serverDialog.open) {
+          if (typeof els.serverDialog.showModal === "function") els.serverDialog.showModal();
+          else els.serverDialog.setAttribute("open", "");
+        }
+      }
+
+      function closeServerDialog() {
+        state.selectedServer = null;
+        if (!els.serverDialog) return;
+        if (typeof els.serverDialog.close === "function") els.serverDialog.close();
+        else els.serverDialog.removeAttribute("open");
+      }
+
+      function renderServerDialogByName(name) {
+        const server = findServer(name);
+        if (!server) {
+          if (els.serverDialog?.open) closeServerDialog();
           return;
         }
-        els.warningList.innerHTML = warnings.map(text => `
-          <article class="warning-item">${escapeHtml(text)}</article>
+        const related = relatedInstances(name);
+        const model = serverViewModel(server, related);
+        const risk = model.risk;
+        const workers = model.workers;
+        const inFlight = model.inFlight;
+        const mode = model.routeMode;
+        const routing = routingPlain(server, risk, related);
+        const evidence = evidenceLine(server);
+        const recommendation = model.recommendation;
+        const verdict = model.verdict;
+        const decision = model.decision;
+        const settings = model.settings;
+        const checklist = serverChecklist(server, risk).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+        const lockDomains = Array.isArray(server.lockDomains) ? server.lockDomains.join(", ") : text(server.hostLock || server.hostLockKey || server.conflictDomain, "none");
+        const requiredCommands = Array.isArray(server.requiredCommands) ? server.requiredCommands.join(", ") : "none";
+        const idName = domId(server.name || "server");
+        const nameEsc = escapeHtml(server.name || "server");
+
+        els.serverDialogTitle.textContent = server.name || "server";
+        els.serverDialogSubtitle.textContent = `${verdict.label} · ${model.category} · ${server.effectiveEnabled ? "enabled" : "disabled"}`;
+        els.serverDialogBody.innerHTML = `
+          <div class="server-dialog-summary">
+            <div>
+              <div class="label">Recommended next step</div>
+              <strong>${escapeHtml(decision.title)}</strong>
+              <p>${escapeHtml(decision.body)}</p>
+            </div>
+            <div class="server-dialog-actions" aria-label="Primary actions for ${nameEsc}">
+              ${serverControls(server, related, "dialog")}
+            </div>
+          </div>
+          <div class="server-setting-brief" aria-label="Recommended settings for ${nameEsc}">
+            ${settingCard("Best setting", settings.stateTitle, settings.stateBody)}
+            ${settingCard("Routing and workers", settings.routeTitle, settings.routeBody)}
+            ${settingCard("Tool evidence", settings.useTitle, settings.useBody)}
+          </div>
+          <details class="manual-settings">
+            <summary>Manual override: routing and workers</summary>
+            <section class="server-settings-grid" aria-label="Editable server routing settings">
+              <div class="server-setting-box">
+                <div class="label">Workers</div>
+                <div class="setting-inline" style="margin-top: 8px;">
+                  <label class="sr-only" for="dialog-workers-${idName}">Worker count</label>
+                  <input id="dialog-workers-${idName}" type="number" min="1" step="1" value="${escapeHtml(workers)}" data-server-input="workers">
+                  <button type="button" data-server-name="${nameEsc}" data-server-action="apply-policy">Apply</button>
+                </div>
+              </div>
+              <div class="server-setting-box">
+                <div class="label">In-flight per worker</div>
+                <div class="setting-inline" style="margin-top: 8px;">
+                  <label class="sr-only" for="dialog-inflight-${idName}">In-flight requests per worker</label>
+                  <input id="dialog-inflight-${idName}" type="number" min="1" step="1" value="${escapeHtml(inFlight)}" data-server-input="inFlight">
+                  <span class="fact"><strong>Current</strong> ${escapeHtml(routeLabel(mode))}</span>
+                </div>
+              </div>
+              <div class="server-setting-box">
+                <div class="label">Routing mode</div>
+                <label class="sr-only" for="dialog-mode-${idName}">Routing mode for ${nameEsc}</label>
+                <select class="server-mode-select" id="dialog-mode-${idName}" data-server-input="mode" style="margin-top: 8px;">
+                  ${modeOptions(mode)}
+                </select>
+              </div>
+            </section>
+          </details>
+          <div class="server-action-note"><strong>Auto plan</strong> ${escapeHtml(model.needsTuning ? `${recommendation.label} available` : "active")} · ${escapeHtml(model.nextStep)}</div>
+          <div class="server-explain-grid">
+            <section class="server-explain-box">
+              <div class="label">Why this route</div>
+              <p>${escapeHtml(routing)}</p>
+            </section>
+            <section class="server-explain-box">
+              <div class="label">Safety notes</div>
+              <ul class="server-checklist">${checklist}</ul>
+            </section>
+          </div>
+          <section class="server-explain-box">
+            <div class="label">Evidence</div>
+            <p>${escapeHtml(evidence)}</p>
+          </section>
+          <div class="detail-grid">
+            ${detail("Kind", server.kind)}
+            ${detail("Profile enabled", server.profileEnabled ? "yes" : "no")}
+            ${detail("Source enabled", server.sourceEnabled ? "yes" : "no")}
+            ${detail("Effective enabled", server.effectiveEnabled ? "yes" : "no")}
+            ${detail("Scope", server.scopeClass)}
+            ${detail("Effect", server.effectClass)}
+            ${detail("State", server.stateClass)}
+            ${detail("State binding", server.stateBinding)}
+            ${detail("Credential binding", server.credentialBinding)}
+            ${detail("Pool model", server.defaultPoolModel)}
+            ${detail("Scheduler lane", server.schedulerLane)}
+            ${detail("Request strategy", server.requestStrategy)}
+            ${detail("Conflict domain", server.conflictDomain)}
+            ${detail("Locks", lockDomains)}
+            ${detail("Launcher", server.launcherKind)}
+            ${detail("Startup", server.startupStrategy)}
+            ${detail("Transport", server.transportPreference || server.sourceType || "stdio")}
+            ${detail("Transport status", server.transportStatus)}
+            ${detail("Required commands", requiredCommands)}
+          </div>
+        `;
+      }
+
+      function actionPayloadForPolicy(server, related, overrides = {}) {
+        return {
+          server: server.name,
+          mode: overrides.mode || serverMode(server, related),
+          maxWorkers: overrides.maxWorkers || maxWorkers(server, related),
+          maxInFlightPerWorker: overrides.maxInFlightPerWorker || maxInFlight(server, related)
+        };
+      }
+
+      function positiveInputValue(selector, fallback) {
+        const value = Number(els.serverDialogBody?.querySelector(selector)?.value);
+        return Number.isFinite(value) && value > 0 ? Math.round(value) : fallback;
+      }
+
+      async function postServerAction(endpoint, payload) {
+        const result = await timedFetchJson(`/api/actions/${endpoint}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+        state.backend.action = {
+          ok: result.ok,
+          ms: result.ms,
+          at: result.at,
+          endpoint,
+          error: result.error?.message || String(result.error || "")
+        };
+        if (!result.ok) throw result.error;
+        return result.value;
+      }
+
+      function applyOptimisticServerAction(endpoint, payload, response) {
+        const server = findServer(payload?.server);
+        if (!server) return;
+        if (endpoint === "server-enable" || endpoint === "server-disable") {
+          const enabled = endpoint === "server-enable";
+          server.sourceEnabled = enabled;
+          server.profileEnabled = enabled;
+          server.effectiveEnabled = enabled && server.platformSupported !== false;
+          delete state.serverTests?.[payload?.server];
+          return;
+        }
+        if (endpoint === "server-test") {
+          state.serverTests[payload.server] = normalizeProbeEvidence(payload.server, response);
+          return;
+        }
+        if (endpoint === "server-policy") {
+          const result = response?.result || {};
+          const policy = result.policy || {};
+          const execution = result.execution || {};
+          server.maxWorkers = Number(result.maxWorkers || execution.maxWorkers || payload.maxWorkers || server.maxWorkers || 1);
+          server.maxInFlightPerWorker = Number(result.maxInFlightPerWorker || execution.maxInFlightPerWorker || payload.maxInFlightPerWorker || server.maxInFlightPerWorker || 1);
+          for (const key of ["scopeClass", "concurrencyPolicy", "stateBinding", "credentialBinding", "parallelismLimit", "conflictDomain", "projectRootMode", "worktreeBinding", "stateProfileMode", "hostLock", "startupStrategy", "routingGroup", "discoveryRequiresLease"]) {
+            if (policy[key] !== undefined) server[key] = policy[key];
+          }
+        }
+      }
+
+      function syncAfterServerAction(delay = 250) {
+        window.setTimeout(() => refreshDashboard({ force: true, reason: "server-action-sync" }), delay);
+      }
+
+      async function runServerAction(endpoint, payload, control, busyLabel = "Working…", options = {}) {
+        const originalText = control && "textContent" in control ? control.textContent : "";
+        try {
+          if (control) {
+            control.disabled = true;
+            if (control.tagName === "BUTTON") control.textContent = busyLabel;
+          }
+          const response = await postServerAction(endpoint, payload);
+          applyOptimisticServerAction(endpoint, payload, response);
+          state.lastError = null;
+          render();
+          if (options.sync !== false) syncAfterServerAction();
+        } catch (error) {
+          state.lastError = error?.message || String(error);
+          renderError(state.lastError);
+        } finally {
+          if (control) {
+            control.disabled = false;
+            if (control.tagName === "BUTTON") control.textContent = originalText;
+          }
+        }
+      }
+
+      async function handleServerControl(control) {
+        const action = control?.dataset?.serverAction;
+        const name = control?.dataset?.serverName || control?.closest("[data-server-name]")?.dataset?.serverName;
+        if (!action || !name) return;
+        const server = findServer(name);
+        const related = relatedInstances(name);
+        if (!server && action !== "settings") return;
+
+        if (action === "settings") {
+          openServerDialog(name);
+          return;
+        }
+        if (action === "toggle") {
+          await runServerAction(server.effectiveEnabled ? "server-disable" : "server-enable", { server: name }, control, server.effectiveEnabled ? "Turning off…" : "Turning on…");
+          return;
+        }
+        if (action === "test") {
+          await runServerAction("server-test", { server: name, timeoutMs: 10000 }, control, "Testing…");
+          return;
+        }
+        if (action === "workers-dec" || action === "workers-inc") {
+          const delta = action === "workers-inc" ? 1 : -1;
+          const nextWorkers = Math.max(1, maxWorkers(server, related) + delta);
+          await runServerAction("server-policy", actionPayloadForPolicy(server, related, { maxWorkers: nextWorkers }), control, "Saving…");
+          return;
+        }
+        if (action === "auto") {
+          const recommendation = recommendedPolicy(server, related);
+          await runServerAction("server-policy", actionPayloadForPolicy(server, related, recommendation), control, "Auto…");
+          return;
+        }
+        if (action === "mode") {
+          await runServerAction("server-policy", actionPayloadForPolicy(server, related, { mode: control.value }), control, "Saving…");
+          return;
+        }
+        if (action === "apply-policy") {
+          const nextWorkers = positiveInputValue('[data-server-input="workers"]', maxWorkers(server, related));
+          const nextInFlight = positiveInputValue('[data-server-input="inFlight"]', maxInFlight(server, related));
+          const mode = els.serverDialogBody?.querySelector('[data-server-input="mode"]')?.value || serverMode(server, related);
+          await runServerAction("server-policy", actionPayloadForPolicy(server, related, {
+            mode,
+            maxWorkers: nextWorkers,
+            maxInFlightPerWorker: nextInFlight
+          }), control, "Applying…");
+        }
+      }
+
+      async function autoTuneVisibleServers(button) {
+        const plan = autoPolicyPlan();
+        if (!plan.changes.length) return;
+        const original = button?.textContent || "";
+        try {
+          if (button) {
+            button.disabled = true;
+            button.textContent = "Applying safe plan…";
+          }
+          const response = await postServerAction("server-autotune", { changes: plan.changes });
+          const results = response?.result?.results || [];
+          for (let index = 0; index < plan.changes.length; index += 1) {
+            applyOptimisticServerAction("server-policy", plan.changes[index], { result: results[index] || {} });
+          }
+          state.lastError = null;
+          render();
+          syncAfterServerAction(100);
+        } catch (error) {
+          state.lastError = error?.message || String(error);
+          renderError(state.lastError);
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.textContent = original;
+          }
+        }
+      }
+
+      async function checkBackendLink(button) {
+        const original = button?.textContent || "";
+        try {
+          if (button) {
+            button.disabled = true;
+            button.textContent = "Checking…";
+          }
+          const [overview, logs] = await Promise.all([
+            timedFetchJson("/api/overview"),
+            timedFetchJson("/api/logs?tail=1")
+          ]);
+          state.backend.overview = overview;
+          state.backend.logs = logs;
+          state.backend.checkedAt = Date.now();
+          if (overview.ok) state.overview = overview.value;
+          if (logs.ok) state.logs = Array.isArray(logs.value) ? logs.value : state.logs;
+          await postServerAction("server-autotune", { changes: [] });
+          state.lastError = overview.ok ? (logs.ok ? null : `Logs: ${logs.error?.message || logs.error}`) : overview.error?.message || String(overview.error);
+          if (state.overview) render();
+          else renderError(state.lastError || "Backend check failed");
+        } catch (error) {
+          state.lastError = error?.message || String(error);
+          if (state.overview) render();
+          else renderError(state.lastError);
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.textContent = original;
+          }
+        }
+      }
+
+      function renderContext(overview, readiness, project, hub, cache, runtime) {
+        const rows = [
+          ["Workspace", overview.rootPath || "—"],
+          ["Hub", hub.status || hub.health || "unknown"],
+          ["Profile", hub.activeProfile || readiness.activeProfile || "—"],
+          ["Cache", cache.hit ? `hit · ttl ${fmtMs(cache.ttlMs)}` : cache.bypassed ? "bypass" : "fresh"],
+          ["Surface", runtime.surface || "dashboard-http"],
+          ["Prereqs", `Rust ${project.rustSourceReady ? "ok" : "missing"} · npm ${project.npmSurfaceReady ? "ok" : "missing"} · Docker ${project.containerToolingReady ? "ok" : "missing"}`]
+        ];
+        els.contextList.innerHTML = rows.map(([name, value]) => `
+          <article class="item"><div class="item-head"><div class="name">${escapeHtml(name)}</div></div><div class="meta">${escapeHtml(value)}</div></article>
         `).join("");
       }
 
-      function renderClients(clients) {
-        const preview = clients.slice(0, 10);
-        if (!preview.length) {
-          els.clientList.innerHTML = `<div class="empty">No documented client surfaces were returned.</div>`;
+      function renderInstances(instances, summary) {
+        const serialized = instances.filter(instance => instance.mode === "serialized" || instance.requestMutexKey).length;
+        setChip(els.instanceChip, `${instances.length || summary.serverCount || 0} planned`, instances.length ? "good" : "warn");
+        if (!instances.length) {
+          els.instanceList.innerHTML = `<div class="empty">No planned instances returned for this context.</div>`;
           return;
         }
-        els.clientList.innerHTML = preview.map(client => `
-          <article class="client-item">
-            <div class="client-top">
-              <div class="client-name">${escapeHtml(client.displayName)}</div>
-              <span class="chip"><span class="dot ${client.surfaceClass === "local" ? "good" : "warn"}"></span>${escapeHtml(client.surfaceClass)}</span>
-            </div>
-            <div class="client-meta">
-              ${escapeHtml(client.id)} · ${escapeHtml(client.surfaceKind)} · ingress ${escapeHtml((client.supportedIngresses || []).join(", "))}
-            </div>
-            <div class="client-tags">
-              ${(client.nativeScopes || []).slice(0, 4).map(scope => `<span class="tag">${escapeHtml(scope)}</span>`).join("")}
-            </div>
+        els.instanceList.innerHTML = instances.slice(0, 10).map(instance => `
+          <article class="${itemClass(instance.mode === "shared" || instance.mode === "pool" ? "good" : "warn")}">
+            <div class="item-head"><div class="name">${escapeHtml(instance.server || instance.serverName || "server")}</div>${chip(instance.mode || "planned", instance.mode === "shared" || instance.mode === "pool" ? "good" : "warn")}</div>
+            <div class="meta">${escapeHtml(instance.trace || instance.instanceId || "no trace")}</div>
+            <div class="tags">${tags([`workers ${text(instance.maxWorkers, 1)}`, `in-flight ${text(instance.maxInFlightPerWorker, 1)}`, instance.schedulerLane, instance.requestStrategy, instance.requestMutexKey ? `mutex ${instance.requestMutexKey}` : "no mutex"])}</div>
+          </article>
+        `).join("") + (instances.length > 10 ? `<div class="note">${instances.length - 10} more planned lane(s).</div>` : "");
+      }
+
+      function renderRuntime(runtime, hub, readiness, project) {
+        const http = runtime.http || {};
+        const pool = runtime.upstreamSessionPool || {};
+        const rows = [
+          ["Runtime actions", hub.readyForRuntimeOps ? "ready" : "blocked", hub.readyForRuntimeOps ? "good" : "bad"],
+          ["Read-only actions", hub.readyForReadOnlyOps ? "ready" : "blocked", hub.readyForReadOnlyOps ? "good" : "bad"],
+          ["HTTP workers", `${num(http.activeConnections)}/${num(http.maxConnections) || "?"} active`, "warn"],
+          ["Upstream pool", `${num(pool.size)}/${num(pool.maxSize) || "?"} sessions · ${num(pool.shardCount, 1)} shard(s)`, "warn"],
+          ["Parallelism", `${runtime.availableParallelism ?? "?"} reported by OS`, num(runtime.availableParallelism) > 1 ? "good" : "warn"],
+          ["Project", `Rust ${project.rustSourceReady ? "ok" : "missing"} · npm ${project.npmSurfaceReady ? "ok" : "missing"}`, project.rustSourceReady && project.npmSurfaceReady ? "good" : "warn"]
+        ];
+        setChip(els.runtimeChip, readiness.runtimePrerequisitesReady ? "ready" : "blocked", readiness.runtimePrerequisitesReady ? "good" : "bad");
+        els.runtimeList.innerHTML = rows.map(([name, meta, tone]) => `<article class="${itemClass(tone)}"><div class="item-head"><div class="name">${escapeHtml(name)}</div>${chip(tone === "good" ? "ok" : "watch", tone)}</div><div class="meta">${escapeHtml(meta)}</div></article>`).join("");
+      }
+
+      function renderPolicies(rows) {
+        const bad = rows.filter(row => row.risk.tone === "bad").length;
+        setChip(els.policyChip, bad ? `${bad} need decisions` : "clean enough", bad ? "bad" : "good");
+        if (!rows.length) {
+          els.policyList.innerHTML = `<div class="empty">No configured servers to route.</div>`;
+          return;
+        }
+        els.policyList.innerHTML = rows.slice(0, 10).map(row => `
+          <article class="${itemClass(row.risk.tone)}">
+            <div class="item-head"><div class="name">${escapeHtml(row.server.name || "server")}</div>${chip(row.risk.label, row.risk.tone)}</div>
+            <div class="meta">${escapeHtml(row.policy)} · group ${escapeHtml(text(row.server.routingGroup))}</div>
           </article>
         `).join("");
+      }
+
+      function renderCapacity(runtime, cache, active, max, pool, sessions) {
+        const http = runtime.http || {};
+        const caches = runtime.caches || {};
+        const saturated = max && active >= max;
+        setChip(els.capacityChip, saturated ? "saturated" : "within limits", saturated ? "bad" : "good");
+        const rows = [
+          ["HTTP capacity", `${active}/${max || "?"} active · max observed ${num(http.maxObservedActiveConnections)} · timeout ${fmtMs(http.ioTimeoutMs)}`, saturated ? "bad" : "good", [`body ${fmtBytes(http.maxBodyBytes)}`, `${http.maxHeaderCount ?? "?"} headers`]],
+          ["Dashboard cache", `${cache.hit ? "hit" : cache.bypassed ? "bypass" : "fresh"} · age ${fmtMs(cache.ageMs)} · ttl ${fmtMs(cache.ttlMs)}`, cache.stale || cache.refreshError ? "warn" : "good", [`overview ${fmtMs(caches.overviewTtlMs)}`, `health ${fmtMs(caches.healthTtlMs)}`]],
+          ["HTTP sessions", `${num(sessions.size)}/${num(sessions.maxSize) || "?"} sessions · ${num(sessions.prunedExpiredSessions)} pruned`, num(sessions.size) >= num(sessions.maxSize, 1) ? "warn" : "good", [`ttl ${fmtMs(sessions.ttlMs)}`]],
+          ["Upstream pool", `${num(pool.size)}/${num(pool.maxSize) || "?"} sessions · ${num(pool.lockedShardCount)}/${num(pool.shardCount) || "?"} shards locked`, num(pool.size) >= num(pool.maxSize, 1) ? "warn" : "good", [`idle ${fmtMs(pool.idleTtlMs)}`]]
+        ];
+        els.capacityList.innerHTML = rows.map(([name, meta, tone, tagList]) => `<article class="${itemClass(tone)}"><div class="item-head"><div class="name">${escapeHtml(name)}</div>${chip(tone === "good" ? "ok" : "watch", tone)}</div><div class="meta">${escapeHtml(meta)}</div><div class="tags">${tags(tagList)}</div></article>`).join("");
+      }
+
+      function renderTelemetry(servers, instances, http, logs) {
+        const rows = [
+          ["Server inventory", servers.length ? `${servers.length} servers with runtime policy fields` : "No server inventory returned", servers.length ? "good" : "warn", ["runtimeType", "stateClass", "effectClass"]],
+          ["Instance plan", instances.length ? `${instances.length} lanes with workers/mutex hints` : "No server instances payload returned", instances.length ? "good" : "warn", ["mode", "trace", "workers"]],
+          ["Traffic / errors", Object.keys(http).length ? `${num(http.acceptedConnections)} accepted · ${num(http.failedConnections)} failed` : "HTTP counters unavailable", Object.keys(http).length ? "good" : "warn", ["accepted", "completed", "failed"]],
+          ["Latency histograms", "Not collected yet: p50/p95/p99 are not shown because the runtime does not expose request duration histograms.", "warn", ["missing", "request duration"]],
+          ["Per-server CPU/RAM", "Not collected yet: current payload has limits/sessions, not OS process usage per upstream worker.", "warn", ["missing", "process telemetry"]],
+          ["Logs and safe audit", Array.isArray(logs) ? `${logs.length} recent log entries loaded` : "Logs endpoint missing", Array.isArray(logs) ? "good" : "warn", ["lifecycle", "safe fingerprints"]]
+        ];
+        els.telemetryList.innerHTML = rows.map(([name, meta, tone, tagList]) => `<article class="${itemClass(tone)}"><div class="item-head"><div class="name">${escapeHtml(name)}</div>${chip(tone === "good" ? "available" : "gap", tone)}</div><div class="meta">${escapeHtml(meta)}</div><div class="tags">${tags(tagList)}</div></article>`).join("");
+      }
+
+      function renderActivity(leases, http, pool, sessions) {
+        setChip(els.activityChip, leases.length ? `${leases.length} active locks` : "no locks", leases.length ? "warn" : "good");
+        const rows = [
+          ["HTTP workers", `${num(http.activeConnections)}/${num(http.maxConnections) || "?"} active · ${num(http.failedConnections)} failed`, num(http.failedConnections) ? "warn" : "good"],
+          ["HTTP sessions", `${num(sessions.size)}/${num(sessions.maxSize) || "?"} sessions · ttl ${fmtMs(sessions.ttlMs)}`, "good"],
+          ["Upstream pool", `${num(pool.size)}/${num(pool.maxSize) || "?"} sessions · idle ${fmtMs(pool.idleTtlMs)}`, num(pool.size) ? "warn" : "good"],
+          ...(leases.length ? leases.slice(0, 6).map(lease => [lease.server || lease.serverName || lease.id || "lock", `${lease.status || "active"} · ${lease.requestMutexKey || lease.mutexKey || lease.conflictDomain || "held by scheduler"}`, "warn"]) : [["Locks", "No active locks returned by hub.", "good"]])
+        ];
+        els.activityList.innerHTML = rows.map(([name, meta, tone]) => `<article class="${itemClass(tone)}"><div class="item-head"><div class="name">${escapeHtml(name)}</div>${chip(tone === "good" ? "ok" : "active", tone)}</div><div class="meta">${escapeHtml(meta)}</div></article>`).join("");
+      }
+
+      function renderClients(clients, catalog) {
+        setChip(els.clientChip, `${clients.length} clients`, clients.length ? "good" : "warn");
+        if (!clients.length) {
+          els.clientList.innerHTML = `<div class="empty">No client surfaces returned.</div>`;
+          return;
+        }
+        els.clientList.innerHTML = clients.slice(0, 8).map(client => `<article class="item"><div class="item-head"><div class="name">${escapeHtml(client.displayName || client.id || "client")}</div>${chip(client.surfaceClass || "surface", client.surfaceClass === "local" ? "good" : "warn")}</div><div class="meta">${escapeHtml(client.id || "client")} · ${escapeHtml(client.surfaceKind || "surface")} · ingress ${escapeHtml((client.supportedIngresses || []).join(", ") || "—")}</div></article>`).join("");
       }
 
       function renderLogs(logs) {
-        if (!Array.isArray(logs) || !logs.length) {
-          els.logList.innerHTML = `<div class="empty">No recent log entries.</div>`;
-          return;
-        }
-        els.logList.innerHTML = logs.slice().reverse().map(entry => `
-          <article class="log-item">
-            <div class="log-top">
-              <div class="log-name">${escapeHtml(entry.event || "event")}</div>
-              <span class="chip"><span class="dot ${entry.level === "warn" ? "warn" : entry.level === "error" ? "bad" : "good"}"></span>${escapeHtml(entry.level || "info")}</span>
-            </div>
-            <div class="log-meta">${formatDate(entry.tsMs)}</div>
-            <details>
-              <summary>View raw event payload</summary>
-              <pre>${escapeHtml(JSON.stringify(entry, null, 2))}</pre>
-            </details>
-          </article>
-        `).join("");
+        const audits = Array.isArray(logs) ? logs.filter(entry => entry.event === "tool_call_audit" || entry.event === "tool_batch_audit").slice(-6).reverse() : [];
+        setChip(els.logChip, `${logs.length} logs`, logs.length ? "good" : "warn");
+        els.auditList.innerHTML = audits.length ? audits.map(entry => `<article class="item"><div class="item-head"><div class="name">${escapeHtml(entry.server || "server")} · ${escapeHtml(entry.tool || entry.event || "tool")}</div>${chip(entry.bridgeOk && entry.upstreamOk ? "ok" : "watch", entry.bridgeOk && entry.upstreamOk ? "good" : "warn")}</div><div class="meta">${escapeHtml(entry.trace || "no trace")} · ${fmtDate(entry.tsMs)}</div></article>`).join("") : `<div class="empty">No tool-call audit entries yet.</div>`;
+        els.logList.innerHTML = Array.isArray(logs) && logs.length ? logs.slice(-8).reverse().map(entry => `<article class="item"><div class="item-head"><div class="name">${escapeHtml(entry.event || "event")}</div>${chip(entry.level || "info", entry.level === "error" ? "bad" : entry.level === "warn" ? "warn" : "good")}</div><div class="meta">${fmtDate(entry.tsMs)}</div><details class="server-settings"><summary>Raw payload</summary><pre>${escapeHtml(JSON.stringify(entry, null, 2))}</pre></details></article>`).join("") : `<div class="empty">No recent log entries.</div>`;
       }
 
-      document.getElementById("refresh-button").addEventListener("click", () => refreshDashboard({ force: true }));
-      document.getElementById("hub-up-button").addEventListener("click", () => runAction("/api/actions/hub-up"));
-      document.getElementById("hub-down-button").addEventListener("click", () => runAction("/api/actions/hub-down"));
-      document.getElementById("repair-button").addEventListener("click", () => runAction("/api/actions/repair"));
-      els.serverSearch.addEventListener("input", event => {
-        state.serverQuery = event.target.value;
-        render();
-      });
-      els.toggleEnabledFilter.addEventListener("click", () => {
-        state.enabledOnly = !state.enabledOnly;
-        els.toggleEnabledFilter.textContent = state.enabledOnly ? "Show all servers" : "Show enabled only";
-        render();
-      });
+      function syncControls() {
+        els.refreshSelect.value = state.refreshMode;
+        els.serverSort.value = state.sort;
+        els.serverScope.value = state.scope;
+        els.densitySelect.value = state.density;
+        els.serverSearch.value = state.query;
+        document.body.dataset.density = state.density;
+      }
 
-      if (typeof document.addEventListener === "function") {
-        document.addEventListener("visibilitychange", () => {
-          if (isDocumentHidden()) {
-            scheduleAutoRefresh();
-            return;
-          }
-          refreshDashboard({ force: true, reason: "visible" });
+      function bindSelect(element, key, pref, onChange = render) {
+        element.addEventListener("change", event => {
+          state[key] = event.target.value;
+          writePref(pref, state[key]);
+          onChange();
         });
       }
 
-      window.__mcpaceDashboard = {
-        refreshDashboard,
-        runAction,
-        render,
-        scheduleAutoRefresh,
-        state
-      };
+      syncControls();
+      bindSelect(els.refreshSelect, "refreshMode", "refreshMode", () => { scheduleRefresh(); updateRefreshChip(); });
+      bindSelect(els.serverSort, "sort", "sort");
+      bindSelect(els.serverScope, "scope", "scope");
+      bindSelect(els.densitySelect, "density", "density", () => { document.body.dataset.density = state.density; render(); });
 
-      refreshDashboard({ reason: "initial" });
+      els.refreshButton.addEventListener("click", () => refreshDashboard({ force: true, reason: "manual" }));
+      els.backendCheckButton.addEventListener("click", event => checkBackendLink(event.currentTarget));
+      els.startButton.addEventListener("click", event => runAction("/api/actions/hub-up", event.currentTarget, "", "Starting…"));
+      els.stopButton.addEventListener("click", event => runAction("/api/actions/hub-down", event.currentTarget, "Stop the local MCPace hub? Active clients may lose routing until it starts again.", "Stopping…"));
+      els.repairButton.addEventListener("click", event => runAction("/api/actions/repair", event.currentTarget, "Run MCPace repair now? This may update local runtime wiring and client config files.", "Repairing…"));
+      els.serverSearch.addEventListener("input", event => { state.query = event.target.value; render(); });
+      els.clearSearch.addEventListener("click", () => { state.query = ""; els.serverSearch.value = ""; render(); els.serverSearch.focus(); });
+      els.toggleEnabled.addEventListener("click", () => { state.enabledOnly = !state.enabledOnly; writePref("enabledOnly", String(state.enabledOnly)); render(); });
+      els.autoTuneVisible.addEventListener("click", event => autoTuneVisibleServers(event.currentTarget));
+      els.serverFleetBoard.addEventListener("click", event => {
+        const card = event.target.closest("[data-server-bucket]");
+        if (!card) return;
+        const next = card.dataset.serverBucket || "all";
+        state.bucket = state.bucket === next ? "all" : next;
+        if (state.bucket === "off") {
+          state.enabledOnly = false;
+          writePref("enabledOnly", "false");
+        }
+        writePref("bucket", state.bucket);
+        render();
+      });
+      els.serverList.addEventListener("click", event => {
+        const control = event.target.closest("[data-server-action]");
+        if (!control || control.tagName === "SELECT") return;
+        handleServerControl(control);
+      });
+      els.serverList.addEventListener("change", event => {
+        const control = event.target.closest("[data-server-action]");
+        if (control) handleServerControl(control);
+      });
+      els.serverDialogBody.addEventListener("click", event => {
+        const control = event.target.closest("[data-server-action]");
+        if (!control || control.tagName === "SELECT") return;
+        handleServerControl(control);
+      });
+      els.serverDialogBody.addEventListener("change", event => {
+        const control = event.target.closest("[data-server-action]");
+        if (control) handleServerControl(control);
+      });
+      els.serverDialogClose.addEventListener("click", closeServerDialog);
+      els.serverDialog.addEventListener("click", event => {
+        if (event.target === els.serverDialog) closeServerDialog();
+      });
+      els.serverDialog.addEventListener("close", () => { state.selectedServer = null; });
+      document.addEventListener("visibilitychange", () => {
+        if (document.visibilityState === "hidden" || state.refreshMode === "paused") scheduleRefresh();
+        else refreshDashboard({ force: true, reason: "visible" });
+      });
+
+      window.__mcpaceDashboard = { state, refreshDashboard, runAction, checkBackendLink, render, openServerDialog };
+      refreshDashboard({ allowHidden: true, reason: "initial" });
     </script>
   </body>
 </html>

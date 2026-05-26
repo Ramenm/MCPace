@@ -235,6 +235,10 @@ impl UpstreamSessionPool {
         UPSTREAM_SESSION_IDLE_TTL.as_millis()
     }
 
+    pub(crate) fn purge_idle_and_exited(&mut self) -> usize {
+        self.remove_idle_and_exited_sessions()
+    }
+
     pub(super) fn session_exists(&self, key: &UpstreamSessionKey) -> bool {
         self.sessions.contains_key(key)
     }
@@ -396,18 +400,7 @@ impl UpstreamSessionPool {
     }
 
     fn prepare_for_key(&mut self, key: &UpstreamSessionKey) -> (usize, usize) {
-        let now = Instant::now();
-        let mut evicted_idle_count = 0usize;
-        self.sessions.retain(|_, session| {
-            let idle = now.duration_since(session.last_used) > UPSTREAM_SESSION_IDLE_TTL;
-            let exited = session.running.has_exited();
-            if idle || exited {
-                evicted_idle_count = evicted_idle_count.saturating_add(1);
-                false
-            } else {
-                true
-            }
-        });
+        let evicted_idle_count = self.remove_idle_and_exited_sessions();
 
         let mut evicted_capacity_count = 0usize;
         while !self.sessions.contains_key(key) && self.sessions.len() >= self.max_session_count() {
@@ -424,5 +417,21 @@ impl UpstreamSessionPool {
         }
 
         (evicted_idle_count, evicted_capacity_count)
+    }
+
+    fn remove_idle_and_exited_sessions(&mut self) -> usize {
+        let now = Instant::now();
+        let mut evicted_count = 0usize;
+        self.sessions.retain(|_, session| {
+            let idle = now.duration_since(session.last_used) > UPSTREAM_SESSION_IDLE_TTL;
+            let exited = session.running.has_exited();
+            if idle || exited {
+                evicted_count = evicted_count.saturating_add(1);
+                false
+            } else {
+                true
+            }
+        });
+        evicted_count
     }
 }

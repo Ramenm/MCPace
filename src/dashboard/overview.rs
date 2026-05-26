@@ -243,9 +243,12 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
     let mut upstream_pool_max_size = 0usize;
     let mut upstream_pool_idle_ttl_ms = 0u128;
     let mut upstream_pool_locked_shards = 0usize;
+    let mut upstream_pool_evicted_idle_count = 0usize;
 
     for pool_lock in &config.upstream_session_pools {
-        if let Ok(pool) = pool_lock.lock() {
+        if let Ok(mut pool) = pool_lock.lock() {
+            upstream_pool_evicted_idle_count =
+                upstream_pool_evicted_idle_count.saturating_add(pool.purge_idle_and_exited());
             upstream_pool_size = upstream_pool_size.saturating_add(pool.session_count());
             upstream_pool_max_size =
                 upstream_pool_max_size.saturating_add(pool.max_session_count());
@@ -423,6 +426,10 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
                 ("size", JsonValue::number(upstream_pool_size)),
                 ("maxSize", JsonValue::number(upstream_pool_max_size)),
                 ("idleTtlMs", JsonValue::number(upstream_pool_idle_ttl_ms)),
+                (
+                    "evictedIdleCount",
+                    JsonValue::number(upstream_pool_evicted_idle_count),
+                ),
                 (
                     "shardCount",
                     JsonValue::number(config.upstream_session_pools.len()),
