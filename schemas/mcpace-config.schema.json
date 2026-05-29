@@ -360,11 +360,11 @@
         },
         "maxWorkers": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 0
         },
         "maxInFlightPerWorker": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 0
         }
       }
     },
@@ -403,7 +403,7 @@
         },
         "maxInFlightPerWorker": {
           "type": "integer",
-          "minimum": 1
+          "minimum": 0
         },
         "conflictDomain": {
           "type": "string"

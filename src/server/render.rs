@@ -41,6 +41,10 @@ pub(super) fn render_list(
             record.state_binding,
             record.credential_binding
         );
+        let launch = launch_command(record);
+        if !launch.is_empty() {
+            let _ = writeln!(stdout, "    launch: {}", launch);
+        }
     }
     0
 }
@@ -111,8 +115,33 @@ pub(super) fn render_capabilities(
         );
         let _ = writeln!(
             stdout,
+            "    source path: {}",
+            blank_to_none(&record.source_path)
+        );
+        let _ = writeln!(
+            stdout,
             "    source command: {}",
             blank_to_none(&record.source_command)
+        );
+        let _ = writeln!(
+            stdout,
+            "    source args: {}",
+            join_or_none(&record.source_args)
+        );
+        let _ = writeln!(
+            stdout,
+            "    launch: {}",
+            blank_to_none(&launch_command(record))
+        );
+        let _ = writeln!(
+            stdout,
+            "    source env names: {}",
+            join_or_none(&record.source_env_names)
+        );
+        let _ = writeln!(
+            stdout,
+            "    source header names: {}",
+            join_or_none(&record.source_header_names)
         );
         let _ = writeln!(
             stdout,
@@ -158,6 +187,31 @@ fn blank_to_none(value: &str) -> String {
     } else {
         value.to_string()
     }
+}
+
+fn launch_command(record: &ServerRecord) -> String {
+    if !record.source_command.trim().is_empty() {
+        let mut parts = vec![shell_word(&record.source_command)];
+        parts.extend(record.source_args.iter().map(|arg| shell_word(arg)));
+        return parts.join(" ");
+    }
+    if !record.source_url.trim().is_empty() {
+        return record.source_url.clone();
+    }
+    String::new()
+}
+
+fn shell_word(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return "''".to_string();
+    }
+    if trimmed.chars().all(|ch| {
+        ch.is_ascii_alphanumeric() || matches!(ch, '_' | '-' | '.' | '/' | ':' | '@' | '=' | ',')
+    }) {
+        return trimmed.to_string();
+    }
+    format!("'{}'", trimmed.replace('\'', "'\\''"))
 }
 
 pub(super) fn render_test_result(

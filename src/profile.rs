@@ -1,5 +1,6 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::mcp_sources;
 use crate::text_utils::normalize_flag;
 use std::collections::BTreeMap;
 use std::env;
@@ -332,7 +333,10 @@ fn read_server_overrides(
                             .unwrap_or(true),
                         _ => true,
                     };
-                    overrides.insert(server_name.trim().to_ascii_lowercase(), enabled);
+                    let normalized_server_name = mcp_sources::normalize_server_name(server_name);
+                    if !normalized_server_name.is_empty() {
+                        overrides.insert(normalized_server_name, enabled);
+                    }
                 }
             }
             break;

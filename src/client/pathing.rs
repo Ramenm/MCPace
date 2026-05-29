@@ -1,29 +1,93 @@
 use crate::text_utils;
 
 pub(super) fn path_is_within(path: &str, root: &str) -> bool {
-    let normalized_path = trim_trailing_separator(path);
-    let normalized_root = trim_trailing_separator(root);
-    let path_key = path_compare_key(normalized_path);
-    let root_key = path_compare_key(normalized_root);
+    let path_key = path_compare_key(path);
+    let root_key = path_compare_key(root);
+    if root_key.is_empty() {
+        return false;
+    }
     path_key == root_key || path_key.starts_with(&(root_key + "/"))
 }
 
-fn trim_trailing_separator(value: &str) -> &str {
-    value.trim_end_matches('/')
-}
-
 fn path_compare_key(value: &str) -> String {
-    if looks_like_windows_path(value) {
-        value.to_ascii_lowercase()
+    let normalized = lexical_path_key(value);
+    if looks_like_windows_path(&normalized) {
+        normalized.to_ascii_lowercase()
     } else {
-        value.to_string()
+        normalized
     }
 }
 
 fn looks_like_windows_path(value: &str) -> bool {
     let bytes = value.as_bytes();
-    (bytes.len() >= 3 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic() && bytes[2] == b'/')
+    (bytes.len() >= 2 && bytes[1] == b':' && bytes[0].is_ascii_alphabetic())
         || value.starts_with("//")
+}
+
+fn lexical_path_key(value: &str) -> String {
+    let normalized = normalize_path(value);
+    let mut rest = normalized.trim();
+    if rest.is_empty() {
+        return String::new();
+    }
+
+    let prefix;
+    if rest.starts_with("//") {
+        prefix = "//";
+        rest = &rest[2..];
+    } else if rest.as_bytes().len() >= 2
+        && rest.as_bytes()[1] == b':'
+        && rest.as_bytes()[0].is_ascii_alphabetic()
+    {
+        prefix = &rest[..2];
+        rest = &rest[2..];
+        rest = rest.trim_start_matches('/');
+    } else if rest.starts_with('/') {
+        prefix = "/";
+        rest = rest.trim_start_matches('/');
+    } else {
+        prefix = "";
+    }
+
+    let mut parts: Vec<&str> = Vec::new();
+    for part in rest.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                if parts.last().is_some_and(|last| *last != "..") {
+                    parts.pop();
+                } else if prefix.is_empty() {
+                    parts.push(part);
+                }
+            }
+            _ => parts.push(part),
+        }
+    }
+
+    match prefix {
+        "/" => {
+            if parts.is_empty() {
+                "/".to_string()
+            } else {
+                format!("/{}", parts.join("/"))
+            }
+        }
+        "//" => {
+            if parts.is_empty() {
+                "//".to_string()
+            } else {
+                format!("//{}", parts.join("/"))
+            }
+        }
+        "" => parts.join("/"),
+        drive => {
+            if parts.is_empty() {
+                drive.to_string()
+            } else {
+                format!("{}/{}", drive, parts.join("/"))
+            }
+        }
+    }
 }
 
 pub(super) fn normalize(value: &str) -> String {
@@ -135,4 +199,34 @@ pub(super) fn stable_hash_hex(input: &str) -> String {
         hash = hash.wrapping_mul(0x100000001b3);
     }
     format!("{:016x}", hash)
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::path_is_within;
+
+    #[test]
+    fn path_containment_uses_lexical_segments_not_raw_prefixes() {
+        assert!(path_is_within(
+            "/work/project/src/lib.rs",
+            "/work/project"
+        ));
+        assert!(!path_is_within(
+            "/work/project/../secret/file.txt",
+            "/work/project"
+        ));
+        assert!(!path_is_within(
+            "/work/project-other/file.txt",
+            "/work/project"
+        ));
+    }
+
+    #[test]
+    fn path_containment_handles_windows_drive_roots_case_insensitively() {
+        assert!(path_is_within("c:/Users/alice/project", "C:/"));
+        assert!(path_is_within("C:/Work/Project", "c:/work"));
+        assert!(!path_is_within("C:/work/../Windows", "C:/work"));
+        assert!(!path_is_within("D:/Users/alice", "C:/"));
+    }
 }

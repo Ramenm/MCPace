@@ -46,13 +46,14 @@ jobs:
           npm run check:package
           npm run pack:npm:dry-run
 
+      - name: Refuse incomplete native package publication
+        run: node scripts/verify-npm-publish-contract.mjs --enforce
+
       - name: Publish main npm launcher
         working-directory: packages/npm/cli
-        env:
-          MCPACE_NPM_EXEC_PACKAGE: npm@11.13.0
         run: |
           if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm publish --dry-run --access public
+            npm exec --yes --package=npm@11.13.0 -- npm publish --dry-run --access public
           else
-            npm publish --access public
+            npm exec --yes --package=npm@11.13.0 -- npm publish --access public
           fi

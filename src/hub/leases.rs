@@ -959,6 +959,22 @@ fn route_blockers(route: &PlannedRoute) -> Vec<String> {
             route.server_name, route.admission_state
         ));
     }
+    if route.request_strategy == "disabled-no-route"
+        || route.request_strategy == "legacy-compat-disabled"
+        || route.scheduler_lane == "disabled"
+        || route.scheduler_lane == "legacy-disabled"
+        || route.startup_strategy == "disabled"
+        || route.parallelism_limit == 0
+    {
+        blockers.push(format!(
+            "server '{}' is not routable because strategy='{}' lane='{}' startup='{}' parallelismLimit={}",
+            route.server_name,
+            route.request_strategy,
+            route.scheduler_lane,
+            route.startup_strategy,
+            route.parallelism_limit
+        ));
+    }
     if route
         .project_binding_key
         .as_deref()
@@ -1232,6 +1248,9 @@ fn clean_required_server_name(server_name: &str) -> Result<String, String> {
     let server_name = server_name.trim();
     if server_name.is_empty() {
         return Err("hub lease acquire requires --server <name>".to_string());
+    }
+    if server_name.chars().any(|ch| ch.is_control()) {
+        return Err("hub lease server name must not contain control characters".to_string());
     }
     Ok(server_name.to_string())
 }

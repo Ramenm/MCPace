@@ -1,0 +1,216 @@
+{
+  "schema": "mcpace.projectAssurance.v1",
+  "generatedAt": "2026-05-28T18:42:31.178Z",
+  "root": "/mnt/data/mcpace_internal_more",
+  "overall": "needs-live-rust-proof",
+  "summary": {
+    "pass": 12,
+    "warn": 2,
+    "fail": 0,
+    "worstStatus": "warn"
+  },
+  "reviewModel": [
+    {
+      "question": "What should a normal user see?",
+      "answer": "One readiness verdict, endpoint, server launch command/URL, evidence state, and one safe next action."
+    },
+    {
+      "question": "What should an operator see?",
+      "answer": "Per-server lane, blockers, safeguards, recommended policy, command runbook, and whether policy drift exists."
+    },
+    {
+      "question": "What should stay hidden by default?",
+      "answer": "Secret values, raw JSON/logs, manual concurrency controls, and disabled tools represented as usable."
+    },
+    {
+      "question": "What proves the product is smarter?",
+      "answer": "Backend evidence drives UI decisions; package names alone do not grant trust; runtimeControlPlane ties evidence, risk, isolation, resources, and parallelism into one reviewable model."
+    }
+  ],
+  "correctVerificationFlow": [
+    "Static source contract: npm run check:assurance and npm run check.",
+    "Release contract: npm run build:release-artifacts and inspect zipVerification.status.",
+    "Platform static contract: npm run check:platform and inspect reports/platform-proof.md.",
+    "Rust host contract: npm run check:rust and cargo build --release on a machine with Rust 1.95.0.",
+    "Live user contract: mcpace up, open dashboard, add one harmless server disabled, enable intentionally, run Test once.",
+    "MCP client contract: point one client at /mcp, run tools/list, then one read-only upstream_call.",
+    "Security negative contract: bad Origin/Host/content headers/session/request-id tests must fail closed."
+  ],
+  "claims": [
+    {
+      "id": "safe-empty-default",
+      "title": "Fresh bundle starts with no silently enabled upstream server",
+      "status": "pass",
+      "why": "A user should not accidentally expose filesystem, memory, browser, or shell tools just by installing MCPace.",
+      "evidence": [
+        "mcp_settings.json:mcpServers",
+        "README.md:does not add a filesystem server"
+      ],
+      "failureMode": "Silent default tools would make the dashboard look useful while hiding a high-risk permission grant.",
+      "nextCheck": "Install one explicit server, verify it stays disabled by default, then run Test manually."
+    },
+    {
+      "id": "user-readiness",
+      "title": "Dashboard has a user-level readiness verdict, not only raw internals",
+      "status": "pass",
+      "why": "The first screen should answer whether the product is usable, what is missing, and what the next action is.",
+      "evidence": [
+        "src/dashboard/overview.rs:userReadiness",
+        "src/dashboard/index.html:renderUserReadiness"
+      ],
+      "failureMode": "Users see many facts but cannot decide whether to trust the setup.",
+      "nextCheck": "Open dashboard after mcpace up and confirm the top verdict changes when no servers, parked servers, unchecked servers, and ready servers are present."
+    },
+    {
+      "id": "operator-plan",
+      "title": "Backend produces a per-server operator plan and runbook",
+      "status": "pass",
+      "why": "Per-server UI should be driven by backend evidence: lane, blocker, next action, and commands to run.",
+      "evidence": [
+        "src/dashboard/overview.rs:operatorPlan",
+        "src/dashboard/index.html:renderServerRunbook"
+      ],
+      "failureMode": "Frontend invents readiness from partial fields and drifts away from backend runtime truth.",
+      "nextCheck": "Compare each server row with mcpace server capabilities <name> --json and verify the same launch/evidence/policy direction."
+    },
+    {
+      "id": "runtime-control-plane",
+      "title": "Runtime control combines live evidence, risk, parallelism, isolation, and resource budgets",
+      "status": "pass",
+      "why": "A useful MCP runtime manager must not stop at server lists; it should explain when to probe, serialize, approve, restrict, or sandbox each server.",
+      "evidence": [
+        "src/dashboard/overview.rs:runtimeControlPlane",
+        "src/dashboard/overview.rs:serverResourceMonitoring",
+        "src/dashboard/index.html:renderRuntimeControl"
+      ],
+      "failureMode": "The UI claims readiness without connecting tool evidence, risk, concurrency, isolation, and observed resource use.",
+      "nextCheck": "Run a harmless upstream_call and verify /api/resources reports a live per-server session row with pid/resource data."
+    },
+    {
+      "id": "frontend-backend-contract",
+      "title": "Dashboard frontend calls are covered by backend routes and DOM contract tests",
+      "status": "pass",
+      "why": "UI can be pretty but useless if buttons, routes, payload keys, or DOM ids drift independently.",
+      "evidence": [
+        "tests/node/dashboard-contract.test.mjs",
+        "src/dashboard.rs:16 static routes"
+      ],
+      "failureMode": "A user clicks Enable/Test/Add server and nothing real happens, or an action reaches backend with the wrong JSON.",
+      "nextCheck": "Run npm run check before every release and add a new assertion for every new UI action."
+    },
+    {
+      "id": "server-launch-visible",
+      "title": "Each server exposes how it starts without leaking secrets",
+      "status": "pass",
+      "why": "A user must see command/URL, but only names of env/header keys, never secret values.",
+      "evidence": [
+        "src/server/model.rs:sourceCommand/sourceArgs/sourceEnvNames/sourceHeaderNames",
+        "src/dashboard/overview.rs:launch_command_for_server"
+      ],
+      "failureMode": "The dashboard either cannot explain what will run, or it leaks tokens/API keys.",
+      "nextCheck": "Create a server with env/header config and verify dashboard shows key names only."
+    },
+    {
+      "id": "add-server-preflight",
+      "title": "Adding a server by command is preflighted and does not execute shell compositions",
+      "status": "pass",
+      "why": "Paste-a-command UX is useful only if it is a source-record workflow, not a hidden arbitrary shell execution path.",
+      "evidence": [
+        "src/dashboard.rs:write_server_install_command_action",
+        "src/dashboard/index.html:commandLineLooksComposed"
+      ],
+      "failureMode": "A malicious or accidental command line can chain extra operations through ;, &&, pipes, redirects, backticks, or command substitution.",
+      "nextCheck": "Try npx/uvx/url/local-path examples and then try blocked shell-composition strings; all blocked strings should be rejected before install."
+    },
+    {
+      "id": "http-boundary",
+      "title": "Local Streamable HTTP boundary has explicit origin/header/session checks",
+      "status": "pass",
+      "why": "Local HTTP MCP endpoints need browser-facing hardening: origin/host checks, expected content types, session binding, and hardened dashboard responses.",
+      "evidence": [
+        "src/dashboard/http_boundary.rs",
+        "src/dashboard/mcp_http.rs",
+        "src/dashboard/http_session.rs",
+        "src/dashboard/response.rs"
+      ],
+      "failureMode": "Browser-origin or DNS-rebinding style access can reach a local MCP endpoint without the user intending it.",
+      "nextCheck": "Run negative HTTP tests for bad Origin, bad Host, missing Accept, missing Content-Type, reused request id, and stale session id."
+    },
+    {
+      "id": "human-in-loop-tools",
+      "title": "Tools are not treated as trusted until visible evidence and an explicit operator action exist",
+      "status": "pass",
+      "why": "MCP tools expose external actions; the UI should make tool exposure and evidence visible instead of quietly trusting package names.",
+      "evidence": [
+        "src/dashboard/overview.rs:operator_plan_for_server",
+        "src/dashboard/index.html:server-test"
+      ],
+      "failureMode": "The user thinks a server is ready just because it is configured, even though no live initialize/tools-list proof exists.",
+      "nextCheck": "For a new server: add disabled, enable intentionally, run Test once, compare tool names/count with server capabilities JSON."
+    },
+    {
+      "id": "release-reproducibility",
+      "title": "Release artifact is manifest-driven and excludes heavy/runtime directories",
+      "status": "pass",
+      "why": "A reliable project review needs a deterministic source bundle with tests, scripts, schemas, docs, and no node_modules/.git/target/dist cargo.",
+      "evidence": [
+        "release-manifest.json",
+        "scripts/build-release-artifacts.mjs",
+        "tests/node/docs-and-package.test.mjs"
+      ],
+      "failureMode": "The archive looks complete but omits checks or includes local build/cache state that hides reproducibility issues.",
+      "nextCheck": "Run npm run build:release-artifacts and verify zipVerification.status is pass."
+    },
+    {
+      "id": "platform-proof-matrix",
+      "title": "Linux, macOS, and Windows have an explicit proof matrix",
+      "status": "pass",
+      "why": "Cross-platform readiness cannot be inferred from a Linux-only source review; each desktop OS needs Node checks, Rust build/test, and native binary smoke commands.",
+      "evidence": [
+        ".github/workflows/platform-proof.yml",
+        "reports/platform-proof.json",
+        "scripts/platform-binary-smoke.mjs"
+      ],
+      "failureMode": "The project appears portable while Windows/macOS path, shell, process, service, or binary resolution code is untested.",
+      "nextCheck": "Run the manual platform-proof workflow with full=true and keep reports/platform-proof.json green."
+    },
+    {
+      "id": "console-ui-scope",
+      "title": "Console UI scope avoids pulling Tauri before platform proof is green",
+      "status": "pass",
+      "why": "Tauri is the right family for a packaged desktop webview, not a terminal UI. The safer console path is to reuse backend readiness/operatorPlan in a future Ratatui TUI after native platform proof passes.",
+      "evidence": [
+        "reports/platform-proof.md:Console UI decision",
+        "Cargo.toml"
+      ],
+      "failureMode": "A heavy desktop shell duplicates dashboard logic before the native CLI/runtime has been proven on Linux/macOS/Windows.",
+      "nextCheck": "After platform-proof is green on all OS families, add `mcpace tui` as a thin terminal view over userReadiness/operatorPlan."
+    },
+    {
+      "id": "rust-runtime-unverified-here",
+      "title": "Rust compile/clippy/test pass is still a required external gate",
+      "status": "warn",
+      "why": "This environment does not provide cargo/rustc, so Node-side assurance cannot prove the Rust binary compiles or executes live MCP flows.",
+      "evidence": [
+        "package.json:check:rust",
+        "scripts/cargo-task.mjs",
+        "rust-toolchain.toml"
+      ],
+      "failureMode": "Dashboard/static contracts are green but the shipped native binary fails to build or runtime paths fail under Cargo tests.",
+      "nextCheck": "On a Rust host run: rustup toolchain install 1.95.0 && npm run check:rust && cargo build --release."
+    },
+    {
+      "id": "live-e2e-unverified-here",
+      "title": "Live add-enable-test-upstream-call path needs one real target-machine proof",
+      "status": "warn",
+      "why": "Static checks show wiring and contracts, but user confidence also needs one real server and one real client call through /mcp.",
+      "evidence": [
+        "scripts/load-test-local.mjs",
+        "src/dashboard/overview.rs:flow",
+        "tests/node/dashboard-contract.test.mjs"
+      ],
+      "failureMode": "Everything is connected in source, but target OS process spawning, firewall, client config path, or upstream stdio runtime fails in practice.",
+      "nextCheck": "Run mcpace up, add a harmless server, enable it, Test it, connect a client to /mcp, and execute one read-only upstream_call."
+    }
+  ]
+}

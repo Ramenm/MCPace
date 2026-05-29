@@ -7,6 +7,7 @@ use super::{
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::resources;
 use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
@@ -45,6 +46,37 @@ pub(super) struct UpstreamPoolCallOutcome {
     pub(super) idle_ttl_ms: u128,
     pub(super) evicted_idle_count: usize,
     pub(super) evicted_capacity_count: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct UpstreamSessionSnapshot {
+    pub server_name: String,
+    pub pid: u32,
+    pub client_id: String,
+    pub session_id: String,
+    pub project_root: String,
+    pub transport: String,
+    pub created_age_ms: u128,
+    pub idle_ms: u128,
+    pub call_count: usize,
+    pub resource: JsonValue,
+}
+
+impl UpstreamSessionSnapshot {
+    pub fn to_json_value(&self) -> JsonValue {
+        JsonValue::object([
+            ("server", JsonValue::string(self.server_name.clone())),
+            ("pid", JsonValue::number(self.pid)),
+            ("clientId", JsonValue::string(self.client_id.clone())),
+            ("sessionId", JsonValue::string(self.session_id.clone())),
+            ("projectRoot", JsonValue::string(self.project_root.clone())),
+            ("transport", JsonValue::string(self.transport.clone())),
+            ("ageMs", JsonValue::number(self.created_age_ms)),
+            ("idleMs", JsonValue::number(self.idle_ms)),
+            ("callCount", JsonValue::number(self.call_count)),
+            ("resource", self.resource.clone()),
+        ])
+    }
 }
 
 pub(super) struct UpstreamPoolInvocation<'a> {
@@ -237,6 +269,31 @@ impl UpstreamSessionPool {
 
     pub(crate) fn purge_idle_and_exited(&mut self) -> usize {
         self.remove_idle_and_exited_sessions()
+    }
+
+    pub(crate) fn session_snapshots(&mut self) -> Vec<UpstreamSessionSnapshot> {
+        let now = Instant::now();
+        self.sessions
+            .iter_mut()
+            .filter_map(|(key, session)| {
+                if session.running.has_exited() {
+                    return None;
+                }
+                let pid = session.running.child.id();
+                Some(UpstreamSessionSnapshot {
+                    server_name: key.server_name.clone(),
+                    pid,
+                    client_id: key.client_id.clone(),
+                    session_id: key.session_id.clone(),
+                    project_root: key.project_root.clone(),
+                    transport: key.transport.clone(),
+                    created_age_ms: now.duration_since(session.created_at).as_millis(),
+                    idle_ms: now.duration_since(session.last_used).as_millis(),
+                    call_count: session.call_count,
+                    resource: resources::process_resource_snapshot_json(pid),
+                })
+            })
+            .collect()
     }
 
     pub(super) fn session_exists(&self, key: &UpstreamSessionKey) -> bool {

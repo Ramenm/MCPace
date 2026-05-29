@@ -1,4 +1,4 @@
-use super::http_boundary::request_header_string;
+use super::http_boundary::request_header_string_unique;
 use super::HttpRequest;
 use crate::json::JsonValue;
 use crate::json_helpers;
@@ -8,7 +8,7 @@ pub(super) fn validate_mcp_standard_headers(
     message: &JsonValue,
     method: &str,
 ) -> Result<(), String> {
-    if let Some(header_method) = request_header_string(Some(request), "mcp-method") {
+    if let Some(header_method) = request_header_string_unique(Some(request), "mcp-method")? {
         if header_method != method {
             return Err(format!(
                 "Mcp-Method header '{}' does not match JSON-RPC method '{}'",
@@ -17,7 +17,7 @@ pub(super) fn validate_mcp_standard_headers(
         }
     }
 
-    let header_name = request_header_string(Some(request), "mcp-name");
+    let header_name = request_header_string_unique(Some(request), "mcp-name")?;
     let expected_name = mcp_standard_header_name(message, method);
     match (header_name, expected_name) {
         (Some(actual), Some(expected)) if actual != expected => Err(format!(

@@ -1,9 +1,11 @@
 name: security
 
-# GitHub-hosted security jobs are manual-only while local CI is the default gate
-# and paid private-repo Actions minutes are intentionally avoided.
+# GitHub-hosted security jobs run on public pull requests, or on private repositories
+# only when the matching MCPACE_ENABLE_PRIVATE_* repository variable is enabled.
+# Manual dispatch stays available for explicit proof runs.
 on:
   workflow_dispatch:
+  pull_request:
 
 permissions:
   contents: read

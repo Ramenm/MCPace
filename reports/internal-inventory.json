@@ -1,0 +1,1502 @@
+{
+  "schema": "mcpace.projectInventory.v1",
+  "generatedAt": "2026-05-28T18:42:32.420Z",
+  "root": "/mnt/data/mcpace_internal_more",
+  "commands": [
+    {
+      "name": "help",
+      "aliases": [
+        "-h",
+        "--help"
+      ],
+      "implemented": true,
+      "description": "Show help for the Rust-only CLI."
+    },
+    {
+      "name": "version",
+      "aliases": [
+        "--version",
+        "-v"
+      ],
+      "implemented": true,
+      "description": "Print the MCPace version from mcpace.config.json."
+    },
+    {
+      "name": "doctor",
+      "aliases": [],
+      "implemented": true,
+      "description": "Inspect host/source readiness without starting a runtime."
+    },
+    {
+      "name": "setup",
+      "aliases": [
+        "up",
+        "quickstart",
+        "bootstrap",
+        "one-click"
+      ],
+      "implemented": true,
+      "description": "Home-first onboarding: create/repair MCPace home, start the endpoint, wire supported local clients, and smoke-test without adding upstream servers."
+    },
+    {
+      "name": "service",
+      "aliases": [
+        "autostart",
+        "startup"
+      ],
+      "implemented": true,
+      "description": "Install or inspect user-level autostart for the MCPace endpoint."
+    },
+    {
+      "name": "dashboard",
+      "aliases": [
+        "ui"
+      ],
+      "implemented": true,
+      "description": "Serve a local admin dashboard for MCPace."
+    },
+    {
+      "name": "serve",
+      "aliases": [],
+      "implemented": true,
+      "description": "Serve the local MCPace HTTP surface on one port."
+    },
+    {
+      "name": "profile",
+      "aliases": [],
+      "implemented": true,
+      "description": "Read-only runtime profile inspection."
+    },
+    {
+      "name": "projects",
+      "aliases": [
+        "project"
+      ],
+      "implemented": true,
+      "description": "Read-only project registry inspection."
+    },
+    {
+      "name": "candidates",
+      "aliases": [],
+      "implemented": true,
+      "description": "Inspect candidate server catalog."
+    },
+    {
+      "name": "lab",
+      "aliases": [],
+      "implemented": true,
+      "description": "Inspect runtime lab scenarios, coverage, and gap reports."
+    },
+    {
+      "name": "server",
+      "aliases": [
+        "servers",
+        "capabilities",
+        "server-capabilities",
+        "mcp",
+        "add-server",
+        "server-install"
+      ],
+      "implemented": true,
+      "description": "Grouped server inspection and automatic MCP package/URL/command install command."
+    },
+    {
+      "name": "verify",
+      "aliases": [
+        "check",
+        "status",
+        "smoke",
+        "readiness",
+        "probe",
+        "stress-status",
+        "stress-startup-status"
+      ],
+      "implemented": true,
+      "description": "Grouped verification command."
+    },
+    {
+      "name": "init",
+      "aliases": [
+        "boot"
+      ],
+      "implemented": true,
+      "description": "Bootstrap runtime state layout and readiness."
+    },
+    {
+      "name": "hub",
+      "aliases": [
+        "start"
+      ],
+      "implemented": true,
+      "description": "Manage the local hub lifecycle, status, and logs."
+    },
+    {
+      "name": "stdio-shim",
+      "aliases": [
+        "stdio_shim"
+      ],
+      "implemented": true,
+      "description": "Internal bootstrap-only stdio shim proof surface."
+    },
+    {
+      "name": "mcp-server",
+      "aliases": [
+        "mcp_server"
+      ],
+      "implemented": true,
+      "description": "Internal MCP stdio compatibility surface."
+    },
+    {
+      "name": "client",
+      "aliases": [
+        "setup-clients",
+        "setup-mcp-clients"
+      ],
+      "implemented": true,
+      "description": "Grouped client planning/install/export command."
+    },
+    {
+      "name": "connect",
+      "aliases": [
+        "guide",
+        "next",
+        "onboard"
+      ],
+      "implemented": true,
+      "description": "Show client-first wiring guidance, endpoint details, and next commands."
+    },
+    {
+      "name": "cleanup",
+      "aliases": [
+        "clean",
+        "prune"
+      ],
+      "implemented": true,
+      "description": "Safely inspect or remove disposable cache, logs, and ephemeral runtime markers."
+    },
+    {
+      "name": "repair",
+      "aliases": [
+        "backup",
+        "rotate-logs",
+        "windows-mcp-lease",
+        "auth"
+      ],
+      "implemented": true,
+      "description": "Grouped repair/maintenance command."
+    },
+    {
+      "name": "update",
+      "aliases": [
+        "update-check"
+      ],
+      "implemented": true,
+      "description": "Check external package-manager update guidance without self-updating."
+    },
+    {
+      "name": "release",
+      "aliases": [
+        "build-release"
+      ],
+      "implemented": true,
+      "description": "Build local source release artifacts without publishing."
+    }
+  ],
+  "groupedSubcommands": {
+    "server": [
+      "add",
+      "auto",
+      "candidates",
+      "capabilities",
+      "disable",
+      "discover",
+      "enable",
+      "import",
+      "install",
+      "instances",
+      "leases",
+      "list",
+      "remove",
+      "set-policy",
+      "sources",
+      "test"
+    ],
+    "client": [
+      "export",
+      "install",
+      "latest",
+      "list",
+      "plan",
+      "restore"
+    ],
+    "hub": [
+      "acquire",
+      "down",
+      "lease",
+      "leases",
+      "list",
+      "logs",
+      "release",
+      "renew",
+      "repair",
+      "run",
+      "status",
+      "up"
+    ],
+    "verify": [
+      "doctor",
+      "readiness"
+    ],
+    "lab": [
+      "coverage",
+      "gaps",
+      "list",
+      "matrix",
+      "probe",
+      "report",
+      "run",
+      "show"
+    ]
+  },
+  "counts": {
+    "rustFiles": 125,
+    "rustFunctions": 1598,
+    "publicCommands": 23,
+    "implementedPublicCommands": 23,
+    "duplicateFunctionNames": 67,
+    "longRustFiles": 23
+  },
+  "npmLauncher": {
+    "binPath": "packages/npm/cli/bin/mcpace.js",
+    "exists": true,
+    "executable": true
+  },
+  "architectureSlices": [
+    {
+      "slice": "CLI dispatch",
+      "owners": [
+        "src/app.rs",
+        "src/catalog.rs"
+      ]
+    },
+    {
+      "slice": "Setup/up orchestration",
+      "owners": [
+        "src/setup.rs",
+        "src/init.rs",
+        "src/serve.rs",
+        "src/service.rs"
+      ]
+    },
+    {
+      "slice": "Client wiring",
+      "owners": [
+        "src/client.rs",
+        "src/client/*",
+        "src/client_catalog.rs"
+      ]
+    },
+    {
+      "slice": "Server inventory/install/policy",
+      "owners": [
+        "src/server.rs",
+        "src/server/*",
+        "src/mcp_sources/*"
+      ]
+    },
+    {
+      "slice": "Runtime scheduling/leases",
+      "owners": [
+        "src/hub/*",
+        "src/client/plan.rs",
+        "src/upstream/lease_runtime.rs"
+      ]
+    },
+    {
+      "slice": "HTTP MCP/dashboard boundary",
+      "owners": [
+        "src/dashboard.rs",
+        "src/dashboard/*"
+      ]
+    },
+    {
+      "slice": "Upstream execution",
+      "owners": [
+        "src/upstream.rs",
+        "src/upstream/*"
+      ]
+    },
+    {
+      "slice": "Verification/evidence",
+      "owners": [
+        "src/verify/*",
+        "src/lab/*",
+        "eval/*"
+      ]
+    },
+    {
+      "slice": "Release/npm packaging",
+      "owners": [
+        "packages/npm/cli/*",
+        "scripts/build-release-artifacts.mjs",
+        "release-manifest.json"
+      ]
+    },
+    {
+      "slice": "Platform proof",
+      "owners": [
+        "release-targets.json",
+        ".github/workflows/platform-proof.yml",
+        "scripts/platform-proof.mjs",
+        "scripts/platform-binary-smoke.mjs"
+      ]
+    }
+  ],
+  "longRustFiles": [
+    {
+      "file": "src/server/loader.rs",
+      "lines": 2660
+    },
+    {
+      "file": "src/dashboard/overview.rs",
+      "lines": 2141
+    },
+    {
+      "file": "src/dashboard/tests.rs",
+      "lines": 2117
+    },
+    {
+      "file": "src/upstream/tests.rs",
+      "lines": 1929
+    },
+    {
+      "file": "src/setup.rs",
+      "lines": 1796
+    },
+    {
+      "file": "src/adapter/discovery.rs",
+      "lines": 1779
+    },
+    {
+      "file": "src/dashboard.rs",
+      "lines": 1722
+    },
+    {
+      "file": "src/upstream/lease_runtime.rs",
+      "lines": 1597
+    },
+    {
+      "file": "src/mcp_server.rs",
+      "lines": 1337
+    },
+    {
+      "file": "src/hub/leases.rs",
+      "lines": 1322
+    },
+    {
+      "file": "src/serve.rs",
+      "lines": 1321
+    },
+    {
+      "file": "src/upstream.rs",
+      "lines": 1291
+    },
+    {
+      "file": "src/server/discover.rs",
+      "lines": 1181
+    },
+    {
+      "file": "src/mcp_server/tool_surface.rs",
+      "lines": 1174
+    },
+    {
+      "file": "src/adapter.rs",
+      "lines": 1113
+    },
+    {
+      "file": "src/dashboard/http_tools.rs",
+      "lines": 1026
+    },
+    {
+      "file": "src/client/actions.rs",
+      "lines": 1023
+    },
+    {
+      "file": "src/mcp_autoinstall.rs",
+      "lines": 962
+    },
+    {
+      "file": "src/lab/render.rs",
+      "lines": 915
+    },
+    {
+      "file": "src/client_catalog.rs",
+      "lines": 908
+    }
+  ],
+  "duplicateFunctionNames": [
+    {
+      "name": "to_json_value",
+      "owners": [
+        "src/candidates.rs (pub)",
+        "src/cleanup.rs (private)",
+        "src/client/actions/render_models.rs (pub(super))",
+        "src/client/actions/render_models.rs (pub(super))",
+        "src/client/actions/render_models.rs (pub(super))",
+        "src/client/actions/render_models.rs (pub(super))",
+        "src/client/render.rs (pub(super))",
+        "src/client/render.rs (pub(super))",
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)",
+        "src/connect/model.rs (pub(super))",
+        "src/connect/model.rs (private)",
+        "src/connect/model.rs (private)",
+        "src/connect/model.rs (private)",
+        "src/connect/model.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/doctor.rs (pub)",
+        "src/doctor.rs (private)",
+        "src/doctor.rs (private)",
+        "src/doctor.rs (private)",
+        "src/hub/model.rs (private)",
+        "src/hub/model.rs (pub(super))",
+        "src/hub/model.rs (pub(super))",
+        "src/init.rs (private)",
+        "src/lab/model.rs (pub(super))",
+        "src/lab/model.rs (pub(super))",
+        "src/lab/model.rs (pub(super))",
+        "src/mcp_autoinstall.rs (pub)",
+        "src/mcp_autoinstall.rs (pub)",
+        "src/mcp_sources.rs (pub)",
+        "src/mcp_sources.rs (pub)",
+        "src/mcp_sources/import.rs (pub)",
+        "src/mcp_sources/import.rs (private)",
+        "src/mcp_sources/write.rs (pub)",
+        "src/mcp_sources/write.rs (pub)",
+        "src/mcp_sources/write.rs (pub)",
+        "src/profile.rs (private)",
+        "src/profile.rs (private)",
+        "src/projects.rs (private)",
+        "src/update.rs (private)",
+        "src/upstream/session_pool.rs (pub)",
+        "src/verify/model.rs (pub)"
+      ]
+    },
+    {
+      "name": "run",
+      "owners": [
+        "src/app.rs (pub)",
+        "src/candidates.rs (pub)",
+        "src/cleanup.rs (pub)",
+        "src/client.rs (pub)",
+        "src/connect.rs (pub)",
+        "src/dashboard.rs (pub)",
+        "src/doctor.rs (pub)",
+        "src/hub.rs (pub)",
+        "src/hub/leases.rs (pub(super))",
+        "src/init.rs (pub)",
+        "src/lab.rs (pub)",
+        "src/mcp_server.rs (pub)",
+        "src/profile.rs (pub)",
+        "src/projects.rs (pub)",
+        "src/release.rs (pub)",
+        "src/repair.rs (pub)",
+        "src/serve.rs (pub)",
+        "src/server.rs (pub)",
+        "src/server/add.rs (pub(super))",
+        "src/server/discover.rs (pub(super))",
+        "src/server/import.rs (pub(super))",
+        "src/server/install.rs (pub(super))",
+        "src/server/instances.rs (pub(super))",
+        "src/server/policy.rs (pub(super))",
+        "src/server/query.rs (pub(super))",
+        "src/server/remove.rs (pub(super))",
+        "src/server/sources.rs (pub(super))",
+        "src/server/test.rs (pub(super))",
+        "src/server/toggle.rs (pub(super))",
+        "src/service.rs (pub)",
+        "src/setup.rs (pub)",
+        "src/stdio_shim.rs (pub)",
+        "src/update.rs (pub)",
+        "src/verify.rs (pub)"
+      ]
+    },
+    {
+      "name": "write_help",
+      "owners": [
+        "src/app.rs (private)",
+        "src/candidates.rs (private)",
+        "src/cleanup.rs (private)",
+        "src/client/args.rs (pub(super))",
+        "src/connect/args.rs (pub(super))",
+        "src/dashboard.rs (private)",
+        "src/hub/args.rs (pub(super))",
+        "src/init.rs (private)",
+        "src/lab/args.rs (pub(super))",
+        "src/mcp_server/args.rs (pub(super))",
+        "src/profile.rs (private)",
+        "src/projects.rs (private)",
+        "src/release.rs (private)",
+        "src/repair.rs (private)",
+        "src/serve.rs (private)",
+        "src/server/args.rs (pub(super))",
+        "src/service.rs (private)",
+        "src/setup.rs (private)",
+        "src/stdio_shim.rs (private)",
+        "src/update.rs (private)",
+        "src/verify/args.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "parse_args",
+      "owners": [
+        "src/candidates.rs (private)",
+        "src/cleanup.rs (private)",
+        "src/client/args.rs (pub(super))",
+        "src/connect/args.rs (pub(super))",
+        "src/dashboard.rs (private)",
+        "src/hub/args.rs (pub(super))",
+        "src/init.rs (private)",
+        "src/lab/args.rs (pub(super))",
+        "src/mcp_server/args.rs (pub(super))",
+        "src/profile.rs (private)",
+        "src/projects.rs (private)",
+        "src/serve.rs (private)",
+        "src/server/args.rs (pub(super))",
+        "src/service.rs (private)",
+        "src/setup.rs (private)",
+        "src/stdio_shim.rs (private)",
+        "src/update.rs (private)",
+        "src/verify/args.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "default",
+      "owners": [
+        "src/cleanup.rs (private)",
+        "src/client_catalog.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/dashboard/http_session.rs (private)",
+        "src/runtimepaths.rs (private)",
+        "src/service.rs (private)",
+        "src/tool_result.rs (private)",
+        "src/upstream/session_pool.rs (private)"
+      ]
+    },
+    {
+      "name": "drop",
+      "owners": [
+        "src/dashboard.rs (private)",
+        "src/hub/leases.rs (private)",
+        "src/hub/model.rs (private)",
+        "src/hub/runtime.rs (private)",
+        "src/resources.rs (private)",
+        "src/upstream/lease_runtime.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/tool_cache.rs (private)"
+      ]
+    },
+    {
+      "name": "empty_object",
+      "owners": [
+        "src/dashboard/response.rs (pub(super))",
+        "src/json_helpers.rs (pub)",
+        "src/mcp_protocol.rs (pub)",
+        "src/setup.rs (private)",
+        "src/upstream.rs (private)"
+      ]
+    },
+    {
+      "name": "temp_root",
+      "owners": [
+        "src/adapter/tests.rs (private)",
+        "src/dashboard/tests.rs (private)",
+        "src/mcp_sources/import.rs (private)",
+        "src/serve.rs (private)",
+        "src/upstream/tests.rs (private)"
+      ]
+    },
+    {
+      "name": "write_text_report",
+      "owners": [
+        "src/cleanup.rs (private)",
+        "src/doctor.rs (pub)",
+        "src/service.rs (private)",
+        "src/setup.rs (private)",
+        "src/update.rs (private)"
+      ]
+    },
+    {
+      "name": "from_static",
+      "owners": [
+        "src/client_catalog.rs (private)",
+        "src/client_catalog.rs (private)",
+        "src/client_catalog.rs (private)",
+        "src/client_catalog.rs (private)"
+      ]
+    },
+    {
+      "name": "new",
+      "owners": [
+        "src/dashboard/http_session.rs (private)",
+        "src/dashboard/http_session.rs (pub(super))",
+        "src/hub/runtime.rs (private)",
+        "src/upstream/session_pool.rs (private)"
+      ]
+    },
+    {
+      "name": "normalize",
+      "owners": [
+        "src/adapter.rs (private)",
+        "src/catalog.rs (pub)",
+        "src/client/pathing.rs (pub(super))",
+        "src/client_catalog.rs (pub)"
+      ]
+    },
+    {
+      "name": "now_ms",
+      "owners": [
+        "src/client/actions/backup.rs (pub(super))",
+        "src/dashboard/response.rs (pub(super))",
+        "src/hub/runtime.rs (pub(super))",
+        "src/serve.rs (private)"
+      ]
+    },
+    {
+      "name": "write_text",
+      "owners": [
+        "src/client/actions/render_models.rs (pub(super))",
+        "src/client/actions/render_models.rs (pub(super))",
+        "src/client/actions/render_models.rs (pub(super))",
+        "src/client/actions/render_models.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "as_str",
+      "owners": [
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)",
+        "src/json.rs (pub)"
+      ]
+    },
+    {
+      "name": "call_tool",
+      "owners": [
+        "src/upstream/lease_runtime.rs (pub)",
+        "src/upstream/session_pool.rs (pub(super))",
+        "src/upstream/session_pool.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "call_tools",
+      "owners": [
+        "src/upstream/lease_runtime.rs (pub)",
+        "src/upstream/session_pool.rs (pub(super))",
+        "src/upstream/session_pool.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "from_json",
+      "owners": [
+        "src/client_catalog.rs (private)",
+        "src/client_catalog.rs (private)",
+        "src/client_catalog.rs (private)"
+      ]
+    },
+    {
+      "name": "list_tools",
+      "owners": [
+        "src/upstream/lease_runtime.rs (pub)",
+        "src/upstream/session_pool.rs (pub(super))",
+        "src/upstream/session_pool.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "preferred_install_config_path",
+      "owners": [
+        "src/client/actions.rs (private)",
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)"
+      ]
+    },
+    {
+      "name": "preferred_install_scope",
+      "owners": [
+        "src/client/actions.rs (private)",
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)"
+      ]
+    },
+    {
+      "name": "run_json_command",
+      "owners": [
+        "src/dashboard.rs (pub(super))",
+        "src/mcp_server.rs (private)",
+        "src/setup.rs (private)"
+      ]
+    },
+    {
+      "name": "autostart_launcher_command",
+      "owners": [
+        "src/service.rs (private)",
+        "src/service.rs (private)"
+      ]
+    },
+    {
+      "name": "autostart_script_path",
+      "owners": [
+        "src/service.rs (private)",
+        "src/service.rs (private)"
+      ]
+    },
+    {
+      "name": "blank_to_none",
+      "owners": [
+        "src/lab/render.rs (private)",
+        "src/server/render.rs (private)"
+      ]
+    },
+    {
+      "name": "build_next_steps",
+      "owners": [
+        "src/connect/model.rs (private)",
+        "src/lab/analysis.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "build_report",
+      "owners": [
+        "src/connect/model.rs (pub(super))",
+        "src/profile.rs (private)"
+      ]
+    },
+    {
+      "name": "callable_server_names",
+      "owners": [
+        "src/adapter/discovery.rs (private)",
+        "src/upstream/lease_runtime.rs (pub)"
+      ]
+    },
+    {
+      "name": "client_install_support_summary",
+      "owners": [
+        "src/client/actions.rs (pub(super))",
+        "src/client_catalog.rs (pub)"
+      ]
+    },
+    {
+      "name": "collect_status",
+      "owners": [
+        "src/hub/status.rs (pub(super))",
+        "src/serve.rs (private)"
+      ]
+    }
+  ],
+  "unsupportedMarkers": [
+    {
+      "file": "src/catalog.rs",
+      "line": 113,
+      "text": "description: \"Internal bootstrap-only stdio shim proof surface.\","
+    },
+    {
+      "file": "src/client/actions.rs",
+      "line": 954,
+      "text": "\"This preview keeps one stable stdio launcher command, but bootstrap-only proof should not be treated as completed live forwarding yet.\".to_string(),"
+    },
+    {
+      "file": "src/client_catalog/builtin.rs",
+      "line": 309,
+      "text": "\"Cloud agent supports tools only; resources and prompts are not available on this surface.\","
+    },
+    {
+      "file": "src/dashboard/diagnostics.rs",
+      "line": 169,
+      "text": "\"external/remote HTTP server policy is configured, but live HTTP upstream fan-out is not implemented in this HTTP adapter\","
+    },
+    {
+      "file": "src/hub/launcher.rs",
+      "line": 18,
+      "text": "Err(\"background hub launch is not implemented for this platform\".to_string())"
+    },
+    {
+      "file": "src/profile.rs",
+      "line": 142,
+      "text": "\"Profile mutation is not implemented yet in the Rust-only repo.\""
+    },
+    {
+      "file": "src/profile.rs",
+      "line": 174,
+      "text": "\"profile mutation is not implemented yet in the Rust-only repo\".to_string(),"
+    },
+    {
+      "file": "src/projects.rs",
+      "line": 100,
+      "text": "\"Project scanning is not implemented yet in the Rust-only repo.\""
+    },
+    {
+      "file": "src/projects.rs",
+      "line": 132,
+      "text": "\"project scanning is not implemented yet in the Rust-only repo\".to_string(),"
+    },
+    {
+      "file": "src/serve.rs",
+      "line": 1025,
+      "text": "Err(\"background serve launch is not implemented for this platform\".to_string())"
+    },
+    {
+      "file": "src/stdio_shim.rs",
+      "line": 35,
+      "text": "\"stdio-shim is currently a bootstrap-only proof surface. Run 'mcpace stdio-shim --json ...' to normalize metadata, derive a sticky session lease, and ensure the hub is up. Live MCP stdio forwarding is not implemented yet"
+    },
+    {
+      "file": "src/stdio_shim.rs",
+      "line": 148,
+      "text": "\"Live MCP stdio message forwarding is not implemented yet; this shim only normalizes routing context, derives a sticky lease, and ensures the persistent hub is up.\".to_string(),"
+    },
+    {
+      "file": "src/stdio_shim.rs",
+      "line": 155,
+      "text": "(\"mode\", JsonValue::string(\"bootstrap-only\")),"
+    },
+    {
+      "file": "src/stdio_shim.rs",
+      "line": 225,
+      "text": "\"stdio-shim is currently a bootstrap-only proof surface.\""
+    },
+    {
+      "file": "src/upstream/http_runtime.rs",
+      "line": 249,
+      "text": "\"direct HTTPS upstream forwarding is not available without a TLS adapter; use a stdio bridge such as mcp-remote or a local HTTP gateway\""
+    }
+  ],
+  "commandAliasDuplicates": [],
+  "runtimeFlow": {
+    "schema": "mcpace.runtimeFlowAudit.v1",
+    "mcpHttpMethods": [
+      "initialize",
+      "notifications/initialized",
+      "ping",
+      "prompts/get",
+      "prompts/list",
+      "resources/list",
+      "resources/read",
+      "resources/templates/list",
+      "tools/call",
+      "tools/list"
+    ],
+    "surfaces": {
+      "stdioToolCount": 25,
+      "httpToolCount": 24,
+      "commonToolCount": 22,
+      "stdioTools": [
+        "adapter_profile",
+        "adapter_route",
+        "client_export",
+        "client_list",
+        "client_plan",
+        "doctor",
+        "hub_down",
+        "hub_logs",
+        "hub_status",
+        "hub_up",
+        "runtime_acquire",
+        "runtime_leases",
+        "runtime_release",
+        "runtime_renew",
+        "server_capabilities",
+        "server_list",
+        "surface_manifest",
+        "upstream_batch",
+        "upstream_call",
+        "upstream_catalog",
+        "upstream_policy_audit",
+        "upstream_policy_suggest",
+        "upstream_probe",
+        "upstream_search",
+        "upstream_tools"
+      ],
+      "httpTools": [
+        "adapter_profile",
+        "adapter_route",
+        "client_export",
+        "client_list",
+        "client_plan",
+        "doctor",
+        "hub_down",
+        "hub_logs",
+        "hub_repair",
+        "hub_status",
+        "hub_up",
+        "runtime_diagnostics",
+        "runtime_leases",
+        "server_capabilities",
+        "server_list",
+        "surface_manifest",
+        "upstream_batch",
+        "upstream_call",
+        "upstream_catalog",
+        "upstream_policy_audit",
+        "upstream_policy_suggest",
+        "upstream_probe",
+        "upstream_search",
+        "upstream_tools"
+      ],
+      "onlyStdio": [
+        "runtime_acquire",
+        "runtime_release",
+        "runtime_renew"
+      ],
+      "onlyHttp": [
+        "hub_repair",
+        "runtime_diagnostics"
+      ],
+      "note": "Differences are not automatically bugs: stdio exposes explicit lease primitives, while Streamable HTTP routes upstream calls through request/session context and exposes diagnostics instead."
+    },
+    "dispatchCoverage": {
+      "stdio": [
+        {
+          "name": "adapter_profile",
+          "dispatched": true
+        },
+        {
+          "name": "adapter_route",
+          "dispatched": true
+        },
+        {
+          "name": "client_export",
+          "dispatched": true
+        },
+        {
+          "name": "client_list",
+          "dispatched": true
+        },
+        {
+          "name": "client_plan",
+          "dispatched": true
+        },
+        {
+          "name": "doctor",
+          "dispatched": true
+        },
+        {
+          "name": "hub_down",
+          "dispatched": true
+        },
+        {
+          "name": "hub_logs",
+          "dispatched": true
+        },
+        {
+          "name": "hub_status",
+          "dispatched": true
+        },
+        {
+          "name": "hub_up",
+          "dispatched": true
+        },
+        {
+          "name": "runtime_acquire",
+          "dispatched": true
+        },
+        {
+          "name": "runtime_leases",
+          "dispatched": true
+        },
+        {
+          "name": "runtime_release",
+          "dispatched": true
+        },
+        {
+          "name": "runtime_renew",
+          "dispatched": true
+        },
+        {
+          "name": "server_capabilities",
+          "dispatched": true
+        },
+        {
+          "name": "server_list",
+          "dispatched": true
+        },
+        {
+          "name": "surface_manifest",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_batch",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_call",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_catalog",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_policy_audit",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_policy_suggest",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_probe",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_search",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_tools",
+          "dispatched": true
+        }
+      ],
+      "http": [
+        {
+          "name": "adapter_profile",
+          "dispatched": true
+        },
+        {
+          "name": "adapter_route",
+          "dispatched": true
+        },
+        {
+          "name": "client_export",
+          "dispatched": true
+        },
+        {
+          "name": "client_list",
+          "dispatched": true
+        },
+        {
+          "name": "client_plan",
+          "dispatched": true
+        },
+        {
+          "name": "doctor",
+          "dispatched": true
+        },
+        {
+          "name": "hub_down",
+          "dispatched": true
+        },
+        {
+          "name": "hub_logs",
+          "dispatched": true
+        },
+        {
+          "name": "hub_repair",
+          "dispatched": true
+        },
+        {
+          "name": "hub_status",
+          "dispatched": true
+        },
+        {
+          "name": "hub_up",
+          "dispatched": true
+        },
+        {
+          "name": "runtime_diagnostics",
+          "dispatched": true
+        },
+        {
+          "name": "runtime_leases",
+          "dispatched": true
+        },
+        {
+          "name": "server_capabilities",
+          "dispatched": true
+        },
+        {
+          "name": "server_list",
+          "dispatched": true
+        },
+        {
+          "name": "surface_manifest",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_batch",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_call",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_catalog",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_policy_audit",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_policy_suggest",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_probe",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_search",
+          "dispatched": true
+        },
+        {
+          "name": "upstream_tools",
+          "dispatched": true
+        }
+      ],
+      "missingStdioDispatch": [],
+      "missingHttpDispatch": []
+    },
+    "endToEndFlows": [
+      {
+        "name": "Quickstart / up",
+        "trigger": "mcpace up / mcpace setup",
+        "path": [
+          "src/app.rs",
+          "src/setup.rs",
+          "src/init.rs",
+          "src/serve.rs",
+          "src/client/actions.rs",
+          "src/verify/*"
+        ],
+        "usefulWork": "Create or repair the MCPace home, import existing MCP settings, start the local endpoint, wire supported clients, and run readiness checks without adding default upstream servers.",
+        "safetyBoundary": "No default filesystem/memory/server is installed unless the user imports or installs one."
+      },
+      {
+        "name": "Client wiring",
+        "trigger": "mcpace client install/export/plan/restore",
+        "path": [
+          "src/client.rs",
+          "src/client/args.rs",
+          "src/client/actions.rs",
+          "src/client/actions/config_update.rs",
+          "src/client/plan.rs"
+        ],
+        "usefulWork": "Detect supported clients, generate one MCPace endpoint entry, preserve existing user MCP servers, and keep backup/restore paths.",
+        "safetyBoundary": "Client mutation stays inside client actions; setup only orchestrates."
+      },
+      {
+        "name": "Server inventory and policy",
+        "trigger": "mcpace server list/import/install/auto/set-policy/instances/test",
+        "path": [
+          "src/server.rs",
+          "src/server/*",
+          "src/mcp_sources/*",
+          "src/source_type.rs",
+          "src/adapter/discovery.rs"
+        ],
+        "usefulWork": "Merge MCP settings, normalize source shapes, infer runtime policy, write explicit server fragments, and plan instances/leases.",
+        "safetyBoundary": "Unknown packages stay review/plan-only unless trust gates allow install and probe."
+      },
+      {
+        "name": "Streamable HTTP MCP endpoint",
+        "trigger": "POST /mcp initialize -> notifications/initialized -> tools/list -> tools/call",
+        "path": [
+          "src/dashboard/mcp_http.rs",
+          "src/dashboard/http_boundary.rs",
+          "src/dashboard/http_session.rs",
+          "src/dashboard/http_tools.rs",
+          "src/dashboard/tool_runtime.rs"
+        ],
+        "usefulWork": "Enforce local HTTP boundary checks, negotiate MCP protocol/session, list management and broker tools, and execute tool calls.",
+        "safetyBoundary": "Origin/Accept/Content-Type/session checks are centralized before tool execution."
+      },
+      {
+        "name": "Upstream broker call",
+        "trigger": "upstream_search/upstream_tools/upstream_call/upstream_batch or projected u_* tool",
+        "path": [
+          "src/dashboard/tool_runtime.rs",
+          "src/mcp_server.rs",
+          "src/adapter.rs",
+          "src/upstream.rs",
+          "src/upstream/lease_runtime.rs",
+          "src/upstream/stdio_runtime.rs",
+          "src/upstream/http_runtime.rs"
+        ],
+        "usefulWork": "Discover live upstream tools, verify requested tools against tools/list, acquire routing context, then call stdio or local Streamable HTTP upstreams through scheduler-aware pooling.",
+        "safetyBoundary": "No hidden dynamic upstream tool call is allowed unless explicitly trusted through the override argument."
+      },
+      {
+        "name": "Observability / operator UI",
+        "trigger": "mcpace dashboard / /api/overview / runtime_diagnostics",
+        "path": [
+          "src/dashboard.rs",
+          "src/dashboard/*",
+          "src/hub/status.rs",
+          "src/upstream/diagnostics.rs"
+        ],
+        "usefulWork": "Show endpoint health, configured servers, warnings, leases, logs, and runtime/upstream availability without inventing unavailable telemetry.",
+        "safetyBoundary": "Process-level CPU/RAM/latency histograms remain explicit telemetry gaps until runtime collection exists."
+      }
+    ]
+  },
+  "dashboardContract": {
+    "schema": "mcpace.dashboardContractAudit.v1",
+    "backendRoutes": [
+      {
+        "method": "DELETE",
+        "path": "/mcp",
+        "dynamic": true
+      },
+      {
+        "method": "GET",
+        "path": "/",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/api/logs",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/api/overview",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/api/resources",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/favicon.ico",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/healthz",
+        "dynamic": true
+      },
+      {
+        "method": "GET",
+        "path": "/mcp",
+        "dynamic": true
+      },
+      {
+        "method": "GET",
+        "path": "/status",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/hub-down",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/hub-up",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/ping",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/repair",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/server-autotune",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/server-disable",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/server-enable",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/server-install-command",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/server-policy",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/server-test",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/mcp",
+        "dynamic": true
+      }
+    ],
+    "frontendEndpoints": [
+      "/api/actions/hub-down",
+      "/api/actions/hub-up",
+      "/api/actions/ping",
+      "/api/actions/repair",
+      "/api/logs?tail=1",
+      "/api/logs?tail=40",
+      "/api/overview",
+      "/api/resources"
+    ],
+    "frontendServerActions": [
+      "server-autotune",
+      "server-disable",
+      "server-enable",
+      "server-install-command",
+      "server-policy",
+      "server-test"
+    ],
+    "missingFrontendRoutes": [],
+    "registeredElementCount": 77,
+    "missingElementIds": [],
+    "payloadKeys": [
+      "server",
+      "name",
+      "mode",
+      "maxWorkers",
+      "maxInFlightPerWorker",
+      "timeoutMs",
+      "changes",
+      "commandLine",
+      "force",
+      "disabled",
+      "dryRun"
+    ],
+    "payloadParserCoverage": [
+      {
+        "key": "server",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "name",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "mode",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "maxWorkers",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "maxInFlightPerWorker",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "timeoutMs",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "changes",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "commandLine",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "force",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "disabled",
+        "frontendMentions": true,
+        "backendMentions": true
+      },
+      {
+        "key": "dryRun",
+        "frontendMentions": true,
+        "backendMentions": true
+      }
+    ],
+    "operatorPlan": {
+      "backendSchema": true,
+      "overviewField": true,
+      "uiPanel": true,
+      "uiRenderer": true,
+      "serverRunbook": true,
+      "commandPreflight": true,
+      "embeddedScriptParses": true
+    },
+    "userReadiness": {
+      "backendSchema": true,
+      "overviewField": true,
+      "uiPanel": true,
+      "uiRenderer": true,
+      "visibilityRules": true
+    },
+    "runtimeControl": {
+      "backendSchema": true,
+      "overviewField": true,
+      "resourceSchema": true,
+      "resourceEndpointField": true,
+      "uiRenderer": true,
+      "uiLookup": true,
+      "resourceUi": true,
+      "processSnapshot": true,
+      "sessionSnapshots": true
+    },
+    "note": "Dashboard UI calls /api/overview, /api/logs, /api/resources, /api/actions/*, shows per-server launch metadata, receives backend operatorPlan lanes/runbooks, userReadiness, runtimeControlPlane decisions, and live serverResourceMonitoring snapshots when upstream sessions are running."
+  },
+  "platformProof": {
+    "present": true,
+    "overall": "pass",
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "workflowPlatforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "publishedTargetCount": 6,
+    "smokeCommandCount": 17,
+    "note": "Do not add Tauri as a console dependency now. Tauri is appropriate for a packaged desktop app around the existing web dashboard; a real terminal UI should be Ratatui/crossterm later. Current safe step is a platform-proofed CLI/dashboard with native binary smoke tests."
+  },
+  "assurance": {
+    "present": true,
+    "overall": "needs-live-rust-proof",
+    "pass": 12,
+    "warn": 2,
+    "fail": 0,
+    "note": "Assurance report checks user-visible truth, safety boundaries, release reproducibility, and unverified Rust/live gates."
+  }
+}

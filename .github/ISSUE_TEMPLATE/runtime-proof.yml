@@ -2,8 +2,8 @@ name: Runtime proof trace
 description: Share a real client/upstream trace or request a compatibility proof.
 title: "[runtime-proof] "
 labels:
-  - runtime
-  - needs-proof
+  - status:needs-runtime-trace
+  - area:mcp-http
 body:
   - type: markdown
     attributes:

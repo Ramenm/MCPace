@@ -89,14 +89,19 @@ pub(super) fn build_plan(
 
     for record in server_records {
         let plan = build_server_plan(record, &context);
-        requires_hub_owned_stdio = requires_hub_owned_stdio || plan.upstream_transport == "stdio";
-        if plan.request_strategy == "parallel-safe" {
-            parallel_safe_servers += 1;
-        } else {
-            serialized_servers += 1;
+        let route_is_routable = server_plan_is_routable(&plan);
+        if route_is_routable && plan.upstream_transport == "stdio" {
+            requires_hub_owned_stdio = true;
         }
-        if plan.request_strategy.starts_with("exclusive") {
-            exclusive_servers += 1;
+        if route_is_routable {
+            if plan.request_strategy == "parallel-safe" {
+                parallel_safe_servers += 1;
+            } else {
+                serialized_servers += 1;
+            }
+            if plan.request_strategy.starts_with("exclusive") {
+                exclusive_servers += 1;
+            }
         }
         warnings.extend(plan.warnings.iter().cloned());
         server_plans.push(plan);
@@ -104,8 +109,9 @@ pub(super) fn build_plan(
 
     if context.project_root.is_none()
         && server_records.iter().any(|record| {
-            record.scope_class == "project-local"
-                || record.concurrency_policy == "isolated-per-project"
+            server_record_is_routable(record)
+                && (record.scope_class == "project-local"
+                    || record.concurrency_policy == "isolated-per-project")
         })
     {
         warnings.push(
@@ -115,7 +121,7 @@ pub(super) fn build_plan(
     if context.session_id.is_none()
         && server_records
             .iter()
-            .any(|record| record.concurrency_policy == "single-session")
+            .any(|record| server_record_is_routable(record) && record.concurrency_policy == "single-session")
     {
         warnings.push(format!(
             "At least one server is single-session and no external session id was resolved; the future hub must keep derived lease '{}' sticky instead of collapsing traffic under one anonymous route.",
@@ -408,6 +414,19 @@ fn resolve_request_strategy(
     scope: &ScopeResolution,
     context: &ResolvedContext,
 ) -> RequestStrategy {
+    if server_is_not_routable(record) {
+        return RequestStrategy {
+            name: "disabled-no-route".to_string(),
+            mutex_key: None,
+            scheduler_lane: "disabled".to_string(),
+            parallelism_limit: 0,
+            warnings: vec![format!(
+                "{} is disabled or plan-only; MCPace must not route tool calls to it.",
+                record.name
+            )],
+        };
+    }
+
     if record.transport_status == "legacy-compat" {
         return RequestStrategy {
             name: "legacy-compat-disabled".to_string(),
@@ -659,8 +678,12 @@ fn is_none_marker(value: &str) -> bool {
 }
 
 fn admission_state(record: &ServerRecord) -> String {
-    if record.source_enabled {
+    if !record.platform_supported {
+        "unsupported-platform".to_string()
+    } else if record.source_enabled && record.effective_enabled {
         "configured-source".to_string()
+    } else if record.source_enabled {
+        "disabled-by-policy".to_string()
     } else if record.required {
         "required-needs-source".to_string()
     } else if record.default_enabled {
@@ -668,6 +691,29 @@ fn admission_state(record: &ServerRecord) -> String {
     } else {
         "optional-disabled".to_string()
     }
+}
+
+fn server_record_is_routable(record: &ServerRecord) -> bool {
+    !server_is_not_routable(record) && record.transport_status != "legacy-compat"
+}
+
+fn server_plan_is_routable(plan: &ServerCoordinationPlan) -> bool {
+    plan.parallelism_limit > 0
+        && plan.scheduler_lane != "disabled"
+        && plan.scheduler_lane != "legacy-disabled"
+        && plan.request_strategy != "disabled-no-route"
+        && plan.request_strategy != "legacy-compat-disabled"
+}
+
+fn server_is_not_routable(record: &ServerRecord) -> bool {
+    !record.platform_supported
+        || !record.effective_enabled
+        || record.startup_strategy == "disabled"
+        || record.routing_group == "disabled"
+        || record.routing_group == "sdk-or-example"
+        || record.concurrency_policy == "plan-only"
+        || record.scope_class == "not-runnable"
+        || record.max_workers == 0
 }
 
 fn resolve_upstream_transport(record: &ServerRecord) -> String {

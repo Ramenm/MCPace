@@ -12,7 +12,8 @@
   "scripts": {
     "lint:npm": "node scripts/check-node-syntax.mjs --json",
     "test:npm": "node --test packages/npm/cli/test/*.test.mjs tests/node/*.test.mjs",
-    "check": "npm run lint:npm && npm run test:npm",
+    "check": "npm run lint:npm && npm run test:npm && npm run check:platform && npm run check:assurance",
+    "inventory": "node scripts/project-inventory.mjs --write",
     "check:package": "publint packages/npm/cli",
     "check:ci": "npm run check && npm run check:package && npm run release:dry-run",
     "ci:local:quick": "npm run check",
@@ -27,7 +28,15 @@
     "fmt:check": "node scripts/cargo-task.mjs fmt --check",
     "clippy": "node scripts/cargo-task.mjs clippy --all-targets -- -D warnings",
     "check:rust": "npm run fmt:check && npm run clippy && npm run test:rust",
-    "check:external-tools": "node scripts/tooling-preflight.mjs"
+    "check:external-tools": "node scripts/tooling-preflight.mjs",
+    "assurance": "node scripts/project-assurance.mjs --write",
+    "check:assurance": "node scripts/project-assurance.mjs --check",
+    "platform": "node scripts/platform-proof.mjs --write",
+    "check:platform": "node scripts/platform-proof.mjs --check",
+    "platform:binary-smoke": "node scripts/platform-binary-smoke.mjs",
+    "proof:local": "node scripts/local-proof.mjs --write",
+    "proof:local:plan": "node scripts/local-proof.mjs --plan-only --json",
+    "check:publish-contract": "node scripts/verify-npm-publish-contract.mjs --json"
   },
   "packageManager": "npm@10.9.2",
   "devEngines": {

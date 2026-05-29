@@ -1,4 +1,5 @@
 use super::HttpRequest;
+use std::net::IpAddr;
 
 pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), String> {
     let mut hosts = request.headers.iter().filter(|(key, _)| key == "host");
@@ -28,6 +29,38 @@ pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn is_valid_http_header_name(name: &str) -> bool {
+    !name.is_empty()
+        && name.bytes().all(|byte| {
+            matches!(
+                byte,
+                b'!' | b'#'
+                    | b'$'
+                    | b'%'
+                    | b'&'
+                    | b'\''
+                    | b'*'
+                    | b'+'
+                    | b'-'
+                    | b'.'
+                    | b'^'
+                    | b'_'
+                    | b'`'
+                    | b'|'
+                    | b'~'
+                    | b'0'..=b'9'
+                    | b'A'..=b'Z'
+                    | b'a'..=b'z'
+            )
+        })
+}
+
+pub(super) fn is_valid_http_header_value(value: &str) -> bool {
+    value
+        .bytes()
+        .all(|byte| byte == b' ' || (0x21..=0x7e).contains(&byte))
+}
+
 pub(crate) fn is_allowed_local_origin(origin: &str) -> bool {
     if origin == "null" {
         return false;
@@ -53,7 +86,22 @@ fn is_allowed_local_authority(authority: &str) -> bool {
     let Some(host) = origin_host(authority) else {
         return false;
     };
-    host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "[::1]"
+    is_loopback_host(host)
+}
+
+pub(crate) fn is_loopback_host(host: &str) -> bool {
+    let trimmed = host.trim();
+    if trimmed.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    let normalized = trimmed
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(trimmed);
+    normalized
+        .parse::<IpAddr>()
+        .map(|address| address.is_loopback())
+        .unwrap_or(false)
 }
 
 fn origin_host(authority: &str) -> Option<&str> {
@@ -82,7 +130,7 @@ fn valid_port_suffix(value: &str) -> bool {
 }
 
 fn valid_port(value: &str) -> bool {
-    !value.is_empty() && value.chars().all(|character| character.is_ascii_digit())
+    value.parse::<u16>().is_ok()
 }
 
 pub(super) fn accepts(request: &HttpRequest, media_type: &str) -> bool {
@@ -107,30 +155,53 @@ pub(super) fn accepts_streamable_http_post(request: &HttpRequest) -> bool {
 }
 
 pub(super) fn content_type_is(request: &HttpRequest, media_type: &str) -> bool {
-    request
+    let mut values = request
         .headers
         .iter()
-        .filter(|(key, _)| key == "content-type")
-        .any(|(_, value)| {
-            value
-                .trim()
-                .split(';')
-                .next()
-                .unwrap_or_default()
-                .trim()
-                .eq_ignore_ascii_case(media_type)
-        })
+        .filter(|(key, _)| key == "content-type");
+    let Some((_, value)) = values.next() else {
+        return false;
+    };
+    if values.next().is_some() {
+        return false;
+    }
+    value
+        .trim()
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .eq_ignore_ascii_case(media_type)
 }
 
 pub(super) fn request_header_string(request: Option<&HttpRequest>, key: &str) -> Option<String> {
-    let key = key.to_ascii_lowercase();
-    request.and_then(|request| {
-        request
-            .headers
-            .iter()
-            .find(|(candidate, _)| candidate == &key)
-            .map(|(_, value)| value.trim())
-            .filter(|value| !value.is_empty())
-            .map(ToOwned::to_owned)
-    })
+    request_header_string_unique(request, key).ok().flatten()
+}
+
+pub(super) fn request_header_string_unique(
+    request: Option<&HttpRequest>,
+    key: &str,
+) -> Result<Option<String>, String> {
+    let Some(request) = request else {
+        return Ok(None);
+    };
+    let key_lower = key.to_ascii_lowercase();
+    let mut matches = request
+        .headers
+        .iter()
+        .filter(|(candidate, _)| candidate == &key_lower);
+    let Some((_, value)) = matches.next() else {
+        return Ok(None);
+    };
+    if matches.next().is_some() {
+        return Err(format!(
+            "multiple {} headers are not allowed for MCP HTTP requests",
+            key
+        ));
+    }
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(trimmed.to_string()))
 }

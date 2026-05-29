@@ -1,30 +1,111 @@
 {
-  "name": "mcpace",
-  "version": "0.6.9",
-  "ports": {
-    "hub": 12223,
-    "serve": 39022
+  "approvedCatalog": {
+    "description": "Optional local allow/review catalog. Keep it advisory by default so MCPace remains lightweight; turn requireApprovalForUnknown on for stricter teams.",
+    "paths": [
+      "./catalog/approved-servers.json"
+    ],
+    "requireApprovalForUnknown": false,
+    "trustLevelDefault": "review"
+  },
+  "autoProfile": {
+    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer",
+    "description": "Evidence-first server profiling. MCPace derives conservative scheduling from source config, transport, launcher, live initialize/tools-list probes, and optional operator policy overrides; no packaged upstream-server catalog is required.",
+    "probeCalls": [
+      "initialize"
+,      "notifications/initialized"
+,      "tools/list"
+    ],
+    "stateRules": "Infer runtimeType/stateClass/effectClass automatically: stateless read-only tools may share; session-stateful memory/context tools bind to chat/session; project-stateful file/git/db tools bind to project/worktree; credential/remote servers bind to credential or transport session; browser/shell/process servers stay exclusive; unknown stdio stays conservative until live probe evidence improves it."
+  },
+  "client": {
+    "keyName": "MCPace"
+  },
+  "clientCatalog": {
+    "description": "Optional external client target catalog. Built-ins remain a fallback; entries here or MCPACE_CLIENT_CATALOG can add/override clients without recompiling.",
+    "paths": [],
+    "targets": []
+  },
+  "compatibility": {
+    "sessionGate": {
+      "enabled": true,
+      "idleDelayMs": 1500,
+      "logTailLines": 400,
+      "streamProbeMs": 0
+    }
+  },
+  "dynamicDiscovery": {
+    "autoInstall": "trusted-only",
+    "autoRefreshRegistry": true,
+    "catalogPaths": [
+      "./catalog/approved-servers.json"
+    ],
+    "defaultCommand": "auto",
+    "description": "One-command dynamic mode. `mcpace auto` refreshes the registry cache when it is missing or stale, selects approved/trusted candidates, writes server config, launches the package manager only during probe, reads live initialize/tools/list evidence, and lets MCPace infer safe runtime policy without asking the user for a server type.",
+    "enabled": true,
+    "installUnknown": "plan-only",
+    "maxAutoInstallsPerRun": 4,
+    "mode": "auto",
+    "probeAfterInstall": true,
+    "refreshRegistryOnDiscover": false,
+    "registryCachePath": "./catalog/registry-cache.json",
+    "registryCacheTtlHours": 24,
+    "registryEndpoints": [
+      "https://registry.modelcontextprotocol.io"
+    ]
+  },
+  "executionDefaults": {
+    "affinity": [
+      "client"
+    ],
+    "description": "Safe default for unknown local stdio servers: one in-flight call per server until an explicit policy proves stronger concurrency is safe.",
+    "maxInFlightPerWorker": 1,
+    "maxWorkers": 1,
+    "mode": "serialized",
+    "protocol": "mcpace.execution.v1",
+    "queueTimeoutMs": 10000,
+    "reusePolicy": "sticky"
+  },
+  "health": {
+    "offlineThreshold": 2,
+    "probeTimeoutSec": 2,
+    "startupTimeoutSec": 60
   },
   "hub": {
     "containerName": "mcpace",
-    "image": "samanhappy/mcphub:0.12.12",
     "env": {
       "REQUEST_TIMEOUT": "180000"
-    }
+    },
+    "image": "samanhappy/mcphub:0.12.12"
   },
+  "mcpSettings": {
+    "description": "Optional additional MCP settings JSON files/directories. Sources are merged in order: mcp_settings.json, default mcp_settings.d/*.json, includePaths/includeDirs, MCPACE_MCP_SETTINGS, then MCPACE_MCP_SETTINGS_DIRS; later duplicate server names override earlier ones.",
+    "includeDirs": [
+      "mcp_settings.d"
+    ],
+    "includePaths": []
+  },
+  "name": "mcpace",
   "packages": {
     "mcpRemote": "mcp-remote@0.1.18"
+  },
+  "platform": {
+    "dockerHostAlias": "host.docker.internal",
+    "windowsOnlyServers": []
+  },
+  "ports": {
+    "hub": 12223,
+    "serve": 39022
   },
   "profiles": {
     "runtime": {
       "default": "manual",
       "profiles": {
-        "manual": {
-          "description": "No upstream MCP servers are enabled by default. Add any MCP server to mcp_settings.json; add mcpace.config.json policy only when needed.",
-          "serverOverrides": {}
-        },
         "labs": {
           "description": "Empty sandbox profile; use it for local experiments by adding explicit serverOverrides.",
+          "serverOverrides": {}
+        },
+        "manual": {
+          "description": "No upstream MCP servers are enabled by default. Add any MCP server to mcp_settings.json; add mcpace.config.json policy only when needed.",
           "serverOverrides": {}
         }
       }
@@ -35,112 +116,461 @@
       "roots": []
     }
   },
-  "workspaces": {
-    "primary": {
-      "name": "primary",
-      "hostPath": ".",
-      "access": "rw"
+  "serve": {
+    "description": "Advertised Streamable HTTP endpoint. publicUrl overrides local host/port/path for client install/export when a relay or public ingress is used.",
+    "host": "127.0.0.1",
+    "mcpPath": "/mcp",
+    "port": 39022,
+    "publicUrl": ""
+  },
+  "servers": {
+    "browser": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:browser",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
     },
-    "extras": []
-  },
-  "servers": {},
-  "client": {
-    "keyName": "MCPace"
-  },
-  "health": {
-    "probeTimeoutSec": 2,
-    "startupTimeoutSec": 60,
-    "offlineThreshold": 2
-  },
-  "platform": {
-    "dockerHostAlias": "host.docker.internal",
-    "windowsOnlyServers": []
-  },
-  "compatibility": {
-    "sessionGate": {
-      "enabled": true,
-      "streamProbeMs": 0,
-      "idleDelayMs": 1500,
-      "logTailLines": 400
+    "context7": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:context7",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "everything": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:everything",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "exa": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:exa",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "fetch": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:fetch",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "memory": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:memory",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "playwright": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:playwright",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "sequential-thinking": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:sequential-thinking",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "serena": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:serena",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "sqlite": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:sqlite",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "time": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:time",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "windows-mcp": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:windows-mcp",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
+    },
+    "wireshark-mcp": {
+      "defaultEnabled": true,
+      "execution": {
+        "affinity": [
+          "client"
+        ],
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "mode": "serialized",
+        "protocol": "mcpace.execution.v1",
+        "queueTimeoutMs": 10000,
+        "reusePolicy": "sticky"
+      },
+      "kind": "configured",
+      "policy": {
+        "concurrencyPolicy": "single-writer",
+        "conflictDomain": "serialized-source:wireshark-mcp",
+        "credentialBinding": "source-config",
+        "discoveryRequiresLease": true,
+        "hostLock": "none",
+        "maxInFlightPerWorker": 1,
+        "maxWorkers": 1,
+        "parallelismLimit": 1,
+        "projectRootMode": "optional",
+        "routingGroup": "serialized-queue",
+        "scopeClass": "configured-source",
+        "startupStrategy": "lazy-shared",
+        "stateBinding": "runtime-source",
+        "stateProfileMode": "optional",
+        "worktreeBinding": "none"
+      },
+      "required": false
     }
   },
-  "clientCatalog": {
-    "paths": [],
-    "targets": [],
-    "description": "Optional external client target catalog. Built-ins remain a fallback; entries here or MCPACE_CLIENT_CATALOG can add/override clients without recompiling."
-  },
-  "serve": {
-    "host": "127.0.0.1",
-    "port": 39022,
-    "mcpPath": "/mcp",
-    "publicUrl": "",
-    "description": "Advertised Streamable HTTP endpoint. publicUrl overrides local host/port/path for client install/export when a relay or public ingress is used."
-  },
-  "mcpSettings": {
-    "includePaths": [],
-    "description": "Optional additional MCP settings JSON files/directories. Sources are merged in order: mcp_settings.json, default mcp_settings.d/*.json, includePaths/includeDirs, MCPACE_MCP_SETTINGS, then MCPACE_MCP_SETTINGS_DIRS; later duplicate server names override earlier ones.",
-    "includeDirs": [
-      "mcp_settings.d"
-    ]
-  },
-  "autoProfile": {
-    "description": "Evidence-first server profiling. MCPace derives conservative scheduling from source config, transport, launcher, live initialize/tools-list probes, and optional operator policy overrides; no packaged upstream-server catalog is required.",
-    "defaultUnknownPolicy": "review-required + disabled-until-user-confirms + single-writer",
-    "probeCalls": [
-      "initialize",
-      "notifications/initialized",
-      "tools/list"
-    ],
-    "stateRules": "Infer runtimeType/stateClass/effectClass automatically: stateless read-only tools may share; session-stateful memory/context tools bind to chat/session; project-stateful file/git/db tools bind to project/worktree; credential/remote servers bind to credential or transport session; browser/shell/process servers stay exclusive; unknown stdio stays conservative until live probe evidence improves it."
-  },
-  "executionDefaults": {
-    "protocol": "mcpace.execution.v1",
-    "mode": "serialized",
-    "affinity": [
-      "client"
-    ],
-    "queueTimeoutMs": 10000,
-    "reusePolicy": "sticky",
-    "maxWorkers": 1,
-    "maxInFlightPerWorker": 1,
-    "description": "Safe default for unknown local stdio servers: one in-flight call per server until an explicit policy proves stronger concurrency is safe."
-  },
   "uiSurface": {
+    "auditTail": 60,
+    "description": "Local-first operational surface for watching live leases, planned instances, concurrency lanes, and tool-call audit events. Desktop tray can remain a thin launcher later.",
     "enabled": true,
-    "surface": "dashboard-http",
     "localOnly": true,
     "refreshIntervalMs": 15000,
-    "showConcurrencyMap": true,
     "showAuditTrail": true,
-    "auditTail": 60,
-    "description": "Local-first operational surface for watching live leases, planned instances, concurrency lanes, and tool-call audit events. Desktop tray can remain a thin launcher later."
+    "showConcurrencyMap": true,
+    "surface": "dashboard-http"
   },
-  "approvedCatalog": {
-    "paths": [
-      "./catalog/approved-servers.json"
-    ],
-    "requireApprovalForUnknown": false,
-    "trustLevelDefault": "review",
-    "description": "Optional local allow/review catalog. Keep it advisory by default so MCPace remains lightweight; turn requireApprovalForUnknown on for stricter teams."
-  },
-  "dynamicDiscovery": {
-    "enabled": true,
-    "mode": "auto",
-    "registryEndpoints": [
-      "https://registry.modelcontextprotocol.io"
-    ],
-    "catalogPaths": [
-      "./catalog/approved-servers.json"
-    ],
-    "registryCachePath": "./catalog/registry-cache.json",
-    "refreshRegistryOnDiscover": false,
-    "autoInstall": "trusted-only",
-    "installUnknown": "plan-only",
-    "probeAfterInstall": true,
-    "description": "One-command dynamic mode. `mcpace auto` refreshes the registry cache when it is missing or stale, selects approved/trusted candidates, writes server config, launches the package manager only during probe, reads live initialize/tools/list evidence, and lets MCPace infer safe runtime policy without asking the user for a server type.",
-    "maxAutoInstallsPerRun": 4,
-    "autoRefreshRegistry": true,
-    "registryCacheTtlHours": 24,
-    "defaultCommand": "auto"
+  "version": "0.6.9",
+  "workspaces": {
+    "extras": [],
+    "primary": {
+      "access": "rw",
+      "hostPath": ".",
+      "name": "primary"
+    }
   }
 }

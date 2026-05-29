@@ -63,7 +63,21 @@ pub(super) fn run_http_tool(
                 ],
             )
         }
+        "runtime_leases" => run_json_command(root_path, &["hub", "lease", "list", "--json"]),
         "server_list" => run_json_command(root_path, &["server", "list", "--json"]),
+        "server_capabilities" => {
+            let name = required_http_string(args, "name")?;
+            run_json_command_vec(
+                root_path,
+                vec![
+                    "server".to_string(),
+                    "capabilities".to_string(),
+                    "--json".to_string(),
+                    "--name".to_string(),
+                    name,
+                ],
+            )
+        }
         "runtime_diagnostics" => runtime_diagnostics(config),
         "adapter_profile" => {
             let include_live_catalog =
@@ -228,11 +242,61 @@ pub(super) fn run_http_tool(
             )
         }
         "client_list" => run_json_command(root_path, &["client", "list", "--json"]),
+        "client_plan" => run_json_command_vec(
+            root_path,
+            build_http_client_args("plan", args, request)?,
+        ),
+        "client_export" => run_json_command_vec(
+            root_path,
+            build_http_client_args("export", args, request)?,
+        ),
         other => Err(format!(
             "unsupported MCPace HTTP tool '{}'. This HTTP endpoint exposes MCPace management tools plus adapter_profile/upstream_search and stdio upstream access through surface_manifest/upstream_catalog/upstream_probe/upstream_policy_audit/upstream_policy_suggest/upstream_tools/upstream_call/upstream_batch. In auto/native exposure mode, upstream tools may also appear as projected u_<server>_<tool>_<hash> names in tools/list; call adapter_profile for the current routing plan, upstream_search for concise discovery, upstream_tools for one server's full schemas, then upstream_call or upstream_batch when brokered routing is better. Call runtime_diagnostics for exact status.",
             other
         )),
     }
+}
+
+fn build_http_client_args(
+    action: &str,
+    args: &JsonValue,
+    request: Option<&HttpRequest>,
+) -> Result<Vec<String>, String> {
+    let context = http_upstream_lease_context(args, request)?;
+    let client_id = context
+        .client_id
+        .clone()
+        .unwrap_or_else(|| "local-http".to_string());
+    let mut command = vec![
+        "client".to_string(),
+        action.to_string(),
+        "--json".to_string(),
+    ];
+    if action == "export" {
+        command.push(client_id);
+    } else {
+        command.push("--client-id".to_string());
+        command.push(client_id);
+    }
+    push_optional_http_arg(&mut command, "--session-id", context.session_id);
+    push_optional_http_arg(&mut command, "--project-root", context.project_root);
+    push_optional_http_arg(&mut command, "--transport", context.transport);
+    if let Some(metadata) = context.metadata {
+        command.push("--metadata-json".to_string());
+        command.push(metadata.to_compact_string());
+    }
+    Ok(command)
+}
+
+fn push_optional_http_arg(args: &mut Vec<String>, flag: &str, value: Option<String>) {
+    if let Some(value) = value {
+        args.push(flag.to_string());
+        args.push(value);
+    }
+}
+
+fn required_http_string(args: &JsonValue, key: &str) -> Result<String, String> {
+    optional_http_string(args, key)?.ok_or_else(|| format!("{} is required", key))
 }
 
 fn parse_http_upstream_batch_call(

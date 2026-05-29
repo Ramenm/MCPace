@@ -115,6 +115,7 @@ struct ToolRiskPolicy {
 struct UpstreamServerPolicy {
     profile_enabled: bool,
     platform_supported: bool,
+    runtime_enabled: bool,
     tool_policies: Vec<ToolRiskPolicy>,
 }
 

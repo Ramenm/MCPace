@@ -130,6 +130,64 @@ fn json_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn write_dangerous_upstream_config(root: &std::path::Path) {
+    let script = root.join("dangerous-upstream.js");
+    fs::write(
+        &script,
+        r#"
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
+function send(id, result) { process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n'); }
+rl.on('line', (line) => {
+  const message = JSON.parse(line);
+  if (message.method === 'initialize') {
+    send(message.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'dangerous', version: '0.1.0' } });
+  } else if (message.method === 'tools/list') {
+    send(message.id, { tools: [
+      { name: 'read_status', description: 'Read status only', annotations: { readOnlyHint: true }, inputSchema: { type: 'object', properties: {}, additionalProperties: false } },
+      { name: 'apply_plan', description: 'Delete files under a supplied path', annotations: { destructiveHint: true, readOnlyHint: false, openWorldHint: true }, inputSchema: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'], additionalProperties: false } }
+    ] });
+  } else if (message.method === 'tools/call') {
+    send(message.id, { content: [{ type: 'text', text: 'ok' }], isError: false });
+  }
+});
+"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": { "keyName": "MCPace" },
+  "profiles": {
+    "runtime": {
+      "default": "safe",
+      "profiles": { "safe": { "description": "Safe", "serverOverrides": {} } }
+    }
+  },
+  "servers": {}
+}"#,
+    )
+    .unwrap();
+    fs::write(
+        root.join("mcp_settings.json"),
+        format!(
+            r#"{{
+  "mcpServers": {{
+    "dangerous": {{
+      "enabled": true,
+      "type": "stdio",
+      "command": "node",
+      "args": ["{}"]
+    }}
+  }}
+}}"#,
+            json_escape(&script.display().to_string())
+        ),
+    )
+    .unwrap();
+}
+
 fn assert_dashboard_html_lacks(parts: &[&str]) {
     let marker = parts.concat();
     assert!(
@@ -178,6 +236,9 @@ fn dashboard_ui_exposes_production_cockpit_without_probe_loop_copy() {
         .contains("refreshDashboard({ allowHidden: true, reason: \"initial\" })"));
     assert!(super::DASHBOARD_HTML.contains("const MAX_SERVER_ROWS = 64"));
     assert!(super::DASHBOARD_HTML.contains("server-autotune"));
+    assert!(super::DASHBOARD_HTML.contains("/api/actions/ping"));
+    assert!(super::DASHBOARD_HTML.contains("/api/resources"));
+    assert!(super::DASHBOARD_HTML.contains("REQUEST_TIMEOUT_MS"));
     assert!(!super::DASHBOARD_HTML.contains("Auto</strong> ${tuned ? \"OK\""));
     assert_dashboard_html_lacks(&["mcpace lab", " probe"]);
     assert_dashboard_html_lacks(&["cannot safely", " prove"]);
@@ -232,6 +293,52 @@ fn overview_json_contains_expected_sections() {
     assert!(object.contains_key("readiness"));
     assert!(object.contains_key("servers"));
     assert!(object.contains_key("clients"));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn overview_runtime_control_uses_cached_tools_list_evidence_for_risk() {
+    if which::which("node").is_err() {
+        eprintln!("skipping cached evidence risk test because node is not on PATH");
+        return;
+    }
+    let root = temp_root();
+    write_dangerous_upstream_config(&root);
+    crate::upstream::warm_tool_list_cache(&root, Some(5_000), true).expect("warm tools cache");
+
+    let overview = build_overview_json(&root).expect("build overview");
+    assert_eq!(
+        json_helpers::value_at_path(&overview, &["cachedToolEvidence", "toolCount"])
+            .and_then(JsonValue::as_i64),
+        Some(2)
+    );
+    let items = json_helpers::array_at_path(&overview, &["runtimeControlPlane", "items"])
+        .expect("runtime control items");
+    let dangerous = items
+        .iter()
+        .find(|item| json_helpers::string_at_path(item, &["name"]) == Some("dangerous"))
+        .expect("dangerous runtime item");
+    assert_eq!(
+        json_helpers::string_at_path(dangerous, &["evidenceState"]),
+        Some("cached-tools")
+    );
+    assert_eq!(
+        json_helpers::string_at_path(dangerous, &["toolRisk", "risk"]),
+        Some("destructive")
+    );
+    assert_eq!(
+        json_helpers::bool_at_path(dangerous, &["toolRisk", "approvalRequired"]),
+        Some(true)
+    );
+    assert_eq!(
+        json_helpers::string_at_path(dangerous, &["isolation", "mode"]),
+        Some("container-required")
+    );
+    assert_eq!(
+        json_helpers::string_at_path(dangerous, &["nextGate"]),
+        Some("choose-isolation")
+    );
+
     let _ = fs::remove_dir_all(root);
 }
 
@@ -369,6 +476,24 @@ fn runtime_status_reports_live_connection_metrics() {
             .and_then(JsonValue::as_i64),
         Some(1)
     );
+    assert!(
+        json_helpers::value_at_path(&status, &["http", "requestDurationTotalMs"])
+            .and_then(JsonValue::as_i64)
+            .unwrap_or(-1)
+            >= 0
+    );
+    assert!(
+        json_helpers::value_at_path(&status, &["http", "requestDurationAverageMs"])
+            .and_then(JsonValue::as_i64)
+            .unwrap_or(-1)
+            >= 0
+    );
+    assert!(
+        json_helpers::value_at_path(&status, &["http", "requestDurationMaxMs"])
+            .and_then(JsonValue::as_i64)
+            .unwrap_or(-1)
+            >= 0
+    );
     let _ = fs::remove_dir_all(root);
 }
 
@@ -407,6 +532,143 @@ fn query_bool_flag_accepts_common_truthy_refresh_values() {
     assert!(query_bool_flag("refresh", "refresh"));
     assert!(!query_bool_flag("refresh=0", "refresh"));
     assert!(!query_bool_flag("other=true", "refresh"));
+}
+
+#[test]
+fn bounded_query_usize_clamps_invalid_or_large_values() {
+    assert_eq!(super::bounded_query_usize("tail=40", "tail", 20, 500), 40);
+    assert_eq!(super::bounded_query_usize("tail=0", "tail", 20, 500), 20);
+    assert_eq!(super::bounded_query_usize("tail=-1", "tail", 20, 500), 20);
+    assert_eq!(
+        super::bounded_query_usize("tail=999999", "tail", 20, 500),
+        500
+    );
+    assert_eq!(super::bounded_query_usize("other=1", "tail", 20, 500), 20);
+}
+
+#[test]
+fn action_body_requires_json_object_with_json_content_type() {
+    let json_request = super::HttpRequest {
+        method: "POST".to_string(),
+        path: "/api/actions/server-test".to_string(),
+        query: String::new(),
+        headers: vec![(
+            "content-type".to_string(),
+            "application/json; charset=utf-8".to_string(),
+        )],
+        body: br#"{"server":"fake"}"#.to_vec(),
+    };
+    assert!(matches!(
+        super::parse_action_body(&json_request),
+        Ok(JsonValue::Object(_))
+    ));
+
+    let text_request = super::HttpRequest {
+        headers: vec![("content-type".to_string(), "text/plain".to_string())],
+        ..json_request
+    };
+    assert!(super::parse_action_body(&text_request)
+        .expect_err("text/plain action body should be rejected")
+        .contains("Content-Type: application/json"));
+
+    let array_request = super::HttpRequest {
+        headers: vec![("content-type".to_string(), "application/json".to_string())],
+        body: br#"[]"#.to_vec(),
+        ..text_request
+    };
+    assert!(super::parse_action_body(&array_request)
+        .expect_err("non-object JSON action body should be rejected")
+        .contains("JSON object"));
+}
+
+#[test]
+fn bearer_authorization_is_case_insensitive_and_strict() {
+    let root = temp_root();
+    write_minimal_config(&root);
+    let mut config = test_config(root.clone(), None, super::ServeSurface::Dashboard);
+    config.auth_token = Some("secret-token".to_string());
+
+    let request = super::HttpRequest {
+        method: "GET".to_string(),
+        path: "/api/resources".to_string(),
+        query: String::new(),
+        headers: vec![(
+            "authorization".to_string(),
+            "bearer secret-token".to_string(),
+        )],
+        body: Vec::new(),
+    };
+    assert!(super::is_authorized_http_request(&request, &config));
+
+    let extra = super::HttpRequest {
+        headers: vec![(
+            "authorization".to_string(),
+            "Bearer secret-token extra".to_string(),
+        )],
+        ..request
+    };
+    assert!(!super::is_authorized_http_request(&extra, &config));
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn http_header_name_validation_rejects_empty_or_whitespace_names() {
+    assert!(super::http_boundary::is_valid_http_header_name("Host"));
+    assert!(super::http_boundary::is_valid_http_header_name(
+        "Mcp-Session-Id"
+    ));
+    assert!(!super::http_boundary::is_valid_http_header_name(""));
+    assert!(!super::http_boundary::is_valid_http_header_name(
+        "Bad Header"
+    ));
+    assert!(!super::http_boundary::is_valid_http_header_name(
+        "Bad:Header"
+    ));
+    assert!(super::http_boundary::is_valid_http_header_value(
+        "Bearer token"
+    ));
+    assert!(!super::http_boundary::is_valid_http_header_value(
+        "ok\r\nX-Bad: injected"
+    ));
+}
+
+#[test]
+fn content_type_validation_requires_one_exact_json_media_type() {
+    let json_request = super::HttpRequest {
+        method: "POST".to_string(),
+        path: "/api/actions/ping".to_string(),
+        query: String::new(),
+        headers: vec![(
+            "content-type".to_string(),
+            "application/json; charset=utf-8".to_string(),
+        )],
+        body: b"{}".to_vec(),
+    };
+    assert!(super::http_boundary::content_type_is(
+        &json_request,
+        "application/json"
+    ));
+
+    let duplicate_request = super::HttpRequest {
+        headers: vec![
+            ("content-type".to_string(), "application/json".to_string()),
+            ("content-type".to_string(), "text/plain".to_string()),
+        ],
+        ..json_request
+    };
+    assert!(!super::http_boundary::content_type_is(
+        &duplicate_request,
+        "application/json"
+    ));
+}
+
+#[test]
+fn http_request_line_validation_is_strictly_http1() {
+    assert!(super::is_supported_http_version("HTTP/1.1"));
+    assert!(super::is_supported_http_version("HTTP/1.0"));
+    assert!(!super::is_supported_http_version("HTTP/2"));
+    assert!(!super::is_supported_http_version("HTTP/3"));
 }
 
 #[test]
@@ -548,6 +810,7 @@ fn origin_validation_allows_only_exact_loopback_hosts() {
     for origin in [
         "http://127.0.0.1",
         "http://127.0.0.1:39022",
+        "http://127.42.0.1:39022",
         "https://127.0.0.1:39022",
         "http://localhost",
         "http://localhost:39022",
@@ -571,6 +834,7 @@ fn origin_validation_allows_only_exact_loopback_hosts() {
         "http://evil.example/127.0.0.1",
         "http://[::1].evil.example",
         "http://[::1]:not-a-port",
+        "http://127.0.0.1:65536",
     ] {
         assert!(
             !is_allowed_local_origin(origin),
@@ -584,6 +848,7 @@ fn host_validation_allows_only_exact_loopback_authorities() {
     for host in [
         "127.0.0.1",
         "127.0.0.1:39022",
+        "127.42.0.1:39022",
         "localhost",
         "LOCALHOST:39022",
         "[::1]",
@@ -606,6 +871,7 @@ fn host_validation_allows_only_exact_loopback_authorities() {
         "evil.example/127.0.0.1",
         "[::1].evil.example",
         "[::1]:not-a-port",
+        "127.0.0.1:65536",
     ] {
         assert!(
             !is_allowed_local_host(host),
@@ -693,7 +959,7 @@ fn dashboard_serves_root_and_overview() {
         let mut stderr = Vec::new();
         serve_listener(
             listener,
-            test_config(server_root, Some(4), super::ServeSurface::Dashboard),
+            test_config(server_root, Some(5), super::ServeSurface::Dashboard),
             &mut stderr,
         )
     });
@@ -709,6 +975,8 @@ fn dashboard_serves_root_and_overview() {
     stream.read_to_string(&mut root_response).unwrap();
     assert!(root_response.contains("MCPace dashboard"));
     assert!(root_response.contains("/api/overview"));
+    assert!(root_response.contains("X-Content-Type-Options: nosniff"));
+    assert!(root_response.contains("Content-Security-Policy:"));
 
     let mut favicon_response = String::new();
     let mut stream = TcpStream::connect(addr).unwrap();
@@ -746,6 +1014,19 @@ fn dashboard_serves_root_and_overview() {
     stream.read_to_string(&mut resources_response).unwrap();
     assert!(resources_response.contains("\"upstreamSessionPool\""));
     assert!(resources_response.contains("\"activeConnections\""));
+
+    let mut ping_response = String::new();
+    let mut stream = TcpStream::connect(addr).unwrap();
+    write!(
+        stream,
+        "POST /api/actions/ping HTTP/1.1\r\nHost: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+        addr
+    )
+    .unwrap();
+    stream.read_to_string(&mut ping_response).unwrap();
+    assert!(ping_response.contains("HTTP/1.1 200 OK"));
+    assert!(ping_response.contains("\"action\": \"ping\""));
+    assert!(ping_response.contains("\"status\": \"ok\""));
 
     assert_eq!(handle.join().unwrap(), 0);
     let _ = fs::remove_dir_all(root);

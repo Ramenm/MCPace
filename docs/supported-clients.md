@@ -1,17 +1,12 @@
 # Supported clients
 
-MCPace exposes one local MCP URL:
+MCPace keeps one local MCP endpoint and patches client configs only when a supported local config or installed CLI is detected.
 
-```text
-http://127.0.0.1:39022/mcp
-```
+| Client mode | Behavior |
+|---|---|
+| `--client auto` | Default. Patch detected clients only. |
+| `--client cursor-local` | Patch Cursor local config when present. |
+| `--client all` | Patch every supported detected client. |
+| `--client none` | Start MCPace without touching client config. |
 
-Use `mcpace client list` to see patchers known to the installed build. Preview before writing:
-
-```bash
-mcpace client install cursor-local --dry-run --diff
-mcpace client install claude-code --dry-run --diff
-mcpace client export --json
-```
-
-`mcpace up --client auto` patches only detected local clients. Use `--client none` when you only want the endpoint, and use `mcpace connect` for manual wiring guidance when a client is not patchable yet.
+The updater preserves unrelated server entries and skips MCPace self-references to avoid routing loops.

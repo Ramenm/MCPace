@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
+import vm from 'node:vm';
 import { cargoCommand, readPinnedToolchain, runCargo } from '../../scripts/cargo-task.mjs';
 import { readRootPackageJson, repoRoot } from '../../scripts/lib/project-metadata.mjs';
 
@@ -404,8 +405,8 @@ test('GitHub metadata references only declared repository labels', () => {
   const checkedFiles = [
     '.github/dependabot.yml',
     '.github/release.yml',
-    '.github/ISSUE_TEMPLATE/bug_report.yml',
-    '.github/ISSUE_TEMPLATE/feature_request.yml',
+    ...walkFiles(path.join(repoRoot, '.github', 'ISSUE_TEMPLATE'), (file) => /\.ya?ml$/.test(file))
+      .map((file) => path.relative(repoRoot, file)),
   ];
   const missing = [];
   for (const relative of checkedFiles) {
@@ -425,7 +426,9 @@ test('GitHub workflows keep current action majors and pinned Rust toolchain synt
   assert.equal(workflowText.includes('actions/checkout@v5'), false, 'update this test when an older checkout major is deliberately restored');
   assert.match(workflowText, /actions\/setup-node@v6/);
   assert.match(workflowText, /actions\/upload-artifact@v7/);
+  assert.match(workflowText, /actions\/download-artifact@v8/);
   assert.equal(workflowText.includes('actions/upload-artifact@v8'), false, 'update this test when a newer artifact major is deliberately adopted');
+  assert.equal(workflowText.includes('actions/download-artifact@v7'), false, 'download-artifact should stay on v8 when paired with upload-artifact v7');
   assert.match(workflowText, /dtolnay\/rust-toolchain@1\.95\.0/);
   assert.equal(workflowText.includes('dtolnay/rust-toolchain@stable'), false, 'explicit Rust toolchain workflows should not use the floating stable action ref');
   assert.equal(/toolchain:\s*1\.95\.0/.test(workflowText), false, 'dtolnay/rust-toolchain should use @1.95.0 rather than @stable plus a toolchain input');
@@ -535,6 +538,13 @@ test('optional external tooling is wired without slowing the fast local check', 
   assert.ok(manifest.includePaths.includes('scripts/tooling-preflight.mjs'), 'source bundle should include optional external tooling preflight');
 });
 
+test('security workflow pull-request jobs are reachable only through declared triggers', () => {
+  const securityWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'security.yml'), 'utf8');
+  assert.match(securityWorkflow, /^  pull_request:\s*$/m);
+  assert.match(securityWorkflow, /github\.event_name == 'pull_request'/);
+  assert.match(securityWorkflow, /MCPACE_ENABLE_PRIVATE_DEPENDENCY_REVIEW/);
+});
+
 test('GitHub Node jobs install locked dev tooling before package checks', () => {
   const workflowText = walkFiles(path.join(repoRoot, '.github', 'workflows'), (file) => /\.ya?ml$/.test(file))
     .map((file) => fs.readFileSync(file, 'utf8'))
@@ -550,4 +560,45 @@ test('checked-in package lock is public-registry safe and does not leak local mi
   const internalRegistryPattern = new RegExp([`packages\\.applied-${'caas'}-gateway`, `arti${'factory'}`, `internal\\.api\\.${'openai'}`].join('|'), 'i');
   assert.equal(internalRegistryPattern.test(lockfile), false);
   assert.match(lockfile, /https:\/\/registry\.npmjs\.org\/publint\/-\/publint-/);
+});
+
+test('dashboard HTTP surface keeps boundary checks, hardening headers, and telemetry centralized', () => {
+  const boundary = fs.readFileSync(path.join(repoRoot, 'src/dashboard/http_boundary.rs'), 'utf8');
+  const response = fs.readFileSync(path.join(repoRoot, 'src/dashboard/response.rs'), 'utf8');
+  const dashboard = fs.readFileSync(path.join(repoRoot, 'src/dashboard.rs'), 'utf8');
+  const overview = fs.readFileSync(path.join(repoRoot, 'src/dashboard/overview.rs'), 'utf8');
+  const html = fs.readFileSync(path.join(repoRoot, 'src/dashboard/index.html'), 'utf8');
+
+  assert.match(boundary, /pub\(crate\) fn is_loopback_host/);
+  assert.match(boundary, /parse::<IpAddr>\(\)/);
+  assert.match(response, /X-Content-Type-Options: nosniff/);
+  assert.match(response, /Referrer-Policy: no-referrer/);
+  assert.match(response, /Content-Security-Policy:/);
+  assert.match(dashboard, /fn bounded_query_usize/);
+  assert.match(boundary, /fn is_valid_http_header_name/);
+  assert.match(boundary, /fn is_valid_http_header_value/);
+  assert.match(boundary, /values.next\(\).is_some\(\)/);
+  assert.match(response, /invalid response header value/);
+  assert.match(dashboard, /Malformed HTTP header/);
+  assert.match(dashboard, /JSON action bodies require Content-Type: application\/json/);
+  assert.match(dashboard, /fn authorization_bearer_token/);
+  assert.match(dashboard, /eq_ignore_ascii_case\("Bearer"\)/);
+  assert.equal((dashboard.match(/reject_forbidden_origin\(stream, request\)/g) || []).length, 1, 'origin checks should be applied once at the HTTP entry boundary');
+  const mcpHttp = fs.readFileSync(path.join(repoRoot, 'src/dashboard/mcp_http.rs'), 'utf8');
+  assert.doesNotMatch(mcpHttp, /reject_forbidden_origin/);
+  assert.doesNotMatch(mcpHttp, /validate_origin\(request\)/);
+  assert.match(overview, /requestDurationAverageMs/);
+  assert.match(overview, /requestDurationMaxMs/);
+  assert.match(html, /Request duration/);
+  assert.doesNotMatch(html, /Latency histograms/);
+});
+
+test('dashboard inline scripts stay parseable by current Node tooling', () => {
+  const html = fs.readFileSync(path.join(repoRoot, 'src/dashboard/index.html'), 'utf8');
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+  assert.ok(scripts.length > 0, 'dashboard should keep its boot script in the checked HTML shell');
+
+  for (const script of scripts) {
+    assert.doesNotThrow(() => new vm.Script(script, { filename: 'src/dashboard/index.html' }));
+  }
 });

@@ -1,4 +1,4 @@
-use super::http_boundary::request_header_string;
+use super::http_boundary::request_header_string_unique;
 use super::HttpRequest;
 use crate::resources;
 use std::collections::{BTreeSet, HashMap};
@@ -132,8 +132,9 @@ impl McpHttpSessionStore {
         request: &HttpRequest,
         now_ms: u128,
     ) -> Result<McpHttpSession, McpHttpSessionError> {
-        let raw_session_id =
-            request_header_string(Some(request), "mcp-session-id").ok_or_else(|| {
+        let raw_session_id = request_header_string_unique(Some(request), "mcp-session-id")
+            .map_err(|message| McpHttpSessionError::new(McpHttpSessionErrorKind::Invalid, message))?
+            .ok_or_else(|| {
                 McpHttpSessionError::new(
                     McpHttpSessionErrorKind::Missing,
                     "missing required Mcp-Session-Id header after initialize",
@@ -145,9 +146,8 @@ impl McpHttpSessionStore {
                 "invalid Mcp-Session-Id header; expected bounded visible ASCII",
             )
         })?;
-        let protocol_header = request_header_string(Some(request), "mcp-protocol-version")
-            .map(|value| value.trim().to_string())
-            .filter(|value| !value.is_empty());
+        let protocol_header = request_header_string_unique(Some(request), "mcp-protocol-version")
+            .map_err(|message| McpHttpSessionError::new(McpHttpSessionErrorKind::Invalid, message))?;
         self.touch(&session_id, protocol_header.as_deref(), now_ms)
     }
 
@@ -233,8 +233,9 @@ impl McpHttpSessionStore {
         request: &HttpRequest,
         now_ms: u128,
     ) -> Result<McpHttpSession, McpHttpSessionError> {
-        let raw_session_id =
-            request_header_string(Some(request), "mcp-session-id").ok_or_else(|| {
+        let raw_session_id = request_header_string_unique(Some(request), "mcp-session-id")
+            .map_err(|message| McpHttpSessionError::new(McpHttpSessionErrorKind::Invalid, message))?
+            .ok_or_else(|| {
                 McpHttpSessionError::new(
                     McpHttpSessionErrorKind::Missing,
                     "DELETE /mcp requires Mcp-Session-Id",

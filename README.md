@@ -2,9 +2,7 @@
 
 MCPace runs MCP servers at the right concurrency.
 
-Share safe servers, serialize fragile ones, and clone stateful stdio servers per client, project, or chat — automatically.
-
-MCPace is a local MCP process scheduler for concurrent AI agents. It keeps the simple `http://127.0.0.1:39022/mcp` workflow, but the real job is runtime adaptation: turn fragile single-session servers into reliable multi-session infrastructure.
+MCPace is a local MCP process scheduler for concurrent AI agents. It gives every client one local endpoint, then decides whether each upstream MCP server should be shared, serialized, isolated per chat/project, pooled, or disabled.
 
 ## Install from this source bundle
 
@@ -13,48 +11,44 @@ cargo install --path .
 mcpace up
 ```
 
-`mcpace up` is home-first: it creates or repairs `~/.mcpace`, imports existing MCP servers from detected local configs, starts the local endpoint, wires detected clients, and runs readiness checks. It does **not** add a filesystem server, memory server, or any other upstream server by default.
+`mcpace up` creates or repairs `~/.mcpace`, imports safe existing MCP servers from detected local configs, starts `http://127.0.0.1:39022/mcp`, wires detected clients, and runs readiness checks. It does **not** add a filesystem server, memory server, or any other upstream server by default.
 
-## Set a server concurrency policy
+## Daily commands
 
-```bash
-mcpace server set-policy filesystem --mode session-isolated --affinity client,project,chat
-mcpace server instances --client-id cursor --session-id chat-a --project-root .
-mcpace server leases --json
-```
+| Need | Command |
+|---|---|
+| Start or repair the local home | `mcpace up` |
+| Preview auto discovery | `mcpace auto --dry-run` |
+| Add trusted discovered servers | `mcpace auto` |
+| Add an explicit server | `mcpace install npm:@modelcontextprotocol/server-memory --as memory` |
+| Import an existing config | `mcpace server import ./mcp.json --dry-run` |
+| Set routing policy | `mcpace server set-policy filesystem --mode session-isolated --affinity client,project,chat` |
+| Inspect routing | `mcpace server instances --client-id cursor --session-id chat-a --project-root .` |
+| Watch the local UI | `mcpace dashboard` |
 
-Modes: `shared`, `serialized`, `session-isolated`, `project-isolated`, `pool`, and `disabled`.
+## Runtime policy
 
-## Auto-discover new MCP servers
+Modes are `shared`, `serialized`, `session-isolated`, `project-isolated`, `pool`, and `disabled`. MCPace starts conservatively: unproven stdio servers stay serialized or isolated until metadata, policy, or a safe `initialize`/`tools/list` probe proves a wider mode is safe.
 
-```bash
-mcpace auto --dry-run
-mcpace auto
-mcpace auto filesystem --json
-```
+## Documentation
 
-`mcpace auto` is the normal path: refresh the registry cache when it is missing or stale, pick approved/trusted candidates, write server config, launch the package manager only during probe, read live `initialize`/`tools/list` evidence, and let MCPace infer safe runtime policy. Advanced `server discover --refresh/--auto-install/--allow-review` flags still exist for debugging, but users should not need to choose a server type.
-
-Runtime type is also inferred automatically: stateless, session/project/credential stateful, external, host-interactive, side-effecting, legacy, or conservative unknown. Details live in [`docs/architecture.md`](docs/architecture.md).
-
-## Add or import servers only when you choose
-
-```bash
-mcpace install npm:@modelcontextprotocol/server-memory --as memory
-mcpace install https://example.com/mcp --as remote
-mcpace server import ./mcp.json --dry-run
-```
-
-Server type is inferred from the input: `command` means stdio, URL fields mean remote HTTP, and explicit local paths map to the filesystem server.
-
-## Watch what is happening
-
-```bash
-mcpace dashboard
-```
-
-The local dashboard shows health, server posture, policy review, planned concurrency instances, runtime leases, and a tool-call audit trail.
+| File | Purpose |
+|---|---|
+| [`docs/README.md`](docs/README.md) | Runbook and documentation map. |
+| [`docs/architecture.md`](docs/architecture.md) | Scheduler model, planes, modes, and state classes. |
+| [`docs/configuration.md`](docs/configuration.md) | Config files, install/import examples, dynamic discovery, and policy options. |
+| [`docs/lab-harness.md`](docs/lab-harness.md) | Evidence corpus for automatic runtime classification. |
+| [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and security boundary. |
 
 ## Verify
 
-Run `npm run check` and `cargo test`. Read the runbook in [`docs/README.md`](docs/README.md). This ZIP is source-only: no `.git`, `node_modules`, caches, runtime logs, vendored binaries, or heavy build outputs.
+```bash
+npm run check
+cargo fmt --check
+cargo clippy --all-targets -- -D warnings
+cargo test
+cargo build --release
+npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --concurrency 64
+```
+
+This ZIP is source-only: no `.git`, `node_modules`, caches, runtime logs, vendored binaries, Rust `target`, or heavy build outputs.

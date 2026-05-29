@@ -1,8 +1,8 @@
 use crate::app;
 use crate::json::{parse_str, JsonValue};
-use crate::json_helpers;
 use crate::resources;
 use crate::runtimepaths;
+use crate::text_utils;
 use crate::upstream;
 
 mod diagnostics;
@@ -38,7 +38,7 @@ use http_boundary::{is_allowed_local_host, is_allowed_local_origin};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io::{BufRead, BufReader, Write};
-use std::net::{IpAddr, Shutdown, TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{
     atomic::{AtomicUsize, Ordering},
@@ -48,6 +48,8 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const HTTP_WORKER_STACK_BYTES: usize = 4 * 1024 * 1024;
+const DEFAULT_LOG_TAIL: usize = 20;
+const MAX_LOG_TAIL: usize = 500;
 
 #[derive(Debug)]
 struct ParsedArgs {
@@ -105,6 +107,8 @@ struct HttpRuntimeMetrics {
     completed_connections: AtomicUsize,
     failed_connections: AtomicUsize,
     max_active_connections: AtomicUsize,
+    total_request_duration_ms: AtomicUsize,
+    max_request_duration_ms: AtomicUsize,
 }
 
 #[derive(Clone, Debug)]
@@ -114,10 +118,14 @@ struct HttpRuntimeMetricsSnapshot {
     completed_connections: usize,
     failed_connections: usize,
     max_active_connections: usize,
+    total_request_duration_ms: usize,
+    average_request_duration_ms: usize,
+    max_request_duration_ms: usize,
 }
 
 struct HttpRuntimeMetricsGuard<'a> {
     metrics: &'a HttpRuntimeMetrics,
+    started_at: Instant,
     failed: bool,
 }
 
@@ -128,17 +136,25 @@ impl HttpRuntimeMetrics {
         self.record_max_active(active);
         HttpRuntimeMetricsGuard {
             metrics: self,
+            started_at: Instant::now(),
             failed: false,
         }
     }
 
     fn snapshot(&self) -> HttpRuntimeMetricsSnapshot {
+        let completed_connections = self.completed_connections.load(Ordering::Relaxed);
+        let total_request_duration_ms = self.total_request_duration_ms.load(Ordering::Relaxed);
         HttpRuntimeMetricsSnapshot {
             accepted_connections: self.accepted_connections.load(Ordering::Relaxed),
             active_connections: self.active_connections.load(Ordering::Relaxed),
-            completed_connections: self.completed_connections.load(Ordering::Relaxed),
+            completed_connections,
             failed_connections: self.failed_connections.load(Ordering::Relaxed),
             max_active_connections: self.max_active_connections.load(Ordering::Relaxed),
+            total_request_duration_ms,
+            average_request_duration_ms: total_request_duration_ms
+                .checked_div(completed_connections)
+                .unwrap_or(0),
+            max_request_duration_ms: self.max_request_duration_ms.load(Ordering::Relaxed),
         }
     }
 
@@ -148,6 +164,23 @@ impl HttpRuntimeMetrics {
             match self.max_active_connections.compare_exchange_weak(
                 observed,
                 active,
+                Ordering::Relaxed,
+                Ordering::Relaxed,
+            ) {
+                Ok(_) => break,
+                Err(value) => observed = value,
+            }
+        }
+    }
+
+    fn record_request_duration(&self, duration_ms: usize) {
+        self.total_request_duration_ms
+            .fetch_add(duration_ms, Ordering::Relaxed);
+        let mut observed = self.max_request_duration_ms.load(Ordering::Relaxed);
+        while duration_ms > observed {
+            match self.max_request_duration_ms.compare_exchange_weak(
+                observed,
+                duration_ms,
                 Ordering::Relaxed,
                 Ordering::Relaxed,
             ) {
@@ -166,6 +199,9 @@ impl HttpRuntimeMetricsGuard<'_> {
 
 impl Drop for HttpRuntimeMetricsGuard<'_> {
     fn drop(&mut self) {
+        let duration_ms =
+            usize::try_from(self.started_at.elapsed().as_millis()).unwrap_or(usize::MAX);
+        self.metrics.record_request_duration(duration_ms);
         self.metrics
             .active_connections
             .fetch_sub(1, Ordering::Relaxed);
@@ -406,18 +442,7 @@ fn tool_list_cache_warmup_enabled() -> bool {
 }
 
 fn is_loopback_bind_host(host: &str) -> bool {
-    let trimmed = host.trim();
-    if trimmed.eq_ignore_ascii_case("localhost") {
-        return true;
-    }
-    let normalized = trimmed
-        .strip_prefix('[')
-        .and_then(|value| value.strip_suffix(']'))
-        .unwrap_or(trimmed);
-    normalized
-        .parse::<IpAddr>()
-        .map(|address| address.is_loopback())
-        .unwrap_or(false)
+    http_boundary::is_loopback_host(host)
 }
 
 fn parse_args(args: &[String]) -> ParsedArgs {
@@ -786,6 +811,10 @@ fn read_limited_http_line(
     }
 }
 
+fn is_supported_http_version(version: &str) -> bool {
+    matches!(version, "HTTP/1.1" | "HTTP/1.0")
+}
+
 fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<(), String> {
     let _ = stream.set_read_timeout(Some(config.io_timeout));
     let _ = stream.set_write_timeout(Some(config.io_timeout));
@@ -817,12 +846,21 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
     }
 
     let parts: Vec<&str> = request_line.split_whitespace().collect();
-    if parts.len() < 2 {
+    if parts.len() != 3 || !is_supported_http_version(parts[2]) {
         write_text_response(
             &mut stream,
             "400 Bad Request",
             "text/plain; charset=utf-8",
             "Malformed HTTP request",
+        )?;
+        return Ok(());
+    }
+    if !parts[1].starts_with('/') {
+        write_text_response(
+            &mut stream,
+            "400 Bad Request",
+            "text/plain; charset=utf-8",
+            "Unsupported HTTP request target",
         )?;
         return Ok(());
     }
@@ -874,44 +912,61 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             )?;
             return Ok(());
         }
-        if let Some((name, value)) = header.split_once(':') {
-            let key = name.trim().to_ascii_lowercase();
-            let trimmed = value.trim().to_string();
-            if key == "transfer-encoding" {
-                write_text_response(
-                    &mut stream,
-                    "400 Bad Request",
-                    "text/plain; charset=utf-8",
-                    "Transfer-Encoding is not supported",
-                )?;
-                return Ok(());
-            }
-            if key == "content-length" {
-                let parsed_length = match trimmed.parse::<usize>() {
-                    Ok(value) => value,
-                    Err(_) => {
-                        write_text_response(
-                            &mut stream,
-                            "400 Bad Request",
-                            "text/plain; charset=utf-8",
-                            "Invalid Content-Length",
-                        )?;
-                        return Ok(());
-                    }
-                };
-                if content_length.is_some() {
+        let Some((name, value)) = header.split_once(':') else {
+            write_text_response(
+                &mut stream,
+                "400 Bad Request",
+                "text/plain; charset=utf-8",
+                "Malformed HTTP header",
+            )?;
+            return Ok(());
+        };
+        let raw_name = name.trim();
+        if !http_boundary::is_valid_http_header_name(raw_name) {
+            write_text_response(
+                &mut stream,
+                "400 Bad Request",
+                "text/plain; charset=utf-8",
+                "Invalid HTTP header name",
+            )?;
+            return Ok(());
+        }
+        let key = raw_name.to_ascii_lowercase();
+        let trimmed = value.trim().to_string();
+        if key == "transfer-encoding" {
+            write_text_response(
+                &mut stream,
+                "400 Bad Request",
+                "text/plain; charset=utf-8",
+                "Transfer-Encoding is not supported",
+            )?;
+            return Ok(());
+        }
+        if key == "content-length" {
+            let parsed_length = match trimmed.parse::<usize>() {
+                Ok(value) => value,
+                Err(_) => {
                     write_text_response(
                         &mut stream,
                         "400 Bad Request",
                         "text/plain; charset=utf-8",
-                        "Duplicate Content-Length is not allowed",
+                        "Invalid Content-Length",
                     )?;
                     return Ok(());
                 }
-                content_length = Some(parsed_length);
+            };
+            if content_length.is_some() {
+                write_text_response(
+                    &mut stream,
+                    "400 Bad Request",
+                    "text/plain; charset=utf-8",
+                    "Duplicate Content-Length is not allowed",
+                )?;
+                return Ok(());
             }
-            headers.push((key, trimmed));
+            content_length = Some(parsed_length);
         }
+        headers.push((key, trimmed));
     }
 
     let host_header_count = headers.iter().filter(|(key, _)| key == "host").count();
@@ -1044,9 +1099,7 @@ fn handle_http_request(
             write_json_response(stream, "200 OK", &payload)?;
         }
         ("GET", "/api/logs") => {
-            let tail = query_parameter(&request.query, "tail")
-                .and_then(|value| value.parse::<i64>().ok())
-                .unwrap_or(20);
+            let tail = bounded_query_usize(&request.query, "tail", DEFAULT_LOG_TAIL, MAX_LOG_TAIL);
             let payload = run_json_command_vec(
                 &config.root_path,
                 vec![
@@ -1060,9 +1113,6 @@ fn handle_http_request(
             write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/hub-up") => {
-            if reject_forbidden_origin(stream, request)? {
-                return Ok(());
-            }
             let payload = action_response(
                 "hub-up",
                 run_json_command(&config.root_path, &["hub", "up", "--json"])?,
@@ -1070,9 +1120,6 @@ fn handle_http_request(
             write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/hub-down") => {
-            if reject_forbidden_origin(stream, request)? {
-                return Ok(());
-            }
             let payload = action_response(
                 "hub-down",
                 run_json_command(&config.root_path, &["hub", "down", "--json"])?,
@@ -1080,29 +1127,45 @@ fn handle_http_request(
             write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/repair") => {
-            if reject_forbidden_origin(stream, request)? {
-                return Ok(());
-            }
             let payload = action_response(
                 "repair",
                 run_json_command(&config.root_path, &["repair", "--json"])?,
             );
             write_json_response(stream, "200 OK", &payload)?;
         }
+        ("POST", "/api/actions/ping") => {
+            let payload = action_response(
+                "ping",
+                JsonValue::object([
+                    ("status", JsonValue::string("ok")),
+                    (
+                        "surface",
+                        JsonValue::string(match config.surface {
+                            ServeSurface::Dashboard => "dashboard-http",
+                            ServeSurface::UnifiedServe => "unified-serve-http",
+                        }),
+                    ),
+                ]),
+            );
+            write_json_response(stream, "200 OK", &payload)?;
+        }
         ("POST", "/api/actions/server-enable") => {
-            run_server_action_endpoint(stream, request, config, "server-enable", "enable")?;
+            write_server_toggle_action(stream, request, config, true)?;
         }
         ("POST", "/api/actions/server-disable") => {
-            run_server_action_endpoint(stream, request, config, "server-disable", "disable")?;
+            write_server_toggle_action(stream, request, config, false)?;
         }
         ("POST", "/api/actions/server-policy") => {
-            run_server_policy_action(stream, request, config)?;
+            write_server_policy_action(stream, request, config)?;
         }
         ("POST", "/api/actions/server-autotune") => {
-            run_server_autotune_action(stream, request, config)?;
+            write_server_autotune_action(stream, request, config)?;
         }
         ("POST", "/api/actions/server-test") => {
-            run_server_test_action(stream, request, config)?;
+            write_server_test_action(stream, request, config)?;
+        }
+        ("POST", "/api/actions/server-install-command") => {
+            write_server_install_command_action(stream, request, config)?;
         }
         _ => write_text_response(
             stream,
@@ -1115,254 +1178,429 @@ fn handle_http_request(
     Ok(())
 }
 
-fn run_server_action_endpoint(
+fn write_server_toggle_action(
     stream: &mut TcpStream,
     request: &HttpRequest,
     config: &DashboardConfig,
-    action: &str,
-    operation: &str,
+    enabled: bool,
 ) -> Result<(), String> {
-    if reject_forbidden_origin(stream, request)? {
-        return Ok(());
-    }
-
-    let payload = parse_action_payload(request, action)?;
-    let server = required_string_field(&payload, "server", action)?;
-    let cli_result = run_json_command_vec(
-        &config.root_path,
-        vec![
-            "server".to_string(),
-            operation.to_string(),
-            server,
-            "--json".to_string(),
-        ],
-    )?;
-    let response = action_response(action, cli_result);
-    write_json_response(stream, "200 OK", &response)?;
-    Ok(())
-}
-
-fn run_server_policy_action(
-    stream: &mut TcpStream,
-    request: &HttpRequest,
-    config: &DashboardConfig,
-) -> Result<(), String> {
-    if reject_forbidden_origin(stream, request)? {
-        return Ok(());
-    }
-    let payload = parse_action_payload(request, "server-policy")?;
-    let server = required_string_field(&payload, "server", "server-policy")?;
-    let mut args = vec![
-        "server".to_string(),
-        "set-policy".to_string(),
-        server,
-        "--json".to_string(),
-    ];
-    push_option_arg_from_payload(&mut args, &payload, "mode", "--mode", "server-policy")?;
-    push_u64_arg_from_payload(
-        &mut args,
-        &payload,
-        "maxWorkers",
-        "--max-workers",
-        "server-policy",
-    )?;
-    push_u64_arg_from_payload(
-        &mut args,
-        &payload,
-        "maxInFlightPerWorker",
-        "--max-in-flight-per-worker",
-        "server-policy",
-    )?;
-    push_u64_arg_from_payload(
-        &mut args,
-        &payload,
-        "queueTimeoutMs",
-        "--queue-timeout-ms",
-        "server-policy",
-    )?;
-    push_option_arg_from_payload(
-        &mut args,
-        &payload,
-        "reusePolicy",
-        "--reuse-policy",
-        "server-policy",
-    )?;
-    if let Some(value) = payload.get("affinity").and_then(JsonValue::as_str) {
-        let affinity = value.trim();
-        if !affinity.is_empty() {
-            args.push("--affinity".to_string());
-            args.push(affinity.to_string());
-        }
-    }
-
-    let cli_result = run_json_command_vec(&config.root_path, args)?;
-    let response = action_response("server-policy", cli_result);
-    write_json_response(stream, "200 OK", &response)?;
-    Ok(())
-}
-
-fn run_server_autotune_action(
-    stream: &mut TcpStream,
-    request: &HttpRequest,
-    config: &DashboardConfig,
-) -> Result<(), String> {
-    if reject_forbidden_origin(stream, request)? {
-        return Ok(());
-    }
-    let payload = parse_action_payload(request, "server-autotune")?;
-    let changes = match payload.get("changes") {
-        Some(JsonValue::Array(value)) => value,
-        Some(_) => return Err("server-autotune body requires \"changes\" as an array".to_string()),
-        None => return Err("server-autotune body requires \"changes\"".to_string()),
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let server = match action_server_name(&body) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
     };
 
-    let mut results = Vec::new();
-    let mut updated = 0u64;
+    let action = if enabled {
+        "server-enable"
+    } else {
+        "server-disable"
+    };
+    let command = if enabled { "enable" } else { "disable" };
+    let payload = action_response(
+        action,
+        run_json_command_vec(
+            &config.root_path,
+            vec![
+                "server".to_string(),
+                command.to_string(),
+                server,
+                "--json".to_string(),
+            ],
+        )?,
+    );
+    write_json_response(stream, "200 OK", &payload)
+}
 
-    for raw_change in changes.iter() {
-        let change =
-            match raw_change {
-                JsonValue::Object(_) => raw_change,
-                _ => return Err(
-                    "server-autotune changes entries must be objects with at least a server field"
-                        .to_string(),
-                ),
-            };
-        let server = required_string_field(change, "server", "server-autotune")?;
-        let mut args = vec![
-            "server".to_string(),
-            "set-policy".to_string(),
-            server,
-            "--json".to_string(),
-        ];
+fn write_server_policy_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let args = match server_policy_command_args(&body) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
 
-        push_option_arg_from_payload(&mut args, change, "mode", "--mode", "server-autotune")?;
-        push_u64_arg_from_payload(
-            &mut args,
-            change,
-            "maxWorkers",
-            "--max-workers",
-            "server-autotune",
-        )?;
-        push_u64_arg_from_payload(
-            &mut args,
-            change,
-            "maxInFlightPerWorker",
-            "--max-in-flight-per-worker",
-            "server-autotune",
-        )?;
+    let payload = action_response(
+        "server-policy",
+        run_json_command_vec(&config.root_path, args)?,
+    );
+    write_json_response(stream, "200 OK", &payload)
+}
 
-        let cli_result = run_json_command_vec(&config.root_path, args)?;
-        updated = updated.saturating_add(1);
-        results.push(cli_result);
+fn write_server_autotune_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let changes = match body.get("changes").and_then(JsonValue::as_array) {
+        Some(value) => value,
+        None => {
+            return write_bad_action_request(stream, "server autotune requires a 'changes' array");
+        }
+    };
+    if changes.len() > 100 {
+        return write_bad_action_request(
+            stream,
+            "server autotune accepts at most 100 changes per request",
+        );
     }
 
-    let response = action_response(
+    let mut results = Vec::new();
+    for change in changes {
+        if !matches!(change, JsonValue::Object(_)) {
+            return write_bad_action_request(
+                stream,
+                "server autotune changes entries must be objects",
+            );
+        }
+        let args = match server_policy_command_args(change) {
+            Ok(value) => value,
+            Err(error) => return write_bad_action_request(stream, &error),
+        };
+        results.push(run_json_command_vec(&config.root_path, args)?);
+    }
+
+    let payload = action_response(
         "server-autotune",
         JsonValue::object([
-            ("updated", JsonValue::number(updated)),
+            ("status", JsonValue::string("updated")),
+            ("updated", JsonValue::number(results.len())),
             ("results", JsonValue::array(results)),
         ]),
     );
-    write_json_response(stream, "200 OK", &response)?;
-    Ok(())
+    write_json_response(stream, "200 OK", &payload)
 }
 
-fn run_server_test_action(
+fn write_server_test_action(
     stream: &mut TcpStream,
     request: &HttpRequest,
     config: &DashboardConfig,
 ) -> Result<(), String> {
-    if reject_forbidden_origin(stream, request)? {
-        return Ok(());
-    }
-
-    let payload = parse_action_payload(request, "server-test")?;
-    let server = required_string_field(&payload, "server", "server-test")?;
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let server = match action_server_name(&body) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
     let mut args = vec![
         "server".to_string(),
         "test".to_string(),
         server,
         "--json".to_string(),
     ];
-    push_u64_arg_from_payload(
-        &mut args,
-        &payload,
-        "timeoutMs",
-        "--timeout-ms",
+    if let Some(timeout_ms) = match action_positive_usize(&body, "timeoutMs") {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    } {
+        args.push("--timeout-ms".to_string());
+        args.push(timeout_ms.to_string());
+    }
+
+    let payload = action_response(
         "server-test",
-    )?;
-    let cli_result = run_json_command_vec(&config.root_path, args)?;
-    let response = action_response("server-test", cli_result);
-    write_json_response(stream, "200 OK", &response)?;
+        run_json_command_vec(&config.root_path, args)?,
+    );
+    write_json_response(stream, "200 OK", &payload)
+}
+
+fn write_server_install_command_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let command_line = match action_string(&body, "commandLine")
+        .or_else(|_| action_string(&body, "command"))
+        .or_else(|_| action_string(&body, "spec"))
+    {
+        Ok(value) => value,
+        Err(_) => {
+            return write_bad_action_request(
+                stream,
+                "server install requires a non-empty commandLine field",
+            );
+        }
+    };
+    if command_line.len() > 4096 {
+        return write_bad_action_request(stream, "server install commandLine is too long");
+    }
+    if command_line
+        .chars()
+        .any(|ch| ch == '\0' || ch == '\r' || ch == '\n' || ch.is_control())
+    {
+        return write_bad_action_request(
+            stream,
+            "server install commandLine cannot contain control characters or newlines",
+        );
+    }
+    if command_line_uses_shell_composition(&command_line) {
+        return write_bad_action_request(
+            stream,
+            "server install commandLine must be one launcher, URL, or path; remove shell chaining, pipes, redirects, backticks, or command substitutions",
+        );
+    }
+
+    let mut args = vec![
+        "server".to_string(),
+        "install".to_string(),
+        command_line,
+        "--json".to_string(),
+    ];
+    let server_name = match optional_action_string(&body, "server") {
+        Ok(Some(value)) => Some(value),
+        Ok(None) => match optional_action_string(&body, "name") {
+            Ok(value) => value,
+            Err(error) => return write_bad_action_request(stream, &error),
+        },
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    if let Some(server) = server_name {
+        args.push("--as".to_string());
+        args.push(server);
+    }
+    let force = match action_bool(&body, "force") {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    if force {
+        args.push("--force".to_string());
+    }
+    let disabled = match action_bool(&body, "disabled") {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    if disabled {
+        args.push("--disabled".to_string());
+    }
+    let dry_run = match action_bool(&body, "dryRun") {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    if dry_run {
+        args.push("--dry-run".to_string());
+    }
+
+    let payload = action_response(
+        "server-install-command",
+        run_json_command_vec(&config.root_path, args)?,
+    );
+    write_json_response(stream, "200 OK", &payload)
+}
+
+fn command_line_uses_shell_composition(value: &str) -> bool {
+    text_utils::uses_shell_composition(value)
+}
+
+fn write_bad_action_request(stream: &mut TcpStream, error: &str) -> Result<(), String> {
+    write_json_error_response(stream, "400 Bad Request", "bad_request", error)
+}
+
+fn parse_action_body(request: &HttpRequest) -> Result<JsonValue, String> {
+    if request.body.is_empty() {
+        return Ok(empty_object());
+    }
+    if !http_boundary::content_type_is(request, "application/json") {
+        return Err("JSON action bodies require Content-Type: application/json".to_string());
+    }
+    let body = std::str::from_utf8(&request.body)
+        .map_err(|error| format!("request body is not UTF-8: {}", error))?;
+    let parsed =
+        parse_str(body.trim()).map_err(|error| format!("invalid JSON request body: {}", error))?;
+    if !matches!(parsed, JsonValue::Object(_)) {
+        return Err("action body must be a JSON object".to_string());
+    }
+    Ok(parsed)
+}
+
+fn action_server_name(body: &JsonValue) -> Result<String, String> {
+    action_string(body, "server")
+        .or_else(|_| action_string(body, "name"))
+        .map_err(|_| "server action requires a non-empty server name".to_string())
+}
+
+fn action_policy_mode(body: &JsonValue) -> Result<String, String> {
+    let mode = action_string(body, "mode")?
+        .trim()
+        .to_ascii_lowercase()
+        .replace('_', "-");
+    let canonical = match mode.as_str() {
+        "shared" | "parallel" | "parallel-safe" | "multi-reader" => "shared",
+        "serialized" | "serial" | "single-writer" | "queue" | "queued" => "serialized",
+        "session" | "session-isolated" | "per-session" | "single-session" => "session-isolated",
+        "project" | "project-isolated" | "per-project" | "isolated-per-project" => {
+            "project-isolated"
+        }
+        "pool" | "process-pool" | "worker-pool" => "pool",
+        "disabled" | "off" => "disabled",
+        _ => {
+            return Err(
+                "server policy mode must be one of shared, serialized, session-isolated, project-isolated, pool, or disabled"
+                    .to_string(),
+            );
+        }
+    };
+    Ok(canonical.to_string())
+}
+
+fn server_policy_command_args(body: &JsonValue) -> Result<Vec<String>, String> {
+    let server = action_server_name(body)?;
+    let mode = action_policy_mode(body)?;
+    let mut args = vec![
+        "server".to_string(),
+        "set-policy".to_string(),
+        server,
+        "--mode".to_string(),
+        mode,
+        "--json".to_string(),
+    ];
+    if mode != "disabled" {
+        push_positive_usize_arg(&mut args, body, "maxWorkers", "--max-workers")?;
+        push_positive_usize_arg(
+            &mut args,
+            body,
+            "maxInFlightPerWorker",
+            "--max-in-flight-per-worker",
+        )?;
+    }
+    push_positive_usize_arg(&mut args, body, "queueTimeoutMs", "--queue-timeout-ms")?;
+    push_string_arg(&mut args, body, "reusePolicy", "--reuse-policy")?;
+    push_affinity_arg(&mut args, body)?;
+    Ok(args)
+}
+
+fn push_positive_usize_arg(
+    args: &mut Vec<String>,
+    body: &JsonValue,
+    key: &str,
+    arg_name: &str,
+) -> Result<(), String> {
+    if let Some(value) = action_positive_usize(body, key)? {
+        args.push(arg_name.to_string());
+        args.push(value.to_string());
+    }
     Ok(())
 }
 
-fn parse_action_payload(request: &HttpRequest, action: &str) -> Result<JsonValue, String> {
-    let body_text = std::str::from_utf8(&request.body)
-        .map_err(|error| format!("invalid UTF-8 body for {}: {}", action, error))?;
-    let payload = parse_str(body_text.trim())
-        .map_err(|error| format!("invalid JSON body for {}: {}", action, error))?;
-    match &payload {
-        JsonValue::Object(_) => Ok(payload),
-        _ => Err(format!("{} body must be a JSON object", action)),
-    }
-}
-
-fn required_string_field(payload: &JsonValue, key: &str, action: &str) -> Result<String, String> {
-    let value = json_helpers::value_at_path(payload, &[key]).and_then(JsonValue::as_str);
-    let trimmed = value.unwrap_or("").trim();
-    if trimmed.is_empty() {
-        return Err(format!("{} body requires a non-empty \"{}\"", action, key));
-    }
-    Ok(trimmed.to_string())
-}
-
-fn push_option_arg_from_payload(
+fn push_string_arg(
     args: &mut Vec<String>,
-    payload: &JsonValue,
+    body: &JsonValue,
     key: &str,
     arg_name: &str,
-    action: &str,
 ) -> Result<(), String> {
-    match payload.get(key) {
-        Some(JsonValue::String(value)) => {
-            let value = value.trim();
-            if !value.is_empty() {
-                args.push(arg_name.to_string());
-                args.push(value.to_string());
-            }
-        }
-        Some(_) => {
-            return Err(format!("{} body field {} must be a string", action, key));
-        }
-        None => {}
-    }
-    Ok(())
-}
-
-fn push_u64_arg_from_payload(
-    args: &mut Vec<String>,
-    payload: &JsonValue,
-    key: &str,
-    arg_name: &str,
-    action: &str,
-) -> Result<(), String> {
-    let Some(value) = payload.get(key) else {
+    let Some(value) = body.get(key) else {
         return Ok(());
     };
-    let parsed = value
-        .as_i64()
-        .ok_or_else(|| format!("{} body field {} requires a positive integer", action, key))?;
-    if parsed <= 0 {
-        return Err(format!(
-            "{} body field {} requires a positive integer",
-            action, key
-        ));
+    match value
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(value) => {
+            args.push(arg_name.to_string());
+            args.push(value.to_string());
+            Ok(())
+        }
+        None => Err(format!("'{}' must be a non-empty string", key)),
     }
-    args.push(arg_name.to_string());
-    args.push(parsed.to_string());
+}
+
+fn push_affinity_arg(args: &mut Vec<String>, body: &JsonValue) -> Result<(), String> {
+    let Some(value) = body.get("affinity") else {
+        return Ok(());
+    };
+    let affinity = match value {
+        JsonValue::String(raw) => raw
+            .split(',')
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(str::to_string)
+            .collect::<Vec<_>>(),
+        JsonValue::Array(items) => {
+            let mut values = Vec::new();
+            for item in items {
+                let Some(raw) = item
+                    .as_str()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+                else {
+                    return Err("'affinity' array items must be non-empty strings".to_string());
+                };
+                values.push(raw.to_string());
+            }
+            values
+        }
+        _ => return Err("'affinity' must be a string or array of strings".to_string()),
+    };
+    if !affinity.is_empty() {
+        args.push("--affinity".to_string());
+        args.push(affinity.join(","));
+    }
     Ok(())
+}
+
+fn action_string(body: &JsonValue, key: &str) -> Result<String, String> {
+    optional_action_string(body, key)?
+        .ok_or_else(|| format!("request body requires a non-empty '{}' field", key))
+}
+
+fn optional_action_string(body: &JsonValue, key: &str) -> Result<Option<String>, String> {
+    let Some(value) = body.get(key) else {
+        return Ok(None);
+    };
+    value
+        .as_str()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(|value| Ok(Some(value.to_string())))
+        .unwrap_or_else(|| {
+            Err(format!(
+                "'{}' must be a non-empty string when provided",
+                key
+            ))
+        })
+}
+
+fn action_bool(body: &JsonValue, key: &str) -> Result<bool, String> {
+    let Some(value) = body.get(key) else {
+        return Ok(false);
+    };
+    match value {
+        JsonValue::Bool(value) => Ok(*value),
+        JsonValue::String(value) if value.eq_ignore_ascii_case("true") => Ok(true),
+        JsonValue::String(value) if value.eq_ignore_ascii_case("false") => Ok(false),
+        _ => Err(format!("'{}' must be a boolean when provided", key)),
+    }
+}
+
+fn action_positive_usize(body: &JsonValue, key: &str) -> Result<Option<usize>, String> {
+    let Some(value) = body.get(key) else {
+        return Ok(None);
+    };
+    let parsed = match value {
+        JsonValue::Number(raw) | JsonValue::String(raw) => raw.trim().parse::<usize>().ok(),
+        _ => None,
+    };
+    match parsed {
+        Some(number) if number > 0 => Ok(Some(number)),
+        _ => Err(format!("'{}' must be a positive integer", key)),
+    }
 }
 
 fn is_authorized_http_request(request: &HttpRequest, config: &DashboardConfig) -> bool {
@@ -1379,10 +1617,20 @@ fn is_authorized_http_request(request: &HttpRequest, config: &DashboardConfig) -
     if authorization_headers.next().is_some() {
         return false;
     }
-    let Some(token) = value.trim().strip_prefix("Bearer ") else {
+    let Some(token) = authorization_bearer_token(value) else {
         return false;
     };
-    !token.trim().is_empty() && constant_time_eq(token.trim().as_bytes(), expected.as_bytes())
+    constant_time_eq(token.as_bytes(), expected.as_bytes())
+}
+
+fn authorization_bearer_token(value: &str) -> Option<&str> {
+    let mut parts = value.split_whitespace();
+    let scheme = parts.next()?;
+    let token = parts.next()?;
+    if parts.next().is_some() || token.is_empty() || !scheme.eq_ignore_ascii_case("Bearer") {
+        return None;
+    }
+    Some(token)
 }
 
 fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
@@ -1410,6 +1658,14 @@ fn configured_http_paths(config: &DashboardConfig) -> (String, String) {
 
 fn matches_configured_path(path: &str, configured: &str, fallback: &str) -> bool {
     path == configured || path == fallback
+}
+
+fn bounded_query_usize(query: &str, key: &str, default: usize, max: usize) -> usize {
+    query_parameter(query, key)
+        .and_then(|value| value.parse::<usize>().ok())
+        .filter(|value| *value > 0)
+        .map(|value| value.min(max))
+        .unwrap_or(default)
 }
 
 fn reject_forbidden_origin(stream: &mut TcpStream, request: &HttpRequest) -> Result<bool, String> {

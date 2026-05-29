@@ -315,9 +315,9 @@ fn looks_like_mcpace_self_entry(
         .trim()
         .to_ascii_lowercase();
     if !url.is_empty()
-        && (url == configured_url
-            || url.starts_with("http://127.0.0.1:39022/mcp")
-            || url.starts_with("http://localhost:39022/mcp"))
+        && (matches_endpoint_url(&url, &configured_url)
+            || matches_endpoint_url(&url, "http://127.0.0.1:39022/mcp")
+            || matches_endpoint_url(&url, "http://localhost:39022/mcp"))
     {
         return true;
     }
@@ -340,6 +340,18 @@ fn looks_like_mcpace_self_entry(
         .any(|arg| arg == "mcp-server" || arg == "stdio-shim")
 }
 
+fn matches_endpoint_url(value: &str, endpoint: &str) -> bool {
+    let value = value.trim().trim_end_matches('/');
+    let endpoint = endpoint.trim().trim_end_matches('/');
+    if value == endpoint {
+        return true;
+    }
+    let Some(suffix) = value.strip_prefix(endpoint) else {
+        return false;
+    };
+    matches!(suffix.as_bytes().first(), Some(b'/' | b'?' | b'#'))
+}
+
 fn read_or_new_settings(path: &Path) -> Result<JsonValue, String> {
     if path.is_file() {
         return json_helpers::read_json_file(path);
@@ -351,7 +363,7 @@ fn read_or_new_settings(path: &Path) -> Result<JsonValue, String> {
 }
 
 fn has_normalized_server(value: &JsonValue, normalized_name: &str) -> Result<bool, String> {
-    let Some(servers) = json_helpers::object_at_path(value, &["mcpServers"]) else {
+    let Some(servers) = json_helpers::mcp_servers_object(value) else {
         return match value {
             JsonValue::Object(_) => Ok(false),
             _ => Err("MCP settings target must contain a JSON object".to_string()),
@@ -374,15 +386,7 @@ fn insert_server_value(
             target_path.display()
         ));
     };
-    if !root_object.contains_key("mcpServers") {
-        root_object.insert("mcpServers".to_string(), JsonValue::Object(BTreeMap::new()));
-    }
-    let Some(JsonValue::Object(servers)) = root_object.get_mut("mcpServers") else {
-        return Err(format!(
-            "MCP settings target '{}' has non-object mcpServers",
-            target_path.display()
-        ));
-    };
+    let servers = ensure_import_servers_object_mut(root_object, target_path)?;
     let normalized_name = normalize_server_name(name);
     let key_to_replace = servers
         .keys()
@@ -393,6 +397,33 @@ fn insert_server_value(
     }
     servers.insert(name.to_string(), server_value);
     Ok(())
+}
+
+fn ensure_import_servers_object_mut<'a>(
+    root_object: &'a mut BTreeMap<String, JsonValue>,
+    target_path: &Path,
+) -> Result<&'a mut BTreeMap<String, JsonValue>, String> {
+    let key = if root_object.contains_key("mcpServers") {
+        "mcpServers"
+    } else if root_object.contains_key("servers") {
+        "servers"
+    } else {
+        root_object.insert("mcpServers".to_string(), JsonValue::Object(BTreeMap::new()));
+        "mcpServers"
+    };
+    match root_object.get_mut(key) {
+        Some(JsonValue::Object(servers)) => Ok(servers),
+        Some(_) => Err(format!(
+            "MCP settings target '{}' has non-object {}",
+            target_path.display(),
+            key
+        )),
+        None => Err(format!(
+            "MCP settings target '{}' has no {} object",
+            target_path.display(),
+            key
+        )),
+    }
 }
 
 impl McpServerImportResult {

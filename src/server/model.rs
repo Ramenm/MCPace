@@ -41,7 +41,11 @@ pub struct ServerRecord {
     pub health_url: String,
     pub source_enabled: bool,
     pub source_type: String,
+    pub source_path: String,
     pub source_command: String,
+    pub source_args: Vec<String>,
+    pub source_env_names: Vec<String>,
+    pub source_header_names: Vec<String>,
     pub source_url: String,
     pub tool_policies: Vec<JsonValue>,
     pub installer_target: String,
@@ -58,6 +62,9 @@ pub(super) struct SourceServerRecord {
     pub(super) command: String,
     pub(super) url: String,
     pub(super) args: Vec<String>,
+    pub(super) env_names: Vec<String>,
+    pub(super) header_names: Vec<String>,
+    pub(super) source_path: String,
     pub(super) profile_hints: Vec<String>,
 }
 
@@ -74,6 +81,30 @@ impl ServerRecord {
                 JsonValue::bool(self.platform_supported),
             ),
             ("sourceEnabled", JsonValue::bool(self.source_enabled)),
+            ("sourceType", JsonValue::string(self.source_type.clone())),
+            ("sourcePath", JsonValue::string(self.source_path.clone())),
+            (
+                "sourceCommand",
+                JsonValue::string(self.source_command.clone()),
+            ),
+            (
+                "sourceArgs",
+                JsonValue::array(self.source_args.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "sourceEnvNames",
+                JsonValue::array(self.source_env_names.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "sourceHeaderNames",
+                JsonValue::array(
+                    self.source_header_names
+                        .iter()
+                        .cloned()
+                        .map(JsonValue::string),
+                ),
+            ),
+            ("sourceUrl", JsonValue::string(self.source_url.clone())),
             ("effectiveEnabled", JsonValue::bool(self.effective_enabled)),
             (
                 "transportPreference",
@@ -280,9 +311,27 @@ impl ServerRecord {
             ("healthUrl", JsonValue::string(self.health_url.clone())),
             ("sourceEnabled", JsonValue::bool(self.source_enabled)),
             ("sourceType", JsonValue::string(self.source_type.clone())),
+            ("sourcePath", JsonValue::string(self.source_path.clone())),
             (
                 "sourceCommand",
                 JsonValue::string(self.source_command.clone()),
+            ),
+            (
+                "sourceArgs",
+                JsonValue::array(self.source_args.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "sourceEnvNames",
+                JsonValue::array(self.source_env_names.iter().cloned().map(JsonValue::string)),
+            ),
+            (
+                "sourceHeaderNames",
+                JsonValue::array(
+                    self.source_header_names
+                        .iter()
+                        .cloned()
+                        .map(JsonValue::string),
+                ),
             ),
             ("sourceUrl", JsonValue::string(self.source_url.clone())),
             ("toolPolicies", JsonValue::array(self.tool_policies.clone())),

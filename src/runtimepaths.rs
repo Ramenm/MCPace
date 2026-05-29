@@ -148,8 +148,7 @@ pub fn normalize_http_path(value: &str, fallback: &str) -> String {
         || !trimmed.starts_with('/')
         || trimmed.contains('?')
         || trimmed.contains('#')
-        || trimmed.contains("\r")
-        || trimmed.contains("\n")
+        || trimmed.chars().any(|ch| ch.is_control() || ch.is_whitespace())
     {
         fallback.to_string()
     } else {
@@ -363,14 +362,68 @@ fn u16_at(value: &JsonValue, path: &[&str]) -> Option<u16> {
 fn normalize_public_url(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty()
-        || trimmed.contains("\r")
-        || trimmed.contains("\n")
-        || !(trimmed.starts_with("http://") || trimmed.starts_with("https://"))
+        || trimmed.chars().any(|ch| ch.is_control() || ch.is_whitespace())
+        || trimmed.contains('#')
     {
-        None
-    } else {
-        Some(trimmed.trim_end_matches('/').to_string())
+        return None;
     }
+    let rest = trimmed
+        .strip_prefix("http://")
+        .or_else(|| trimmed.strip_prefix("https://"))?;
+    let authority = rest
+        .split(|ch| ch == '/' || ch == '?')
+        .next()
+        .unwrap_or("");
+    if !valid_public_url_authority(authority) {
+        return None;
+    }
+    Some(trimmed.trim_end_matches('/').to_string())
+}
+
+fn valid_public_url_authority(authority: &str) -> bool {
+    if authority.is_empty()
+        || authority.contains('/')
+        || authority.contains('@')
+        || authority.bytes().any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
+    {
+        return false;
+    }
+    if authority.starts_with('[') {
+        let Some(end) = authority.find(']') else {
+            return false;
+        };
+        let host = &authority[1..end];
+        return valid_public_url_host(host) && valid_public_port_suffix(&authority[end + 1..]);
+    }
+    if authority.matches(':').count() > 1 {
+        return false;
+    }
+    match authority.rsplit_once(':') {
+        Some((host, port)) if !host.is_empty() => valid_public_url_host(host) && valid_public_port(port),
+        Some(_) => false,
+        None => valid_public_url_host(authority),
+    }
+}
+
+fn valid_public_url_host(host: &str) -> bool {
+    !host.trim().is_empty()
+        && !host
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
+}
+
+fn valid_public_port_suffix(value: &str) -> bool {
+    if value.is_empty() {
+        return true;
+    }
+    value.strip_prefix(':').map(valid_public_port).unwrap_or(false)
+}
+
+fn valid_public_port(port: &str) -> bool {
+    port.parse::<u16>()
+        .ok()
+        .filter(|value| *value > 0)
+        .is_some()
 }
 
 fn normalize_url_host(host: &str) -> String {
@@ -385,4 +438,51 @@ fn normalize_url_host(host: &str) -> String {
         return format!("[{}]", trimmed);
     }
     trimmed.to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize_http_path, normalize_public_url, DEFAULT_LOCAL_MCP_PATH};
+
+    #[test]
+    fn normalize_http_path_rejects_request_line_injection_primitives() {
+        for candidate in [
+            "",
+            "relative",
+            "/mcp?debug=1",
+            "/mcp#frag",
+            "/mcp with-space",
+            "/mcp\twith-tab",
+            "/mcp\r\nInjected: bad",
+        ] {
+            assert_eq!(normalize_http_path(candidate, DEFAULT_LOCAL_MCP_PATH), DEFAULT_LOCAL_MCP_PATH);
+        }
+        assert_eq!(normalize_http_path("/custom/path", DEFAULT_LOCAL_MCP_PATH), "/custom/path");
+    }
+
+    #[test]
+    fn normalize_public_url_rejects_ambiguous_or_unsafe_authorities() {
+        assert_eq!(
+            normalize_public_url("https://relay.example/mcp"),
+            Some("https://relay.example/mcp".to_string())
+        );
+        assert_eq!(
+            normalize_public_url("https://[::1]:39022/mcp"),
+            Some("https://[::1]:39022/mcp".to_string())
+        );
+        for candidate in [
+            "https://relay.example/mcp with-space",
+            "https://relay.example/mcp\twith-tab",
+            "https://relay.example/mcp\r\nInjected: bad",
+            "https://user:pass@relay.example/mcp",
+            "https://relay.example:0/mcp",
+            "https://relay.example:99999/mcp",
+            "https://2001:db8::1/mcp",
+            "https://[::1]bad/mcp",
+            "https://relay.example/mcp#fragment",
+            "ftp://relay.example/mcp",
+        ] {
+            assert_eq!(normalize_public_url(candidate), None);
+        }
+    }
 }

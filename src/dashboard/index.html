@@ -289,9 +289,22 @@
         overflow-wrap: anywhere;
       }
 
-      .backend-card {
+      .backend-card,
+      .user-card {
         display: grid;
         gap: 12px;
+      }
+
+      .user-card { grid-column: 1 / -1; }
+
+      .user-readiness-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 8px;
+      }
+
+      .user-readiness-grid .backend-readout strong {
+        font-size: 12px;
       }
 
       .backend-head {
@@ -527,6 +540,138 @@
         align-items: center;
       }
       .server-auto-actions { justify-content: flex-end; }
+
+      .operator-plan-panel {
+        display: grid;
+        gap: 12px;
+        margin-top: 12px;
+        border: 1px solid rgba(246, 196, 83, 0.18);
+        border-radius: 15px;
+        background: linear-gradient(135deg, rgba(42, 35, 13, 0.48), rgba(8, 18, 29, 0.72));
+        padding: 13px;
+      }
+      .operator-plan-copy {
+        display: grid;
+        gap: 5px;
+        min-width: 0;
+      }
+      .operator-plan-copy strong {
+        font-size: 15px;
+        letter-spacing: -0.02em;
+      }
+      .operator-plan-copy p {
+        margin: 0;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .operator-plan-stats,
+      .operator-plan-lanes,
+      .operator-command-list {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 7px;
+        align-items: center;
+      }
+      .operator-plan-lanes {
+        align-items: stretch;
+      }
+      .operator-plan-card {
+        min-width: 190px;
+        flex: 1 1 190px;
+        border: 1px solid rgba(148, 163, 184, 0.14);
+        border-radius: 13px;
+        background: rgba(4, 11, 18, 0.5);
+        padding: 10px;
+      }
+      .operator-plan-card strong {
+        display: block;
+        color: var(--text);
+        font-size: 12px;
+      }
+      .operator-plan-card p {
+        margin: 5px 0 0;
+        color: var(--muted);
+        font-size: 11px;
+        line-height: 1.38;
+      }
+      .operator-command {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        max-width: 100%;
+        border: 1px solid rgba(139, 211, 255, 0.16);
+        border-radius: 999px;
+        background: rgba(7, 13, 22, 0.68);
+        padding: 5px 8px;
+        color: var(--muted-strong);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 10px;
+        overflow-wrap: anywhere;
+      }
+      .operator-command strong {
+        color: var(--text);
+        font-family: inherit;
+        font-size: 10px;
+      }
+
+      .server-install-panel {
+        display: grid;
+        gap: 10px;
+        margin-top: 12px;
+        border: 1px solid rgba(139, 211, 255, 0.16);
+        border-radius: 15px;
+        background: linear-gradient(135deg, rgba(7, 18, 32, 0.78), rgba(8, 14, 23, 0.66));
+        padding: 13px;
+      }
+      .server-install-copy {
+        display: grid;
+        gap: 4px;
+      }
+      .server-install-copy strong {
+        font-size: 15px;
+        letter-spacing: -0.02em;
+      }
+      .server-install-copy p {
+        margin: 0;
+        color: var(--muted-strong);
+        font-size: 12px;
+        line-height: 1.5;
+      }
+      .server-install-form {
+        display: grid;
+        grid-template-columns: minmax(0, 1.5fr) minmax(160px, 0.5fr) auto;
+        gap: 8px;
+        align-items: end;
+      }
+      .server-install-options {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 10px;
+      }
+      .checkbox-field {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        color: var(--muted-strong);
+        font-size: 12px;
+      }
+      .checkbox-field input[type="checkbox"] {
+        width: auto;
+        min-width: 0;
+        padding: 0;
+      }
+      .launch-line {
+        display: block;
+        max-width: 100%;
+        margin-top: 6px;
+        color: var(--muted-strong);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+        font-size: 11px;
+        line-height: 1.35;
+        overflow-wrap: anywhere;
+      }
 
       .server-row {
         display: grid;
@@ -957,6 +1102,7 @@
         .server-main { grid-template-columns: 1fr; }
         .server-quick-controls { justify-content: flex-start; }
         .server-auto-panel { grid-template-columns: 1fr; }
+        .server-install-form { grid-template-columns: 1fr; }
         .server-auto-actions { justify-content: flex-start; }
         .server-explain-grid,
         .server-settings-grid { grid-template-columns: 1fr 1fr; }
@@ -967,6 +1113,7 @@
         .signal-strip,
         .ops-steps,
         .backend-grid,
+        .user-readiness-grid,
         .fleet-board,
         .toolbar { grid-template-columns: 1fr; }
         .actions button,
@@ -1055,6 +1202,17 @@
           </div>
           <div class="backend-grid" id="backend-grid"></div>
         </article>
+        <article class="ops-card user-card" aria-labelledby="user-readiness-title">
+          <div class="backend-head">
+            <div>
+              <div class="label">User view</div>
+              <div class="backend-state" id="user-readiness-title">Checking what a user should see…</div>
+            </div>
+            <span class="chip" id="user-confidence-chip"><span class="dot warn"></span>—</span>
+          </div>
+          <p class="ops-body" id="user-readiness-body">MCPace will summarize whether the dashboard is usable without exposing secrets or raw internals.</p>
+          <div class="user-readiness-grid" id="user-readiness-grid"></div>
+        </article>
       </section>
 
       <section class="layout">
@@ -1093,6 +1251,39 @@
               </div>
               <div class="server-auto-actions">
                 <button class="primary" id="auto-tune-visible" type="button">Apply safe plan</button>
+              </div>
+            </div>
+            <div class="operator-plan-panel" id="operator-plan-panel" aria-labelledby="operator-plan-title">
+              <div class="operator-plan-copy">
+                <div class="label">Operator plan</div>
+                <strong id="operator-plan-title">Waiting for backend decision layer.</strong>
+                <p id="operator-plan-body">MCPace will turn raw server metadata into lanes, blockers, safeguards, and next commands.</p>
+                <div class="operator-plan-stats" id="operator-plan-stats"></div>
+              </div>
+              <div class="operator-plan-lanes" id="operator-plan-lanes"></div>
+            </div>
+            <div class="server-install-panel" aria-labelledby="server-install-title">
+              <div class="server-install-copy">
+                <div class="label">Add server</div>
+                <strong id="server-install-title">Paste the launch command once.</strong>
+                <p>Saved as an MCP server source first; run Test on the row afterwards before trusting tools in real chats.</p>
+              </div>
+              <form class="server-install-form" id="server-install-form">
+                <div class="field">
+                  <label for="server-install-command">Launch command or URL</label>
+                  <input id="server-install-command" name="commandLine" type="text" spellcheck="false" autocomplete="off" placeholder="npx -y @modelcontextprotocol/server-filesystem .">
+                </div>
+                <div class="field">
+                  <label for="server-install-name">Name optional</label>
+                  <input id="server-install-name" name="server" type="text" spellcheck="false" autocomplete="off" placeholder="filesystem">
+                </div>
+                <button class="primary" id="server-install-button" type="submit">Save server</button>
+              </form>
+              <div class="server-install-options">
+                <label class="checkbox-field"><input id="server-install-disabled" type="checkbox" checked> Add disabled</label>
+                <label class="checkbox-field"><input id="server-install-force" type="checkbox"> Replace existing</label>
+                <label class="checkbox-field"><input id="server-install-dry-run" type="checkbox"> Preview only</label>
+                <span class="note" id="server-install-note">No command is executed by the dashboard while saving; source is written, then you test explicitly.</span>
               </div>
             </div>
             <div class="chips" id="server-chips"></div>
@@ -1213,6 +1404,8 @@
       const REFRESH_MS = { "15": 15000, "30": 30000, "60": 60000, paused: 0 };
       const MAX_SERVER_ROWS = 64;
       const HIDDEN_REFRESH_MS = 60000;
+      const REQUEST_TIMEOUT_MS = 10000;
+      const ACTION_TIMEOUT_MS = 30000;
       const ROUTING_MODES = [
         ["serialized", "Safe queue"],
         ["shared", "Shared"],
@@ -1235,6 +1428,7 @@
         backend: {
           overview: null,
           logs: null,
+          resources: null,
           action: null,
           checkedAt: 0
         },
@@ -1262,6 +1456,10 @@
         backendCheckButton: $("backend-check-button"),
         backendState: $("backend-link-title"),
         backendGrid: $("backend-grid"),
+        userReadinessTitle: $("user-readiness-title"),
+        userReadinessBody: $("user-readiness-body"),
+        userReadinessGrid: $("user-readiness-grid"),
+        userConfidenceChip: $("user-confidence-chip"),
         attentionCount: $("attention-count"),
         attentionNote: $("attention-note"),
         serverCount: $("server-count"),
@@ -1277,6 +1475,18 @@
         serverAutoTitle: $("server-auto-title"),
         serverAutoBody: $("server-auto-body"),
         serverAutoStats: $("server-auto-stats"),
+        operatorPlanTitle: $("operator-plan-title"),
+        operatorPlanBody: $("operator-plan-body"),
+        operatorPlanStats: $("operator-plan-stats"),
+        operatorPlanLanes: $("operator-plan-lanes"),
+        serverInstallForm: $("server-install-form"),
+        serverInstallCommand: $("server-install-command"),
+        serverInstallName: $("server-install-name"),
+        serverInstallButton: $("server-install-button"),
+        serverInstallDisabled: $("server-install-disabled"),
+        serverInstallForce: $("server-install-force"),
+        serverInstallDryRun: $("server-install-dry-run"),
+        serverInstallNote: $("server-install-note"),
         serverFleetBoard: $("server-fleet-board"),
         serverGuide: $("server-guide"),
         serverFilterChip: $("server-filter-chip"),
@@ -1339,6 +1549,39 @@
 
       function text(value, fallback = "—") {
         return value === null || value === undefined || value === "" ? fallback : String(value);
+      }
+
+      function listValues(value) {
+        return Array.isArray(value) ? value.map(item => String(item || "")).filter(Boolean) : [];
+      }
+
+      function shellWord(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return "''";
+        if (/^[A-Za-z0-9_./:@=,+-]+$/.test(raw)) return raw;
+        return `'${raw.replaceAll("'", "'\\''")}'`;
+      }
+
+      function launchCommand(server) {
+        const command = String(server?.sourceCommand || "").trim();
+        if (command) return [command, ...listValues(server?.sourceArgs)].map(shellWord).join(" ");
+        const url = String(server?.sourceUrl || "").trim();
+        return url;
+      }
+
+      function shortText(value, limit = 96) {
+        const raw = String(value || "").trim();
+        return raw.length > limit ? `${raw.slice(0, Math.max(0, limit - 1))}…` : raw;
+      }
+
+      function compactList(value, fallback = "none") {
+        const values = listValues(value);
+        return values.length ? values.join(", ") : fallback;
+      }
+
+      function setInstallNote(message, tone = "warn") {
+        if (!els.serverInstallNote) return;
+        els.serverInstallNote.innerHTML = `${dot(tone)}${escapeHtml(message)}`;
       }
 
       function fmtDate(ms) {
@@ -1411,11 +1654,13 @@
       }
 
       function maxWorkers(server, instances) {
+        if (serverMode(server, instances) === "disabled") return 0;
         const fromInstances = instances.reduce((max, instance) => Math.max(max, num(instance.maxWorkers)), 0);
         return num(server.maxWorkers, 0) || num(server.parallelismLimit, 0) || fromInstances || 1;
       }
 
       function maxInFlight(server, instances) {
+        if (serverMode(server, instances) === "disabled") return 0;
         const fromInstances = instances.reduce((max, instance) => Math.max(max, num(instance.maxInFlightPerWorker)), 0);
         return num(server.maxInFlightPerWorker, 0) || fromInstances || 1;
       }
@@ -1666,6 +1911,7 @@
           inFlight: maxInFlight(server, related),
           recommendation,
           needsTuning: policyNeedsTuning(server, related, recommendation),
+          operatorPlan: operatorPlanForServer(server.name),
           facts: serverFacts(server, risk, related)
         };
       }
@@ -2014,6 +2260,184 @@
         }
       }
 
+      function normalizeOperatorPlan(value) {
+        const plan = value && typeof value === "object" ? value : {};
+        return {
+          schema: plan.schema || "mcpace.operatorPlan.v0",
+          summary: plan.summary || {},
+          items: Array.isArray(plan.items) ? plan.items : [],
+          flow: Array.isArray(plan.flow) ? plan.flow : []
+        };
+      }
+
+      function operatorPlanForServer(name) {
+        const plan = normalizeOperatorPlan(state.overview?.operatorPlan);
+        const wanted = String(name || "");
+        return plan.items.find(item => String(item?.name || "") === wanted) || null;
+      }
+
+      function operatorPlanTone(plan) {
+        if (!plan) return "warn";
+        if (plan.tone) return plan.tone;
+        if (plan.lane === "ready") return "good";
+        if (plan.lane === "blocked") return "bad";
+        return "warn";
+      }
+
+      function operatorCommandChips(commands, limit = 4) {
+        const items = Array.isArray(commands) ? commands.slice(0, limit) : [];
+        if (!items.length) return `<span class="note">No runbook commands yet.</span>`;
+        return items.map(command => `<span class="operator-command"><strong>${escapeHtml(command.label || "Run")}</strong>${escapeHtml(shortText(command.command || "", 118))}</span>`).join("");
+      }
+
+      function renderOperatorPlan(rawPlan, servers = [], instances = []) {
+        const plan = normalizeOperatorPlan(rawPlan);
+        const summary = plan.summary || {};
+        const items = [...plan.items].sort((left, right) => num(left.priority, 9) - num(right.priority, 9) || String(left.name || "").localeCompare(String(right.name || "")));
+        const blocked = num(summary.blocked);
+        const unchecked = num(summary.unchecked);
+        const guarded = num(summary.guarded);
+        const ready = num(summary.ready);
+        const changes = num(summary.policyChanges);
+        const total = num(summary.total, servers.length);
+        const top = items[0];
+        const title = blocked
+          ? `${blocked} blocked server${blocked === 1 ? "" : "s"}`
+          : unchecked
+            ? `${unchecked} server${unchecked === 1 ? "" : "s"} need live evidence`
+            : changes
+              ? `${changes} policy correction${changes === 1 ? "" : "s"} ready`
+              : ready
+                ? `${ready} server${ready === 1 ? "" : "s"} ready for brokered use`
+                : "No active server plan yet";
+        const body = top
+          ? `${top.nextAction || "Review next action"}. ${top.rationale || "Backend operator plan is active."}`
+          : "Add or import an MCP server, keep it disabled first, then run Test to collect initialize + tools/list evidence.";
+        if (els.operatorPlanTitle) els.operatorPlanTitle.textContent = title;
+        if (els.operatorPlanBody) els.operatorPlanBody.textContent = body;
+        if (els.operatorPlanStats) {
+          els.operatorPlanStats.innerHTML = [
+            chip(`${total} total`, total ? "good" : "warn"),
+            chip(`${blocked} blocked`, blocked ? "bad" : "good"),
+            chip(`${unchecked} unchecked`, unchecked ? "warn" : "good"),
+            chip(`${guarded} guarded`, guarded ? "warn" : "good"),
+            chip(`${ready} ready`, ready ? "good" : "warn"),
+            chip(`${changes} policy fixes`, changes ? "warn" : "good")
+          ].join("");
+        }
+        if (els.operatorPlanLanes) {
+          const laneOrder = ["blocked", "unchecked", "guarded", "ready", "off"];
+          const cards = laneOrder.map(lane => {
+            const laneItems = items.filter(item => item.lane === lane);
+            if (!laneItems.length) return "";
+            const lead = laneItems[0];
+            const tone = operatorPlanTone(lead);
+            return `<article class="operator-plan-card ${itemClass(tone)}">
+              <div class="label">${escapeHtml(lane)} · ${laneItems.length}</div>
+              <strong>${escapeHtml(lead.name || "server")}: ${escapeHtml(lead.nextAction || "review")}</strong>
+              <p>${escapeHtml(lead.rationale || lead.evidence || "No rationale available.")}</p>
+              <div class="operator-command-list" style="margin-top: 8px;">${operatorCommandChips(lead.commands, 2)}</div>
+            </article>`;
+          }).filter(Boolean);
+          els.operatorPlanLanes.innerHTML = cards.length ? cards.join("") : `<div class="empty">No server operator lanes yet.</div>`;
+        }
+      }
+
+      function runtimeControlForServer(name) {
+        const items = state.overview?.runtimeControlPlane?.items;
+        if (!Array.isArray(items)) return null;
+        return items.find(item => item.name === name) || null;
+      }
+
+      function renderRuntimeControl(item) {
+        if (!item) return "";
+        const risk = item.toolRisk || {};
+        const parallel = item.parallelism || {};
+        const isolation = item.isolation || {};
+        const budget = item.resourceBudget || {};
+        const labels = [
+          `evidence ${text(item.evidenceState, "unknown")}`,
+          `risk ${text(risk.risk, "unknown")}`,
+          `isolation ${text(isolation.mode, "unknown")}`,
+          `budget ${text(budget.class, "unknown")}`
+        ];
+        const signals = Array.isArray(risk.signals) && risk.signals.length ? risk.signals.slice(0, 4).join(", ") : "no tool-risk signals yet";
+        return `
+          <section class="server-explain-box" aria-label="Runtime control plane">
+            <div class="label">Runtime control plane</div>
+            <p>${escapeHtml(item.why || "MCPace combines live evidence, tool risk, route policy, isolation, and resource budget before widening concurrency.")}</p>
+            <div class="tags">${tags(labels)}</div>
+            <div class="detail-grid" style="margin-top: 10px;">
+              ${detail("Tool risk", `${text(risk.risk, "unknown")} · approval ${risk.approvalRequired ? "required" : "not required"}`)}
+              ${detail("Risk signals", signals)}
+              ${detail("Parallelism", `${text(parallel.mode, "serialized")} · ${text(parallel.admission, "lease-gated")}`)}
+              ${detail("Locks", text(parallel.lockScope, "none"))}
+              ${detail("Isolation", `${text(isolation.mode, "native-restricted")} · container ${isolation.containerCompatible ? "possible" : "not default"}`)}
+              ${detail("Resource budget", `${text(budget.class, "guarded")} · ${text(budget.memoryHintMb, "?")} MB hint · ${text(budget.monitor, "monitor when live")}`)}
+            </div>
+          </section>
+        `;
+      }
+
+      function renderServerRunbook(plan) {
+        if (!plan) return "";
+        const blockers = Array.isArray(plan.blockers) ? plan.blockers : [];
+        const safeguards = Array.isArray(plan.safeguards) ? plan.safeguards : [];
+        const commands = Array.isArray(plan.commands) ? plan.commands : [];
+        const blockerList = blockers.length ? `<section><div class="label">Blockers</div><ul class="server-checklist">${blockers.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>` : "";
+        const safeguardList = safeguards.length ? `<section><div class="label">Safeguards</div><ul class="server-checklist">${safeguards.map(item => `<li>${escapeHtml(item)}</li>`).join("")}</ul></section>` : "";
+        return `<section class="server-explain-box">
+          <div class="label">Backend operator runbook</div>
+          <p><strong>${escapeHtml(plan.nextAction || "Review")}</strong> · ${escapeHtml(plan.rationale || "No backend rationale available.")}</p>
+          <div class="operator-command-list">${operatorCommandChips(commands, 6)}</div>
+          <div class="server-explain-grid" style="margin-top: 10px;">${blockerList}${safeguardList}</div>
+        </section>`;
+      }
+
+      function commandLineLooksComposed(value) {
+        const chars = [...String(value || "")];
+        let singleQuoted = false;
+        let doubleQuoted = false;
+        let escaped = false;
+        for (let index = 0; index < chars.length; index += 1) {
+          const ch = chars[index];
+          if (escaped) { escaped = false; continue; }
+          if (ch === "\\" && !singleQuoted) { escaped = true; continue; }
+          if (ch === "'" && !doubleQuoted) { singleQuoted = !singleQuoted; continue; }
+          if (ch === '"' && !singleQuoted) { doubleQuoted = !doubleQuoted; continue; }
+          if (singleQuoted || doubleQuoted) continue;
+          if (["`", ";", "|", "<", ">"].includes(ch)) return true;
+          if (ch === "&" && chars[index + 1] === "&") return true;
+          if (ch === "$" && chars[index + 1] === "(") return true;
+        }
+        return false;
+      }
+
+      function installCommandIntent(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return { tone: "warn", label: "Waiting", body: "Paste one launcher command, package spec, local path, or Streamable HTTP URL." };
+        if (commandLineLooksComposed(raw)) {
+          return { tone: "bad", label: "Rejected", body: "Use one command or URL only. Remove shell chaining, pipes, redirects, backticks, or command substitutions." };
+        }
+        if (/^https?:\/\//i.test(raw)) {
+          return { tone: "good", label: "HTTP source", body: "Will save a Streamable HTTP source. MCPace will not call it until you explicitly Test or enable it." };
+        }
+        const launcher = raw.split(/\s+/)[0] || "";
+        if (["npx", "pnpm", "yarn", "bunx", "uvx", "python", "python3", "node", "deno"].includes(launcher)) {
+          return { tone: "warn", label: "Launcher", body: `Will save ${launcher} as a server launcher. Keep disabled, then run Test to collect tools/list evidence.` };
+        }
+        if (/^(\.|~|\/|[A-Za-z]:[\\/])/.test(raw)) {
+          return { tone: "warn", label: "Local path", body: "Will save a local command/path. Check working directory and environment names before enabling." };
+        }
+        return { tone: "warn", label: "Package or command", body: "Will save this as a server source. Prefer trusted registries and review the resolved launch command before enabling." };
+      }
+
+      function updateServerInstallPreflight() {
+        const intent = installCommandIntent(els.serverInstallCommand?.value || "");
+        setInstallNote(`${intent.label}: ${intent.body}`, intent.tone);
+        if (els.serverInstallButton) els.serverInstallButton.disabled = intent.tone === "bad";
+      }
+
       function serverSensitivity(server, risk) {
         const fields = `${server.effectClass || ""} ${server.stateClass || ""} ${server.credentialBinding || ""} ${server.scopeClass || ""}`.toLowerCase();
         if (/credential|external|remote|stateful|session|write|host/.test(fields)) return "Guarded";
@@ -2025,6 +2449,8 @@
         const recommendation = recommendedPolicy(server, related);
         const tuned = !policyNeedsTuning(server, related, recommendation);
         const evidence = serverToolEvidence(server);
+        const launch = launchCommand(server);
+        const launchFact = launch ? `<span class="fact"><strong>Launch</strong> ${escapeHtml(shortText(launch, 72))}</span>` : "";
         const toolLabel = evidence.checked
           ? evidence.ok
             ? `${evidence.toolCount} listed`
@@ -2035,12 +2461,14 @@
             `<span class="fact"><strong>Status</strong> ${profileSourceMismatch(server) ? "Needs setup" : "Off"}</span>`,
             `<span class="fact"><strong>Tools</strong> ${escapeHtml(toolLabel)}</span>`,
             `<span class="fact"><strong>Source</strong> ${server.sourceEnabled ? "on" : "off"}</span>`,
+            launchFact,
             `<span class="fact"><strong>Policy</strong> ${escapeHtml(serverSensitivity(server, risk))}</span>`
-          ].join("");
+          ].filter(Boolean).join("");
         }
         return [
           `<span class="fact"><strong>Status</strong> On</span>`,
           `<span class="fact"><strong>Tools</strong> ${escapeHtml(toolLabel)}</span>`,
+          launchFact,
           `<span class="fact"><strong>Policy</strong> ${escapeHtml(serverSensitivity(server, risk))}</span>`,
           tuned ? "" : `<span class="fact"><strong>Fix</strong> ${escapeHtml(recommendation.label)}</span>`
         ].filter(Boolean).join("");
@@ -2174,8 +2602,50 @@
         updateRefreshChip();
       }
 
+      function timeoutSignal(ms) {
+        if (typeof AbortSignal !== "undefined" && typeof AbortSignal.timeout === "function") {
+          return AbortSignal.timeout(ms);
+        }
+        if (typeof AbortController === "undefined") return null;
+        const controller = new AbortController();
+        window.setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), ms);
+        return controller.signal;
+      }
+
+      function combineSignals(signals) {
+        const active = signals.filter(Boolean);
+        if (!active.length) return null;
+        if (typeof AbortSignal !== "undefined" && typeof AbortSignal.any === "function") {
+          return AbortSignal.any(active);
+        }
+        if (typeof AbortController === "undefined") return active[0];
+        const controller = new AbortController();
+        const abort = event => {
+          if (!controller.signal.aborted) controller.abort(event?.target?.reason || new DOMException("Request aborted", "AbortError"));
+        };
+        for (const signal of active) {
+          if (signal.aborted) { abort({ target: signal }); break; }
+          signal.addEventListener("abort", abort, { once: true });
+        }
+        return controller.signal;
+      }
+
+      function apiErrorMessage(error) {
+        if (!error) return "Request failed";
+        if (error.name === "TimeoutError") return "Request timed out";
+        if (error.name === "AbortError") return "Request aborted";
+        return error.message || String(error);
+      }
+
       async function fetchJson(url, options = {}) {
-        const response = await fetch(url, { ...options, headers: { accept: "application/json", ...(options.headers || {}) } });
+        const { timeoutMs = REQUEST_TIMEOUT_MS, headers = {}, ...fetchOptions } = options;
+        const signal = combineSignals([fetchOptions.signal, timeoutMs > 0 ? timeoutSignal(timeoutMs) : null]);
+        const response = await fetch(url, {
+          ...fetchOptions,
+          signal: signal || fetchOptions.signal,
+          cache: fetchOptions.cache || "no-store",
+          headers: { accept: "application/json", ...headers }
+        });
         const raw = await response.text();
         let payload = null;
         if (raw) {
@@ -2183,7 +2653,10 @@
         }
         if (!response.ok) {
           const message = payload?.error?.message || payload?.error || `${response.status} ${response.statusText}`;
-          throw new Error(message);
+          const error = new Error(message);
+          error.status = response.status;
+          error.url = url;
+          throw error;
         }
         return payload;
       }
@@ -2209,24 +2682,30 @@
         try {
           const request = controller ? { signal: controller.signal } : {};
           const overviewUrl = options.force ? "/api/overview?refresh=1" : "/api/overview";
-          const [overviewResult, logsResult] = await Promise.allSettled([
+          const [overviewResult, logsResult, resourcesResult] = await Promise.allSettled([
             timedFetchJson(overviewUrl, request),
-            timedFetchJson("/api/logs?tail=40", request)
+            timedFetchJson("/api/logs?tail=40", request),
+            timedFetchJson("/api/resources", request)
           ]);
           if (seq !== state.seq) return;
           const overviewCheck = overviewResult.status === "fulfilled" ? overviewResult.value : { ok: false, error: overviewResult.reason, ms: 0, url: overviewUrl, at: Date.now() };
           const logsCheck = logsResult.status === "fulfilled" ? logsResult.value : { ok: false, error: logsResult.reason, ms: 0, url: "/api/logs?tail=40", at: Date.now() };
+          const resourcesCheck = resourcesResult.status === "fulfilled" ? resourcesResult.value : { ok: false, error: resourcesResult.reason, ms: 0, url: "/api/resources", at: Date.now() };
           state.backend.overview = overviewCheck;
           state.backend.logs = logsCheck;
+          state.backend.resources = resourcesCheck;
           state.backend.checkedAt = Date.now();
           if (!overviewCheck.ok) throw overviewCheck.error;
           state.overview = overviewCheck.value;
           if (logsCheck.ok) state.logs = Array.isArray(logsCheck.value) ? logsCheck.value : [];
-          state.lastError = logsCheck.ok ? null : `Logs: ${logsCheck.error?.message || logsCheck.error}`;
+          state.lastError = logsCheck.ok && resourcesCheck.ok ? null : [
+            logsCheck.ok ? "" : `Logs: ${apiErrorMessage(logsCheck.error)}`,
+            resourcesCheck.ok ? "" : `Resources: ${apiErrorMessage(resourcesCheck.error)}`
+          ].filter(Boolean).join(" · ");
           render();
         } catch (error) {
           if (error?.name !== "AbortError") {
-            state.lastError = error?.message || String(error);
+            state.lastError = apiErrorMessage(error);
             renderError(state.lastError);
           }
         } finally {
@@ -2253,8 +2732,8 @@
         if (els.backendGrid) els.backendGrid.innerHTML = [
           readout("/api/overview", "failed", message, "bad"),
           readout("/api/logs", "unknown", "overview failed first", "warn"),
-          readout("action POST", state.backend.action?.ok ? "ok" : "not checked", state.backend.action ? `${fmtMs(state.backend.action.ms)} · ${fmtDate(state.backend.action.at)}` : "waiting", state.backend.action?.ok ? "good" : "warn"),
-          readout("HTTP runtime", "unknown", "no fresh counters", "warn")
+          readout("/api/resources", state.backend.resources?.ok ? "ok" : "unknown", state.backend.resources ? `${fmtMs(state.backend.resources.ms)} · ${fmtDate(state.backend.resources.at)}` : "waiting", state.backend.resources?.ok ? "good" : "warn"),
+          readout("action ping", state.backend.action?.ok ? "ok" : "not checked", state.backend.action ? `${fmtMs(state.backend.action.ms)} · ${fmtDate(state.backend.action.at)}` : "waiting", state.backend.action?.ok ? "good" : "warn")
         ].join("");
         els.loadState.textContent = "Failed";
         els.loadNote.textContent = "Backend overview request failed.";
@@ -2269,10 +2748,18 @@
         const original = button?.textContent || "";
         try {
           if (button) { button.disabled = true; button.textContent = busyLabel || "Working…"; }
-          await fetchJson(path, { method: "POST" });
+          const result = await timedFetchJson(path, { method: "POST", timeoutMs: ACTION_TIMEOUT_MS });
+          state.backend.action = {
+            ok: result.ok,
+            ms: result.ms,
+            at: result.at,
+            endpoint: path.replace("/api/actions/", ""),
+            error: result.ok ? "" : apiErrorMessage(result.error)
+          };
+          if (!result.ok) throw result.error;
           await refreshDashboard({ force: true, reason: "action" });
         } catch (error) {
-          state.lastError = error?.message || String(error);
+          state.lastError = apiErrorMessage(error);
           renderError(state.lastError);
         } finally {
           if (button) { button.disabled = false; button.textContent = original; }
@@ -2351,8 +2838,10 @@
           failed,
           saturation
         });
+        renderUserReadiness(overview.userReadiness, servers, clients);
         renderAttention(attentionItems, systemTone);
         renderAutoSetup(servers, instances);
+        renderOperatorPlan(overview.operatorPlan, servers, instances);
         renderFleetBoard(servers, instances);
         renderServers(servers, instances, groups);
         renderContext(overview, readiness, project, hub, cache, runtime);
@@ -2425,11 +2914,15 @@
         } = context;
         const overview = state.backend.overview;
         const logs = state.backend.logs;
+        const resources = state.backend.resources;
         const action = state.backend.action;
         const backendOk = Boolean(overview?.ok);
         const logsOk = !logs || logs.ok;
+        const resourcesOk = !resources || resources.ok;
         const actionLabel = action ? (action.ok ? `${action.endpoint} ok` : `${action.endpoint} failed`) : "action not checked";
         const actionTone = !action ? "warn" : action.ok ? "good" : "bad";
+        const logsMeta = logs?.ok ? `updated ${fmtDate(logs.at)}` : logs ? apiErrorMessage(logs.error) : "waiting";
+        const resourcesMeta = resources?.ok ? `${active}/${max || "?"} active HTTP` : resources ? apiErrorMessage(resources.error) : "waiting";
 
         if (els.opsDot) els.opsDot.className = `dot ${systemTone}`;
         if (els.opsTitle) {
@@ -2456,16 +2949,57 @@
           ].join("");
         }
         if (els.backendState) {
-          els.backendState.textContent = backendOk && logsOk ? "Live backend connected" : backendOk ? "Partial backend link" : "Backend not connected";
+          els.backendState.textContent = backendOk && logsOk && resourcesOk ? "Live backend connected" : backendOk ? "Partial backend link" : "Backend not connected";
         }
         if (els.backendGrid) {
           els.backendGrid.innerHTML = [
             readout("/api/overview", backendOk ? fmtMs(overview.ms) : "failed", backendOk ? `updated ${fmtDate(overview.at)}` : text(overview?.error?.message || overview?.error, "waiting"), backendOk ? msTone(overview.ms) : "bad"),
-            readout("/api/logs", logs?.ok ? fmtMs(logs.ms) : logs ? "failed" : "pending", logs?.ok ? `updated ${fmtDate(logs.at)}` : text(logs?.error?.message || logs?.error, "waiting"), logs?.ok ? msTone(logs.ms) : "warn"),
-            readout("action POST", actionLabel, action ? `${fmtMs(action.ms)} · ${fmtDate(action.at)}` : "use Check link or any action", actionTone),
-            readout("HTTP runtime", max ? `${active}/${max}` : `${active}/?`, `${saturation}% saturation · ${completed} handled · ${failed} failed`, failed ? "warn" : "good")
+            readout("/api/logs", logs?.ok ? fmtMs(logs.ms) : logs ? "failed" : "pending", logsMeta, logs?.ok ? msTone(logs.ms) : "warn"),
+            readout("/api/resources", resources?.ok ? fmtMs(resources.ms) : resources ? "failed" : "pending", resourcesMeta, resources?.ok ? msTone(resources.ms) : "warn"),
+            readout("action ping", actionLabel, action ? `${fmtMs(action.ms)} · ${fmtDate(action.at)}` : "use Check link or any action", actionTone)
           ].join("");
         }
+      }
+
+      function normalizeUserReadiness(value) {
+        const item = value && typeof value === "object" ? value : {};
+        return {
+          schema: item.schema || "mcpace.userReadiness.v0",
+          headline: item.headline || "User readiness unknown",
+          body: item.body || "Backend did not return a user-readiness summary yet.",
+          confidence: Number.isFinite(Number(item.confidence)) ? Number(item.confidence) : 0,
+          primaryAction: item.primaryAction || "Refresh overview",
+          primaryReason: item.primaryReason || "Live backend state is required before trusting the UI.",
+          shouldSee: Array.isArray(item.shouldSee) ? item.shouldSee : [],
+          shouldHide: Array.isArray(item.shouldHide) ? item.shouldHide : [],
+          missing: Array.isArray(item.missing) ? item.missing : [],
+          endpoint: item.endpoint || "/mcp"
+        };
+      }
+
+      function listSentence(items, fallback) {
+        const values = Array.isArray(items) ? items.filter(Boolean).map(value => String(value)) : [];
+        if (!values.length) return fallback;
+        return values.slice(0, 4).join(" · ") + (values.length > 4 ? ` · +${values.length - 4}` : "");
+      }
+
+      function renderUserReadiness(rawReadiness, servers = [], clients = []) {
+        const readiness = normalizeUserReadiness(rawReadiness);
+        const confidencePct = Math.max(0, Math.min(100, Math.round(readiness.confidence * 100)));
+        const tone = confidencePct >= 80 ? "good" : confidencePct >= 55 ? "warn" : "bad";
+        if (els.userReadinessTitle) els.userReadinessTitle.textContent = readiness.headline;
+        if (els.userReadinessBody) els.userReadinessBody.textContent = readiness.body;
+        if (els.userConfidenceChip) setChip(els.userConfidenceChip, `${confidencePct}% confidence`, tone);
+        if (!els.userReadinessGrid) return;
+        const visible = listSentence(readiness.shouldSee, "status, endpoint, server launch commands, live tool evidence");
+        const hidden = listSentence(readiness.shouldHide, "secret values, raw JSON, manual worker settings, advanced logs");
+        const missing = listSentence(readiness.missing, "nothing critical from the current user view");
+        els.userReadinessGrid.innerHTML = [
+          readout("Can I use it?", readiness.primaryAction, readiness.primaryReason, tone),
+          readout("Visible now", `${servers.length} server${servers.length === 1 ? "" : "s"}`, visible, "good"),
+          readout("Hidden by default", "safe defaults", hidden, "warn"),
+          readout("Missing", readiness.missing.length ? `${readiness.missing.length} gap${readiness.missing.length === 1 ? "" : "s"}` : "clean", missing, readiness.missing.length ? "warn" : "good")
+        ].join("");
       }
 
       function renderFleetBoard(servers, instances) {
@@ -2521,7 +3055,7 @@
           if (state.scope === "attention" && risk.rank > 3) return false;
           if (!query) return true;
           const evidence = serverToolEvidence(server);
-          return [server.name, server.kind, server.runtimeType, server.stateClass, server.effectClass, server.scopeClass, server.concurrencyPolicy, server.routingGroup, server.transportPreference, server.launcherKind, server.startupStrategy, evidence.status, ...(evidence.toolNames || [])]
+          return [server.name, server.kind, server.runtimeType, server.stateClass, server.effectClass, server.scopeClass, server.concurrencyPolicy, server.routingGroup, server.transportPreference, server.launcherKind, server.startupStrategy, server.sourceType, server.sourceCommand, server.sourceUrl, server.sourcePath, ...(server.sourceArgs || []), ...(server.sourceEnvNames || []), ...(server.sourceHeaderNames || []), evidence.status, ...(evidence.toolNames || [])]
             .some(value => String(value || "").toLowerCase().includes(query));
         });
         rows = rows.sort((left, right) => {
@@ -2543,7 +3077,8 @@
           const risk = model.risk;
           const verdict = model.verdict;
           const human = model.human;
-          const showNext = risk.rank <= 1;
+          const plan = model.operatorPlan;
+          const showNext = risk.rank <= 1 || Boolean(plan?.needsPolicyChange);
           const name = escapeHtml(server.name || "server");
           return `
             <article class="server-row ${itemClass(verdict.tone)}" data-server-name="${name}" data-server-bucket="${model.bucket}" data-enabled="${server.effectiveEnabled ? "true" : "false"}">
@@ -2554,6 +3089,7 @@
                     ${chip(verdict.label, verdict.tone)}
                   </div>
                    <div class="server-purpose">${escapeHtml(model.category)} · ${escapeHtml(model.impact)}</div>
+                   ${launchCommand(server) ? `<code class="launch-line">${escapeHtml(launchCommand(server))}</code>` : ""}
                    <div class="server-human-card" aria-label="Plain-language setup for ${name}">
                      <section>
                        <div class="label">Live evidence</div>
@@ -2574,7 +3110,7 @@
               <div class="server-fast-facts" aria-label="Useful server facts">
                 ${model.facts}
               </div>
-              ${showNext ? `<div class="server-action-note"><strong>Next</strong> ${escapeHtml(model.nextStep)} <br><strong>Auto</strong> ${escapeHtml(model.recommendation.reason)}</div>` : ""}
+              ${showNext ? `<div class="server-action-note"><strong>Next</strong> ${escapeHtml(plan?.nextAction || model.nextStep)} <br><strong>Backend plan</strong> ${escapeHtml(plan?.rationale || model.recommendation.reason)}</div>` : ""}
             </article>
           `;
         }).join("");
@@ -2620,8 +3156,15 @@
         const decision = model.decision;
         const settings = model.settings;
         const checklist = serverChecklist(server, risk).map(item => `<li>${escapeHtml(item)}</li>`).join("");
+        const operatorRunbook = renderServerRunbook(model.operatorPlan);
+        const runtimeControl = runtimeControlForServer(server.name);
         const lockDomains = Array.isArray(server.lockDomains) ? server.lockDomains.join(", ") : text(server.hostLock || server.hostLockKey || server.conflictDomain, "none");
         const requiredCommands = Array.isArray(server.requiredCommands) ? server.requiredCommands.join(", ") : "none";
+        const launch = launchCommand(server);
+        const sourceArgs = compactList(server.sourceArgs);
+        const sourceEnvNames = compactList(server.sourceEnvNames);
+        const sourceHeaderNames = compactList(server.sourceHeaderNames);
+        const sourcePath = text(server.sourcePath, "default MCP settings");
         const idName = domId(server.name || "server");
         const nameEsc = escapeHtml(server.name || "server");
 
@@ -2671,7 +3214,9 @@
               </div>
             </section>
           </details>
-          <div class="server-action-note"><strong>Auto plan</strong> ${escapeHtml(model.needsTuning ? `${recommendation.label} available` : "active")} · ${escapeHtml(model.nextStep)}</div>
+          <div class="server-action-note"><strong>Auto plan</strong> ${escapeHtml(model.needsTuning ? `${recommendation.label} available` : "active")} · ${escapeHtml(model.operatorPlan?.nextAction || model.nextStep)}</div>
+          ${operatorRunbook}
+          ${renderRuntimeControl(runtimeControl)}
           <div class="server-explain-grid">
             <section class="server-explain-box">
               <div class="label">Why this route</div>
@@ -2703,6 +3248,11 @@
             ${detail("Locks", lockDomains)}
             ${detail("Launcher", server.launcherKind)}
             ${detail("Startup", server.startupStrategy)}
+            ${detail("Launch command", launch || "none")}
+            ${detail("Source file", sourcePath)}
+            ${detail("Source args", sourceArgs)}
+            ${detail("Env names", sourceEnvNames)}
+            ${detail("Header names", sourceHeaderNames)}
             ${detail("Transport", server.transportPreference || server.sourceType || "stdio")}
             ${detail("Transport status", server.transportStatus)}
             ${detail("Required commands", requiredCommands)}
@@ -2713,9 +3263,9 @@
       function actionPayloadForPolicy(server, related, overrides = {}) {
         return {
           server: server.name,
-          mode: overrides.mode || serverMode(server, related),
-          maxWorkers: overrides.maxWorkers || maxWorkers(server, related),
-          maxInFlightPerWorker: overrides.maxInFlightPerWorker || maxInFlight(server, related)
+          mode: overrides.mode ?? serverMode(server, related),
+          maxWorkers: overrides.maxWorkers ?? maxWorkers(server, related),
+          maxInFlightPerWorker: overrides.maxInFlightPerWorker ?? maxInFlight(server, related)
         };
       }
 
@@ -2727,6 +3277,7 @@
       async function postServerAction(endpoint, payload) {
         const result = await timedFetchJson(`/api/actions/${endpoint}`, {
           method: "POST",
+          timeoutMs: ACTION_TIMEOUT_MS,
           headers: { "content-type": "application/json" },
           body: JSON.stringify(payload)
         });
@@ -2735,10 +3286,60 @@
           ms: result.ms,
           at: result.at,
           endpoint,
-          error: result.error?.message || String(result.error || "")
+          error: result.ok ? "" : apiErrorMessage(result.error)
         };
         if (!result.ok) throw result.error;
         return result.value;
+      }
+
+      async function submitServerInstallCommand(event) {
+        event.preventDefault();
+        const commandLine = String(els.serverInstallCommand?.value || "").trim();
+        const server = String(els.serverInstallName?.value || "").trim();
+        if (!commandLine) {
+          setInstallNote("Paste a command, package, local path, or Streamable HTTP URL first.", "bad");
+          els.serverInstallCommand?.focus();
+          return;
+        }
+        const intent = installCommandIntent(commandLine);
+        if (intent.tone === "bad") {
+          setInstallNote(`${intent.label}: ${intent.body}`, "bad");
+          els.serverInstallCommand?.focus();
+          return;
+        }
+        const button = els.serverInstallButton;
+        const original = button?.textContent || "Save server";
+        const payload = {
+          commandLine,
+          disabled: Boolean(els.serverInstallDisabled?.checked),
+          force: Boolean(els.serverInstallForce?.checked),
+          dryRun: Boolean(els.serverInstallDryRun?.checked)
+        };
+        if (server) payload.server = server;
+        try {
+          if (button) {
+            button.disabled = true;
+            button.textContent = payload.dryRun ? "Previewing…" : "Saving…";
+          }
+          setInstallNote(payload.dryRun ? "Previewing install plan…" : "Saving server source…", "warn");
+          const response = await postServerAction("server-install-command", payload);
+          const planned = response?.result?.plan?.name || response?.result?.write?.name || server || "server";
+          setInstallNote(payload.dryRun ? `Preview ready for ${planned}; nothing was written.` : `Saved ${planned}. Run Test on its row before relying on its tools.`, "good");
+          if (!payload.dryRun) {
+            if (els.serverInstallCommand) els.serverInstallCommand.value = "";
+            if (els.serverInstallName) els.serverInstallName.value = "";
+          }
+          await refreshDashboard({ force: true, reason: "server-install-command" });
+        } catch (error) {
+          state.lastError = apiErrorMessage(error);
+          setInstallNote(state.lastError, "bad");
+          renderError(state.lastError);
+        } finally {
+          if (button) {
+            button.disabled = false;
+            button.textContent = original;
+          }
+        }
       }
 
       function applyOptimisticServerAction(endpoint, payload, response) {
@@ -2760,8 +3361,9 @@
           const result = response?.result || {};
           const policy = result.policy || {};
           const execution = result.execution || {};
-          server.maxWorkers = Number(result.maxWorkers || execution.maxWorkers || payload.maxWorkers || server.maxWorkers || 1);
-          server.maxInFlightPerWorker = Number(result.maxInFlightPerWorker || execution.maxInFlightPerWorker || payload.maxInFlightPerWorker || server.maxInFlightPerWorker || 1);
+          const firstDefined = (...values) => values.find(value => value !== undefined && value !== null && value !== "");
+          server.maxWorkers = Number(firstDefined(result.maxWorkers, execution.maxWorkers, payload.maxWorkers, server.maxWorkers, 1));
+          server.maxInFlightPerWorker = Number(firstDefined(result.maxInFlightPerWorker, execution.maxInFlightPerWorker, payload.maxInFlightPerWorker, server.maxInFlightPerWorker, 1));
           for (const key of ["scopeClass", "concurrencyPolicy", "stateBinding", "credentialBinding", "parallelismLimit", "conflictDomain", "projectRootMode", "worktreeBinding", "stateProfileMode", "hostLock", "startupStrategy", "routingGroup", "discoveryRequiresLease"]) {
             if (policy[key] !== undefined) server[key] = policy[key];
           }
@@ -2785,7 +3387,7 @@
           render();
           if (options.sync !== false) syncAfterServerAction();
         } catch (error) {
-          state.lastError = error?.message || String(error);
+          state.lastError = apiErrorMessage(error);
           renderError(state.lastError);
         } finally {
           if (control) {
@@ -2860,7 +3462,7 @@
           render();
           syncAfterServerAction(100);
         } catch (error) {
-          state.lastError = error?.message || String(error);
+          state.lastError = apiErrorMessage(error);
           renderError(state.lastError);
         } finally {
           if (button) {
@@ -2877,21 +3479,35 @@
             button.disabled = true;
             button.textContent = "Checking…";
           }
-          const [overview, logs] = await Promise.all([
+          const [overview, logs, resources, ping] = await Promise.all([
             timedFetchJson("/api/overview"),
-            timedFetchJson("/api/logs?tail=1")
+            timedFetchJson("/api/logs?tail=1"),
+            timedFetchJson("/api/resources"),
+            timedFetchJson("/api/actions/ping", { method: "POST", timeoutMs: ACTION_TIMEOUT_MS })
           ]);
           state.backend.overview = overview;
           state.backend.logs = logs;
+          state.backend.resources = resources;
+          state.backend.action = {
+            ok: ping.ok,
+            ms: ping.ms,
+            at: ping.at,
+            endpoint: "ping",
+            error: ping.ok ? "" : apiErrorMessage(ping.error)
+          };
           state.backend.checkedAt = Date.now();
           if (overview.ok) state.overview = overview.value;
           if (logs.ok) state.logs = Array.isArray(logs.value) ? logs.value : state.logs;
-          await postServerAction("server-autotune", { changes: [] });
-          state.lastError = overview.ok ? (logs.ok ? null : `Logs: ${logs.error?.message || logs.error}`) : overview.error?.message || String(overview.error);
+          state.lastError = [
+            overview.ok ? "" : `Overview: ${apiErrorMessage(overview.error)}`,
+            logs.ok ? "" : `Logs: ${apiErrorMessage(logs.error)}`,
+            resources.ok ? "" : `Resources: ${apiErrorMessage(resources.error)}`,
+            ping.ok ? "" : `Action ping: ${apiErrorMessage(ping.error)}`
+          ].filter(Boolean).join(" · ") || null;
           if (state.overview) render();
           else renderError(state.lastError || "Backend check failed");
         } catch (error) {
-          state.lastError = error?.message || String(error);
+          state.lastError = apiErrorMessage(error);
           if (state.overview) render();
           else renderError(state.lastError);
         } finally {
@@ -2935,11 +3551,15 @@
       function renderRuntime(runtime, hub, readiness, project) {
         const http = runtime.http || {};
         const pool = runtime.upstreamSessionPool || {};
+        const control = state.overview?.runtimeControlPlane?.summary || {};
+        const monitor = runtime.serverResourceMonitoring || {};
         const rows = [
           ["Runtime actions", hub.readyForRuntimeOps ? "ready" : "blocked", hub.readyForRuntimeOps ? "good" : "bad"],
           ["Read-only actions", hub.readyForReadOnlyOps ? "ready" : "blocked", hub.readyForReadOnlyOps ? "good" : "bad"],
           ["HTTP workers", `${num(http.activeConnections)}/${num(http.maxConnections) || "?"} active`, "warn"],
           ["Upstream pool", `${num(pool.size)}/${num(pool.maxSize) || "?"} sessions · ${num(pool.shardCount, 1)} shard(s)`, "warn"],
+          ["Server resources", `${num(monitor.sessionCount, 0)} live session(s) · ${text(monitor.status, "waiting")}`, num(monitor.sessionCount, 0) ? "good" : "warn"],
+          ["Runtime control", `${num(control.noLiveEvidence, 0)} need probe · ${num(control.approvalRequired, 0)} need approval · ${num(control.containerRequired, 0)} need container`, num(control.containerRequired, 0) ? "bad" : num(control.noLiveEvidence, 0) ? "warn" : "good"],
           ["Parallelism", `${runtime.availableParallelism ?? "?"} reported by OS`, num(runtime.availableParallelism) > 1 ? "good" : "warn"],
           ["Project", `Rust ${project.rustSourceReady ? "ok" : "missing"} · npm ${project.npmSurfaceReady ? "ok" : "missing"}`, project.rustSourceReady && project.npmSurfaceReady ? "good" : "warn"]
         ];
@@ -2981,7 +3601,7 @@
           ["Server inventory", servers.length ? `${servers.length} servers with runtime policy fields` : "No server inventory returned", servers.length ? "good" : "warn", ["runtimeType", "stateClass", "effectClass"]],
           ["Instance plan", instances.length ? `${instances.length} lanes with workers/mutex hints` : "No server instances payload returned", instances.length ? "good" : "warn", ["mode", "trace", "workers"]],
           ["Traffic / errors", Object.keys(http).length ? `${num(http.acceptedConnections)} accepted · ${num(http.failedConnections)} failed` : "HTTP counters unavailable", Object.keys(http).length ? "good" : "warn", ["accepted", "completed", "failed"]],
-          ["Latency histograms", "Not collected yet: p50/p95/p99 are not shown because the runtime does not expose request duration histograms.", "warn", ["missing", "request duration"]],
+          ["Request duration", Object.keys(http).length ? `avg ${fmtMs(http.requestDurationAverageMs)} · max ${fmtMs(http.requestDurationMaxMs)}` : "HTTP duration counters unavailable", Object.keys(http).length ? msTone(http.requestDurationAverageMs) : "warn", ["avg", "max", "request duration"]],
           ["Per-server CPU/RAM", "Not collected yet: current payload has limits/sessions, not OS process usage per upstream worker.", "warn", ["missing", "process telemetry"]],
           ["Logs and safe audit", Array.isArray(logs) ? `${logs.length} recent log entries loaded` : "Logs endpoint missing", Array.isArray(logs) ? "good" : "warn", ["lifecycle", "safe fingerprints"]]
         ];
@@ -3046,6 +3666,9 @@
       els.serverSearch.addEventListener("input", event => { state.query = event.target.value; render(); });
       els.clearSearch.addEventListener("click", () => { state.query = ""; els.serverSearch.value = ""; render(); els.serverSearch.focus(); });
       els.toggleEnabled.addEventListener("click", () => { state.enabledOnly = !state.enabledOnly; writePref("enabledOnly", String(state.enabledOnly)); render(); });
+      els.serverInstallForm.addEventListener("submit", submitServerInstallCommand);
+      els.serverInstallCommand.addEventListener("input", updateServerInstallPreflight);
+      updateServerInstallPreflight();
       els.autoTuneVisible.addEventListener("click", event => autoTuneVisibleServers(event.currentTarget));
       els.serverFleetBoard.addEventListener("click", event => {
         const card = event.target.closest("[data-server-bucket]");

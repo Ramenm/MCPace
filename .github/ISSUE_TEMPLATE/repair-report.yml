@@ -2,7 +2,8 @@ name: Repair report
 description: Report a broken repository path, CI failure, or governance drift that needs repair.
 title: "[repair] "
 labels:
-  - repair
+  - status:needs-root-cause
+  - severity:p2
 body:
   - type: textarea
     id: symptom

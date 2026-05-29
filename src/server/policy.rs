@@ -98,10 +98,18 @@ pub(super) fn run(
         .filter(|value| !value.is_empty())
         .unwrap_or(preset.default_reuse_policy)
         .to_string();
-    let max_workers = parsed
-        .max_workers
-        .unwrap_or_else(|| default_max_workers_for_preset(&preset));
-    let max_in_flight = parsed.max_in_flight_per_worker.unwrap_or(1);
+    let max_workers = if preset.mode == "disabled" {
+        0
+    } else {
+        parsed
+            .max_workers
+            .unwrap_or_else(|| default_max_workers_for_preset(&preset))
+    };
+    let max_in_flight = if preset.mode == "disabled" {
+        0
+    } else {
+        parsed.max_in_flight_per_worker.unwrap_or(1)
+    };
     let conflict_domain = format!("{}:{}", preset.conflict_domain_prefix, server_name);
 
     let policy = policy_json(&preset, &conflict_domain, max_workers, max_in_flight);
@@ -297,22 +305,22 @@ fn preset_for_mode(raw_mode: &str) -> Result<ExecutionPreset, String> {
         },
         "disabled" => ExecutionPreset {
             mode: mode.to_string(),
-            scope_class: "configured-source",
-            concurrency_policy: "single-writer",
-            state_binding: "runtime-source",
-            credential_binding: "source-config",
-            parallelism_limit: 1,
+            scope_class: "not-runnable",
+            concurrency_policy: "plan-only",
+            state_binding: "none",
+            credential_binding: "none",
+            parallelism_limit: 0,
             conflict_domain_prefix: "disabled-source",
-            project_root_mode: "optional",
+            project_root_mode: "none",
             worktree_binding: "none",
             state_profile_mode: "none",
             host_lock: "none",
             startup_strategy: "disabled",
             routing_group: "disabled",
-            discovery_requires_lease: true,
+            discovery_requires_lease: false,
             default_affinity: &[],
             default_reuse_policy: "never",
-            default_queue_timeout_ms: 1,
+            default_queue_timeout_ms: 0,
         },
         _ => unreachable!(),
     })
@@ -344,7 +352,9 @@ fn normalized_affinity(parsed: &ParsedArgs, preset: &ExecutionPreset) -> Vec<Str
 }
 
 fn default_max_workers_for_preset(preset: &ExecutionPreset) -> usize {
-    if preset.mode == "pool" {
+    if preset.mode == "disabled" {
+        0
+    } else if preset.mode == "pool" {
         preset.parallelism_limit.max(4)
     } else {
         preset.parallelism_limit.max(1)
@@ -357,10 +367,18 @@ fn policy_json(
     max_workers: usize,
     max_in_flight: usize,
 ) -> JsonValue {
-    let parallelism = if preset.mode == "pool" {
+    let parallelism = if preset.mode == "disabled" {
+        0
+    } else if preset.mode == "pool" {
         max_workers.max(1)
     } else {
         preset.parallelism_limit.max(1)
+    };
+    let max_workers = if preset.mode == "disabled" { 0 } else { max_workers };
+    let max_in_flight = if preset.mode == "disabled" {
+        0
+    } else {
+        max_in_flight.max(1)
     };
     JsonValue::object([
         ("scopeClass", JsonValue::string(preset.scope_class)),

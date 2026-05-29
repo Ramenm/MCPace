@@ -34,9 +34,9 @@ test('server loader exposes explicit stateless/stateful runtime classification',
   assert.match(loader, /effect_class: "project-mutating"/);
   assert.match(loader, /effect_class: "external-read"/);
   assert.match(loader, /effect_class: "process-exec"/);
-  assert.match(loader, /policy_string\(policy, \"runtimeType\"/);
-  assert.match(loader, /policy_string\(policy, \"stateClass\"/);
-  assert.match(loader, /policy_string\(policy, \"effectClass\"/);
+  assert.match(loader, /policy_token\(policy, \"runtimeType\"/);
+  assert.match(loader, /policy_token\(policy, \"stateClass\"/);
+  assert.match(loader, /policy_token\(policy, \"effectClass\"/);
   assert.match(loader, /tool_policies\.iter\(\)\.any\(policy_mentions_destructive\)/);
 
   assert.match(clientModel, /runtime_type: String/);

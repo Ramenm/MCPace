@@ -2,17 +2,20 @@
 
 Common files:
 
-- `mcpace.config.json` — runtime defaults, scheduling policy, UI surface, and include paths.
-- `mcp_settings.json` — root MCP server settings.
-- `mcp_settings.d/*.json` — per-server fragments written by `mcpace install` or `mcpace up` import.
-- `catalog/approved-servers.json` — optional local review catalog for known-good or blocked servers.
+| Path | Purpose |
+|---|---|
+| `mcpace.config.json` | Runtime defaults, scheduling policy, UI surface, and include paths. |
+| `mcp_settings.json` | Root MCP server settings. |
+| `mcp_settings.d/*.json` | Per-server fragments written by install/import/up flows. |
+| `catalog/approved-servers.json` | Local review catalog for trusted, approved, blocked, or review-only servers. |
+| `manifests/*.permissions.json` | Optional permission hints for risky servers. |
 
 ## Config-first import
 
 ```bash
 mcpace server import ./mcp.json --dry-run
 mcpace server import ./mcp.json --force
-mcpace server sources
+mcpace server sources --json
 mcpace up
 ```
 
@@ -26,78 +29,71 @@ Supported input shapes:
 { "servers": { "remote": { "serverUrl": "https://example.com/mcp" } } }
 ```
 
+Normalization rules:
+
+| Input | Normalized result |
+|---|---|
+| `command` | `type: "stdio"` |
+| `url`, `serverUrl`, `httpUrl`, `endpoint` | `type: "streamable-http"` plus `url` |
+| `transport: "command"` or `"stdio"` | stdio server |
+| `transport: "http"` or `"remote"` | Streamable HTTP server |
+| `disabled: true` | `enabled: false` |
+| MCPace self-entry | skipped to avoid loops |
+
 ## Install examples
 
 ```bash
 mcpace install npm:@modelcontextprotocol/server-memory --as memory --dry-run
 mcpace install pypi:mcp-server-demo --as demo --dry-run
+mcpace install oci:ghcr.io/example/mcp-server --as container-demo --dry-run
 mcpace install https://example.com/mcp --as remote-example --dry-run
 mcpace install . --as filesystem --dry-run
 mcpace install -- npx -y @modelcontextprotocol/server-memory
 ```
 
+Use `--dry-run` before writing and `--as <name>` to choose a stable server name.
+
 ## Automatic policy inference
 
-MCPace now applies a conservative automatic policy before any manual override is needed:
+MCPace applies conservative policy before manual overrides:
 
-- source-only servers imported from `mcp_settings.json` or `mcp_settings.d/*.json` are classified from name, command, URL, args, and transport;
-- declared servers in `mcpace.config.json` that do not specify a full `policy` inherit the same generic source inference instead of falling back to blank/unknown scheduler fields;
-- explicit `policy` fields still win one by one, so users can override only the field they care about.
+- imported source-only servers are classified from transport, command, URL, args, config flags, and profile hints;
+- declared servers without a full policy inherit generic source inference;
+- explicit policy fields win one by one;
+- unproven stdio remains conservative until metadata, tool policy, or safe MCP probe evidence improves confidence.
 
 Typical defaults:
 
-| Server signal | Default scheduling policy | Why |
-| --- | --- | --- |
-| `filesystem` | `isolated-per-project` | file state is project/worktree-bound |
-| `memory`, `context`, `sequential-thinking` | `single-session`/state-profile | mutable chat/session context should not bleed |
-| `git`, `worktree`, repository tools | `single-writer` per project | repository mutation should serialize |
-| `sqlite`, SQL/database tools | `single-writer` per project/db | database writes need a conflict domain |
-| `fetch`, web/API read tools | `multi-reader` with a small limit | usually safe to parallelize but still budgeted |
-| `time`, `calculator`, read-only utilities | `multi-reader` | stateless local tools can share safely |
-| browser/desktop/shell/process tools | exclusive/serialized | host state and side effects are fragile |
-| unknown | conservative `single-writer` | safe default until reviewed |
+| Server signal | Default policy | Why |
+|---|---|---|
+| `filesystem` | project/session isolated | File scope is project/worktree-bound. |
+| `memory`, `context`, `sequential-thinking` | session isolated | Mutable chat context should not bleed. |
+| `git`, worktree, repo tools | project single-writer | Repository mutation needs a conflict domain. |
+| `sqlite`, SQL/database tools | database/project single-writer | Writes need serialization. |
+| `fetch`, web/API read tools | budgeted multi-reader | Usually read-mostly, still resource-limited. |
+| `time`, calculator, read-only utilities | multi-reader | Stateless local tools can share. |
+| browser/desktop/shell/process tools | serialized or isolated | Host state and side effects are fragile. |
+| unknown | unknown-conservative | Safe default until reviewed or probed. |
 
-Each loaded server also gets an explicit classification surface:
+Classification fields exposed in JSON and dashboard views:
 
-| Class field | Common values | How it is inferred |
-| --- | --- | --- |
-| `runtimeType` | `stateless`, `stateful`, `external`, `interactive`, `side-effecting`, `legacy`, `unknown` | Transport plus source/package/command names and later live probe evidence. |
-| `stateClass` | `stateless`, `session-stateful`, `project-stateful`, `credential-stateful`, `remote-session-stateful`, `host-stateful`, `unknown-conservative` | Determines the partition key: none, chat/session, project/worktree, credential, remote session, host profile, or conservative lease. |
-| `effectClass` | `read-only`, `external-read`, `ephemeral-state`, `project-mutating`, `external-mutating`, `host-mutating`, `process-exec`, `unknown` | Determines whether calls can be shared, must be serialized, or need host/security review. |
-
-Operators may override `runtimeType`, `stateClass`, and `effectClass` inside a server `policy`, but the normal path is automatic. MCPace intentionally treats unproven stdio servers as conservative until source hints, tool policy, or live MCP probe evidence makes a safer class obvious.
-
-The local approved catalog is still advisory in this bundle; it records review decisions and recommended modes, but it is not yet a hard runtime gate.
+| Field | Common values |
+|---|---|
+| `runtimeType` | `stateless`, `stateful`, `external`, `interactive`, `side-effecting`, `legacy`, `unknown` |
+| `stateClass` | `stateless`, `session-stateful`, `project-stateful`, `credential-stateful`, `remote-session-stateful`, `host-stateful`, `unknown-conservative` |
+| `effectClass` | `read-only`, `external-read`, `ephemeral-state`, `project-mutating`, `external-mutating`, `host-mutating`, `process-exec`, `unknown` |
 
 ## Dynamic server discovery
 
-The user-facing workflow is one command:
+User path:
 
 ```bash
-mcpace auto --dry-run       # preview what would be discovered, installed, and probed
-mcpace auto                 # refresh stale cache, add approved/trusted servers, probe live tools
+mcpace auto --dry-run
+mcpace auto
 mcpace auto filesystem --json
 ```
 
-MCPace handles new MCP servers without asking the user to choose `stdio` vs `streamable-http` or a concurrency type:
-
-1. **Already configured servers** are loaded dynamically from `mcp_settings.json`, `mcp_settings.d/*.json`, configured include paths, and environment-provided source files.
-2. **Not-yet-configured servers** are discovered from the local approved catalog plus the optional MCP Registry cache.
-3. **Auto mode** refreshes the registry cache when it is missing or older than `registryCacheTtlHours`, chooses approved/trusted candidates, writes server fragments, and then probes live `initialize`/`tools/list` evidence.
-4. **Runtime policy** stays evidence-first: name/command/URL/package metadata give the initial conservative policy, then probe output and tool annotations can tighten/read-only classify the surface.
-
-Unknown public registry packages are not silently executed. They remain plan-only until a local catalog or explicit install policy marks them as review/approved. This keeps the one-command path safe while still making trusted servers automatic.
-
-Advanced/debug equivalents remain available:
-
-```bash
-mcpace server discover filesystem --json
-mcpace server discover --auto              # same user-facing auto semantics
-mcpace server discover --refresh --json    # force registry refresh only
-mcpace server discover --auto-install      # legacy alias for the curated sweep
-```
-
-The related config block is:
+Config block:
 
 ```json
 {
@@ -118,11 +114,18 @@ The related config block is:
 }
 ```
 
-Package download/execution is performed by the configured launcher (`npx`, `uvx`, Docker, or remote URL) only after a candidate passes the trust gate. `mcpace auto --dry-run` never launches external packages.
+`mcpace auto --dry-run` does not launch external packages. Package download/execution happens through the configured launcher only after the trust gate passes.
+
+Advanced/debug commands:
+
+```bash
+mcpace server discover filesystem --json
+mcpace server discover --auto
+mcpace server discover --refresh --json
+mcpace server test <name> --refresh --json
+```
 
 ## Execution policy
-
-Use `server set-policy` to describe how an upstream server may run:
 
 ```bash
 mcpace server set-policy filesystem --mode session-isolated --affinity client,project,chat
@@ -131,38 +134,20 @@ mcpace server set-policy fetch --mode pool --max-workers 4 --queue-timeout-ms 50
 mcpace server set-policy shell --mode serialized --reuse-policy sticky
 ```
 
-This writes both a human-readable `execution` block and the canonical scheduler `policy` block inside `mcpace.config.json`:
-
-```json
-{
-  "servers": {
-    "filesystem": {
-      "execution": {
-        "protocol": "mcpace.execution.v1",
-        "mode": "session-isolated",
-        "affinity": ["chat", "client", "project"],
-        "queueTimeoutMs": 10000,
-        "reusePolicy": "sticky-session",
-        "maxWorkers": 1,
-        "maxInFlightPerWorker": 1
-      }
-    }
-  }
-}
-```
+This writes a human-readable `execution` block and the canonical scheduler `policy` block inside `mcpace.config.json`.
 
 ## Inspect runtime routing
 
 ```bash
+mcpace server list --json
 mcpace server instances --client-id cursor --session-id chat-a --project-root .
 mcpace server leases --json
+mcpace dashboard
 ```
 
-`server instances` is a planning view. It tells you how MCPace would route the current client/session/project context before you need to debug a live conflict.
+`server instances` is a planning view: it shows how MCPace would route the current client/session/project before a live conflict happens.
 
 ## UI surface
-
-`mcpace.config.json` now includes a lightweight local-first UI section:
 
 ```json
 {
@@ -178,11 +163,9 @@ mcpace server leases --json
 }
 ```
 
-Keep the dashboard as the primary surface while the product is still local-first. Add a desktop tray later only as a launcher/status shell around the same `/api/overview` data.
+Keep the dashboard as the primary surface while MCPace is local-first. A desktop tray should only launch/status-wrap the same `/api/overview` data later.
 
 ## Approved catalog
-
-The local catalog is intentionally small:
 
 ```json
 {
@@ -196,21 +179,21 @@ The local catalog is intentionally small:
 }
 ```
 
-Use it to record review decisions, recommended execution mode, permission hints, and notes. Do not make it mandatory for personal use; teams can enable strict review by setting `approvedCatalog.requireApprovalForUnknown`.
+Use the catalog for review decisions, recommended execution modes, permission hints, and notes. Personal use can stay permissive; teams can require approval for unknown servers.
 
 ## Options
 
-- `--as <name>` sets the server name.
-- `--path <path>` appends path arguments for servers that need explicit scopes.
-- `--env KEY=VALUE` adds environment variables.
-- `--header KEY=VALUE` adds HTTP headers for remote servers.
-- `--settings <path>` writes to a specific MCP settings file.
-- `--dry-run` previews without writing.
-- `--force` replaces an existing fragment.
-- `--disabled` writes the server as disabled.
+| Option | Purpose |
+|---|---|
+| `--as <name>` | Set server name. |
+| `--path <path>` | Add path scopes for servers that need them. |
+| `--env KEY=VALUE` | Add environment variables. |
+| `--header KEY=VALUE` | Add HTTP headers for remote servers. |
+| `--settings <path>` | Write to a specific MCP settings file. |
+| `--dry-run` | Preview without writing. |
+| `--force` | Replace an existing fragment. |
+| `--disabled` | Write the server as disabled. |
 
-### Runtime classification guardrails
+## Runtime classification guardrails
 
-The scheduler treats `runtimeType=unknown` and `stateClass=unknown-conservative` as a safe failure mode: new servers can still be discovered and probed, but they do not become shared concurrent workers until MCPace has metadata, tool annotations, or explicit policy evidence.
-
-The classifier intentionally uses token/boundary matching for server names, package names, commands, and live tool metadata. This avoids bad auto-mode decisions such as treating a GitHub API server as a local `git` repository server, or treating an unrelated word containing `rm` as a destructive remove command. Single-writer and project-isolated servers also advertise `maxWorkers=1`; scaling comes from separate project/session/process partitions, not from parallel calls into one fragile worker.
+`runtimeType=unknown` and `stateClass=unknown-conservative` are safe failure modes. New servers can still be discovered and probed, but they do not become shared concurrent workers until MCPace has metadata, tool annotations, live MCP surface evidence, or explicit policy. Single-writer and project-isolated servers advertise `maxWorkers=1`; scaling comes from separate project/session/process partitions, not parallel calls into one fragile worker.

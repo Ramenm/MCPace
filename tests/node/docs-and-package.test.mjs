@@ -12,7 +12,8 @@ const REQUIRED_DOCS = new Set([
   'security.md',
   'supported-clients.md',
   'troubleshooting.md',
-  'lab-harness.md'
+  'lab-harness.md',
+  'platform-testing.md'
 ]);
 const REMOVED_ROOT_DOCS = [
   'CITATION.cff',

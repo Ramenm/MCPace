@@ -12,7 +12,23 @@ pub(super) fn http_tool_definitions() -> Vec<JsonValue> {
         http_tool("hub_down", "Stop the hub"),
         http_tool("hub_repair", "Repair stopped or stale hub state"),
         http_tool("hub_logs", "Read hub logs"),
+        http_tool("runtime_leases", "List runtime leases"),
         http_tool("server_list", "List configured servers"),
+        http_tool_with_schema(
+            "server_capabilities",
+            "Inspect one configured server capability and policy profile",
+            JsonValue::object([(
+                "name",
+                JsonValue::object([
+                    ("type", JsonValue::string("string")),
+                    (
+                        "description",
+                        JsonValue::string("Configured MCPace server name to inspect."),
+                    ),
+                ]),
+            )]),
+            vec!["name"],
+        ),
         http_tool(
             "runtime_diagnostics",
             "Explain MCPace runtime and upstream tool availability",
@@ -810,7 +826,74 @@ pub(super) fn http_tool_definitions() -> Vec<JsonValue> {
             vec!["server", "calls"],
         ),
         http_tool("client_list", "List known client targets"),
+        http_tool_with_schema(
+            "client_plan",
+            "Plan client connection routing for the current MCP context",
+            http_client_context_properties(),
+            vec![],
+        ),
+        http_tool_with_schema(
+            "client_export",
+            "Build a client connection contract for the current MCP context",
+            http_client_context_properties(),
+            vec![],
+        ),
     ]
+}
+
+fn http_client_context_properties() -> JsonValue {
+    JsonValue::object([
+        (
+            "clientId",
+            JsonValue::object([
+                ("type", JsonValue::string("string")),
+                (
+                    "description",
+                    JsonValue::string("Optional client target override. Defaults to MCP/request metadata when present."),
+                ),
+            ]),
+        ),
+        (
+            "sessionId",
+            JsonValue::object([
+                ("type", JsonValue::string("string")),
+                (
+                    "description",
+                    JsonValue::string("Optional external session id override."),
+                ),
+            ]),
+        ),
+        (
+            "projectRoot",
+            JsonValue::object([
+                ("type", JsonValue::string("string")),
+                (
+                    "description",
+                    JsonValue::string("Optional project or workspace root override."),
+                ),
+            ]),
+        ),
+        (
+            "transport",
+            JsonValue::object([
+                ("type", JsonValue::string("string")),
+                (
+                    "description",
+                    JsonValue::string("Optional ingress override such as stdio or streamable-http."),
+                ),
+            ]),
+        ),
+        (
+            "metadata",
+            JsonValue::object([
+                ("type", JsonValue::string("object")),
+                (
+                    "description",
+                    JsonValue::string("Optional MCP metadata object forwarded as metadata-json."),
+                ),
+            ]),
+        ),
+    ])
 }
 
 pub(super) fn http_tool_definitions_for_protocol(protocol: Option<&str>) -> Vec<JsonValue> {

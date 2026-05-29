@@ -84,6 +84,7 @@
         "project-pool",
         "credential-session-pool",
         "remote-http-session-pool",
+        "disabled",
         "legacy-disabled"
       ]
     },

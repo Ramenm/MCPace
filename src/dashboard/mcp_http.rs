@@ -1,7 +1,7 @@
 use super::{
     empty_object, http_boundary, http_headers, http_session, http_tool_definitions,
-    http_tool_definitions_for_protocol, http_tool_names, now_ms, reject_forbidden_origin,
-    run_http_tool, write_empty_response, write_empty_response_with_headers, write_json_response,
+    http_tool_definitions_for_protocol, http_tool_names, now_ms, run_http_tool,
+    write_empty_response, write_empty_response_with_headers, write_json_response,
     write_json_response_with_owned_headers, write_text_response, DashboardConfig, HttpRequest,
     McpHttpResponse, ServeSurface,
 };
@@ -19,9 +19,6 @@ pub(super) fn handle_mcp_http_route(
 ) -> Result<(), String> {
     match request.method.as_str() {
         "GET" => {
-            if reject_forbidden_origin(stream, request)? {
-                return Ok(());
-            }
             if http_boundary::accepts(request, "text/event-stream") {
                 write_empty_response_with_headers(
                     stream,
@@ -49,9 +46,6 @@ pub(super) fn handle_mcp_http_route(
             write_json_response(stream, "200 OK", &payload)?;
         }
         "DELETE" => {
-            if reject_forbidden_origin(stream, request)? {
-                return Ok(());
-            }
             let close_result = config
                 .http_session_store
                 .lock()
@@ -68,9 +62,6 @@ pub(super) fn handle_mcp_http_route(
             }
         }
         "POST" => {
-            if reject_forbidden_origin(stream, request)? {
-                return Ok(());
-            }
             let response = match handle_mcp_http_request(request, config) {
                 Ok(value) => value,
                 Err(error) => McpHttpResponse::JsonStatus(
@@ -127,7 +118,6 @@ fn handle_mcp_http_request(
     request: &HttpRequest,
     config: &DashboardConfig,
 ) -> Result<McpHttpResponse, String> {
-    http_boundary::validate_origin(request)?;
     if !http_boundary::accepts_streamable_http_post(request) {
         return Ok(McpHttpResponse::JsonStatus(
             "400 Bad Request",
@@ -196,11 +186,8 @@ fn handle_mcp_http_request(
             ),
         ));
     }
-    if let Some(protocol_header) =
-        http_boundary::request_header_string(Some(request), "mcp-protocol-version")
-    {
-        let protocol_header = protocol_header.trim();
-        if !protocol_header.is_empty() && !mcp::is_supported_protocol_version(protocol_header) {
+    match http_boundary::request_header_string_unique(Some(request), "mcp-protocol-version") {
+        Ok(Some(protocol_header)) if !mcp::is_supported_protocol_version(&protocol_header) => {
             return Ok(McpHttpResponse::JsonStatus(
                 "400 Bad Request",
                 mcp_error_response(
@@ -211,6 +198,13 @@ fn handle_mcp_http_request(
                         protocol_header
                     ),
                 ),
+            ));
+        }
+        Ok(_) => {}
+        Err(error) => {
+            return Ok(McpHttpResponse::JsonStatus(
+                "400 Bad Request",
+                mcp_error_response(id, mcp::ERROR_INVALID_REQUEST, error),
             ));
         }
     }
@@ -332,12 +326,20 @@ fn handle_mcp_http_request(
         ]))),
         "tools/list" => {
             let cursor = json_helpers::string_at_path(&message, &["params", "cursor"]);
-            let protocol =
-                http_boundary::request_header_string(Some(request), "mcp-protocol-version")
-                    .map(|value| value.trim().to_string())
-                    .filter(|value| !value.is_empty())
+            let protocol = match http_boundary::request_header_string_unique(
+                Some(request),
+                "mcp-protocol-version",
+            ) {
+                Ok(protocol_header) => protocol_header
                     .or_else(|| session_protocol.clone())
-                    .unwrap_or_else(|| mcp::STREAMABLE_HTTP_DEFAULT_PROTOCOL_VERSION.to_string());
+                    .unwrap_or_else(|| mcp::STREAMABLE_HTTP_DEFAULT_PROTOCOL_VERSION.to_string()),
+                Err(error) => {
+                    return Ok(McpHttpResponse::JsonStatus(
+                        "400 Bad Request",
+                        mcp_error_response(id, mcp::ERROR_INVALID_REQUEST, error),
+                    ));
+                }
+            };
             let protocol_params =
                 JsonValue::object([("protocolVersion", JsonValue::string(protocol.clone()))]);
             let result = adapter::tool_list_result(

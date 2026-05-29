@@ -4,6 +4,7 @@ use crate::runtimepaths;
 use auto_launch::{
     AutoLaunch, AutoLaunchBuilder, LinuxLaunchMode, MacOSLaunchMode, WindowsEnableMode,
 };
+#[cfg(windows)]
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};

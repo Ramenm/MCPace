@@ -2,8 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { SUPPORTED_TARGETS, currentTargetKey, detectTarget, packageNamesForTarget, describeSupportedTargets } from '../lib/platform.js';
 
-test('supported targets include linux and windows lanes', () => {
+test('supported targets include linux macOS and windows lanes', () => {
   assert.ok(SUPPORTED_TARGETS.some((entry) => entry.key === 'linux-x64-gnu'));
+  assert.ok(SUPPORTED_TARGETS.some((entry) => entry.key === 'darwin-arm64'));
+  assert.ok(SUPPORTED_TARGETS.some((entry) => entry.key === 'darwin-x64'));
   assert.ok(SUPPORTED_TARGETS.some((entry) => entry.key === 'win32-x64-msvc'));
 });
 

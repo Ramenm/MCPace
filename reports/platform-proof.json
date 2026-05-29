@@ -1,0 +1,607 @@
+{
+  "schema": "mcpace.platformProof.v1",
+  "generatedAt": "2026-05-28T18:42:29.904Z",
+  "root": "/mnt/data/mcpace_internal_more",
+  "overall": "pass",
+  "summary": {
+    "pass": 8,
+    "warn": 0,
+    "fail": 0,
+    "publishedTargetCount": 6,
+    "plannedTargetCount": 2,
+    "publicCommandCount": 23,
+    "smokeCommandCount": 17
+  },
+  "uiDecision": {
+    "requestedTerm": "Taori/Tauri for console view",
+    "decision": "Do not add Tauri as a console dependency now. Tauri is appropriate for a packaged desktop app around the existing web dashboard; a real terminal UI should be Ratatui/crossterm later. Current safe step is a platform-proofed CLI/dashboard with native binary smoke tests.",
+    "why": [
+      "Tauri adds desktop packaging and webview/runtime integration rather than improving terminal rendering.",
+      "Ratatui is the right family for a terminal TUI, but adding it should wait until Rust CI is green on Linux/macOS/Windows.",
+      "The dashboard already owns the operator model; the first console work should reuse that model rather than fork logic."
+    ],
+    "nextTuiGate": "After platform-proof is green, add a Ratatui-based `mcpace tui` as a thin terminal view over userReadiness/operatorPlan instead of duplicating policy logic."
+  },
+  "platforms": {
+    "published": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "workflow": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "nodeWorkflow": [
+      "linux",
+      "win32"
+    ]
+  },
+  "targets": {
+    "published": [
+      {
+        "key": "linux-x64-gnu",
+        "platform": "linux",
+        "arch": "x64",
+        "rustTarget": "x86_64-unknown-linux-gnu",
+        "runner": "ubuntu-24.04",
+        "npmPackage": "@mcpace/cli-linux-x64-gnu",
+        "binaryName": "mcpace"
+      },
+      {
+        "key": "linux-arm64-gnu",
+        "platform": "linux",
+        "arch": "arm64",
+        "rustTarget": "aarch64-unknown-linux-gnu",
+        "runner": "ubuntu-24.04-arm",
+        "npmPackage": "@mcpace/cli-linux-arm64-gnu",
+        "binaryName": "mcpace"
+      },
+      {
+        "key": "darwin-x64",
+        "platform": "darwin",
+        "arch": "x64",
+        "rustTarget": "x86_64-apple-darwin",
+        "runner": "macos-15-intel",
+        "npmPackage": "@mcpace/cli-darwin-x64",
+        "binaryName": "mcpace"
+      },
+      {
+        "key": "darwin-arm64",
+        "platform": "darwin",
+        "arch": "arm64",
+        "rustTarget": "aarch64-apple-darwin",
+        "runner": "macos-15",
+        "npmPackage": "@mcpace/cli-darwin-arm64",
+        "binaryName": "mcpace"
+      },
+      {
+        "key": "win32-x64-msvc",
+        "platform": "win32",
+        "arch": "x64",
+        "rustTarget": "x86_64-pc-windows-msvc",
+        "runner": "windows-2025",
+        "npmPackage": "@mcpace/cli-win32-x64-msvc",
+        "binaryName": "mcpace.exe"
+      },
+      {
+        "key": "win32-arm64-msvc",
+        "platform": "win32",
+        "arch": "arm64",
+        "rustTarget": "aarch64-pc-windows-msvc",
+        "runner": "windows-11-arm",
+        "npmPackage": "@mcpace/cli-win32-arm64-msvc",
+        "binaryName": "mcpace.exe"
+      }
+    ],
+    "planned": [
+      {
+        "key": "linux-x64-musl",
+        "platform": "linux",
+        "arch": "x64",
+        "rustTarget": "x86_64-unknown-linux-musl",
+        "reason": "Requires a dedicated Alpine/musl build and install proof before publication."
+      },
+      {
+        "key": "linux-arm64-musl",
+        "platform": "linux",
+        "arch": "arm64",
+        "rustTarget": "aarch64-unknown-linux-musl",
+        "reason": "Requires a dedicated Alpine/musl build and install proof before publication."
+      }
+    ]
+  },
+  "commands": [
+    {
+      "name": "candidates",
+      "aliases": [],
+      "implemented": true,
+      "description": "Inspect candidate server catalog."
+    },
+    {
+      "name": "cleanup",
+      "aliases": [
+        "clean",
+        "prune"
+      ],
+      "implemented": true,
+      "description": "Safely inspect or remove disposable cache, logs, and ephemeral runtime markers."
+    },
+    {
+      "name": "client",
+      "aliases": [
+        "setup-clients",
+        "setup-mcp-clients"
+      ],
+      "implemented": true,
+      "description": "Grouped client planning/install/export command."
+    },
+    {
+      "name": "connect",
+      "aliases": [
+        "guide",
+        "next",
+        "onboard"
+      ],
+      "implemented": true,
+      "description": "Show client-first wiring guidance, endpoint details, and next commands."
+    },
+    {
+      "name": "dashboard",
+      "aliases": [
+        "ui"
+      ],
+      "implemented": true,
+      "description": "Serve a local admin dashboard for MCPace."
+    },
+    {
+      "name": "doctor",
+      "aliases": [],
+      "implemented": true,
+      "description": "Inspect host/source readiness without starting a runtime."
+    },
+    {
+      "name": "help",
+      "aliases": [
+        "-h",
+        "--help"
+      ],
+      "implemented": true,
+      "description": "Show help for the Rust-only CLI."
+    },
+    {
+      "name": "hub",
+      "aliases": [
+        "start"
+      ],
+      "implemented": true,
+      "description": "Manage the local hub lifecycle, status, and logs."
+    },
+    {
+      "name": "init",
+      "aliases": [
+        "boot"
+      ],
+      "implemented": true,
+      "description": "Bootstrap runtime state layout and readiness."
+    },
+    {
+      "name": "lab",
+      "aliases": [],
+      "implemented": true,
+      "description": "Inspect runtime lab scenarios, coverage, and gap reports."
+    },
+    {
+      "name": "mcp-server",
+      "aliases": [
+        "mcp_server"
+      ],
+      "implemented": true,
+      "description": "Internal MCP stdio compatibility surface."
+    },
+    {
+      "name": "profile",
+      "aliases": [],
+      "implemented": true,
+      "description": "Read-only runtime profile inspection."
+    },
+    {
+      "name": "projects",
+      "aliases": [
+        "project"
+      ],
+      "implemented": true,
+      "description": "Read-only project registry inspection."
+    },
+    {
+      "name": "release",
+      "aliases": [
+        "build-release"
+      ],
+      "implemented": true,
+      "description": "Build local source release artifacts without publishing."
+    },
+    {
+      "name": "repair",
+      "aliases": [
+        "backup",
+        "rotate-logs",
+        "windows-mcp-lease",
+        "auth"
+      ],
+      "implemented": true,
+      "description": "Grouped repair/maintenance command."
+    },
+    {
+      "name": "serve",
+      "aliases": [],
+      "implemented": true,
+      "description": "Serve the local MCPace HTTP surface on one port."
+    },
+    {
+      "name": "server",
+      "aliases": [
+        "servers",
+        "capabilities",
+        "server-capabilities",
+        "mcp",
+        "add-server",
+        "server-install"
+      ],
+      "implemented": true,
+      "description": "Grouped server inspection and automatic MCP package/URL/command install command."
+    },
+    {
+      "name": "service",
+      "aliases": [
+        "autostart",
+        "startup"
+      ],
+      "implemented": true,
+      "description": "Install or inspect user-level autostart for the MCPace endpoint."
+    },
+    {
+      "name": "setup",
+      "aliases": [
+        "up",
+        "quickstart",
+        "bootstrap",
+        "one-click"
+      ],
+      "implemented": true,
+      "description": "Home-first onboarding: create/repair MCPace home, start the endpoint, wire supported local clients, and smoke-test without adding upstream servers."
+    },
+    {
+      "name": "stdio-shim",
+      "aliases": [
+        "stdio_shim"
+      ],
+      "implemented": true,
+      "description": "Internal bootstrap-only stdio shim proof surface."
+    },
+    {
+      "name": "update",
+      "aliases": [
+        "update-check"
+      ],
+      "implemented": true,
+      "description": "Check external package-manager update guidance without self-updating."
+    },
+    {
+      "name": "verify",
+      "aliases": [
+        "check",
+        "status",
+        "smoke",
+        "readiness",
+        "probe",
+        "stress-status",
+        "stress-startup-status"
+      ],
+      "implemented": true,
+      "description": "Grouped verification command."
+    },
+    {
+      "name": "version",
+      "aliases": [
+        "--version",
+        "-v"
+      ],
+      "implemented": true,
+      "description": "Print the MCPace version from mcpace.config.json."
+    }
+  ],
+  "subcommands": {
+    "server": [
+      "add",
+      "auto",
+      "candidates",
+      "capabilities",
+      "disable",
+      "discover",
+      "enable",
+      "import",
+      "install",
+      "instances",
+      "leases",
+      "list",
+      "remove",
+      "set-policy",
+      "sources",
+      "test"
+    ],
+    "client": [
+      "export",
+      "install",
+      "list",
+      "plan",
+      "restore"
+    ],
+    "lab": [
+      "coverage",
+      "gaps",
+      "list",
+      "matrix",
+      "probe",
+      "report",
+      "run",
+      "show"
+    ],
+    "serve": [
+      "restart",
+      "start",
+      "status",
+      "stop"
+    ],
+    "hub": [
+      "down",
+      "lease",
+      "logs",
+      "repair",
+      "run",
+      "status",
+      "up"
+    ]
+  },
+  "smokeCommands": [
+    {
+      "args": [
+        "help"
+      ],
+      "expects": "text",
+      "reason": "top-level command router and public help",
+      "command": "help",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "version"
+      ],
+      "expects": "text",
+      "reason": "version metadata path",
+      "command": "version",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "doctor",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "host and source readiness without runtime start",
+      "command": "doctor --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "verify",
+        "readiness",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "user readiness gate",
+      "command": "verify readiness --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "server",
+        "list",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "server inventory contract",
+      "command": "server list --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "server",
+        "capabilities",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "launch/capability metadata contract",
+      "command": "server capabilities --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "server",
+        "sources",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "MCP settings source discovery contract",
+      "command": "server sources --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "client",
+        "list",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "client catalog visibility contract",
+      "command": "client list --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "client",
+        "plan",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "client install plan contract",
+      "command": "client plan --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "hub",
+        "status",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "hub state read contract",
+      "command": "hub status --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "profile",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "runtime profile read contract",
+      "command": "profile --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "projects",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "project registry read contract",
+      "command": "projects --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "lab",
+        "report",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "evidence corpus contract",
+      "command": "lab report --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "cleanup",
+        "status",
+        "--json"
+      ],
+      "expects": "json",
+      "reason": "non-destructive cleanup plan",
+      "command": "cleanup status --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "release",
+        "--help"
+      ],
+      "expects": "text",
+      "reason": "release command help path",
+      "command": "release --help",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "service",
+        "--help"
+      ],
+      "expects": "text",
+      "reason": "platform autostart help path",
+      "command": "service --help",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "serve",
+        "status",
+        "--json"
+      ],
+      "expects": "jsonOrNonzero",
+      "reason": "serve state read path without starting daemon",
+      "command": "serve status --json",
+      "coveredTopLevel": true
+    }
+  ],
+  "topLevelCommandGaps": [
+    "candidates",
+    "connect",
+    "dashboard",
+    "init",
+    "mcp-server",
+    "repair",
+    "setup",
+    "stdio-shim",
+    "update"
+  ],
+  "checks": [
+    {
+      "id": "release-targets-cover-three-desktop-os",
+      "status": "pass",
+      "detail": "published platforms: darwin, linux, win32"
+    },
+    {
+      "id": "platform-workflow-covers-three-desktop-os",
+      "status": "pass",
+      "detail": "workflow platforms: darwin, linux, win32"
+    },
+    {
+      "id": "platform-workflow-runs-node-rust-and-binary-smoke",
+      "status": "pass",
+      "detail": "manual platform proof must cover Node contracts, Rust build/test, and native binary smoke commands."
+    },
+    {
+      "id": "optional-npm-packages-match-published-targets",
+      "status": "pass",
+      "detail": "all published target packages are declared optional deps"
+    },
+    {
+      "id": "platform-proof-artifacts-ship-in-source-bundle",
+      "status": "pass",
+      "detail": "report scripts and generated reports must be reviewable in the source bundle."
+    },
+    {
+      "id": "all-public-commands-inventoried",
+      "status": "pass",
+      "detail": "23 public command groups parsed from src/catalog.rs"
+    },
+    {
+      "id": "safe-binary-smoke-covers-operational-groups",
+      "status": "pass",
+      "detail": "17 non-destructive native smoke commands defined"
+    },
+    {
+      "id": "console-ui-decision-is-lightweight",
+      "status": "pass",
+      "detail": "Tauri is desktop-webview scope; console UX should stay CLI/dashboard now, with a future Ratatui TUI only after Rust platform proof is green."
+    }
+  ],
+  "correctPlatformFlow": [
+    "Static proof on any host: npm run check:platform && npm run check.",
+    "Manual GitHub proof: run .github/workflows/platform-proof.yml with full=true.",
+    "For each Linux/macOS/Windows host: npm ci, npm run check, install Rust 1.95.0, cargo fmt, clippy, test, build --release.",
+    "Run npm run platform:binary-smoke -- --binary target/release/mcpace[.exe] on each host.",
+    "Only after all three OS families pass, add a real Ratatui-based mcpace tui command or a Tauri desktop shell."
+  ]
+}

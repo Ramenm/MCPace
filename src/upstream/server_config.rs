@@ -101,6 +101,11 @@ pub(super) fn load_servers(
             .unwrap_or(false)
         {
             Some("server is disabled by the active MCPace runtime profile".to_string())
+        } else if policy
+            .map(|policy| !policy.runtime_enabled)
+            .unwrap_or(false)
+        {
+            Some("server is disabled by MCPace runtime policy".to_string())
         } else {
             None
         };
@@ -184,12 +189,16 @@ fn load_upstream_server_policies(
     };
 
     for (server_name, raw_server) in servers {
+        let normalized_server_name = mcp_sources::normalize_server_name(server_name);
+        if normalized_server_name.is_empty() {
+            continue;
+        }
         let required = json_helpers::bool_at_path(raw_server, &["required"]).unwrap_or(false);
         let default_enabled =
             json_helpers::bool_at_path(raw_server, &["defaultEnabled"]).unwrap_or(false);
         let override_enabled = runtime_profile
             .server_overrides
-            .get(&server_name.trim().to_ascii_lowercase())
+            .get(&normalized_server_name)
             .copied();
         let profile_enabled = if required {
             true
@@ -200,6 +209,7 @@ fn load_upstream_server_policies(
             platform_utils::supports_current_platform(&json_helpers::strings_from_array(
                 json_helpers::array_at_path(raw_server, &["platforms"]),
             ));
+        let runtime_enabled = !server_policy_is_disabled(raw_server);
         let mut tool_policies = Vec::new();
         if let Some(raw_policies) = json_helpers::array_at_path(raw_server, &["toolPolicies"]) {
             for raw_policy in raw_policies {
@@ -209,16 +219,51 @@ fn load_upstream_server_policies(
             }
         }
         policies.insert(
-            server_name.trim().to_ascii_lowercase(),
+            normalized_server_name,
             UpstreamServerPolicy {
                 profile_enabled,
                 platform_supported,
+                runtime_enabled,
                 tool_policies,
             },
         );
     }
 
     Ok(policies)
+}
+
+fn server_policy_is_disabled(raw_server: &JsonValue) -> bool {
+    let startup_disabled = json_helpers::string_at_path(raw_server, &["policy", "startupStrategy"])
+        .map(|value| normalize_policy_token(value) == "disabled")
+        .unwrap_or(false);
+    let routing_disabled = json_helpers::string_at_path(raw_server, &["policy", "routingGroup"])
+        .map(|value| normalize_policy_token(value) == "disabled")
+        .unwrap_or(false);
+    let plan_only = json_helpers::string_at_path(raw_server, &["policy", "concurrencyPolicy"])
+        .map(|value| normalize_policy_token(value) == "plan-only")
+        .unwrap_or(false);
+    let not_runnable = json_helpers::string_at_path(raw_server, &["policy", "scopeClass"])
+        .map(|value| normalize_policy_token(value) == "not-runnable")
+        .unwrap_or(false);
+    let zero_policy_workers = json_helpers::value_at_path(raw_server, &["policy", "maxWorkers"])
+        .and_then(JsonValue::as_i64)
+        .map(|value| value <= 0)
+        .unwrap_or(false);
+    let execution_disabled = json_helpers::string_at_path(raw_server, &["execution", "mode"])
+        .map(|value| normalize_policy_token(value) == "disabled")
+        .unwrap_or(false);
+    let zero_execution_workers = json_helpers::value_at_path(raw_server, &["execution", "maxWorkers"])
+        .and_then(JsonValue::as_i64)
+        .map(|value| value <= 0)
+        .unwrap_or(false);
+
+    startup_disabled
+        || routing_disabled
+        || plan_only
+        || not_runnable
+        || zero_policy_workers
+        || execution_disabled
+        || zero_execution_workers
 }
 
 fn parse_tool_policy(raw: &JsonValue) -> Option<ToolRiskPolicy> {

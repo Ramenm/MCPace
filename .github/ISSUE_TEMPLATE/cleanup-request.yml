@@ -2,7 +2,8 @@ name: Cleanup request
 description: Request explicit repository cleanup, refactor, or deslop work.
 title: "[cleanup] "
 labels:
-  - cleanup
+  - internal-only
+  - severity:p3
 body:
   - type: markdown
     attributes:

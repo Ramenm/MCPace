@@ -156,15 +156,7 @@ pub fn write_mcp_server_entry(
             target_path.display()
         ));
     };
-    if !root_object.contains_key("mcpServers") {
-        root_object.insert("mcpServers".to_string(), JsonValue::Object(BTreeMap::new()));
-    }
-    let Some(JsonValue::Object(servers)) = root_object.get_mut("mcpServers") else {
-        return Err(format!(
-            "MCP settings source '{}' has non-object mcpServers",
-            target_path.display()
-        ));
-    };
+    let servers = ensure_servers_object_mut(root_object, &target_path)?;
 
     let existing_key = servers
         .keys()
@@ -262,40 +254,27 @@ pub fn remove_mcp_server_entry(
     let mut existed_before = false;
     let remaining_server_count;
     match &mut root_value {
-        JsonValue::Object(root_object) => match root_object.get_mut("mcpServers") {
-            Some(JsonValue::Object(servers)) => {
-                let key_to_remove = servers
-                    .keys()
-                    .find(|key| normalize_server_name(key) == normalized_name)
-                    .cloned();
-                if let Some(key) = key_to_remove {
-                    existed_before = true;
-                    if !options.dry_run {
-                        servers.remove(&key);
-                    }
+        JsonValue::Object(root_object) => {
+            let servers = existing_servers_object_mut(root_object, &target_path)?;
+            let key_to_remove = servers
+                .keys()
+                .find(|key| normalize_server_name(key) == normalized_name)
+                .cloned();
+            if let Some(key) = key_to_remove {
+                existed_before = true;
+                if !options.dry_run {
+                    servers.remove(&key);
                 }
-                remaining_server_count = if options.dry_run {
-                    servers
-                        .keys()
-                        .filter(|key| normalize_server_name(key) != normalized_name)
-                        .count()
-                } else {
-                    servers.len()
-                };
             }
-            Some(_) => {
-                return Err(format!(
-                    "MCP settings source '{}' has a non-object mcpServers value",
-                    target_path.display()
-                ));
-            }
-            None => {
-                return Err(format!(
-                    "MCP settings source '{}' has no mcpServers object",
-                    target_path.display()
-                ));
-            }
-        },
+            remaining_server_count = if options.dry_run {
+                servers
+                    .keys()
+                    .filter(|key| normalize_server_name(key) != normalized_name)
+                    .count()
+            } else {
+                servers.len()
+            };
+        }
         _ => {
             return Err(format!(
                 "MCP settings source '{}' must be a JSON object",
@@ -367,42 +346,35 @@ pub fn set_mcp_server_enabled(
     let mut previous_enabled = None;
     let server_count;
     match &mut root_value {
-        JsonValue::Object(root_object) => match root_object.get_mut("mcpServers") {
-            Some(JsonValue::Object(servers)) => {
-                server_count = servers.len();
-                let key_to_update = servers
-                    .keys()
-                    .find(|key| normalize_server_name(key) == normalized_name)
-                    .cloned();
-                if let Some(key) = key_to_update {
-                    existed_before = true;
-                    let Some(JsonValue::Object(server_object)) = servers.get_mut(&key) else {
-                        return Err(format!(
-                            "MCP server '{}' in '{}' must be a JSON object to enable/disable it",
-                            display_name,
-                            target_path.display()
-                        ));
-                    };
-                    previous_enabled = server_object.get("enabled").and_then(JsonValue::as_bool);
-                    if !options.dry_run {
-                        server_object
-                            .insert("enabled".to_string(), JsonValue::bool(options.enabled));
+        JsonValue::Object(root_object) => {
+            let servers = existing_servers_object_mut(root_object, &target_path)?;
+            server_count = servers.len();
+            let key_to_update = servers
+                .keys()
+                .find(|key| normalize_server_name(key) == normalized_name)
+                .cloned();
+            if let Some(key) = key_to_update {
+                existed_before = true;
+                let Some(JsonValue::Object(server_object)) = servers.get_mut(&key) else {
+                    return Err(format!(
+                        "MCP server '{}' in '{}' must be a JSON object to enable/disable it",
+                        display_name,
+                        target_path.display()
+                    ));
+                };
+                let raw_enabled = server_object.get("enabled").and_then(JsonValue::as_bool);
+                let raw_disabled = server_object.get("disabled").and_then(JsonValue::as_bool);
+                previous_enabled = raw_enabled.or_else(|| raw_disabled.map(|disabled| !disabled));
+                if !options.dry_run {
+                    server_object.insert("enabled".to_string(), JsonValue::bool(options.enabled));
+                    if options.enabled {
+                        server_object.remove("disabled");
+                    } else {
+                        server_object.insert("disabled".to_string(), JsonValue::bool(true));
                     }
                 }
             }
-            Some(_) => {
-                return Err(format!(
-                    "MCP settings source '{}' has a non-object mcpServers value",
-                    target_path.display()
-                ));
-            }
-            None => {
-                return Err(format!(
-                    "MCP settings source '{}' has no mcpServers object",
-                    target_path.display()
-                ));
-            }
-        },
+        }
         _ => {
             return Err(format!(
                 "MCP settings source '{}' must be a JSON object",
@@ -437,6 +409,58 @@ pub fn set_mcp_server_enabled(
         previous_enabled,
         server_count,
     })
+}
+
+fn ensure_servers_object_mut<'a>(
+    root_object: &'a mut BTreeMap<String, JsonValue>,
+    target_path: &Path,
+) -> Result<&'a mut BTreeMap<String, JsonValue>, String> {
+    let key = if root_object.contains_key("mcpServers") {
+        "mcpServers"
+    } else if root_object.contains_key("servers") {
+        "servers"
+    } else {
+        root_object.insert("mcpServers".to_string(), JsonValue::Object(BTreeMap::new()));
+        "mcpServers"
+    };
+    servers_object_mut(root_object, key, target_path)
+}
+
+fn existing_servers_object_mut<'a>(
+    root_object: &'a mut BTreeMap<String, JsonValue>,
+    target_path: &Path,
+) -> Result<&'a mut BTreeMap<String, JsonValue>, String> {
+    let key = if root_object.contains_key("mcpServers") {
+        "mcpServers"
+    } else if root_object.contains_key("servers") {
+        "servers"
+    } else {
+        return Err(format!(
+            "MCP settings source '{}' has no mcpServers or servers object",
+            target_path.display()
+        ));
+    };
+    servers_object_mut(root_object, key, target_path)
+}
+
+fn servers_object_mut<'a>(
+    root_object: &'a mut BTreeMap<String, JsonValue>,
+    key: &str,
+    target_path: &Path,
+) -> Result<&'a mut BTreeMap<String, JsonValue>, String> {
+    match root_object.get_mut(key) {
+        Some(JsonValue::Object(servers)) => Ok(servers),
+        Some(_) => Err(format!(
+            "MCP settings source '{}' has a non-object {} value",
+            target_path.display(),
+            key
+        )),
+        None => Err(format!(
+            "MCP settings source '{}' has no {} object",
+            target_path.display(),
+            key
+        )),
+    }
 }
 
 impl McpServerWriteResult {

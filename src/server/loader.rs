@@ -4,6 +4,7 @@ use crate::json_helpers;
 use crate::mcp_sources;
 use crate::platform_utils;
 use crate::profile;
+use crate::text_utils;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
@@ -50,7 +51,10 @@ pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String
     let mut declared_names = BTreeSet::new();
     if let Some(servers_object) = json_helpers::object_at_path(&config, &["servers"]) {
         for (name, value) in servers_object {
-            let normalized_name = name.trim().to_ascii_lowercase();
+            let normalized_name = mcp_sources::normalize_server_name(name);
+            if normalized_name.is_empty() {
+                continue;
+            }
             declared_names.insert(normalized_name.clone());
             if let Some(record) = normalize_server_record(
                 name,
@@ -107,6 +111,8 @@ fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServe
             .to_string();
         let args =
             json_helpers::strings_from_array(value.get("args").and_then(JsonValue::as_array));
+        let env_names = object_keys(value.get("env"));
+        let header_names = object_keys(value.get("headers"));
         let mut profile_hints = json_helpers::strings_from_array(
             value
                 .get("mcpaceProfileHints")
@@ -133,11 +139,21 @@ fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServe
                 command,
                 url,
                 args,
+                env_names,
+                header_names,
+                source_path: entry.source.clone(),
                 profile_hints,
             },
         );
     }
     Ok(map)
+}
+
+fn object_keys(value: Option<&JsonValue>) -> Vec<String> {
+    value
+        .and_then(JsonValue::as_object)
+        .map(|object| object.keys().cloned().collect())
+        .unwrap_or_default()
 }
 
 fn generic_source_server_record(
@@ -178,6 +194,20 @@ fn generic_source_server_record(
         &signal_args,
         &[],
     );
+    let max_workers = infer_max_workers(
+        &source_type,
+        policy.scope_class,
+        policy.concurrency_policy,
+        policy.parallelism_limit,
+    );
+    let effective_enabled = source_record.enabled
+        && !runtime_policy_disabled(
+            policy.scope_class,
+            policy.concurrency_policy,
+            policy.startup_strategy,
+            policy.routing_group,
+            max_workers,
+        );
 
     ServerRecord {
         name: display_name.to_string(),
@@ -186,7 +216,7 @@ fn generic_source_server_record(
         default_enabled: false,
         profile_enabled: source_record.enabled,
         platform_supported: true,
-        effective_enabled: source_record.enabled,
+        effective_enabled,
         auto_start: false,
         transport_preference: source_type.clone(),
         supported_transports: supported_transports_for_source_type(&source_type),
@@ -218,12 +248,7 @@ fn generic_source_server_record(
             policy.state_binding,
             policy.credential_binding,
         ),
-        max_workers: infer_max_workers(
-            &source_type,
-            policy.scope_class,
-            policy.concurrency_policy,
-            policy.parallelism_limit,
-        ),
+        max_workers,
         max_in_flight_per_worker: 1,
         transport_status: transport_status_for_source_type(&source_type),
         launcher_kind: infer_launcher_kind(
@@ -263,7 +288,11 @@ fn generic_source_server_record(
         health_url: String::new(),
         source_enabled: source_record.enabled,
         source_type,
+        source_path: source_record.source_path.clone(),
         source_command: source_record.command.clone(),
+        source_args: source_record.args.clone(),
+        source_env_names: source_record.env_names.clone(),
+        source_header_names: source_record.header_names.clone(),
         source_url: source_record.url.clone(),
         tool_policies: Vec::new(),
         installer_target: "none".to_string(),
@@ -292,7 +321,10 @@ fn source_signal_args(args: &[String], profile_hints: &[String]) -> Vec<String> 
 }
 
 fn raw_arg_is_semantic_signal(value: &str) -> bool {
-    let normalized = value.trim().to_ascii_lowercase();
+    let normalized = value
+        .trim()
+        .trim_matches(|character: char| character == '"' || character == '\'')
+        .to_ascii_lowercase();
     if normalized.is_empty() {
         return false;
     }
@@ -307,6 +339,9 @@ fn raw_arg_is_semantic_signal(value: &str) -> bool {
         "no-write",
     ];
     if exact_signals.contains(&normalized.as_str()) {
+        return true;
+    }
+    if looks_like_launcher_package_signal(&normalized) {
         return true;
     }
     if !normalized.starts_with('-') {
@@ -338,6 +373,31 @@ fn raw_arg_is_semantic_signal(value: &str) -> bool {
         .any(|flag| normalized == *flag || normalized.starts_with(&format!("{}=", flag)))
 }
 
+fn looks_like_launcher_package_signal(value: &str) -> bool {
+    if value.is_empty()
+        || value == "."
+        || value == ".."
+        || value.starts_with('-')
+        || value.starts_with('/')
+        || value.starts_with("./")
+        || value.starts_with("../")
+        || value.starts_with("~/")
+        || value.starts_with("http://")
+        || value.starts_with("https://")
+        || value.contains('\\')
+    {
+        return false;
+    }
+    if value.contains('/') && !value.starts_with('@') {
+        return false;
+    }
+    value.starts_with('@')
+        || value.contains("mcp")
+        || value.contains("modelcontextprotocol")
+        || value.contains("server-")
+        || value.contains("-server")
+}
+
 fn infer_generic_source_policy(
     normalized_name: &str,
     source_record: &SourceServerRecord,
@@ -354,6 +414,7 @@ fn infer_generic_source_policy(
     let remote = source_type == "streamable-http"
         || source_type == "http"
         || !source_record.url.trim().is_empty();
+    let mutable_tools = signals.contains("mutable-tools");
 
     if signals.contains("sdk-or-example") {
         return GenericSourcePolicy {
@@ -370,24 +431,6 @@ fn infer_generic_source_policy(
             startup_strategy: "disabled",
             routing_group: "sdk-or-example",
             discovery_requires_lease: false,
-        };
-    }
-
-    if remote {
-        return GenericSourcePolicy {
-            scope_class: "credential-scoped",
-            concurrency_policy: "single-writer",
-            state_binding: "remote-session",
-            credential_binding: "remote-origin-or-credential",
-            parallelism_limit: 1,
-            conflict_domain_prefix: "remote-mcp",
-            project_root_mode: "optional",
-            worktree_binding: "none",
-            state_profile_mode: "optional",
-            host_lock: "none",
-            startup_strategy: "lazy-shared",
-            routing_group: "remote-mcp",
-            discovery_requires_lease: true,
         };
     }
 
@@ -459,6 +502,24 @@ fn infer_generic_source_policy(
             host_lock: "host-session",
             startup_strategy: "singleton-host",
             routing_group: "dangerous-process",
+            discovery_requires_lease: true,
+        };
+    }
+
+    if remote {
+        return GenericSourcePolicy {
+            scope_class: "credential-scoped",
+            concurrency_policy: "single-writer",
+            state_binding: "remote-session",
+            credential_binding: "remote-origin-or-credential",
+            parallelism_limit: 1,
+            conflict_domain_prefix: "remote-mcp",
+            project_root_mode: "optional",
+            worktree_binding: "none",
+            state_profile_mode: "optional",
+            host_lock: "none",
+            startup_strategy: "lazy-shared",
+            routing_group: "remote-mcp",
             discovery_requires_lease: true,
         };
     }
@@ -652,7 +713,7 @@ fn infer_generic_source_policy(
         };
     }
 
-    if signals.contains("network-fetch") {
+    if signals.contains("network-fetch") && !mutable_tools {
         return GenericSourcePolicy {
             scope_class: "credential-scoped",
             concurrency_policy: "multi-reader",
@@ -670,7 +731,7 @@ fn infer_generic_source_policy(
         };
     }
 
-    if signals.contains("local-utility") || signals.contains("readonly-tools") {
+    if (signals.contains("local-utility") || signals.contains("readonly-tools")) && !mutable_tools {
         return GenericSourcePolicy {
             scope_class: "stateless-local",
             concurrency_policy: "multi-reader",
@@ -713,13 +774,8 @@ fn source_signals(
     args: &[String],
 ) -> BTreeSet<String> {
     let _identity = (normalized_name, display_name);
-    let haystack = format!(
-        "{} {} {}",
-        command_semantic_signal(command),
-        url,
-        args.join(" ")
-    )
-    .to_ascii_lowercase();
+    let haystack = format!("{} {} {}", command_semantic_signal(command), url, args.join(" "))
+        .to_ascii_lowercase();
     let tokens = signal_tokens(&haystack);
     let mut signals = BTreeSet::new();
     let remote_file_api = has_any_substring(
@@ -1414,6 +1470,7 @@ fn command_semantic_signal(command: &str) -> String {
         | "pwsh" | "pwsh.exe" | "ssh" | "ssh.exe" | "sftp" | "sftp.exe" | "terminal" => {
             command_name
         }
+        _ if looks_like_launcher_package_signal(&command_name) => command_name,
         _ => String::new(),
     }
 }
@@ -1438,13 +1495,17 @@ fn infer_source_type(raw_source_type: &str, command: &str, url: &str) -> String 
 }
 
 fn source_enabled(value: &JsonValue) -> bool {
-    if let Some(enabled) = value.get("enabled").and_then(JsonValue::as_bool) {
-        return enabled;
-    }
-    !value
+    if value
         .get("disabled")
         .and_then(JsonValue::as_bool)
         .unwrap_or(false)
+    {
+        return false;
+    }
+    value
+        .get("enabled")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(true)
 }
 
 fn supported_transports_for_source_type(source_type: &str) -> Vec<String> {
@@ -1483,7 +1544,7 @@ fn normalize_server_record(
     let platforms =
         json_helpers::strings_from_array(object.get("platforms").and_then(JsonValue::as_array));
     let platform_supported = platform_utils::supports_current_platform(&platforms);
-    let effective_enabled = profile_enabled && source_enabled && platform_supported;
+    let base_effective_enabled = profile_enabled && source_enabled && platform_supported;
 
     let raw_source_type = source_record
         .map(|record| record.source_type.clone())
@@ -1494,7 +1555,20 @@ fn normalize_server_record(
     let source_url = source_record
         .map(|record| record.url.clone())
         .unwrap_or_default();
-    let source_type = infer_source_type(&raw_source_type, &source_command, &source_url);
+    let source_path = source_record
+        .map(|record| record.source_path.clone())
+        .unwrap_or_default();
+    let source_env_names = source_record
+        .map(|record| record.env_names.clone())
+        .unwrap_or_default();
+    let source_header_names = source_record
+        .map(|record| record.header_names.clone())
+        .unwrap_or_default();
+    let source_type = if source_record.is_some() {
+        infer_source_type(&raw_source_type, &source_command, &source_url)
+    } else {
+        String::new()
+    };
     let source_args = source_record
         .map(|record| record.args.clone())
         .unwrap_or_default();
@@ -1526,6 +1600,9 @@ fn normalize_server_record(
         command: source_command.clone(),
         url: source_url.clone(),
         args: source_args.clone(),
+        env_names: source_env_names.clone(),
+        header_names: source_header_names.clone(),
+        source_path: source_path.clone(),
         profile_hints: source_profile_hints.clone(),
     };
     let normalized_name_for_policy = name.trim().to_ascii_lowercase();
@@ -1535,14 +1612,14 @@ fn normalize_server_record(
         &source_type,
     );
 
-    let scope_class = policy_string(policy, "scopeClass", inferred_policy.scope_class);
-    let concurrency_policy = policy_string(
+    let scope_class = policy_token(policy, "scopeClass", inferred_policy.scope_class);
+    let concurrency_policy = policy_token(
         policy,
         "concurrencyPolicy",
         inferred_policy.concurrency_policy,
     );
-    let state_binding = policy_string(policy, "stateBinding", inferred_policy.state_binding);
-    let credential_binding = policy_string(
+    let state_binding = policy_token(policy, "stateBinding", inferred_policy.state_binding);
+    let credential_binding = policy_token(
         policy,
         "credentialBinding",
         inferred_policy.credential_binding,
@@ -1562,18 +1639,18 @@ fn normalize_server_record(
     };
     let conflict_domain = policy_string(policy, "conflictDomain", &default_conflict_domain);
     let project_root_mode =
-        policy_string(policy, "projectRootMode", inferred_policy.project_root_mode);
+        policy_token(policy, "projectRootMode", inferred_policy.project_root_mode);
     let worktree_binding =
-        policy_string(policy, "worktreeBinding", inferred_policy.worktree_binding);
-    let state_profile_mode = policy_string(
+        policy_token(policy, "worktreeBinding", inferred_policy.worktree_binding);
+    let state_profile_mode = policy_token(
         policy,
         "stateProfileMode",
         inferred_policy.state_profile_mode,
     );
-    let host_lock = policy_string(policy, "hostLock", inferred_policy.host_lock);
+    let host_lock = policy_token(policy, "hostLock", inferred_policy.host_lock);
     let startup_strategy =
-        policy_string(policy, "startupStrategy", inferred_policy.startup_strategy);
-    let routing_group = policy_string(policy, "routingGroup", inferred_policy.routing_group);
+        policy_token(policy, "startupStrategy", inferred_policy.startup_strategy);
+    let routing_group = policy_token(policy, "routingGroup", inferred_policy.routing_group);
     let discovery_requires_lease = policy_bool(
         policy,
         "discoveryRequiresLease",
@@ -1624,9 +1701,9 @@ fn normalize_server_record(
         &signal_args,
         &tool_policies,
     );
-    let runtime_type = policy_string(policy, "runtimeType", runtime_classification.runtime_type);
-    let state_class = policy_string(policy, "stateClass", runtime_classification.state_class);
-    let effect_class = policy_string(policy, "effectClass", runtime_classification.effect_class);
+    let runtime_type = policy_token(policy, "runtimeType", runtime_classification.runtime_type);
+    let state_class = policy_token(policy, "stateClass", runtime_classification.state_class);
+    let effect_class = policy_token(policy, "effectClass", runtime_classification.effect_class);
     let default_pool_model = infer_default_pool_model(
         &source_type,
         &scope_class,
@@ -1640,8 +1717,25 @@ fn normalize_server_record(
         &concurrency_policy,
         parallelism_limit,
     );
-    let max_workers = policy_usize(policy, "maxWorkers", inferred_max_workers).max(1);
-    let max_in_flight_per_worker = policy_usize(policy, "maxInFlightPerWorker", 1).max(1);
+    let max_workers = normalized_worker_count(
+        policy_usize(policy, "maxWorkers", inferred_max_workers),
+        &source_type,
+        &scope_class,
+        &concurrency_policy,
+    );
+    let max_in_flight_per_worker = if max_workers == 0 {
+        0
+    } else {
+        policy_usize(policy, "maxInFlightPerWorker", 1).max(1)
+    };
+    let effective_enabled = base_effective_enabled
+        && !runtime_policy_disabled(
+            &scope_class,
+            &concurrency_policy,
+            &startup_strategy,
+            &routing_group,
+            max_workers,
+        );
     let lock_domains = infer_lock_domains(
         &scope_class,
         &concurrency_policy,
@@ -1675,21 +1769,10 @@ fn normalize_server_record(
             .get("autoStart")
             .and_then(JsonValue::as_bool)
             .unwrap_or(false),
-        transport_preference: object
-            .get("transportPreference")
-            .and_then(JsonValue::as_str)
-            .unwrap_or("")
-            .trim()
-            .to_string(),
-        supported_transports: json_helpers::strings_from_array(
-            object
-                .get("supportedTransports")
-                .and_then(JsonValue::as_array),
-        ),
+        transport_preference: inferred_transport_preference(object, &source_type),
+        supported_transports: inferred_supported_transports(object, &source_type),
         platforms,
-        required_commands: json_helpers::strings_from_array(
-            object.get("requiredCommands").and_then(JsonValue::as_array),
-        ),
+        required_commands: inferred_required_commands(object, &source_type, &source_command),
         scope_class,
         concurrency_policy,
         state_binding,
@@ -1727,7 +1810,11 @@ fn normalize_server_record(
             .to_string(),
         source_enabled,
         source_type,
+        source_path,
         source_command,
+        source_args,
+        source_env_names,
+        source_header_names,
         source_url,
         tool_policies,
         installer_target: installer
@@ -1745,6 +1832,14 @@ fn normalize_server_record(
             .trim()
             .to_string(),
     })
+}
+
+fn policy_token(
+    policy: Option<&BTreeMap<String, JsonValue>>,
+    key: &str,
+    fallback: &str,
+) -> String {
+    text_utils::normalize_flag(&policy_string(policy, key, fallback))
 }
 
 fn policy_string(
@@ -1774,6 +1869,93 @@ fn policy_bool(policy: Option<&BTreeMap<String, JsonValue>>, key: &str, fallback
         .and_then(|policy| policy.get(key))
         .and_then(JsonValue::as_bool)
         .unwrap_or(fallback)
+}
+
+
+fn runtime_policy_disabled(
+    scope_class: &str,
+    concurrency_policy: &str,
+    startup_strategy: &str,
+    routing_group: &str,
+    max_workers: usize,
+) -> bool {
+    let scope_class = scope_class.trim().to_ascii_lowercase();
+    let concurrency_policy = concurrency_policy.trim().to_ascii_lowercase();
+    let startup_strategy = startup_strategy.trim().to_ascii_lowercase();
+    let routing_group = routing_group.trim().to_ascii_lowercase();
+    startup_strategy == "disabled"
+        || routing_group == "disabled"
+        || concurrency_policy == "plan-only"
+        || scope_class == "not-runnable"
+        || max_workers == 0
+}
+
+fn allows_zero_workers(source_type: &str, scope_class: &str, concurrency_policy: &str) -> bool {
+    source_type == "sse-legacy"
+        || source_type == "sse"
+        || scope_class == "not-runnable"
+        || concurrency_policy == "plan-only"
+}
+
+fn normalized_worker_count(
+    value: usize,
+    source_type: &str,
+    scope_class: &str,
+    concurrency_policy: &str,
+) -> usize {
+    if allows_zero_workers(source_type, scope_class, concurrency_policy) {
+        value
+    } else {
+        value.max(1)
+    }
+}
+
+fn inferred_transport_preference(object: &BTreeMap<String, JsonValue>, source_type: &str) -> String {
+    let configured = object
+        .get("transportPreference")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("")
+        .trim()
+        .to_string();
+    if configured.is_empty() {
+        source_type.to_string()
+    } else {
+        configured
+    }
+}
+
+fn inferred_supported_transports(
+    object: &BTreeMap<String, JsonValue>,
+    source_type: &str,
+) -> Vec<String> {
+    let mut transports = json_helpers::strings_from_array(
+        object
+            .get("supportedTransports")
+            .and_then(JsonValue::as_array),
+    );
+    if transports.is_empty() {
+        transports = supported_transports_for_source_type(source_type);
+    }
+    transports.sort();
+    transports.dedup();
+    transports
+}
+
+fn inferred_required_commands(
+    object: &BTreeMap<String, JsonValue>,
+    source_type: &str,
+    source_command: &str,
+) -> Vec<String> {
+    let mut commands = json_helpers::strings_from_array(
+        object.get("requiredCommands").and_then(JsonValue::as_array),
+    );
+    let command = source_command.trim();
+    if source_type == "stdio" && !command.is_empty() {
+        commands.push(command.to_string());
+    }
+    commands.sort();
+    commands.dedup();
+    commands
 }
 
 fn transport_status_for_source_type(source_type: &str) -> String {
@@ -1869,11 +2051,21 @@ fn infer_runtime_classification(
         };
     }
 
-    if signals.contains("browser-observation") || state_binding == "host-readonly" {
+    if (signals.contains("browser-observation") || state_binding == "host-readonly")
+        && !destructive_tools
+    {
         return RuntimeClassification {
             runtime_type: "stateful",
             state_class: "host-stateful",
             effect_class: "read-only",
+        };
+    }
+
+    if signals.contains("browser-observation") || state_binding == "host-readonly" {
+        return RuntimeClassification {
+            runtime_type: "side-effecting",
+            state_class: "host-stateful",
+            effect_class: "host-mutating",
         };
     }
 
@@ -1903,7 +2095,11 @@ fn infer_runtime_classification(
         return RuntimeClassification {
             runtime_type: "stateful",
             state_class: "project-stateful",
-            effect_class: "read-only",
+            effect_class: if destructive_tools {
+                "project-mutating"
+            } else {
+                "read-only"
+            },
         };
     }
 
@@ -2077,10 +2273,14 @@ fn infer_parallel_safety_class(
     tool_policies: &[JsonValue],
 ) -> String {
     let signals = source_signals("", "", command, url, args);
+    let destructive_tools = tool_policies.iter().any(policy_mentions_destructive)
+        || signals.contains("mutable-tools");
     if source_type == "sse-legacy" || source_type == "sse" {
         return "PX_legacy_compat".to_string();
     }
-    if signals.contains("browser-observation") || state_binding == "host-readonly" {
+    if (signals.contains("browser-observation") || state_binding == "host-readonly")
+        && !destructive_tools
+    {
         return "P1_host_readonly_candidate".to_string();
     }
     if scope_class == "shared-exclusive"
@@ -2094,6 +2294,15 @@ fn infer_parallel_safety_class(
     }
     if scope_class == "project-local" || concurrency_policy == "isolated-per-project" {
         return "P3_project_safe".to_string();
+    }
+    if signals.contains("filesystem")
+        || signals.contains("git-repository")
+        || signals.contains("database")
+    {
+        return "P3_project_safe".to_string();
+    }
+    if destructive_tools {
+        return "P0_mutating_requires_serialization".to_string();
     }
     if policy_is_explicit_stateless(concurrency_policy, state_binding) {
         if source_type == "streamable-http" || source_type == "http" || !url.trim().is_empty() {
@@ -2109,12 +2318,6 @@ fn infer_parallel_safety_class(
     }
     if source_type == "streamable-http" || source_type == "http" || !url.trim().is_empty() {
         return "P2_session_safe".to_string();
-    }
-    if signals.contains("filesystem")
-        || signals.contains("git-repository")
-        || signals.contains("database")
-    {
-        return "P3_project_safe".to_string();
     }
     if signals.contains("network-fetch")
         || signals.contains("documentation-lookup")

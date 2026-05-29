@@ -5,6 +5,7 @@
 //! counts and HTTP request limits explicit and cgroup-aware through
 //! `std::thread::available_parallelism`.
 
+use crate::json::JsonValue;
 use std::env;
 use std::time::Duration;
 
@@ -49,6 +50,119 @@ pub fn runtime_resource_env_keys() -> &'static [&'static str] {
         ENV_UPSTREAM_SESSION_POOL_LIMIT,
         ENV_UPSTREAM_SESSION_POOL_SHARDS,
     ]
+}
+
+pub fn process_resource_snapshot_json(pid: u32) -> JsonValue {
+    #[cfg(target_os = "linux")]
+    {
+        process_resource_snapshot_linux(pid)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        JsonValue::object([
+            ("pid", JsonValue::number(pid)),
+            ("available", JsonValue::bool(false)),
+            ("source", JsonValue::string("unsupported-platform")),
+            ("platform", JsonValue::string(std::env::consts::OS)),
+            (
+                "note",
+                JsonValue::string("per-process resource snapshots are currently implemented through Linux procfs; this platform needs a native backend"),
+            ),
+        ])
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn process_resource_snapshot_linux(pid: u32) -> JsonValue {
+    use std::fs;
+
+    let proc_dir = std::path::PathBuf::from(format!("/proc/{pid}"));
+    let status = fs::read_to_string(proc_dir.join("status")).ok();
+    let stat = fs::read_to_string(proc_dir.join("stat")).ok();
+    let rss_bytes = status
+        .as_deref()
+        .and_then(|value| status_kib(value, "VmRSS:"))
+        .map(|kib| kib.saturating_mul(1024));
+    let virtual_memory_bytes = status
+        .as_deref()
+        .and_then(|value| status_kib(value, "VmSize:"))
+        .map(|kib| kib.saturating_mul(1024));
+    let threads = status
+        .as_deref()
+        .and_then(|value| status_u64(value, "Threads:"));
+    let fd_count = fs::read_dir(proc_dir.join("fd"))
+        .ok()
+        .map(|entries| entries.filter_map(Result::ok).count() as u64);
+    let (state, cpu_ticks) = stat
+        .as_deref()
+        .map(stat_state_and_ticks)
+        .unwrap_or((None, None));
+    let available = status.is_some() || stat.is_some() || fd_count.is_some();
+
+    JsonValue::object([
+        ("pid", JsonValue::number(pid)),
+        ("available", JsonValue::bool(available)),
+        ("source", JsonValue::string("linux-procfs")),
+        ("platform", JsonValue::string(std::env::consts::OS)),
+        (
+            "rssBytes",
+            rss_bytes.map(JsonValue::number).unwrap_or(JsonValue::Null),
+        ),
+        (
+            "virtualMemoryBytes",
+            virtual_memory_bytes
+                .map(JsonValue::number)
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "threads",
+            threads.map(JsonValue::number).unwrap_or(JsonValue::Null),
+        ),
+        (
+            "fdCount",
+            fd_count.map(JsonValue::number).unwrap_or(JsonValue::Null),
+        ),
+        (
+            "state",
+            state.map(JsonValue::string).unwrap_or(JsonValue::Null),
+        ),
+        (
+            "cpuTicks",
+            cpu_ticks.map(JsonValue::number).unwrap_or(JsonValue::Null),
+        ),
+    ])
+}
+
+#[cfg(target_os = "linux")]
+fn status_kib(status: &str, key: &str) -> Option<u64> {
+    status_u64(status, key)
+}
+
+#[cfg(target_os = "linux")]
+fn status_u64(status: &str, key: &str) -> Option<u64> {
+    status.lines().find_map(|line| {
+        let rest = line.strip_prefix(key)?;
+        rest.split_whitespace().next()?.parse::<u64>().ok()
+    })
+}
+
+#[cfg(target_os = "linux")]
+fn stat_state_and_ticks(stat: &str) -> (Option<String>, Option<u64>) {
+    let after_name = stat
+        .rsplit_once(')')
+        .map(|(_, rest)| rest.trim())
+        .unwrap_or(stat);
+    let fields = after_name.split_whitespace().collect::<Vec<_>>();
+    let state = fields.first().map(|value| (*value).to_string());
+    let utime = fields.get(11).and_then(|value| value.parse::<u64>().ok());
+    let stime = fields.get(12).and_then(|value| value.parse::<u64>().ok());
+    let ticks = match (utime, stime) {
+        (Some(user), Some(system)) => Some(user.saturating_add(system)),
+        (Some(user), None) => Some(user),
+        (None, Some(system)) => Some(system),
+        (None, None) => None,
+    };
+    (state, ticks)
 }
 
 pub fn available_parallelism() -> usize {

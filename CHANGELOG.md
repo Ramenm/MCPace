@@ -4,6 +4,21 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 
 ## Unreleased
 
+### Changed
+
+- Normalized the documentation set into a compact landing README, focused docs under `docs/`, and a condensed source-bundle summary.
+- Removed stale report paths from the release manifest so source artifact verification matches the files that actually ship.
+- Aligned GitHub issue-template labels with the declared repository label taxonomy and removed stale documentation placeholders.
+- Rechecked every shipped documentation/governance surface and aligned GitHub artifact download and security workflow metadata with the current workflow contract.
+- Tightened npm package-file metadata so the thin CLI package only declares source paths that exist in the release bundle.
+
+### Fixed
+
+- Restored the npm CLI executable shim expected by `@mcpace/cli` package metadata and release artifact tests.
+- Extended repository hygiene coverage so every issue template is checked for undeclared labels.
+- Added hygiene coverage for security workflow trigger reachability and artifact upload/download action-major alignment.
+- Normalized final newlines in the large evaluation ledgers so text-file audits are clean.
+
 ## 0.6.9
 
 ### Added

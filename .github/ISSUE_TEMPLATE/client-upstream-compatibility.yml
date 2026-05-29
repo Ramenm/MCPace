@@ -2,7 +2,8 @@ name: Client or upstream compatibility
 description: Report a specific MCP client or upstream server compatibility problem.
 title: "[compat] "
 labels:
-  - compatibility
+  - type:compatibility
+  - status:needs-runtime-trace
 body:
   - type: dropdown
     id: kind

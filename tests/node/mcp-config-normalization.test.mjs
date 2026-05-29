@@ -34,3 +34,51 @@ test('public help stays compact and install type inference remains documented', 
   assert.match(help, /Server type is inferred/);
   assert.match(help, /It does not add a default upstream server/);
 });
+
+
+test('HTTP path normalization rejects request-line injection primitives', () => {
+  const runtimePaths = readText('src/runtimepaths.rs');
+  assert.match(runtimePaths, /trimmed\.chars\(\)\.any\(\|ch\| ch\.is_control\(\) \|\| ch\.is_whitespace\(\)\)/, 'normalized HTTP paths must reject all whitespace/control characters, not only CRLF');
+  assert.match(runtimePaths, /normalize_http_path_rejects_request_line_injection_primitives/, 'Rust regression test must cover HTTP request-line injection primitives');
+  assert.match(runtimePaths, /"\/mcp with-space"/, 'space-containing request paths must be covered');
+  assert.match(runtimePaths, /"\/mcp\\twith-tab"/, 'tab-containing request paths must be covered');
+});
+
+
+test('public MCP URL normalization rejects invalid URL text before export', () => {
+  const runtimePaths = readText('src/runtimepaths.rs');
+  assert.match(runtimePaths, /fn normalize_public_url\(value: &str\) -> Option<String>/);
+  assert.match(runtimePaths, /trimmed\.chars\(\)\.any\(\|ch\| ch\.is_control\(\) \|\| ch\.is_whitespace\(\)\)/, 'public URL normalization must reject all whitespace/control characters');
+  assert.match(runtimePaths, /normalize_public_url_rejects_ambiguous_or_unsafe_authorities/, 'Rust regression test must cover invalid public URL text and unsafe authorities');
+  assert.match(runtimePaths, /valid_public_url_authority/, 'public URL export must validate authority, not only scheme');
+  assert.match(runtimePaths, /authority\.contains\('@'\)/, 'public URL export must reject userinfo authority confusion');
+  assert.match(runtimePaths, /authority\.matches\(':'\)\.count\(\) > 1/, 'public URL export must reject raw IPv6 authorities');
+});
+
+test('MCP settings writers preserve either mcpServers or servers top-level shape', () => {
+  const writer = readText('src/mcp_sources/write.rs');
+  const importer = readText('src/mcp_sources/import.rs');
+
+  assert.match(writer, /fn ensure_servers_object_mut/);
+  assert.match(writer, /fn existing_servers_object_mut/);
+  assert.match(writer, /root_object\.contains_key\("mcpServers"\)[\s\S]*root_object\.contains_key\("servers"\)/);
+  assert.match(writer, /has no mcpServers or servers object/);
+  assert.doesNotMatch(writer, /root_object\.get_mut\("mcpServers"\)/);
+
+  assert.match(importer, /json_helpers::mcp_servers_object\(value\)/);
+  assert.match(importer, /fn ensure_import_servers_object_mut/);
+  assert.match(importer, /root_object\.contains_key\("mcpServers"\)[\s\S]*root_object\.contains_key\("servers"\)/);
+  assert.doesNotMatch(importer, /root_object\.get_mut\("mcpServers"\)/);
+});
+
+test('MCPace self-loop import detection requires an endpoint path boundary', () => {
+  const importer = readText('src/mcp_sources/import.rs');
+  const selfEntry = importer.slice(importer.indexOf('fn looks_like_mcpace_self_entry'), importer.indexOf('fn matches_endpoint_url'));
+  const matcher = importer.slice(importer.indexOf('fn matches_endpoint_url'), importer.indexOf('fn read_or_new_settings'));
+
+  assert.match(selfEntry, /matches_endpoint_url\(&url, &configured_url\)/);
+  assert.match(selfEntry, /matches_endpoint_url\(&url, "http:\/\/127\.0\.0\.1:39022\/mcp"\)/);
+  assert.doesNotMatch(selfEntry, /url\.starts_with\("http:\/\/127\.0\.0\.1:39022\/mcp"\)/);
+  assert.match(matcher, /strip_prefix\(endpoint\)/);
+  assert.match(matcher, /matches!\(suffix\.as_bytes\(\)\.first\(\), Some\(b'\/' \| b'\?' \| b'#'\)\)/);
+});

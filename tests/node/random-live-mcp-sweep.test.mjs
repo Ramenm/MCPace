@@ -51,7 +51,7 @@ test('auto install writes profile hints and loader consumes them for future rand
 
   assert.match(discover, /profile_hints_from_candidate/);
   assert.match(discover, /"profileHints"/);
-  assert.match(autoinstall, /profile_hints: options\.profile_hints/);
+  assert.match(autoinstall, /profile_hints\.extend\(profile_hints_for_plan\(&plan\)\)/);
   assert.match(write, /"mcpaceProfileHints"/);
   assert.match(loader, /mcpaceProfileHints/);
   assert.match(loader, /source_signal_args/);

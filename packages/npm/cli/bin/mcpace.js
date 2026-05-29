@@ -1,30 +1,33 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
-import { assertSupportedNodeVersion } from '../lib/runtime.js';
 import { resolveBinary } from '../lib/resolve-binary.js';
+import { assertSupportedNodeVersion } from '../lib/runtime.js';
 
 function main() {
   assertSupportedNodeVersion();
   const binary = resolveBinary();
   const result = spawnSync(binary, process.argv.slice(2), {
     stdio: 'inherit',
-    windowsHide: true
+    windowsHide: true,
   });
+
   if (result.error) {
     throw result.error;
   }
   if (typeof result.status === 'number') {
-    process.exit(result.status);
+    process.exitCode = result.status;
+    return;
   }
   if (result.signal) {
-    console.error(`mcpace terminated by signal ${result.signal}`);
-    process.exit(1);
+    process.stderr.write(`mcpace: native binary terminated by ${result.signal}\n`);
+    process.exitCode = 1;
   }
 }
 
 try {
   main();
 } catch (error) {
-  console.error(error?.message || String(error));
-  process.exit(1);
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`mcpace: ${message}\n`);
+  process.exitCode = 1;
 }

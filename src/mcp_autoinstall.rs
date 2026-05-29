@@ -1,6 +1,7 @@
 use crate::json::JsonValue;
 use crate::mcp_sources::{self, McpServerWriteOptions, McpServerWriteResult};
 use crate::runtimepaths;
+use crate::text_utils;
 use std::path::{Path, PathBuf};
 
 const FILESYSTEM_NPM_PACKAGE: &str = "@modelcontextprotocol/server-filesystem";
@@ -58,6 +59,11 @@ pub fn install_auto(
     options: McpAutoInstallOptions,
 ) -> Result<McpAutoInstallResult, String> {
     let plan = plan_auto_install(&options)?;
+    let mut profile_hints = options.profile_hints.clone();
+    profile_hints.extend(profile_hints_for_plan(&plan));
+    profile_hints.sort();
+    profile_hints.dedup();
+
     let write = mcp_sources::write_mcp_server_entry(
         root_path,
         McpServerWriteOptions {
@@ -72,7 +78,7 @@ pub fn install_auto(
             enabled: !options.disabled,
             dry_run: options.dry_run,
             force: options.force,
-            profile_hints: options.profile_hints,
+            profile_hints,
         },
     )?;
     Ok(McpAutoInstallResult { plan, write })
@@ -288,6 +294,66 @@ fn command_like_install_plan(
     }
 }
 
+fn profile_hints_for_plan(plan: &McpAutoInstallPlan) -> Vec<String> {
+    let mut hints = Vec::new();
+
+    // These are install-intent hints, not trust grants. They only tighten the
+    // first policy into a conservative project/session/external class; MCPace
+    // still requires initialize/tools-list evidence before widening concurrency.
+    if plan_is_explicit_filesystem(plan) {
+        hints.extend([
+            "filesystem".to_string(),
+            "project-root".to_string(),
+            "isolated-per-project".to_string(),
+        ]);
+    }
+
+    if plan.server_type == "streamable-http" {
+        hints.push("streamable-http".to_string());
+    }
+
+    if plan.method == "oci" {
+        hints.extend(["container".to_string(), "unknown-side-effects".to_string()]);
+    }
+
+    hints
+}
+
+fn plan_is_explicit_filesystem(plan: &McpAutoInstallPlan) -> bool {
+    if plan.method == "filesystem-path" {
+        return true;
+    }
+    plan.package
+        .as_deref()
+        .map(is_official_filesystem_package)
+        .unwrap_or(false)
+        && has_filesystem_path_argument(plan)
+}
+
+fn is_official_filesystem_package(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed == FILESYSTEM_NPM_PACKAGE
+        || package_name_without_version(trimmed) == "modelcontextprotocol-server-filesystem"
+}
+
+fn has_filesystem_path_argument(plan: &McpAutoInstallPlan) -> bool {
+    let mut saw_package = false;
+    for arg in &plan.args {
+        let trimmed = arg.trim();
+        if !saw_package && is_official_filesystem_package(trimmed) {
+            saw_package = true;
+            continue;
+        }
+        if !saw_package || trimmed.starts_with('-') || trimmed.is_empty() {
+            continue;
+        }
+        if looks_like_local_path_spec(trimmed) {
+            return true;
+        }
+    }
+    false
+}
+
 fn filesystem_path_install_plan(options: &McpAutoInstallOptions, spec: &str) -> McpAutoInstallPlan {
     let name = resolve_name(options, || "filesystem".to_string());
     let mut args = vec!["-y".to_string(), FILESYSTEM_NPM_PACKAGE.to_string()];
@@ -323,6 +389,12 @@ fn filesystem_path_install_plan(options: &McpAutoInstallOptions, spec: &str) -> 
 }
 
 fn command_like_spec(value: &str) -> Result<Option<CommandLikeSpec>, String> {
+    if text_utils::uses_shell_composition(value) {
+        return Err(
+            "server install command spec must be one launcher, URL, or path; remove shell chaining, background operators, pipes, redirects, backticks, or command substitutions"
+                .to_string(),
+        );
+    }
     let tokens = split_command_words(value)?;
     if tokens.len() < 2 {
         return Ok(None);
@@ -484,8 +556,18 @@ fn first_non_option_arg(args: &[String], start_index: usize) -> Option<String> {
         if arg == "--" {
             return args.get(index + 1).cloned();
         }
-        if arg == "--package" || arg == "-p" {
+        if let Some(value) = inline_package_option_value(arg) {
+            return Some(value.to_string());
+        }
+        if launcher_option_selects_package(arg) {
+            return args.get(index + 1).cloned();
+        }
+        if launcher_option_takes_value(arg) {
             index += 2;
+            continue;
+        }
+        if arg.starts_with("--") && arg.contains('=') {
+            index += 1;
             continue;
         }
         if arg.starts_with('-') {
@@ -495,6 +577,41 @@ fn first_non_option_arg(args: &[String], start_index: usize) -> Option<String> {
         return Some(args[index].clone());
     }
     None
+}
+
+fn inline_package_option_value(arg: &str) -> Option<&str> {
+    arg.strip_prefix("--package=")
+        .or_else(|| arg.strip_prefix("--from="))
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+}
+
+fn launcher_option_selects_package(arg: &str) -> bool {
+    matches!(arg, "--package" | "-p" | "--from")
+}
+
+fn launcher_option_takes_value(arg: &str) -> bool {
+    matches!(
+        arg,
+        "--registry"
+            | "--cache"
+            | "--userconfig"
+            | "--prefix"
+            | "--node-options"
+            | "--script-shell"
+            | "--call"
+            | "-c"
+            | "--python"
+            | "--with"
+            | "--with-editable"
+            | "--refresh-package"
+            | "--index-url"
+            | "--extra-index-url"
+            | "--find-links"
+            | "--project"
+            | "--directory"
+            | "--config-file"
+    )
 }
 
 fn docker_image_arg(args: &[String]) -> Option<String> {
@@ -857,5 +974,59 @@ impl McpAutoInstallResult {
             ("plan", self.plan.to_json_value()),
             ("write", self.write.to_json_value()),
         ])
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::{plan_auto_install, McpAutoInstallOptions};
+
+    #[test]
+    fn command_like_install_rejects_shell_composition() {
+        for spec in [
+            "npx @modelcontextprotocol/server-memory && rm -rf /",
+            "npx @modelcontextprotocol/server-memory &",
+            "uvx safe-package | sh",
+            "docker run image > out",
+            "npx `whoami`",
+            "npx $(whoami)",
+        ] {
+            let options = McpAutoInstallOptions {
+                spec: spec.to_string(),
+                ..McpAutoInstallOptions::default()
+            };
+            let error = plan_auto_install(&options).expect_err("shell composition must be rejected");
+            assert!(
+                error.contains("remove shell chaining"),
+                "unexpected error for {spec:?}: {error}"
+            );
+        }
+    }
+
+    #[test]
+    fn command_like_install_prefers_package_flags_for_identity() {
+        let options = McpAutoInstallOptions {
+            spec: "npx --package @modelcontextprotocol/server-filesystem mcp-server-filesystem /repo".to_string(),
+            ..McpAutoInstallOptions::default()
+        };
+        let plan = plan_auto_install(&options).expect("npx package flag plan");
+        assert_eq!(
+            plan.package.as_deref(),
+            Some("@modelcontextprotocol/server-filesystem")
+        );
+    }
+
+    #[test]
+    fn command_like_install_skips_value_options_before_package() {
+        let options = McpAutoInstallOptions {
+            spec: "npx --registry https://registry.npmjs.org @modelcontextprotocol/server-memory".to_string(),
+            ..McpAutoInstallOptions::default()
+        };
+        let plan = plan_auto_install(&options).expect("npx registry plan");
+        assert_eq!(
+            plan.package.as_deref(),
+            Some("@modelcontextprotocol/server-memory")
+        );
     }
 }

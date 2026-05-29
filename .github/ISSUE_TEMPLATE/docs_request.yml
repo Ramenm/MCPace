@@ -2,13 +2,14 @@ name: Documentation request
 description: Report confusing, missing, or stale docs.
 title: "[docs] "
 labels:
-  - docs
+  - type:docs-drift
+  - area:docs
 body:
   - type: textarea
     id: page
     attributes:
       label: Page or section
-      placeholder: README.md, docs/mcp-http-api-spec.md, START-HERE.md
+      placeholder: README.md, docs/README.md, docs/configuration.md
     validations:
       required: true
   - type: textarea

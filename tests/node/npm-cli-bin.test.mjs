@@ -18,6 +18,14 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
     assert.notEqual(fs.statSync(cliBin).mode & 0o111, 0, 'bin/mcpace.js must be executable on Unix');
   }
 
+  for (const entry of cliPackage.files || []) {
+    assert.equal(
+      fs.existsSync(path.join(repoRoot, 'packages', 'npm', 'cli', entry)),
+      true,
+      `package.json files entry points at a missing path: ${entry}`
+    );
+  }
+
   const pack = runChecked('npm', ['pack', '--workspace', '@mcpace/cli', '--json', '--dry-run'], {
     cwd: repoRoot,
     encoding: 'utf8',

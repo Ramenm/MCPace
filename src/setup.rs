@@ -1,6 +1,7 @@
 use crate::json::{parse_str, JsonValue};
 use crate::{
     app, client_catalog, doctor, json_helpers, mcp_sources, resources, runtimepaths, server,
+    text_utils,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -1658,9 +1659,14 @@ fn http_mcp_request(
 ) -> Result<HttpJsonResponse, String> {
     let body = body.to_compact_string();
     let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_MCP_PATH);
-    let session_header = session_id
-        .map(|value| format!("Mcp-Session-Id: {}\r\n", value))
-        .unwrap_or_default();
+    let session_header = if let Some(value) = session_id {
+        if !text_utils::valid_http_header_value(value) {
+            return Err("setup probe received an invalid MCP session id header".to_string());
+        }
+        format!("Mcp-Session-Id: {}\r\n", value)
+    } else {
+        String::new()
+    };
     let request = format!(
         "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
         path,
