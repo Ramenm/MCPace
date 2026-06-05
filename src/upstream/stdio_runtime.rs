@@ -293,7 +293,6 @@ fn default_child_process_environment() -> BTreeMap<String, String> {
     let mut values = BTreeMap::new();
     let names: &[&str] = if cfg!(windows) {
         &[
-            "PATH",
             "Path",
             "PATHEXT",
             "SystemRoot",
@@ -319,6 +318,11 @@ fn default_child_process_environment() -> BTreeMap<String, String> {
     for name in names {
         if let Ok(value) = env::var(name) {
             values.insert((*name).to_string(), value);
+        }
+    }
+    if cfg!(windows) && !values.contains_key("Path") {
+        if let Ok(value) = env::var("PATH") {
+            values.insert("Path".to_string(), value);
         }
     }
     values

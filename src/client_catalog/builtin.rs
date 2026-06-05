@@ -49,6 +49,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         ],
         install_support: Some(ClientInstallSupport {
             kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
+                servers_object_key: "mcpServers",
                 url_field: "url",
                 include_type_http: true,
                 include_tools_star: false,
@@ -81,6 +82,38 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         install_support: None,
     },
     ClientTarget {
+        id: "vscode-workspace",
+        family_id: "vscode",
+        display_name: "Visual Studio Code workspace",
+        aliases: &["vscode", "vs-code", "code", "visual-studio-code"],
+        maturity: "documented",
+        surface_class: "local",
+        surface_kind: "local-editor",
+        proof_tier: "tier-1",
+        config_format: "json",
+        config_paths: &[".vscode/mcp.json", "~/AppData/Roaming/Code/User/mcp.json", "~/Library/Application Support/Code/User/mcp.json", "~/.config/Code/User/mcp.json"],
+        config_precedence: &["workspace", "user"],
+        native_scopes: &["workspace", "user"],
+        supported_ingresses: &["stdio", "streamable-http"],
+        documented_features: &["tools", "inputs", "approval"],
+        documented_constraints: &["workspace-trust", "servers-root-key"],
+        notes: &[
+            "VS Code uses a top-level servers object in mcp.json instead of the mcpServers key used by several other clients.",
+            "Workspace-scoped .vscode/mcp.json keeps MCPace tied to the repository being developed and avoids surprising global editor changes.",
+        ],
+        install_support: Some(ClientInstallSupport {
+            kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
+                servers_object_key: "servers",
+                url_field: "url",
+                include_type_http: true,
+                include_tools_star: false,
+                include_disabled_false: false,
+            }),
+            preferred_scope: "workspace",
+            preferred_config_path: "~/.config/Code/User/mcp.json",
+        }),
+    },
+    ClientTarget {
         id: "cursor-local",
         family_id: "cursor",
         display_name: "Cursor local editor and CLI",
@@ -102,6 +135,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         ],
         install_support: Some(ClientInstallSupport {
             kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
+                servers_object_key: "mcpServers",
                 url_field: "url",
                 include_type_http: false,
                 include_tools_star: false,
@@ -155,6 +189,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         ],
         install_support: Some(ClientInstallSupport {
             kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
+                servers_object_key: "mcpServers",
                 url_field: "url",
                 include_type_http: false,
                 include_tools_star: false,
@@ -186,6 +221,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         ],
         install_support: Some(ClientInstallSupport {
             kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
+                servers_object_key: "mcpServers",
                 url_field: "url",
                 include_type_http: false,
                 include_tools_star: false,
@@ -217,6 +253,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         ],
         install_support: Some(ClientInstallSupport {
             kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
+                servers_object_key: "mcpServers",
                 url_field: "serverUrl",
                 include_type_http: false,
                 include_tools_star: false,
@@ -249,6 +286,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         ],
         install_support: Some(ClientInstallSupport {
             kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
+                servers_object_key: "mcpServers",
                 url_field: "httpUrl",
                 include_type_http: false,
                 include_tools_star: false,
@@ -280,6 +318,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         ],
         install_support: Some(ClientInstallSupport {
             kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
+                servers_object_key: "mcpServers",
                 url_field: "url",
                 include_type_http: true,
                 include_tools_star: true,

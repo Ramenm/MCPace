@@ -1180,7 +1180,8 @@ fn infer_parallelism(
             max_in_flight_per_worker: 0,
             admission: "disabled".to_string(),
             lock_scope,
-            reason: "Disabled servers must not receive work or reserve worker capacity.".to_string(),
+            reason: "Disabled servers must not receive work or reserve worker capacity."
+                .to_string(),
         };
     }
 

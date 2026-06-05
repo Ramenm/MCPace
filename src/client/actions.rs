@@ -576,7 +576,10 @@ fn prefer_local_http_when_supported(
 
 enum ClientInstallConfig {
     TomlManagedTable,
-    JsonMcpServers { server_config: JsonValue },
+    JsonMcpServers {
+        servers_object_key: String,
+        server_config: JsonValue,
+    },
     YamlMcpServers,
 }
 
@@ -691,9 +694,13 @@ impl ClientInstallPlan {
                     &self.config_path,
                 )?
             }
-            ClientInstallConfig::JsonMcpServers { server_config } => upsert_json_mcp_server(
+            ClientInstallConfig::JsonMcpServers {
+                servers_object_key,
+                server_config,
+            } => upsert_json_mcp_server(
                 &existing,
                 &self.adapter_key_name,
+                servers_object_key,
                 server_config.clone(),
                 &self.config_path,
             )?,
@@ -893,6 +900,7 @@ fn install_config_for_target(
     match install_support.kind {
         ClientInstallKind::TomlMcpServersManagedTable => Ok(ClientInstallConfig::TomlManagedTable),
         ClientInstallKind::JsonMcpServers(shape) => Ok(ClientInstallConfig::JsonMcpServers {
+            servers_object_key: shape.servers_object_key.clone(),
             server_config: build_json_install_server_config(shape, server_url),
         }),
         ClientInstallKind::YamlMcpServersManagedSection => Ok(ClientInstallConfig::YamlMcpServers),

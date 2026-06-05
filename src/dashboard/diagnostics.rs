@@ -142,16 +142,21 @@ fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
         json_helpers::bool_at_path(server, &["effectiveEnabled"]).unwrap_or(false);
     let required = json_helpers::bool_at_path(server, &["required"]).unwrap_or(false);
     let auto_start = json_helpers::bool_at_path(server, &["autoStart"]).unwrap_or(false);
-    let runtime_callable = effective_enabled && source_type == "stdio";
+    let runtime_callable = effective_enabled && matches!(source_type, "stdio" | "http");
     let (status, reason) = if !effective_enabled {
         (
             "disabled",
             "server is disabled by source/profile/default configuration",
         )
-    } else if runtime_callable {
+    } else if source_type == "http" && runtime_callable {
+        (
+            "callable-http-bridge",
+            "enabled plain Streamable HTTP upstream can be listed with upstream_tools and called with upstream_call",
+        )
+    } else if source_type == "stdio" && runtime_callable {
         (
             "callable-stdio-bridge",
-            "enabled stdio or plain HTTP upstream can be listed with upstream_tools and called with upstream_call",
+            "enabled stdio upstream can be listed with upstream_tools and called with upstream_call",
         )
     } else if kind == "host-bridge" {
         (
@@ -163,10 +168,15 @@ fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
             "blocked-nonstdio-or-missing-command",
             "this entry is not currently callable through the stdio bridge; check upstreamInventory for command/source details",
         )
+    } else if source_type == "http" {
+        (
+            "blocked-http-upstream",
+            "HTTP upstream is configured but not callable; plain http:// Streamable HTTP is supported, while HTTPS needs a stdio adapter or local gateway",
+        )
     } else if kind == "external-http" || kind == "remote-http" {
         (
             "blocked-preview-http-upstream",
-            "external/remote HTTP server policy is configured, but live HTTP upstream fan-out is not implemented in this HTTP adapter",
+            "external/remote HTTP server policy is configured, but direct HTTPS/custom HTTP fan-out is not implemented in this HTTP adapter",
         )
     } else {
         (

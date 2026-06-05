@@ -774,8 +774,13 @@ fn source_signals(
     args: &[String],
 ) -> BTreeSet<String> {
     let _identity = (normalized_name, display_name);
-    let haystack = format!("{} {} {}", command_semantic_signal(command), url, args.join(" "))
-        .to_ascii_lowercase();
+    let haystack = format!(
+        "{} {} {}",
+        command_semantic_signal(command),
+        url,
+        args.join(" ")
+    )
+    .to_ascii_lowercase();
     let tokens = signal_tokens(&haystack);
     let mut signals = BTreeSet::new();
     let remote_file_api = has_any_substring(
@@ -1834,11 +1839,7 @@ fn normalize_server_record(
     })
 }
 
-fn policy_token(
-    policy: Option<&BTreeMap<String, JsonValue>>,
-    key: &str,
-    fallback: &str,
-) -> String {
+fn policy_token(policy: Option<&BTreeMap<String, JsonValue>>, key: &str, fallback: &str) -> String {
     text_utils::normalize_flag(&policy_string(policy, key, fallback))
 }
 
@@ -1870,7 +1871,6 @@ fn policy_bool(policy: Option<&BTreeMap<String, JsonValue>>, key: &str, fallback
         .and_then(JsonValue::as_bool)
         .unwrap_or(fallback)
 }
-
 
 fn runtime_policy_disabled(
     scope_class: &str,
@@ -1910,7 +1910,10 @@ fn normalized_worker_count(
     }
 }
 
-fn inferred_transport_preference(object: &BTreeMap<String, JsonValue>, source_type: &str) -> String {
+fn inferred_transport_preference(
+    object: &BTreeMap<String, JsonValue>,
+    source_type: &str,
+) -> String {
     let configured = object
         .get("transportPreference")
         .and_then(JsonValue::as_str)
@@ -2273,8 +2276,8 @@ fn infer_parallel_safety_class(
     tool_policies: &[JsonValue],
 ) -> String {
     let signals = source_signals("", "", command, url, args);
-    let destructive_tools = tool_policies.iter().any(policy_mentions_destructive)
-        || signals.contains("mutable-tools");
+    let destructive_tools =
+        tool_policies.iter().any(policy_mentions_destructive) || signals.contains("mutable-tools");
     if source_type == "sse-legacy" || source_type == "sse" {
         return "PX_legacy_compat".to_string();
     }

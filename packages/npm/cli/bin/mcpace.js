@@ -1,33 +1,57 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { resolveBinary } from '../lib/resolve-binary.js';
 import { assertSupportedNodeVersion } from '../lib/runtime.js';
 
-function main() {
-  assertSupportedNodeVersion();
-  const binary = resolveBinary();
-  const result = spawnSync(binary, process.argv.slice(2), {
+function isWindowsCommandScript(binary) {
+  return process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(binary);
+}
+
+function spawnResolvedBinary(binary, args) {
+  if (isWindowsCommandScript(binary)) {
+    const commandProcessor = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe';
+    return spawn(commandProcessor, ['/d', '/s', '/c', binary, ...args], {
+      stdio: 'inherit',
+      windowsHide: true,
+    });
+  }
+
+  return spawn(binary, args, {
     stdio: 'inherit',
     windowsHide: true,
   });
+}
 
-  if (result.error) {
-    throw result.error;
-  }
-  if (typeof result.status === 'number') {
-    process.exitCode = result.status;
-    return;
-  }
-  if (result.signal) {
-    process.stderr.write(`mcpace: native binary terminated by ${result.signal}\n`);
-    process.exitCode = 1;
-  }
+function signalExitCode(signal) {
+  const signalNumbers = { SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGTERM: 15 };
+  return 128 + (signalNumbers[signal] ?? 0);
 }
 
 try {
-  main();
+  assertSupportedNodeVersion();
+
+  const binary = resolveBinary();
+  const child = spawnResolvedBinary(binary, process.argv.slice(2));
+  let finished = false;
+  const finish = (code) => {
+    if (finished) return;
+    finished = true;
+    process.exit(code);
+  };
+
+  child.on('error', (error) => {
+    console.error(`mcpace: failed to launch native binary: ${error.message}`);
+    finish(1);
+  });
+
+  child.on('close', (code, signal) => {
+    if (signal) {
+      finish(signalExitCode(signal));
+      return;
+    }
+    finish(code ?? 1);
+  });
 } catch (error) {
-  const message = error instanceof Error ? error.message : String(error);
-  process.stderr.write(`mcpace: ${message}\n`);
-  process.exitCode = 1;
+  console.error(error?.message || String(error));
+  process.exit(1);
 }

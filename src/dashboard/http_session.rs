@@ -147,7 +147,9 @@ impl McpHttpSessionStore {
             )
         })?;
         let protocol_header = request_header_string_unique(Some(request), "mcp-protocol-version")
-            .map_err(|message| McpHttpSessionError::new(McpHttpSessionErrorKind::Invalid, message))?;
+            .map_err(|message| {
+            McpHttpSessionError::new(McpHttpSessionErrorKind::Invalid, message)
+        })?;
         self.touch(&session_id, protocol_header.as_deref(), now_ms)
     }
 

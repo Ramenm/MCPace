@@ -56,11 +56,14 @@ It imports existing local MCP servers when safe, skips MCPace self-references, s
 {
   "servers": {
     "remote": {
-      "url": "https://example.com/mcp"
+      "url": "http://127.0.0.1:8010/mcp"
     }
   }
 }
 ```
+
+
+Direct upstream forwarding currently supports stdio and plain/local Streamable HTTP. HTTPS remote endpoints should be connected through a stdio adapter such as `mcp-remote` or a local HTTP gateway until native TLS upstream forwarding is added.
 
 Normalization rules are intentionally small: command entries become stdio servers; URL aliases become Streamable HTTP servers; `disabled: true` becomes `enabled: false`; MCPace's own endpoint is skipped to avoid loops.
 
@@ -71,7 +74,7 @@ Normalization rules are intentionally small: command entries become stdio server
 | Start/repair home | `mcpace up` |
 | Avoid client patching | `mcpace up --client none` |
 | Preview an install | `mcpace install npm:@modelcontextprotocol/server-memory --as memory --dry-run` |
-| Add a remote server | `mcpace install https://example.com/mcp --as remote` |
+| Add a local/plain HTTP gateway | `mcpace install http://127.0.0.1:8010/mcp --as local-gateway` |
 | Import existing settings | `mcpace server import ./mcp.json --dry-run` |
 | Discover trusted servers | `mcpace auto --dry-run` then `mcpace auto` |
 | Inspect loaded sources | `mcpace server sources --json` |

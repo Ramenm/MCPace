@@ -18,6 +18,12 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
     assert.notEqual(fs.statSync(cliBin).mode & 0o111, 0, 'bin/mcpace.js must be executable on Unix');
   }
 
+  const shimSource = fs.readFileSync(cliBin, 'utf8');
+  assert.match(shimSource, /isWindowsCommandScript/);
+  assert.match(shimSource, /cmd\.exe/);
+  assert.match(shimSource, /\/d', '\/s', '\/c'/);
+  assert.match(shimSource, /child\.on\('close'/);
+
   for (const entry of cliPackage.files || []) {
     assert.equal(
       fs.existsSync(path.join(repoRoot, 'packages', 'npm', 'cli', entry)),

@@ -1,5 +1,6 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::runtimepaths;
 use crate::text_utils;
 use std::collections::BTreeMap;
 use std::env;
@@ -14,6 +15,7 @@ pub enum ClientInstallKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct JsonMcpServerShape {
+    pub servers_object_key: &'static str,
     pub url_field: &'static str,
     pub include_type_http: bool,
     pub include_tools_star: bool,
@@ -68,6 +70,7 @@ pub enum ClientInstallKindRecord {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct JsonMcpServerShapeRecord {
+    pub servers_object_key: String,
     pub url_field: String,
     pub include_type_http: bool,
     pub include_tools_star: bool,
@@ -540,6 +543,7 @@ impl ClientInstallKindRecord {
 impl JsonMcpServerShapeRecord {
     fn from_static(shape: JsonMcpServerShape) -> Self {
         JsonMcpServerShapeRecord {
+            servers_object_key: shape.servers_object_key.to_string(),
             url_field: shape.url_field.to_string(),
             include_type_http: shape.include_type_http,
             include_tools_star: shape.include_tools_star,
@@ -550,6 +554,8 @@ impl JsonMcpServerShapeRecord {
     fn from_json(value: Option<&JsonValue>) -> Option<Self> {
         let object = value?.as_object()?;
         Some(JsonMcpServerShapeRecord {
+            servers_object_key: string_field(object, "serversObjectKey")
+                .unwrap_or_else(|| "mcpServers".to_string()),
             url_field: string_field(object, "urlField").unwrap_or_else(|| "url".to_string()),
             include_type_http: bool_field(object, "includeTypeHttp", true),
             include_tools_star: bool_field(object, "includeToolsStar", false),
@@ -559,6 +565,10 @@ impl JsonMcpServerShapeRecord {
 
     pub fn to_json_value(&self) -> JsonValue {
         JsonValue::object([
+            (
+                "serversObjectKey",
+                JsonValue::string(self.servers_object_key.clone()),
+            ),
             ("urlField", JsonValue::string(self.url_field.clone())),
             ("includeTypeHttp", JsonValue::bool(self.include_type_http)),
             ("includeToolsStar", JsonValue::bool(self.include_tools_star)),
@@ -573,6 +583,7 @@ impl JsonMcpServerShapeRecord {
 impl Default for JsonMcpServerShapeRecord {
     fn default() -> Self {
         JsonMcpServerShapeRecord {
+            servers_object_key: "mcpServers".to_string(),
             url_field: "url".to_string(),
             include_type_http: true,
             include_tools_star: false,
@@ -654,9 +665,9 @@ fn resolve_catalog_path(root_path: &Path, raw: &str) -> PathBuf {
 
 fn expand_home(raw: &str) -> String {
     if raw == "~" || raw.starts_with("~/") || raw.starts_with("~\\") {
-        if let Ok(home) = env::var("HOME").or_else(|_| env::var("USERPROFILE")) {
+        if let Some(home) = runtimepaths::user_home_dir() {
             let suffix = raw.trim_start_matches('~').trim_start_matches(['/', '\\']);
-            return PathBuf::from(home).join(suffix).display().to_string();
+            return home.join(suffix).display().to_string();
         }
     }
     raw.to_string()
@@ -872,6 +883,10 @@ impl ClientInstallKind {
 impl JsonMcpServerShape {
     pub fn to_json_value(&self) -> JsonValue {
         JsonValue::object([
+            (
+                "serversObjectKey",
+                JsonValue::string(self.servers_object_key),
+            ),
             ("urlField", JsonValue::string(self.url_field)),
             ("includeTypeHttp", JsonValue::bool(self.include_type_http)),
             ("includeToolsStar", JsonValue::bool(self.include_tools_star)),

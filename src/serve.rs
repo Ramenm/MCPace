@@ -288,6 +288,31 @@ fn run_start(
         let _ = writeln!(stderr, "{}", error);
         return 1;
     }
+    let state_path = runtimepaths::serve_state_path(&state_root);
+    if let Ok(existing_state) = read_state(&state_path) {
+        let existing_healthy = health_check(
+            &existing_state.host,
+            existing_state.port,
+            &endpoint.health_path,
+        )
+        .unwrap_or(false);
+        if existing_healthy {
+            if !state_matches_start_request(
+                &existing_state,
+                &host,
+                port,
+                max_connections,
+                io_timeout_ms,
+                max_body_bytes,
+                overview_cache_ms,
+            ) {
+                stop_existing_serve(&canonical_root);
+            }
+        } else {
+            remove_managed_serve_runner_copy(&state_root, &existing_state);
+            let _ = fs::remove_file(&state_path);
+        }
+    }
 
     if let Ok(status) = collect_status(&canonical_root, Some(host.clone()), Some(port)) {
         if status.status == "running" {
@@ -302,7 +327,7 @@ fn run_start(
             return 1;
         }
     };
-    let runner_path = runtimepaths::serve_runner_path(&state_root);
+    let runner_path = runtimepaths::serve_runner_path_for_start(&state_root);
     if let Err(error) = fs::copy(&current_exe, &runner_path) {
         let _ = writeln!(
             stderr,
@@ -351,6 +376,7 @@ fn run_start(
     ) {
         Ok(value) => value,
         Err(error) => {
+            let _ = fs::remove_file(&runner_path);
             let _ = writeln!(stderr, "{}", error);
             return 1;
         }
@@ -372,7 +398,8 @@ fn run_start(
         stdout_log_path: sanitize_display(&stdout_log_path),
         stderr_log_path: sanitize_display(&stderr_log_path),
     };
-    if let Err(error) = write_state(&runtimepaths::serve_state_path(&state_root), &state) {
+    if let Err(error) = write_state(&state_path, &state) {
+        let _ = fs::remove_file(&runner_path);
         let _ = writeln!(stderr, "{}", error);
         return 1;
     }
@@ -385,7 +412,8 @@ fn run_start(
         Duration::from_millis(100),
     ) {
         let _ = kill_process(state.pid);
-        let _ = fs::remove_file(runtimepaths::serve_state_path(&state_root));
+        let _ = fs::remove_file(&state_path);
+        remove_managed_serve_runner_copy(&state_root, &state);
         let _ = writeln!(stderr, "{}", error);
         return 1;
     }
@@ -441,6 +469,23 @@ fn run_restart(
     run_start(parsed, default_root, stdout, stderr)
 }
 
+fn state_matches_start_request(
+    state: &ServeState,
+    host: &str,
+    port: u16,
+    max_connections: Option<usize>,
+    io_timeout_ms: Option<u64>,
+    max_body_bytes: Option<usize>,
+    overview_cache_ms: Option<u64>,
+) -> bool {
+    state.host == host
+        && state.port == port
+        && state.max_connections == max_connections
+        && state.io_timeout_ms == io_timeout_ms
+        && state.max_body_bytes == max_body_bytes
+        && state.overview_cache_ms == overview_cache_ms
+}
+
 fn stop_existing_serve(canonical_root: &Path) {
     let state_root = runtimepaths::resolve_state_root(canonical_root);
     let state_path = runtimepaths::serve_state_path(&state_root);
@@ -454,8 +499,22 @@ fn stop_existing_serve(canonical_root: &Path) {
             }
             thread::sleep(Duration::from_millis(100));
         }
+        remove_managed_serve_runner_copy(&state_root, state);
     }
     let _ = fs::remove_file(&state_path);
+}
+
+fn remove_managed_serve_runner_copy(state_root: &Path, state: &ServeState) {
+    if state.runner_path.trim().is_empty() {
+        return;
+    }
+    let runner_path = PathBuf::from(&state.runner_path);
+    let runtime_bin_dir = runtimepaths::runtime_bin_dir(state_root);
+    let canonical_runner = runtimepaths::canonicalize_or_original(&runner_path);
+    let canonical_runtime_bin = runtimepaths::canonicalize_or_original(&runtime_bin_dir);
+    if canonical_runner.starts_with(&canonical_runtime_bin) {
+        let _ = fs::remove_file(runner_path);
+    }
 }
 
 fn run_status(
@@ -787,50 +846,53 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
 
 fn health_check(host: &str, port: u16, path: &str) -> Result<bool, String> {
     let probe_host = probe_host(host);
-    let mut addrs = (probe_host.as_str(), port)
+    let addrs = (probe_host.as_str(), port)
         .to_socket_addrs()
         .map_err(|error| {
             format!(
                 "failed to resolve serve address {}:{}: {}",
                 probe_host, port, error
             )
-        })?;
-    let Some(addr) = addrs.next() else {
+        })?
+        .collect::<Vec<_>>();
+    if addrs.is_empty() {
         return Ok(false);
-    };
-    let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
-        Ok(stream) => stream,
-        Err(_) => return Ok(false),
-    };
-    let timeout = Some(HEALTH_PROBE_IO_TIMEOUT);
-    let _ = stream.set_read_timeout(timeout);
-    let _ = stream.set_write_timeout(timeout);
+    }
     let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
-    let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-        path, probe_host
-    );
-    if stream.write_all(request.as_bytes()).is_err() {
-        return Ok(false);
+    for addr in addrs {
+        let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
+            Ok(stream) => stream,
+            Err(_) => continue,
+        };
+        let timeout = Some(HEALTH_PROBE_IO_TIMEOUT);
+        let _ = stream.set_read_timeout(timeout);
+        let _ = stream.set_write_timeout(timeout);
+        let request = format!(
+            "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+            path, probe_host
+        );
+        if stream.write_all(request.as_bytes()).is_err() {
+            continue;
+        }
+        let _ = stream.shutdown(Shutdown::Write);
+        let mut response = String::new();
+        if stream.read_to_string(&mut response).is_err() {
+            continue;
+        }
+        let Some((headers, body)) = response.split_once("\r\n\r\n") else {
+            continue;
+        };
+        if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
+            continue;
+        }
+        let Ok(payload) = parse_str(body.trim()) else {
+            continue;
+        };
+        if matches!(payload.get("readiness"), Some(JsonValue::Object(_))) {
+            return Ok(true);
+        }
     }
-    let _ = stream.shutdown(Shutdown::Write);
-    let mut response = String::new();
-    if stream.read_to_string(&mut response).is_err() {
-        return Ok(false);
-    }
-    let Some((headers, body)) = response.split_once("\r\n\r\n") else {
-        return Ok(false);
-    };
-    if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
-        return Ok(false);
-    }
-    let Ok(payload) = parse_str(body.trim()) else {
-        return Ok(false);
-    };
-    Ok(matches!(
-        payload.get("readiness"),
-        Some(JsonValue::Object(_))
-    ))
+    Ok(false)
 }
 
 fn wait_for_health(
@@ -968,10 +1030,7 @@ fn resolve_runner_source() -> Result<PathBuf, std::io::Error> {
 
 fn sanitize_display(path: &Path) -> String {
     let rendered = path.display().to_string();
-    rendered
-        .strip_prefix(r"\\?\")
-        .unwrap_or(&rendered)
-        .to_string()
+    runtimepaths::strip_windows_extended_path_prefix(&rendered)
 }
 
 fn now_ms() -> u128 {
@@ -1078,6 +1137,7 @@ fn kill_process(pid: u32) -> Result<(), String> {
 
     #[cfg(unix)]
     {
+        crate::process_detach::kill_unix_process_group(pid, 15);
         let output = std::process::Command::new("kill")
             .args(["-TERM", &pid.to_string()])
             .output()

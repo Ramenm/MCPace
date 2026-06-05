@@ -24,6 +24,8 @@ test('npm publish contract detects missing native package artifacts before relea
   assert.equal(report.publishable, false, 'source-only bundle must not be considered directly publishable to npm');
   assert.equal(report.binaryPackageGaps.length, 6, 'all enabled native target packages must be accounted for before publish');
   assert.ok(report.binaryPackageGaps.every((gap) => gap.packageName.startsWith('@mcpace/cli-')));
+  assert.ok(report.binaryPackageProof.every((entry) => Object.hasOwn(entry, 'sourceBinaryPath')));
+  assert.ok(report.binaryPackageGaps.every((gap) => /native binary|prebuilt npm tarball/.test(gap.reason)));
   const binaryCheck = report.checks.find((entry) => entry.id === 'binary-packages-or-tarballs-exist');
   assert.equal(binaryCheck?.status, 'failed');
 });
@@ -42,6 +44,16 @@ test('npm publish enforce mode fails closed when native packages are not staged'
   const report = JSON.parse(result.stdout);
   assert.equal(report.publishable, false);
   assert.ok(report.failedChecks.some((entry) => entry.id === 'binary-packages-or-tarballs-exist'));
+});
+
+
+
+test('npm publish contract does not trust empty native package source directories', () => {
+  const script = fs.readFileSync(path.join(repoRoot, 'scripts', 'verify-npm-publish-contract.mjs'), 'utf8');
+  assert.match(script, /sourcePackageBinaryPath/);
+  assert.match(script, /path\.join\(packageDir, 'bin', binaryName\)/);
+  assert.match(script, /&& sourceBinaryPath/);
+  assert.match(script, /expected native binary/);
 });
 
 test('release source ZIP includes the npm publish contract guard script', () => {

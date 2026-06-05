@@ -1,7 +1,7 @@
 {
   "schema": "mcpace.projectInventory.v1",
-  "generatedAt": "2026-05-28T18:42:32.420Z",
-  "root": "/mnt/data/mcpace_internal_more",
+  "generatedAt": "2026-06-05T11:05:54.760Z",
+  "root": "/mnt/data/mcpace_logic/mcpace-v0.6.9-050626-105256",
   "commands": [
     {
       "name": "help",
@@ -260,10 +260,10 @@
   },
   "counts": {
     "rustFiles": 125,
-    "rustFunctions": 1598,
+    "rustFunctions": 1645,
     "publicCommands": 23,
     "implementedPublicCommands": 23,
-    "duplicateFunctionNames": 67,
+    "duplicateFunctionNames": 71,
     "longRustFiles": 23
   },
   "npmLauncher": {
@@ -355,7 +355,11 @@
   "longRustFiles": [
     {
       "file": "src/server/loader.rs",
-      "lines": 2660
+      "lines": 2663
+    },
+    {
+      "file": "src/setup.rs",
+      "lines": 2144
     },
     {
       "file": "src/dashboard/overview.rs",
@@ -370,10 +374,6 @@
       "lines": 1929
     },
     {
-      "file": "src/setup.rs",
-      "lines": 1796
-    },
-    {
       "file": "src/adapter/discovery.rs",
       "lines": 1779
     },
@@ -386,16 +386,16 @@
       "lines": 1597
     },
     {
+      "file": "src/serve.rs",
+      "lines": 1378
+    },
+    {
       "file": "src/mcp_server.rs",
       "lines": 1337
     },
     {
       "file": "src/hub/leases.rs",
       "lines": 1322
-    },
-    {
-      "file": "src/serve.rs",
-      "lines": 1321
     },
     {
       "file": "src/upstream.rs",
@@ -414,24 +414,24 @@
       "lines": 1113
     },
     {
+      "file": "src/mcp_autoinstall.rs",
+      "lines": 1033
+    },
+    {
+      "file": "src/client/actions.rs",
+      "lines": 1031
+    },
+    {
       "file": "src/dashboard/http_tools.rs",
       "lines": 1026
     },
     {
-      "file": "src/client/actions.rs",
-      "lines": 1023
-    },
-    {
-      "file": "src/mcp_autoinstall.rs",
-      "lines": 962
+      "file": "src/client_catalog.rs",
+      "lines": 920
     },
     {
       "file": "src/lab/render.rs",
       "lines": 915
-    },
-    {
-      "file": "src/client_catalog.rs",
-      "lines": 908
     }
   ],
   "duplicateFunctionNames": [
@@ -811,18 +811,18 @@
     },
     {
       "file": "src/client/actions.rs",
-      "line": 954,
+      "line": 962,
       "text": "\"This preview keeps one stable stdio launcher command, but bootstrap-only proof should not be treated as completed live forwarding yet.\".to_string(),"
     },
     {
       "file": "src/client_catalog/builtin.rs",
-      "line": 309,
+      "line": 348,
       "text": "\"Cloud agent supports tools only; resources and prompts are not available on this surface.\","
     },
     {
       "file": "src/dashboard/diagnostics.rs",
-      "line": 169,
-      "text": "\"external/remote HTTP server policy is configured, but live HTTP upstream fan-out is not implemented in this HTTP adapter\","
+      "line": 179,
+      "text": "\"external/remote HTTP server policy is configured, but direct HTTPS/custom HTTP fan-out is not implemented in this HTTP adapter\","
     },
     {
       "file": "src/hub/launcher.rs",
@@ -831,27 +831,17 @@
     },
     {
       "file": "src/profile.rs",
-      "line": 142,
+      "line": 143,
       "text": "\"Profile mutation is not implemented yet in the Rust-only repo.\""
     },
     {
       "file": "src/profile.rs",
-      "line": 174,
+      "line": 175,
       "text": "\"profile mutation is not implemented yet in the Rust-only repo\".to_string(),"
     },
     {
-      "file": "src/projects.rs",
-      "line": 100,
-      "text": "\"Project scanning is not implemented yet in the Rust-only repo.\""
-    },
-    {
-      "file": "src/projects.rs",
-      "line": 132,
-      "text": "\"project scanning is not implemented yet in the Rust-only repo\".to_string(),"
-    },
-    {
       "file": "src/serve.rs",
-      "line": 1025,
+      "line": 1081,
       "text": "Err(\"background serve launch is not implemented for this platform\".to_string())"
     },
     {
@@ -876,7 +866,7 @@
     },
     {
       "file": "src/upstream/http_runtime.rs",
-      "line": 249,
+      "line": 444,
       "text": "\"direct HTTPS upstream forwarding is not available without a TLS adapter; use a stdio bridge such as mcp-remote or a local HTTP gateway\""
     }
   ],

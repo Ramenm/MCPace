@@ -977,7 +977,6 @@ impl McpAutoInstallResult {
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::{plan_auto_install, McpAutoInstallOptions};
@@ -996,7 +995,8 @@ mod tests {
                 spec: spec.to_string(),
                 ..McpAutoInstallOptions::default()
             };
-            let error = plan_auto_install(&options).expect_err("shell composition must be rejected");
+            let error =
+                plan_auto_install(&options).expect_err("shell composition must be rejected");
             assert!(
                 error.contains("remove shell chaining"),
                 "unexpected error for {spec:?}: {error}"
@@ -1007,7 +1007,9 @@ mod tests {
     #[test]
     fn command_like_install_prefers_package_flags_for_identity() {
         let options = McpAutoInstallOptions {
-            spec: "npx --package @modelcontextprotocol/server-filesystem mcp-server-filesystem /repo".to_string(),
+            spec:
+                "npx --package @modelcontextprotocol/server-filesystem mcp-server-filesystem /repo"
+                    .to_string(),
             ..McpAutoInstallOptions::default()
         };
         let plan = plan_auto_install(&options).expect("npx package flag plan");
@@ -1020,7 +1022,8 @@ mod tests {
     #[test]
     fn command_like_install_skips_value_options_before_package() {
         let options = McpAutoInstallOptions {
-            spec: "npx --registry https://registry.npmjs.org @modelcontextprotocol/server-memory".to_string(),
+            spec: "npx --registry https://registry.npmjs.org @modelcontextprotocol/server-memory"
+                .to_string(),
             ..McpAutoInstallOptions::default()
         };
         let plan = plan_auto_install(&options).expect("npx registry plan");

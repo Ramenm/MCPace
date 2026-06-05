@@ -10,7 +10,7 @@ pub(crate) fn current_platform_alias() -> &'static str {
 pub(crate) fn normalize_platform(value: &str) -> String {
     match value.trim().to_ascii_lowercase().as_str() {
         "darwin" | "mac" | "osx" | "macos" => "macos".to_string(),
-        "win" | "windows" => "windows".to_string(),
+        "win" | "win32" | "windows" | "windows_nt" => "windows".to_string(),
         "linux" => "linux".to_string(),
         other => other.to_string(),
     }
@@ -25,4 +25,17 @@ pub(crate) fn supports_current_platform<T: AsRef<str>>(platforms: &[T]) -> bool 
         let normalized = normalize_platform(platform.as_ref());
         normalized == current || normalized == "any" || normalized == "all" || normalized == "*"
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_platform;
+
+    #[test]
+    fn normalize_platform_accepts_common_os_aliases() {
+        assert_eq!(normalize_platform("darwin"), "macos");
+        assert_eq!(normalize_platform("win32"), "windows");
+        assert_eq!(normalize_platform("windows_nt"), "windows");
+        assert_eq!(normalize_platform("linux"), "linux");
+    }
 }

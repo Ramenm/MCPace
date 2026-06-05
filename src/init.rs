@@ -186,9 +186,13 @@ fn initialize_layout(root_path: &Path) -> Result<InitReport, String> {
     seed_json_if_missing(
         &lease_store_path,
         JsonValue::object([
-            ("version", JsonValue::number(1)),
+            ("version", JsonValue::number(2)),
             ("leases", JsonValue::Object(BTreeMap::new())),
             ("sessions", JsonValue::Object(BTreeMap::new())),
+            (
+                "updatedAtMs",
+                JsonValue::number(runtimepaths::unix_time_ms()),
+            ),
         ]),
         &mut created_paths,
         &mut existing_paths,

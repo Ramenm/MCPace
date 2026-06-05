@@ -21,11 +21,7 @@ pub fn write_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
     ));
     fs::write(&temp_path, contents)
         .map_err(|error| format!("failed to write {}: {}", temp_path.display(), error))?;
-    #[cfg(windows)]
-    {
-        let _ = fs::remove_file(path);
-    }
-    fs::rename(&temp_path, path).map_err(|error| {
+    replace_file_atomic(&temp_path, path).map_err(|error| {
         let _ = fs::remove_file(&temp_path);
         format!(
             "failed to move {} to {}: {}",
@@ -34,6 +30,78 @@ pub fn write_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
             error
         )
     })
+}
+
+fn replace_file_atomic(temp_path: &Path, path: &Path) -> Result<(), std::io::Error> {
+    #[cfg(windows)]
+    {
+        replace_file_atomic_windows(temp_path, path)
+    }
+    #[cfg(not(windows))]
+    {
+        fs::rename(temp_path, path)
+    }
+}
+
+#[cfg(windows)]
+fn replace_file_atomic_windows(temp_path: &Path, path: &Path) -> Result<(), std::io::Error> {
+    let mut last_error = None;
+    for attempt in 0..=20 {
+        match fs::rename(temp_path, path)
+            .or_else(|_| replace_existing_file_windows(temp_path, path))
+        {
+            Ok(()) => return Ok(()),
+            Err(error)
+                if attempt < 20
+                    && matches!(
+                        error.kind(),
+                        std::io::ErrorKind::PermissionDenied | std::io::ErrorKind::Other
+                    ) =>
+            {
+                last_error = Some(error);
+                std::thread::sleep(std::time::Duration::from_millis(25));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| std::io::Error::other("atomic replace failed")))
+}
+
+#[cfg(windows)]
+fn replace_existing_file_windows(temp_path: &Path, path: &Path) -> Result<(), std::io::Error> {
+    use std::ffi::OsStr;
+    use std::os::windows::ffi::OsStrExt;
+
+    type Bool = i32;
+    type Dword = u32;
+    type Lpcwstr = *const u16;
+
+    const MOVEFILE_REPLACE_EXISTING: Dword = 0x1;
+    const MOVEFILE_WRITE_THROUGH: Dword = 0x8;
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn MoveFileExW(existing_file_name: Lpcwstr, new_file_name: Lpcwstr, flags: Dword) -> Bool;
+    }
+
+    fn wide_null(value: &OsStr) -> Vec<u16> {
+        value.encode_wide().chain(std::iter::once(0)).collect()
+    }
+
+    let from = wide_null(temp_path.as_os_str());
+    let to = wide_null(path.as_os_str());
+    let moved = unsafe {
+        MoveFileExW(
+            from.as_ptr(),
+            to.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if moved == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
 }
 
 pub(crate) fn unix_time_ms() -> u128 {
@@ -48,7 +116,10 @@ pub(crate) fn unix_time_ms_checked() -> Option<u128> {
 }
 
 pub(crate) fn strip_windows_extended_path_prefix(value: &str) -> String {
-    value.strip_prefix(r"\\?").unwrap_or(value).to_string()
+    if let Some(rest) = value.strip_prefix(r"\\?\UNC\") {
+        return format!(r"\\{}", rest);
+    }
+    value.strip_prefix(r"\\?\").unwrap_or(value).to_string()
 }
 
 pub fn canonicalize_or_original(path: &Path) -> PathBuf {
@@ -56,9 +127,26 @@ pub fn canonicalize_or_original(path: &Path) -> PathBuf {
 }
 
 pub fn user_home_dir() -> Option<PathBuf> {
-    env::var_os("HOME")
-        .or_else(|| env::var_os("USERPROFILE"))
-        .map(PathBuf::from)
+    platform_user_home_dir().map(PathBuf::from)
+}
+
+#[cfg(windows)]
+fn platform_user_home_dir() -> Option<std::ffi::OsString> {
+    env::var_os("USERPROFILE").or_else(|| {
+        match (env::var_os("HOMEDRIVE"), env::var_os("HOMEPATH")) {
+            (Some(drive), Some(path)) => {
+                let mut value = drive;
+                value.push(path);
+                Some(value)
+            }
+            _ => env::var_os("HOME"),
+        }
+    })
+}
+
+#[cfg(not(windows))]
+fn platform_user_home_dir() -> Option<std::ffi::OsString> {
+    env::var_os("HOME").or_else(|| env::var_os("USERPROFILE"))
 }
 
 pub const DEFAULT_LOCAL_HOST: &str = "127.0.0.1";
@@ -148,7 +236,9 @@ pub fn normalize_http_path(value: &str, fallback: &str) -> String {
         || !trimmed.starts_with('/')
         || trimmed.contains('?')
         || trimmed.contains('#')
-        || trimmed.chars().any(|ch| ch.is_control() || ch.is_whitespace())
+        || trimmed
+            .chars()
+            .any(|ch| ch.is_control() || ch.is_whitespace())
     {
         fallback.to_string()
     } else {
@@ -327,6 +417,20 @@ pub fn serve_runner_path(state_root: &Path) -> PathBuf {
     })
 }
 
+pub fn serve_runner_path_for_start(state_root: &Path) -> PathBuf {
+    let suffix = format!(
+        "{}-{}-{}",
+        std::process::id(),
+        unix_time_ms(),
+        ATOMIC_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
+    );
+    runtime_bin_dir(state_root).join(if cfg!(windows) {
+        format!("mcpace-serve-{}.exe", suffix)
+    } else {
+        format!("mcpace-serve-{}", suffix)
+    })
+}
+
 fn absolutize(root_path: &Path, path: PathBuf) -> PathBuf {
     if path.is_absolute() {
         path
@@ -362,7 +466,9 @@ fn u16_at(value: &JsonValue, path: &[&str]) -> Option<u16> {
 fn normalize_public_url(value: &str) -> Option<String> {
     let trimmed = value.trim();
     if trimmed.is_empty()
-        || trimmed.chars().any(|ch| ch.is_control() || ch.is_whitespace())
+        || trimmed
+            .chars()
+            .any(|ch| ch.is_control() || ch.is_whitespace())
         || trimmed.contains('#')
     {
         return None;
@@ -370,10 +476,7 @@ fn normalize_public_url(value: &str) -> Option<String> {
     let rest = trimmed
         .strip_prefix("http://")
         .or_else(|| trimmed.strip_prefix("https://"))?;
-    let authority = rest
-        .split(|ch| ch == '/' || ch == '?')
-        .next()
-        .unwrap_or("");
+    let authority = rest.split(['/', '?']).next().unwrap_or("");
     if !valid_public_url_authority(authority) {
         return None;
     }
@@ -384,7 +487,9 @@ fn valid_public_url_authority(authority: &str) -> bool {
     if authority.is_empty()
         || authority.contains('/')
         || authority.contains('@')
-        || authority.bytes().any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
+        || authority
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
     {
         return false;
     }
@@ -399,7 +504,9 @@ fn valid_public_url_authority(authority: &str) -> bool {
         return false;
     }
     match authority.rsplit_once(':') {
-        Some((host, port)) if !host.is_empty() => valid_public_url_host(host) && valid_public_port(port),
+        Some((host, port)) if !host.is_empty() => {
+            valid_public_url_host(host) && valid_public_port(port)
+        }
         Some(_) => false,
         None => valid_public_url_host(authority),
     }
@@ -416,7 +523,10 @@ fn valid_public_port_suffix(value: &str) -> bool {
     if value.is_empty() {
         return true;
     }
-    value.strip_prefix(':').map(valid_public_port).unwrap_or(false)
+    value
+        .strip_prefix(':')
+        .map(valid_public_port)
+        .unwrap_or(false)
 }
 
 fn valid_public_port(port: &str) -> bool {
@@ -455,9 +565,15 @@ mod tests {
             "/mcp\twith-tab",
             "/mcp\r\nInjected: bad",
         ] {
-            assert_eq!(normalize_http_path(candidate, DEFAULT_LOCAL_MCP_PATH), DEFAULT_LOCAL_MCP_PATH);
+            assert_eq!(
+                normalize_http_path(candidate, DEFAULT_LOCAL_MCP_PATH),
+                DEFAULT_LOCAL_MCP_PATH
+            );
         }
-        assert_eq!(normalize_http_path("/custom/path", DEFAULT_LOCAL_MCP_PATH), "/custom/path");
+        assert_eq!(
+            normalize_http_path("/custom/path", DEFAULT_LOCAL_MCP_PATH),
+            "/custom/path"
+        );
     }
 
     #[test]

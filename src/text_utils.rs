@@ -29,7 +29,6 @@ pub(crate) fn ascii_alnum_dash_underscore(value: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
 }
 
-
 pub(crate) fn valid_http_header_value(value: &str) -> bool {
     !value.is_empty() && value.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
 }

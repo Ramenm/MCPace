@@ -1,21 +1,32 @@
 use crate::json::{parse_str, JsonValue};
 use crate::{
-    app, client_catalog, doctor, json_helpers, mcp_sources, resources, runtimepaths, server,
-    text_utils,
+    app, client_catalog, doctor, json_helpers, mcp_protocol as mcp, mcp_sources, resources,
+    runtimepaths, server, text_utils,
 };
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
-use std::io::{Read, Write};
-use std::net::{Shutdown, TcpStream};
+use std::io::{ErrorKind, Read, Write};
+use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const HTTP_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
+const MAX_HTTP_SETUP_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
 #[derive(Clone, Debug)]
 struct HttpJsonResponse {
     headers: Vec<(String, String)>,
     json: JsonValue,
+}
+
+struct ParsedHttpJsonResponse<'a> {
+    status_line: String,
+    status: u16,
+    headers: Vec<(String, String)>,
+    content_type: String,
+    content_length: Option<usize>,
+    transfer_encoding: String,
+    body: &'a str,
 }
 
 impl HttpJsonResponse {
@@ -356,7 +367,7 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(
         stdout,
-        "  mcpace up https://example.com/mcp --as remote --client all"
+        "  mcpace up http://127.0.0.1:8010/mcp --as local-gateway --client all"
     );
     let _ = writeln!(
         stdout,
@@ -543,9 +554,8 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         root_text.clone(),
     ]);
 
-    let server_count_before = server::load_server_records(&root_path)
-        .map(|records| records.len())
-        .unwrap_or(0);
+    let server_counts_before = setup_server_counts(&root_path);
+    let server_count_before = server_counts_before.source_enabled;
     let requested_server_spec = parsed
         .server_spec
         .as_deref()
@@ -568,10 +578,6 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
     } else {
         None
     };
-    let server_count_after_import = server::load_server_records(&root_path)
-        .map(|records| records.len())
-        .unwrap_or(server_count_before);
-
     let server_spec_to_install = requested_server_spec.clone();
     let server_install = server_spec_to_install.as_ref().map(|spec| {
         let mut args = vec![
@@ -600,9 +606,9 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         run_json_command(args)
     });
 
-    let server_count_after = server::load_server_records(&root_path)
-        .map(|records| records.len())
-        .unwrap_or(server_count_after_import);
+    let server_counts_after = setup_server_counts(&root_path);
+    let server_count_after = server_counts_after.source_enabled;
+    let effective_server_count_after = server_counts_after.effective_enabled;
     if server_count_after == 0 {
         warnings.push(
             "No upstream MCP servers are configured yet, and MCPace did not add a default filesystem server. Add one explicitly with 'mcpace install <path|package|url|command>' or import an existing MCP settings file when you want tools behind the hub."
@@ -713,19 +719,43 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         .and_then(|response| response.header("Mcp-Session-Id"))
         .map(ToOwned::to_owned);
     let initialize = initialize_response.map(|response| response.json);
-    let tools_list = http_mcp_request(
-        &probe_host,
-        port,
-        &mcp_path,
-        JsonValue::object([
-            ("jsonrpc", JsonValue::string("2.0")),
-            ("id", JsonValue::number(2)),
-            ("method", JsonValue::string("tools/list")),
-            ("params", empty_object()),
-        ]),
-        setup_session_id.as_deref(),
-    )
-    .map(|response| response.json);
+    let initialize_ok_for_notification = initialize
+        .as_ref()
+        .ok()
+        .and_then(|value| json_helpers::string_at_path(value, &["result", "protocolVersion"]))
+        .is_some();
+    let initialized_notification = if initialize_ok_for_notification {
+        http_mcp_notification(
+            &probe_host,
+            port,
+            &mcp_path,
+            JsonValue::object([
+                ("jsonrpc", JsonValue::string("2.0")),
+                ("method", JsonValue::string("notifications/initialized")),
+            ]),
+            setup_session_id.as_deref(),
+        )
+    } else {
+        Err("skipped notifications/initialized because initialize did not complete".to_string())
+    };
+    let initialized_ok = initialized_notification.is_ok();
+    let tools_list = if initialized_ok {
+        http_mcp_request(
+            &probe_host,
+            port,
+            &mcp_path,
+            JsonValue::object([
+                ("jsonrpc", JsonValue::string("2.0")),
+                ("id", JsonValue::number(2)),
+                ("method", JsonValue::string("tools/list")),
+                ("params", empty_object()),
+            ]),
+            setup_session_id.as_deref(),
+        )
+        .map(|response| response.json)
+    } else {
+        Err("skipped tools/list because notifications/initialized did not complete".to_string())
+    };
 
     warnings.push(
         "Cloud/public connector surfaces still require a public relay and are not made ready by local setup."
@@ -739,6 +769,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         .map(|result| result.ok)
         .unwrap_or(true);
     let server_configured = server_count_after > 0;
+    let effective_server_configured = effective_server_count_after > 0;
     let serve_ok = serve.ok
         && json_helpers::string_at_path(
             serve.json.as_ref().unwrap_or(&JsonValue::Null),
@@ -765,11 +796,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         .ok()
         .and_then(|value| json_helpers::bool_at_path(value, &["ok"]))
         .unwrap_or(false);
-    let initialize_ok = initialize
-        .as_ref()
-        .ok()
-        .and_then(|value| json_helpers::string_at_path(value, &["result", "protocolVersion"]))
-        .is_some();
+    let initialize_ok = initialize_ok_for_notification;
     let tool_count = tools_list
         .as_ref()
         .ok()
@@ -777,8 +804,10 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         .map(|items| items.len())
         .unwrap_or(0);
     let tools_ok = tool_count > 0;
+    let tools_expected = effective_server_configured;
+    let tools_ready = !tools_expected || tools_ok;
     if !tools_ok {
-        if server_count_after == 0 {
+        if !tools_expected {
             warnings.push(
                 "MCPace responded to initialize. No upstream tools are expected until you add a server."
                     .to_string(),
@@ -799,6 +828,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         && service_ok
         && health_ok
         && initialize_ok
+        && initialized_ok
     {
         "ready"
     } else {
@@ -865,6 +895,14 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
                 ]),
             },
         ),
+        (
+            "serversKnown",
+            JsonValue::object([
+                ("policyCount", JsonValue::number(server_counts_after.policy_records)),
+                ("sourceEnabledCount", JsonValue::number(server_count_after)),
+                ("effectiveEnabledCount", JsonValue::number(effective_server_count_after)),
+            ]),
+        ),
         ("serversConfigured", JsonValue::number(server_count_after)),
         ("serve", command_result_json(&serve)),
         (
@@ -898,6 +936,15 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         ("health", result_json(health)),
         ("mcpInitialize", result_json(initialize)),
         (
+            "mcpInitialized",
+            result_json(initialized_notification.map(|status| {
+                JsonValue::object([
+                    ("ok", JsonValue::bool(true)),
+                    ("httpStatus", JsonValue::number(status)),
+                ])
+            })),
+        ),
+        (
             "mcpTools",
             JsonValue::object([
                 ("ok", JsonValue::bool(tools_ok)),
@@ -912,13 +959,20 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
                 ("homeImportReady", JsonValue::bool(home_import_ok)),
                 ("serverInstallReady", JsonValue::bool(server_install_ok)),
                 ("serverConfigured", JsonValue::bool(server_configured)),
+                (
+                    "effectiveServerConfigured",
+                    JsonValue::bool(effective_server_configured),
+                ),
+                ("mcpToolsExpected", JsonValue::bool(tools_expected)),
                 ("serveRunning", JsonValue::bool(serve_ok)),
                 ("clientInstallReady", JsonValue::bool(install_ok)),
                 ("serviceInstallReady", JsonValue::bool(service_ok)),
                 ("readinessReady", JsonValue::bool(readiness_ok)),
                 ("healthOk", JsonValue::bool(health_ok)),
                 ("mcpInitializeOk", JsonValue::bool(initialize_ok)),
+                ("mcpInitializedOk", JsonValue::bool(initialized_ok)),
                 ("mcpToolsOk", JsonValue::bool(tools_ok)),
+                ("mcpToolsReady", JsonValue::bool(tools_ready)),
                 ("mcpaceCommandInPath", JsonValue::bool(mcpace_in_path)),
             ]),
         ),
@@ -940,6 +994,30 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
             ]),
         ),
     ])
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct SetupServerCounts {
+    policy_records: usize,
+    source_enabled: usize,
+    effective_enabled: usize,
+}
+
+fn setup_server_counts(root_path: &Path) -> SetupServerCounts {
+    match server::load_server_records(root_path) {
+        Ok(records) => SetupServerCounts {
+            policy_records: records.len(),
+            source_enabled: records
+                .iter()
+                .filter(|record| record.source_enabled)
+                .count(),
+            effective_enabled: records
+                .iter()
+                .filter(|record| record.effective_enabled)
+                .count(),
+        },
+        Err(_) => SetupServerCounts::default(),
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1668,9 +1746,10 @@ fn http_mcp_request(
         String::new()
     };
     let request = format!(
-        "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+        "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMCP-Protocol-Version: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
         path,
         host,
+        mcp::CURRENT_PROTOCOL_VERSION,
         session_header,
         body.len(),
         body
@@ -1682,41 +1761,277 @@ fn http_json_request(host: &str, port: u16, request: &str) -> Result<JsonValue, 
     http_json_response(host, port, request).map(|response| response.json)
 }
 
-fn http_json_response(host: &str, port: u16, request: &str) -> Result<HttpJsonResponse, String> {
-    let mut stream = TcpStream::connect((host, port))
-        .map_err(|error| format!("connect {}:{}: {}", host, port, error))?;
-    stream
-        .set_read_timeout(Some(HTTP_PROBE_TIMEOUT))
-        .map_err(|error| format!("set read timeout: {}", error))?;
-    stream
-        .set_write_timeout(Some(HTTP_PROBE_TIMEOUT))
-        .map_err(|error| format!("set write timeout: {}", error))?;
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| format!("write request: {}", error))?;
-    let _ = stream.shutdown(Shutdown::Write);
+fn http_mcp_notification(
+    host: &str,
+    port: u16,
+    path: &str,
+    body: JsonValue,
+    session_id: Option<&str>,
+) -> Result<u16, String> {
+    let body = body.to_compact_string();
+    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_MCP_PATH);
+    let session_header = if let Some(value) = session_id {
+        if !text_utils::valid_http_header_value(value) {
+            return Err("setup probe received an invalid MCP session id header".to_string());
+        }
+        format!("Mcp-Session-Id: {}\r\n", value)
+    } else {
+        String::new()
+    };
+    let request = format!(
+        "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMCP-Protocol-Version: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
+        path,
+        host,
+        mcp::CURRENT_PROTOCOL_VERSION,
+        session_header,
+        body.len(),
+        body
+    );
+    let response = http_raw_response(host, port, &request)?;
+    let parsed = parse_http_setup_response(&response)?;
+    if matches!(parsed.status, 200 | 202 | 204) {
+        Ok(parsed.status)
+    } else {
+        Err(format!("HTTP notification failed: {}", parsed.status_line))
+    }
+}
 
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|error| format!("read response: {}", error))?;
-    let (headers_text, body) = response
+fn http_json_response(host: &str, port: u16, request: &str) -> Result<HttpJsonResponse, String> {
+    let response = http_raw_response(host, port, request)?;
+    parse_http_json_response(&response)
+}
+
+fn http_raw_response(host: &str, port: u16, request: &str) -> Result<String, String> {
+    let probe_host = probe_host(host);
+    let addrs = (probe_host.as_str(), port)
+        .to_socket_addrs()
+        .map_err(|error| format!("resolve {}:{}: {}", probe_host, port, error))?
+        .collect::<Vec<_>>();
+    if addrs.is_empty() {
+        return Err(format!("{}:{} resolved to no addresses", probe_host, port));
+    }
+
+    let mut last_error = None;
+    for addr in addrs {
+        match TcpStream::connect_timeout(&addr, HTTP_PROBE_TIMEOUT) {
+            Ok(mut stream) => {
+                stream
+                    .set_read_timeout(Some(HTTP_PROBE_TIMEOUT))
+                    .map_err(|error| format!("set read timeout: {}", error))?;
+                stream
+                    .set_write_timeout(Some(HTTP_PROBE_TIMEOUT))
+                    .map_err(|error| format!("set write timeout: {}", error))?;
+                stream
+                    .write_all(request.as_bytes())
+                    .map_err(|error| format!("write request: {}", error))?;
+                let _ = stream.shutdown(Shutdown::Write);
+                return read_http_setup_response(&mut stream);
+            }
+            Err(error) => last_error = Some(error),
+        }
+    }
+
+    Err(format!(
+        "connect {}:{}: {}",
+        probe_host,
+        port,
+        last_error
+            .map(|error| error.to_string())
+            .unwrap_or_else(|| "no resolved address accepted the connection".to_string())
+    ))
+}
+
+fn read_http_setup_response(stream: &mut TcpStream) -> Result<String, String> {
+    let mut raw = Vec::new();
+    let mut buffer = [0u8; 8192];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => {
+                raw.extend_from_slice(&buffer[..count]);
+                if raw.len() > MAX_HTTP_SETUP_RESPONSE_BYTES {
+                    return Err(
+                        "HTTP setup probe response exceeded the maximum supported size".to_string(),
+                    );
+                }
+                if let Ok(text) = std::str::from_utf8(&raw) {
+                    if http_setup_response_ready(text) {
+                        return Ok(text.to_string());
+                    }
+                }
+            }
+            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
+                if let Ok(text) = std::str::from_utf8(&raw) {
+                    if http_setup_response_ready(text) {
+                        return Ok(text.to_string());
+                    }
+                }
+                return Err("timed out while reading HTTP setup probe response".to_string());
+            }
+            Err(error) => return Err(format!("read response: {}", error)),
+        }
+    }
+
+    String::from_utf8(raw).map_err(|_| "HTTP setup probe returned a non-UTF-8 response".to_string())
+}
+
+fn http_setup_response_ready(raw: &str) -> bool {
+    let Ok(parsed) = parse_http_setup_response(raw) else {
+        return false;
+    };
+    if parsed.status != 200 {
+        return true;
+    }
+    let transfer_encoding = parsed.transfer_encoding.to_ascii_lowercase();
+    let content_type = parsed.content_type.to_ascii_lowercase();
+    if content_type.contains("text/event-stream") {
+        return sse_json_body(parsed.body).is_some();
+    }
+    if transfer_encoding.contains("chunked") {
+        return decode_chunked_body(parsed.body.as_bytes()).is_ok();
+    }
+    if let Some(content_length) = parsed.content_length {
+        return parsed.body.len() >= content_length;
+    }
+    parse_str(parsed.body.trim()).is_ok()
+}
+
+fn parse_http_json_response(response: &str) -> Result<HttpJsonResponse, String> {
+    let parsed = parse_http_setup_response(response)?;
+    if parsed.status != 200 {
+        return Err(format!("HTTP request failed: {}", parsed.status_line));
+    }
+    let body_bytes = if parsed
+        .transfer_encoding
+        .to_ascii_lowercase()
+        .contains("chunked")
+    {
+        decode_chunked_body(parsed.body.as_bytes())?
+    } else if let Some(content_length) = parsed.content_length {
+        parsed
+            .body
+            .as_bytes()
+            .get(..content_length.min(parsed.body.len()))
+            .unwrap_or(parsed.body.as_bytes())
+            .to_vec()
+    } else {
+        parsed.body.as_bytes().to_vec()
+    };
+    let body = String::from_utf8(body_bytes)
+        .map_err(|_| "HTTP setup probe returned a non-UTF-8 body".to_string())?;
+    let json_body = if parsed
+        .content_type
+        .to_ascii_lowercase()
+        .contains("text/event-stream")
+    {
+        sse_json_body(&body).ok_or_else(|| {
+            "HTTP setup probe SSE response did not contain a JSON-RPC response".to_string()
+        })?
+    } else {
+        body.trim().to_string()
+    };
+    let json =
+        parse_str(&json_body).map_err(|error| format!("parse HTTP JSON response: {}", error))?;
+    Ok(HttpJsonResponse {
+        headers: parsed.headers,
+        json,
+    })
+}
+
+fn parse_http_setup_response(raw: &str) -> Result<ParsedHttpJsonResponse<'_>, String> {
+    let (headers_text, body) = raw
         .split_once("\r\n\r\n")
         .ok_or_else(|| "HTTP response missing header/body separator".to_string())?;
     let mut lines = headers_text.lines();
-    let status = lines.next().unwrap_or_default();
-    if !status.contains(" 200 ") {
-        return Err(format!("HTTP request failed: {}", status));
+    let status_line = lines.next().unwrap_or_default().to_string();
+    let status = status_line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|value| value.parse::<u16>().ok())
+        .ok_or_else(|| format!("HTTP response has malformed status line: {}", status_line))?;
+    let mut headers = Vec::new();
+    let mut content_type = String::new();
+    let mut content_length = None;
+    let mut transfer_encoding = String::new();
+    for line in lines {
+        let Some((name, value)) = line.split_once(':') else {
+            continue;
+        };
+        let name = name.trim().to_string();
+        let value = value.trim().to_string();
+        match name.to_ascii_lowercase().as_str() {
+            "content-type" => content_type = value.clone(),
+            "content-length" => content_length = value.parse::<usize>().ok(),
+            "transfer-encoding" => transfer_encoding = value.clone(),
+            _ => {}
+        }
+        headers.push((name, value));
     }
-    let headers = lines
-        .filter_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            Some((name.trim().to_string(), value.trim().to_string()))
-        })
-        .collect::<Vec<_>>();
-    let json =
-        parse_str(body.trim()).map_err(|error| format!("parse HTTP JSON response: {}", error))?;
-    Ok(HttpJsonResponse { headers, json })
+    Ok(ParsedHttpJsonResponse {
+        status_line,
+        status,
+        headers,
+        content_type,
+        content_length,
+        transfer_encoding,
+        body,
+    })
+}
+
+fn decode_chunked_body(body: &[u8]) -> Result<Vec<u8>, String> {
+    let mut decoded = Vec::new();
+    let mut offset = 0usize;
+    loop {
+        let Some(line_end) = find_crlf(body, offset) else {
+            return Err("chunked HTTP body is incomplete".to_string());
+        };
+        let size_line = std::str::from_utf8(&body[offset..line_end])
+            .map_err(|_| "chunked HTTP body has a non-UTF-8 size line".to_string())?;
+        let size_hex = size_line.split(';').next().unwrap_or_default().trim();
+        let size = usize::from_str_radix(size_hex, 16)
+            .map_err(|_| "chunked HTTP body has an invalid chunk size".to_string())?;
+        offset = line_end + 2;
+        if size == 0 {
+            return Ok(decoded);
+        }
+        if body.len() < offset + size {
+            return Err("chunked HTTP body is incomplete".to_string());
+        }
+        decoded.extend_from_slice(&body[offset..offset + size]);
+        offset += size;
+        if body.get(offset..offset + 2) == Some(b"\r\n") {
+            offset += 2;
+        } else if offset < body.len() {
+            return Err("chunked HTTP body is missing a chunk terminator".to_string());
+        }
+    }
+}
+
+fn find_crlf(body: &[u8], start: usize) -> Option<usize> {
+    body.get(start..)?
+        .windows(2)
+        .position(|window| window == b"\r\n")
+        .map(|index| start + index)
+}
+
+fn sse_json_body(body: &str) -> Option<String> {
+    let normalized = body.replace("\r\n", "\n");
+    for event in normalized.split("\n\n") {
+        let data = event
+            .lines()
+            .filter_map(|line| line.strip_prefix("data:"))
+            .map(str::trim)
+            .collect::<Vec<_>>()
+            .join("\n");
+        let data = data.trim();
+        if data.is_empty() {
+            continue;
+        }
+        if parse_str(data).is_ok() {
+            return Some(data.to_string());
+        }
+    }
+    None
 }
 
 fn probe_host(host: &str) -> String {
@@ -1724,6 +2039,12 @@ fn probe_host(host: &str) -> String {
         "0.0.0.0" | "::" => runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
         other => other.to_string(),
     }
+}
+
+fn usize_at_path(value: &JsonValue, path: &[&str]) -> Option<usize> {
+    json_helpers::value_at_path(value, path)?
+        .as_i64()
+        .and_then(|number| usize::try_from(number).ok())
 }
 
 fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
@@ -1734,19 +2055,50 @@ fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
     for (label, path) in [
         ("Init ready", "initReady"),
         ("Server install ready", "serverInstallReady"),
-        ("Server configured", "serverConfigured"),
         ("Serve running", "serveRunning"),
         ("Client install ready", "clientInstallReady"),
         ("Autostart install ready", "serviceInstallReady"),
         ("Readiness ready", "readinessReady"),
         ("Health OK", "healthOk"),
         ("MCP initialize OK", "mcpInitializeOk"),
-        ("MCP tools OK", "mcpToolsOk"),
+        ("MCP initialized notification OK", "mcpInitializedOk"),
         ("mcpace command in PATH", "mcpaceCommandInPath"),
     ] {
         let value = json_helpers::bool_at_path(report, &["checks", path]).unwrap_or(false);
         let _ = writeln!(stdout, "- {}: {}", label, if value { "yes" } else { "no" });
     }
+    let source_count = usize_at_path(report, &["serversKnown", "sourceEnabledCount"])
+        .unwrap_or_else(|| usize_at_path(report, &["serversConfigured"]).unwrap_or(0));
+    let effective_count =
+        usize_at_path(report, &["serversKnown", "effectiveEnabledCount"]).unwrap_or(source_count);
+    let tools_expected = json_helpers::bool_at_path(report, &["checks", "mcpToolsExpected"])
+        .unwrap_or(effective_count > 0);
+    let tools_ready = json_helpers::bool_at_path(report, &["checks", "mcpToolsReady"])
+        .unwrap_or_else(|| {
+            json_helpers::bool_at_path(report, &["checks", "mcpToolsOk"]).unwrap_or(false)
+        });
+    let _ = writeln!(
+        stdout,
+        "- Upstream servers: {} source-enabled, {} effective-enabled{}",
+        source_count,
+        effective_count,
+        if source_count == 0 {
+            " (optional; empty setup is OK)"
+        } else {
+            ""
+        }
+    );
+    let _ = writeln!(
+        stdout,
+        "- MCP tools ready: {}",
+        if !tools_expected {
+            "not expected yet"
+        } else if tools_ready {
+            "yes"
+        } else {
+            "no"
+        }
+    );
     if let Some(warnings) = json_helpers::array_at_path(report, &["warnings"]) {
         if !warnings.is_empty() {
             let _ = writeln!(stdout, "Warnings:");

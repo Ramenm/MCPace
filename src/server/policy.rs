@@ -374,7 +374,11 @@ fn policy_json(
     } else {
         preset.parallelism_limit.max(1)
     };
-    let max_workers = if preset.mode == "disabled" { 0 } else { max_workers };
+    let max_workers = if preset.mode == "disabled" {
+        0
+    } else {
+        max_workers
+    };
     let max_in_flight = if preset.mode == "disabled" {
         0
     } else {

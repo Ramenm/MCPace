@@ -1467,7 +1467,7 @@ fn server_policy_command_args(body: &JsonValue) -> Result<Vec<String>, String> {
         "set-policy".to_string(),
         server,
         "--mode".to_string(),
-        mode,
+        mode.clone(),
         "--json".to_string(),
     ];
     if mode != "disabled" {

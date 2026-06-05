@@ -10,6 +10,14 @@ Common files:
 | `catalog/approved-servers.json` | Local review catalog for trusted, approved, blocked, or review-only servers. |
 | `manifests/*.permissions.json` | Optional permission hints for risky servers. |
 
+Personal upstream MCP server definitions such as `browser`, `playwright`,
+`context7`, or `time` belong in user-scoped MCP settings (for example
+`MCPACE_MCP_SETTINGS`, `MCPACE_MCP_SETTINGS_DIRS`, or user-owned
+`mcp_settings.d/*.json` fragments). The repository `mcpace.config.json`
+should not ship those personal upstreams; its `servers` object is only for
+optional scheduling/policy overrides when a server is already present in the
+merged user/project MCP settings registry.
+
 ## Config-first import
 
 ```bash
@@ -26,7 +34,7 @@ Supported input shapes:
 ```
 
 ```json
-{ "servers": { "remote": { "serverUrl": "https://example.com/mcp" } } }
+{ "servers": { "localGateway": { "serverUrl": "http://127.0.0.1:8010/mcp" } } }
 ```
 
 Normalization rules:
@@ -40,13 +48,15 @@ Normalization rules:
 | `disabled: true` | `enabled: false` |
 | MCPace self-entry | skipped to avoid loops |
 
+Direct callable upstreams are stdio or plain/local Streamable HTTP. Keep HTTPS remote MCP endpoints behind a stdio adapter such as `mcp-remote` or a local gateway until the TLS bridge is implemented.
+
 ## Install examples
 
 ```bash
 mcpace install npm:@modelcontextprotocol/server-memory --as memory --dry-run
 mcpace install pypi:mcp-server-demo --as demo --dry-run
 mcpace install oci:ghcr.io/example/mcp-server --as container-demo --dry-run
-mcpace install https://example.com/mcp --as remote-example --dry-run
+mcpace install http://127.0.0.1:8010/mcp --as local-gateway --dry-run
 mcpace install . --as filesystem --dry-run
 mcpace install -- npx -y @modelcontextprotocol/server-memory
 ```

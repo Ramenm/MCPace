@@ -211,6 +211,7 @@ pub(super) struct ClientConfigUpdate {
 pub(super) fn upsert_json_mcp_server(
     existing: &str,
     adapter_key_name: &str,
+    servers_object_key: &str,
     server_config: JsonValue,
     config_path: &Path,
 ) -> Result<ClientConfigUpdate, String> {
@@ -236,15 +237,21 @@ pub(super) fn upsert_json_mcp_server(
         }
     };
 
+    let servers_key = if servers_object_key.trim().is_empty() {
+        "mcpServers"
+    } else {
+        servers_object_key.trim()
+    };
     let servers_value = root_object
-        .entry("mcpServers".to_string())
+        .entry(servers_key.to_string())
         .or_insert_with(empty_json_object);
     let servers_object = match servers_value {
         JsonValue::Object(map) => map,
         _ => {
             return Err(format!(
-                "JSON client config '{}' has a non-object mcpServers field",
-                config_path.display()
+                "JSON client config '{}' has a non-object {} field",
+                config_path.display(),
+                servers_key
             ))
         }
     };

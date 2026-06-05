@@ -56,6 +56,13 @@ impl JsonValue {
         }
     }
 
+    pub fn as_object_mut(&mut self) -> Option<&mut BTreeMap<String, JsonValue>> {
+        match self {
+            JsonValue::Object(map) => Some(map),
+            _ => None,
+        }
+    }
+
     pub fn as_array(&self) -> Option<&[JsonValue]> {
         match self {
             JsonValue::Array(items) => Some(items),

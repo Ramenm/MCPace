@@ -119,9 +119,9 @@ pub(super) fn build_plan(
         );
     }
     if context.session_id.is_none()
-        && server_records
-            .iter()
-            .any(|record| server_record_is_routable(record) && record.concurrency_policy == "single-session")
+        && server_records.iter().any(|record| {
+            server_record_is_routable(record) && record.concurrency_policy == "single-session"
+        })
     {
         warnings.push(format!(
             "At least one server is single-session and no external session id was resolved; the future hub must keep derived lease '{}' sticky instead of collapsing traffic under one anonymous route.",

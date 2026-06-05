@@ -48,3 +48,15 @@ test('dashboard MCP headers reject duplicates before protocol or session routing
   assert.doesNotMatch(headers, /request_header_string\(Some\(request\), "mcp-/);
   assert.doesNotMatch(session, /request_header_string\(Some\(request\), "mcp-/);
 });
+
+test('HTTP upstream bridge handles Streamable HTTP JSON and SSE without waiting for socket EOF', () => {
+  assert.match(source, /Accept: application\/json, text\/event-stream/);
+  assert.match(source, /fn read_http_response/);
+  assert.match(source, /http_response_ready/);
+  assert.match(source, /text\/event-stream/);
+  assert.match(source, /sse_json_body/);
+  assert.match(source, /json_response_id_matches/);
+  assert.match(source, /decode_chunked_body/);
+  assert.doesNotMatch(source, /read_to_string\(&mut raw_response\)/, 'HTTP upstream must not wait for EOF on SSE responses');
+  assert.match(source, /collect::<Vec<_>>\(\)/, 'HTTP upstream should try all resolved addresses, not only the first localhost address');
+});

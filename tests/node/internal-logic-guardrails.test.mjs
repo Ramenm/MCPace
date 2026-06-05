@@ -119,7 +119,7 @@ test('disabled execution preset is truly non-routable and zero-capacity', () => 
   assert.match(disabledArm, /discovery_requires_lease: false/);
   assert.match(policy, /if preset\.mode == "disabled" \{\s*0\s*\} else \{/s);
   assert.match(policy, /let parallelism = if preset\.mode == "disabled" \{\s*0\s*\}/s);
-  assert.match(policy, /let max_workers = if preset\.mode == "disabled" \{ 0 \}/);
+  assert.match(policy, /let max_workers = if preset\.mode == "disabled" \{\s*0\s*\} else \{/s);
   assert.match(policy, /let max_in_flight = if preset\.mode == "disabled" \{\s*0\s*\}/s);
 
   const configSchema = readJson('schemas', 'mcpace-config.schema.json');
@@ -212,7 +212,7 @@ test('server add remote URLs validate authority shape instead of only scheme pre
   const authority = sliceFn(helpers, 'validate_remote_mcp_authority', 'validate_remote_mcp_host');
 
   assert.match(validator, /trimmed\.contains\('#'\)/);
-  assert.match(validator, /split\(\|ch\| ch == '\/' \|\| ch == '\?'\)/);
+  assert.match(validator, /split\(\['\/', '\?'\]\)/);
   assert.match(validator, /validate_remote_mcp_authority\(authority\)/);
   assert.match(authority, /authority\.contains\('@'\)/);
   assert.match(authority, /authority\.starts_with\('\['\)/);
@@ -303,4 +303,200 @@ test('runtime profile and policy keys share MCP source-name normalization', () =
   assert.match(upstreamConfig, /let normalized_server_name = mcp_sources::normalize_server_name\(server_name\);/);
   assert.match(upstreamConfig, /server_overrides[\s\S]*\.get\(&normalized_server_name\)/);
   assert.doesNotMatch(upstreamConfig, /server_name\.trim\(\)\.to_ascii_lowercase\(\)/);
+});
+
+test('Windows runtime files are replaced without deleting visible state first', () => {
+  const runtimepaths = read('src', 'runtimepaths.rs');
+  const writeTextAtomic = sliceFn(runtimepaths, 'write_text_atomic', 'replace_file_atomic');
+  const replaceAtomic = sliceFn(runtimepaths, 'replace_file_atomic', 'replace_file_atomic_windows');
+  const windowsReplace = sliceFn(runtimepaths, 'replace_file_atomic_windows', 'replace_existing_file_windows');
+  const moveFileEx = runtimepaths.slice(runtimepaths.indexOf('fn replace_existing_file_windows'), runtimepaths.indexOf('pub(crate) fn unix_time_ms'));
+  assert.ok(moveFileEx.length > 0, 'missing Windows replacement body');
+
+  assert.match(writeTextAtomic, /replace_file_atomic\(&temp_path, path\)/);
+  assert.doesNotMatch(writeTextAtomic, /remove_file\(path\)/, 'atomic write must not unlink the visible file before replacement');
+  assert.match(replaceAtomic, /#\[cfg\(windows\)\]/);
+  assert.match(windowsReplace, /for attempt in 0\.\.=20/);
+  assert.match(moveFileEx, /MoveFileExW/);
+  assert.match(moveFileEx, /MOVEFILE_REPLACE_EXISTING/);
+  assert.match(runtimepaths, /strip_windows_extended_path_prefix/);
+  assert.match(runtimepaths, /\\\\\?\\UNC\\/);
+});
+
+test('serve background lifecycle avoids Windows locked-runner and Linux orphan races', () => {
+  const serve = read('src', 'serve.rs');
+  const runtimepaths = read('src', 'runtimepaths.rs');
+  const start = sliceFn(serve, 'run_start', 'run_stop');
+  const stopExisting = sliceFn(serve, 'stop_existing_serve', 'remove_managed_serve_runner_copy');
+  const cleanup = sliceFn(serve, 'remove_managed_serve_runner_copy', 'run_status');
+  const killProcess = sliceFn(serve, 'kill_process');
+
+  assert.match(runtimepaths, /fn serve_runner_path_for_start/);
+  assert.match(start, /serve_runner_path_for_start\(&state_root\)/);
+  assert.doesNotMatch(start, /serve_runner_path\(&state_root\)/, 'serve start must not overwrite a potentially locked runner exe');
+  assert.match(start, /remove_managed_serve_runner_copy\(&state_root, &state\)/);
+  assert.match(stopExisting, /remove_managed_serve_runner_copy\(&state_root, state\)/);
+  assert.match(cleanup, /canonical_runner\.starts_with\(&canonical_runtime_bin\)/);
+  assert.match(killProcess, /kill_unix_process_group\(pid, 15\)/);
+});
+
+test('stdio child environment keeps only one Windows PATH spelling', () => {
+  const stdio = read('src', 'upstream', 'stdio_runtime.rs');
+  const envBlock = stdio.slice(stdio.indexOf('fn default_child_process_environment'), stdio.indexOf('pub(super) fn read_response'));
+  assert.ok(envBlock.length > 0, 'missing default child environment body');
+  assert.match(envBlock, /"Path"/);
+  assert.match(envBlock, /env::var\("PATH"\)/);
+  assert.doesNotMatch(envBlock, /"PATH",\s*\n\s*"Path"/, 'Windows env forwarding must avoid duplicate case-insensitive PATH keys');
+});
+
+
+test('serve start replaces healthy stale endpoint instead of orphaning another runtime', () => {
+  const serve = read('src', 'serve.rs');
+  const start = sliceFn(serve, 'run_start', 'state_matches_start_request');
+  const matcher = sliceFn(serve, 'state_matches_start_request', 'stop_existing_serve');
+
+  assert.match(start, /let existing_healthy =\s*health_check\(\s*&existing_state\.host,\s*existing_state\.port,\s*&endpoint\.health_path,\s*\)/s);
+  assert.match(start, /if existing_healthy \{\s*if !state_matches_start_request\(/s);
+  assert.match(start, /stop_existing_serve\(&canonical_root\);/);
+  assert.match(start, /\} else \{\s*remove_managed_serve_runner_copy\(&state_root, &existing_state\);\s*let _ = fs::remove_file\(&state_path\);\s*\}/s);
+  assert.match(matcher, /state\.host == host/);
+  assert.match(matcher, /state\.port == port/);
+  assert.match(matcher, /state\.max_connections == max_connections/);
+  assert.match(matcher, /state\.io_timeout_ms == io_timeout_ms/);
+  assert.match(matcher, /state\.max_body_bytes == max_body_bytes/);
+  assert.match(matcher, /state\.overview_cache_ms == overview_cache_ms/);
+});
+
+test('setup readiness probe uses bounded Streamable HTTP reader instead of EOF-only reads', () => {
+  const setup = read('src', 'setup.rs');
+  const httpMcp = sliceFn(setup, 'http_mcp_request', 'http_json_request');
+  const httpJson = sliceFn(setup, 'http_json_response', 'read_http_setup_response');
+  const reader = sliceFn(setup, 'read_http_setup_response', 'http_setup_response_ready');
+  const ready = sliceFn(setup, 'http_setup_response_ready', 'parse_http_json_response');
+  const parser = sliceFn(setup, 'parse_http_json_response', 'parse_http_setup_response');
+
+  assert.match(httpMcp, /MCP-Protocol-Version: \{\}/, 'setup MCP probe should send protocol version header');
+  assert.match(httpMcp, /mcp::CURRENT_PROTOCOL_VERSION/);
+  assert.match(httpJson, /to_socket_addrs\(\)/, 'setup probe should try every resolved localhost address');
+  assert.match(httpJson, /TcpStream::connect_timeout\(&addr, HTTP_PROBE_TIMEOUT\)/);
+  assert.match(reader, /MAX_HTTP_SETUP_RESPONSE_BYTES/);
+  assert.doesNotMatch(reader, /read_to_string/, 'setup probe must not wait for EOF on long-lived SSE streams');
+  const chunked = sliceFn(setup, 'decode_chunked_body', 'find_crlf');
+  const crlf = sliceFn(setup, 'find_crlf', 'sse_json_body');
+  const sse = sliceFn(setup, 'sse_json_body', 'probe_host');
+
+  assert.match(ready, /text\/event-stream/);
+  assert.match(ready, /decode_chunked_body/);
+  assert.match(parser, /sse_json_body\(&body\)/);
+  assert.match(chunked, /b"\\r\\n"/, 'chunked body parser must look for CRLF, not a literal broken newline');
+  assert.match(crlf, /b"\\r\\n"/, 'CRLF finder must use an escaped CRLF byte string');
+  assert.match(sse, /replace\("\\r\\n", "\\n"\)/, 'SSE parser should normalize CRLF without embedding raw newlines in string literals');
+});
+
+
+
+test('setup completes the MCP lifecycle before listing tools', () => {
+  const setup = read('src', 'setup.rs');
+  const runSetup = setup.slice(setup.indexOf('fn run_setup'), setup.indexOf('#[cfg(test)]'));
+  const notification = sliceFn(setup, 'http_mcp_notification', 'http_json_response');
+
+  assert.match(runSetup, /method", JsonValue::string\("notifications\/initialized"\)/);
+  assert.match(runSetup, /let initialized_ok = initialized_notification\.is_ok\(\);/);
+  assert.match(runSetup, /let tools_list = if initialized_ok \{/);
+  assert.match(runSetup, /&& initialized_ok/, 'setup ready status must require initialized notification');
+  assert.match(runSetup, /"mcpInitializedOk"/);
+  assert.match(runSetup, /"mcpInitialized"/);
+  assert.match(notification, /matches!\(parsed\.status, 200 \| 202 \| 204\)/);
+  assert.match(notification, /MCP-Protocol-Version: \{\}/);
+  assert.match(notification, /Mcp-Session-Id: \{\}/);
+});
+
+test('projects JSON output uses the same lower-camel keys as the runtime registry', () => {
+  const projects = read('src', 'projects.rs');
+  const serializer = sliceFn(projects, 'to_json_value');
+  for (const key of ['projectId', 'name', 'hostPath', 'detectedType', 'markers', 'lastUsedAt', 'state']) {
+    assert.match(serializer, new RegExp(`"${key}"`));
+  }
+  for (const key of ['ProjectId', 'Name', 'HostPath', 'DetectedType', 'Markers', 'LastUsedAt', 'State']) {
+    assert.doesNotMatch(serializer, new RegExp(`"${key}"`));
+  }
+});
+
+test('runtime diagnostics treats plain HTTP upstreams as callable wrapper targets', () => {
+  const diagnostics = read('src', 'dashboard', 'diagnostics.rs');
+  const diagnosticFn = sliceFn(diagnostics, 'server_runtime_diagnostic');
+  assert.match(diagnosticFn, /matches!\(source_type, "stdio" \| "http"\)/);
+  assert.match(diagnosticFn, /source_type == "http" && runtime_callable/);
+  assert.match(diagnosticFn, /"callable-http-bridge"/);
+  assert.doesNotMatch(
+    diagnosticFn,
+    /external\/remote HTTP server policy is configured, but live HTTP upstream fan-out is not implemented in this HTTP adapter/,
+    'diagnostics must not mark every HTTP source as preview-blocked after plain HTTP forwarding exists',
+  );
+});
+
+test('project registry scan is implemented and uses stable lower-camel records', () => {
+  const projects = read('src', 'projects.rs');
+  const parser = sliceFn(projects, 'parse_args', 'read_projects');
+  const scanner = sliceFn(projects, 'scan_project', 'detect_project_markers');
+  const upsert = sliceFn(projects, 'upsert_project', 'normalize_project_record');
+  const serializer = sliceFn(projects, 'to_json_value');
+
+  assert.match(parser, /"scan" \| "--scan" \| "-scan"/);
+  assert.match(projects, /fn resolve_scan_project_path/);
+  assert.match(projects, /std::env::current_dir\(\)/, 'relative project scan paths should resolve from the caller cwd, not silently from mcpace --root');
+  assert.doesNotMatch(projects, /project scanning is not implemented yet/);
+  assert.match(scanner, /detect_project_markers\(&canonical\)/);
+  assert.match(scanner, /project_id_for_path\(&host_path\)/);
+  assert.match(projects, /let key = if cfg!\(windows\)/, 'project ids should only case-fold paths on Windows');
+  assert.match(upsert, /runtimepaths::write_text_atomic\(path, &root\.to_pretty_string\(\)\)/);
+  for (const key of ['projectId', 'name', 'hostPath', 'detectedType', 'markers', 'lastUsedAt', 'state']) {
+    assert.match(serializer, new RegExp(`"${key}"`));
+  }
+});
+
+test('init seeds the current hub lease-store schema version', () => {
+  const init = read('src', 'init.rs');
+  const hubRuntime = read('src', 'hub', 'runtime.rs');
+  assert.match(hubRuntime, /fn default_lease_store\(\)[\s\S]*\("version", JsonValue::number\(2\)\)/);
+  assert.match(init, /\("version", JsonValue::number\(2\)\)[\s\S]*"updatedAtMs"[\s\S]*JsonValue::number\(runtimepaths::unix_time_ms\(\)\)/);
+  assert.doesNotMatch(init, /\("version", JsonValue::number\(1\)\),\n\s*\("leases",/);
+});
+
+test('client install catalog supports VS Code mcp.json servers root key', () => {
+  const catalog = read('src', 'client_catalog.rs');
+  const builtin = read('src', 'client_catalog', 'builtin.rs');
+  const actions = read('src', 'client', 'actions.rs');
+  const updater = read('src', 'client', 'actions', 'config_update.rs');
+  const vscode = builtin.slice(builtin.indexOf('id: "vscode-workspace"'), builtin.indexOf('id: "cursor-local"'));
+
+  assert.match(vscode, /display_name: "Visual Studio Code workspace"/);
+  assert.match(vscode, /config_paths: &\["\.vscode\/mcp\.json"/);
+  assert.match(vscode, /servers_object_key: "servers"/);
+  assert.match(vscode, /include_type_http: true/);
+  assert.match(catalog, /serversObjectKey/);
+  assert.match(actions, /servers_object_key: shape\.servers_object_key\.clone\(\)/);
+  assert.match(updater, /entry\(servers_key\.to_string\(\)\)/);
+  assert.doesNotMatch(vscode, /servers_object_key: "mcpServers"/, 'VS Code mcp.json uses top-level servers, not mcpServers');
+});
+
+test('setup readiness counts real upstream sources, not policy-only catalog records', () => {
+  const setup = read('src', 'setup.rs');
+  const runSetup = setup.slice(setup.indexOf('fn run_setup'), setup.indexOf('#[derive(Clone, Debug)]\nstruct HomeMcpSource'));
+  const counts = sliceFn(setup, 'setup_server_counts', 'import_existing_home_mcp_servers');
+  const reporter = sliceFn(setup, 'write_text_report');
+
+  assert.match(runSetup, /let server_counts_before = setup_server_counts\(&root_path\);/);
+  assert.match(runSetup, /let server_count_before = server_counts_before\.source_enabled;/);
+  assert.match(runSetup, /server_count_before == 0 && requested_server_spec\.is_none\(\)/);
+  assert.match(counts, /policy_records: records\.len\(\)/);
+  assert.match(counts, /filter\(\|record\| record\.source_enabled\)\s*\.count\(\)/s);
+  assert.match(counts, /filter\(\|record\| record\.effective_enabled\)/);
+  assert.match(runSetup, /"serversKnown"/);
+  assert.match(runSetup, /"sourceEnabledCount"/);
+  assert.match(runSetup, /"effectiveEnabledCount"/);
+  assert.match(runSetup, /let tools_expected = effective_server_configured;/);
+  assert.match(runSetup, /let tools_ready = !tools_expected \|\| tools_ok;/);
+  assert.match(reporter, /empty setup is OK/);
+  assert.match(reporter, /not expected yet/);
 });

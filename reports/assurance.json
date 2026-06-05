@@ -1,7 +1,7 @@
 {
   "schema": "mcpace.projectAssurance.v1",
-  "generatedAt": "2026-05-28T18:42:31.178Z",
-  "root": "/mnt/data/mcpace_internal_more",
+  "generatedAt": "2026-06-05T11:05:55.526Z",
+  "root": "/mnt/data/mcpace_logic/mcpace-v0.6.9-050626-105256",
   "overall": "needs-live-rust-proof",
   "summary": {
     "pass": 12,

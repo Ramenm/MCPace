@@ -252,10 +252,11 @@ fn server_policy_is_disabled(raw_server: &JsonValue) -> bool {
     let execution_disabled = json_helpers::string_at_path(raw_server, &["execution", "mode"])
         .map(|value| normalize_policy_token(value) == "disabled")
         .unwrap_or(false);
-    let zero_execution_workers = json_helpers::value_at_path(raw_server, &["execution", "maxWorkers"])
-        .and_then(JsonValue::as_i64)
-        .map(|value| value <= 0)
-        .unwrap_or(false);
+    let zero_execution_workers =
+        json_helpers::value_at_path(raw_server, &["execution", "maxWorkers"])
+            .and_then(JsonValue::as_i64)
+            .map(|value| value <= 0)
+            .unwrap_or(false);
 
     startup_disabled
         || routing_disabled

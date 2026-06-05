@@ -94,7 +94,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(
         stdout,
-        "  mcpace server install https://example.com/mcp --as remote"
+        "  mcpace server install http://127.0.0.1:8010/mcp --as local-gateway"
     );
     let _ = writeln!(
         stdout,

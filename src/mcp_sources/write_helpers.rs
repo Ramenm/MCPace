@@ -119,10 +119,7 @@ pub(super) fn validate_remote_mcp_url(value: &str) -> Result<(), String> {
         .ok_or_else(|| {
             "server add --url currently accepts only http:// or https:// MCP endpoints".to_string()
         })?;
-    let authority = rest
-        .split(|ch| ch == '/' || ch == '?')
-        .next()
-        .unwrap_or("");
+    let authority = rest.split(['/', '?']).next().unwrap_or("");
     validate_remote_mcp_authority(authority)
 }
 
@@ -130,7 +127,9 @@ fn validate_remote_mcp_authority(authority: &str) -> Result<(), String> {
     if authority.is_empty()
         || authority.contains('/')
         || authority.contains('@')
-        || authority.bytes().any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
+        || authority
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
     {
         return Err("server add --url has an invalid authority".to_string());
     }
@@ -139,7 +138,11 @@ fn validate_remote_mcp_authority(authority: &str) -> Result<(), String> {
             return Err("server add --url has an invalid bracketed IPv6 authority".to_string());
         };
         let host = &authority[1..end];
-        if host.trim().is_empty() || host.bytes().any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace()) {
+        if host.trim().is_empty()
+            || host
+                .bytes()
+                .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
+        {
             return Err("server add --url has an invalid IPv6 host".to_string());
         }
         return validate_remote_mcp_port_suffix(&authority[end + 1..]);
@@ -159,7 +162,9 @@ fn validate_remote_mcp_authority(authority: &str) -> Result<(), String> {
 
 fn validate_remote_mcp_host(host: &str) -> Result<(), String> {
     if host.trim().is_empty()
-        || host.bytes().any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
+        || host
+            .bytes()
+            .any(|byte| byte.is_ascii_control() || byte.is_ascii_whitespace())
     {
         return Err("server add --url has an invalid host".to_string());
     }

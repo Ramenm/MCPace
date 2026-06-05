@@ -35,7 +35,7 @@ fn lexical_path_key(value: &str) -> String {
     if rest.starts_with("//") {
         prefix = "//";
         rest = &rest[2..];
-    } else if rest.as_bytes().len() >= 2
+    } else if rest.len() >= 2
         && rest.as_bytes()[1] == b':'
         && rest.as_bytes()[0].is_ascii_alphabetic()
     {
@@ -201,17 +201,13 @@ pub(super) fn stable_hash_hex(input: &str) -> String {
     format!("{:016x}", hash)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::path_is_within;
 
     #[test]
     fn path_containment_uses_lexical_segments_not_raw_prefixes() {
-        assert!(path_is_within(
-            "/work/project/src/lib.rs",
-            "/work/project"
-        ));
+        assert!(path_is_within("/work/project/src/lib.rs", "/work/project"));
         assert!(!path_is_within(
             "/work/project/../secret/file.txt",
             "/work/project"

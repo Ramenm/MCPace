@@ -76,6 +76,20 @@ function tarballExistsFor(packageName, version) {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? null;
 }
 
+function sourcePackageBinaryPath(packageInfo, binaryName) {
+  if (!packageInfo) return null;
+  const packageDir = path.join(repoRoot, packageInfo.relativeDir);
+  for (const candidate of [
+    path.join(packageDir, 'bin', binaryName),
+    path.join(packageDir, binaryName),
+  ]) {
+    if (fs.existsSync(candidate) && fs.statSync(candidate).isFile()) {
+      return path.relative(repoRoot, candidate).split(path.sep).join('/');
+    }
+  }
+  return null;
+}
+
 function check(id, ok, message, details = {}) {
   return {
     id,
@@ -115,19 +129,28 @@ function buildReport() {
   for (const target of requiredBinaryPackages) {
     const packageInfo = packagesByName.get(target.packageName) ?? null;
     const tarballPath = tarballExistsFor(target.packageName, version);
-    const hasPublishableSource = packageInfo && packageInfo.private !== true && packageInfo.version === version;
+    const sourceBinaryPath = sourcePackageBinaryPath(packageInfo, target.binaryName);
+    const hasPublishableSource = Boolean(
+      packageInfo
+        && packageInfo.private !== true
+        && packageInfo.version === version
+        && sourceBinaryPath,
+    );
     const hasTarball = Boolean(tarballPath);
     binaryPackageProof.push({
       ...target,
       packageSourceDir: packageInfo?.relativeDir ?? null,
       packageVersion: packageInfo?.version ?? null,
+      sourceBinaryPath,
       tarballPath: tarballPath ? path.relative(repoRoot, tarballPath).split(path.sep).join('/') : null,
       publishReady: Boolean(hasPublishableSource || hasTarball),
     });
     if (!hasPublishableSource && !hasTarball) {
       binaryPackageGaps.push({
         ...target,
-        reason: 'No publishable platform package source or prebuilt npm tarball was found for this target.',
+        reason: packageInfo && packageInfo.private !== true && packageInfo.version === version
+          ? `Platform package source exists, but the expected native binary '${target.binaryName}' was not found in the package.`
+          : 'No publishable platform package source with the expected native binary or prebuilt npm tarball was found for this target.',
       });
     }
   }
@@ -139,7 +162,7 @@ function buildReport() {
     check('optional-dependencies-cover-enabled-targets', missingOptionalDependencies.length === 0, 'Main npm package must depend on every enabled platform package.', { missingOptionalDependencies }),
     check('optional-dependencies-match-project-version', optionalDependencyVersionDrift.length === 0, 'Platform optionalDependencies must match the project version.', { optionalDependencyVersionDrift }),
     check('optional-dependencies-do-not-advertise-disabled-targets', extraOptionalDependencies.length === 0, 'Main npm package must not advertise platform packages outside enabled release targets.', { extraOptionalDependencies }),
-    check('binary-packages-or-tarballs-exist', binaryPackageGaps.length === 0, 'Every enabled target must have a publishable platform package source or prebuilt tarball before npm publish.', { binaryPackageGaps }),
+    check('binary-packages-or-tarballs-exist', binaryPackageGaps.length === 0, 'Every enabled target must have a publishable platform package source containing the expected native binary or a prebuilt tarball before npm publish.', { binaryPackageGaps }),
     check('publish-workflow-uses-pinned-npm-for-publish', workflowUsesPinnedNpmForPublish, 'The publish workflow must use the verified npm executable for npm publish, not the ambient npm binary.'),
     check('publish-workflow-enforces-native-package-contract', workflowEnforcesContract, 'The publish workflow must enforce this contract before publishing the main launcher.'),
   ];
