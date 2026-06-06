@@ -510,11 +510,11 @@ test('retired legacy bridge surfaces stay out of source, docs, and automation', 
 });
 
 test('repository text files use LF line endings as declared in .editorconfig/.gitattributes', () => {
-  const checkedExtensions = new Set(['.rs', '.js', '.mjs', '.json', '.md', '.toml', '.yml', '.yaml', '.html']);
+  const checkedExtensions = new Set(['.rs', '.js', '.mjs', '.json', '.lock', '.md', '.toml', '.yml', '.yaml', '.html']);
   const checkedNames = new Set(['.editorconfig', '.gitattributes', '.gitignore', 'LICENSE']);
   const files = walkFiles(repoRoot, (file) => {
     const relative = normalize(path.relative(repoRoot, file));
-    if (relative.startsWith('.git/') || relative.startsWith('node_modules/') || relative.startsWith('target/') || relative.startsWith('dist/')) return false;
+    if (relative.startsWith('.git/') || relative.startsWith('.omx/') || relative.startsWith('node_modules/') || relative.startsWith('target/') || relative.startsWith('dist/')) return false;
     return checkedExtensions.has(path.extname(file)) || checkedNames.has(path.basename(file));
   });
   const crlfFiles = files
