@@ -83,8 +83,17 @@ function runInherited(command, commandArgs, options = {}) {
   };
 }
 
-function npmCommand() {
-  return process.platform === 'win32' ? 'npm.cmd' : 'npm';
+function npmCommandParts(commandArgs = []) {
+  const npmExecPath = process.env.npm_execpath;
+  if (npmExecPath && fs.existsSync(npmExecPath)) {
+    return [process.execPath, npmExecPath, ...commandArgs];
+  }
+
+  if (process.platform === 'win32') {
+    return ['cmd.exe', '/d', '/s', '/c', 'npm.cmd', ...commandArgs];
+  }
+
+  return ['npm', ...commandArgs];
 }
 
 function cargoCommand() {
@@ -103,21 +112,20 @@ function readToolchain() {
 }
 
 function commandPlan() {
-  const npm = npmCommand();
   const cargoAvailable = commandExists(cargoCommand());
   const plan = [];
-  if (install) plan.push({ id: 'npm-ci', kind: 'node', required: true, command: [npm, 'ci'] });
-  plan.push({ id: 'node-contracts', kind: 'node', required: true, command: [npm, 'run', 'check'] });
-  plan.push({ id: 'npm-package-contract', kind: 'node', required: true, command: [npm, 'run', 'check:package'] });
-  plan.push({ id: 'release-dry-run', kind: 'release', required: true, command: [npm, 'run', 'release:dry-run'] });
-  plan.push({ id: 'npm-pack-dry-run', kind: 'release', required: true, command: [npm, 'run', 'pack:npm:dry-run'] });
-  plan.push({ id: 'source-zip-build', kind: 'release', required: true, command: [npm, 'run', 'build:release-artifacts'] });
+  if (install) plan.push({ id: 'npm-ci', kind: 'node', required: true, command: npmCommandParts(['ci']) });
+  plan.push({ id: 'node-contracts', kind: 'node', required: true, command: npmCommandParts(['run', 'check']) });
+  plan.push({ id: 'npm-package-contract', kind: 'node', required: true, command: npmCommandParts(['run', 'check:package']) });
+  plan.push({ id: 'release-dry-run', kind: 'release', required: true, command: npmCommandParts(['run', 'release:dry-run']) });
+  plan.push({ id: 'npm-pack-dry-run', kind: 'release', required: true, command: npmCommandParts(['run', 'pack:npm:dry-run']) });
+  plan.push({ id: 'source-zip-build', kind: 'release', required: true, command: npmCommandParts(['run', 'build:release-artifacts']) });
 
   if (full) {
     if (cargoAvailable) {
-      plan.push({ id: 'rust-contracts', kind: 'rust', required: true, command: [npm, 'run', 'check:rust'] });
-      plan.push({ id: 'rust-release-build', kind: 'rust', required: true, command: [npm, 'run', 'build'] });
-      plan.push({ id: 'native-binary-smoke', kind: 'rust', required: true, command: [npm, 'run', 'platform:binary-smoke', '--', '--binary', targetBinary()] });
+      plan.push({ id: 'rust-contracts', kind: 'rust', required: true, command: npmCommandParts(['run', 'check:rust']) });
+      plan.push({ id: 'rust-release-build', kind: 'rust', required: true, command: npmCommandParts(['run', 'build']) });
+      plan.push({ id: 'native-binary-smoke', kind: 'rust', required: true, command: npmCommandParts(['run', 'platform:binary-smoke', '--', '--binary', targetBinary()]) });
     } else {
       plan.push({
         id: 'rust-contracts',
@@ -143,7 +151,8 @@ function commandPlan() {
 
 function hostInfo() {
   const node = runCapture(process.execPath, ['--version'], { timeoutMs: 30_000 });
-  const npm = runCapture(npmCommand(), ['--version'], { timeoutMs: 30_000 });
+  const [npmCommand, ...npmArgs] = npmCommandParts(['--version']);
+  const npm = runCapture(npmCommand, npmArgs, { timeoutMs: 30_000 });
   const cargo = commandExists(cargoCommand()) ? runCapture(cargoCommand(), ['--version'], { timeoutMs: 30_000 }) : null;
   const rustc = commandExists(process.platform === 'win32' ? 'rustc.exe' : 'rustc') ? runCapture(process.platform === 'win32' ? 'rustc.exe' : 'rustc', ['--version'], { timeoutMs: 30_000 }) : null;
   return {

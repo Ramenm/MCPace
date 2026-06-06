@@ -24,10 +24,16 @@ test('local proof script exposes a safe current-host command plan', () => {
   assert.equal(report.schema, 'mcpace.localProof.v1');
   assert.equal(report.mode.planOnly, true);
   assert.equal(report.mode.full, true);
-  assert.ok(report.results.some((item) => item.id === 'node-contracts' && /npm(\.cmd)? run check/.test(item.command)));
+  assert.ok(report.results.some((item) => item.id === 'node-contracts' && /run check/.test(item.command)));
   assert.ok(report.results.some((item) => item.id === 'release-dry-run'));
   assert.ok(report.results.some((item) => item.id === 'source-zip-build'));
   assert.ok(report.results.some((item) => item.id === 'rust-contracts'));
+});
+
+test('local proof avoids directly spawning npm.cmd on Windows', () => {
+  const source = read('scripts/local-proof.mjs');
+  assert.match(source, /process\.env\.npm_execpath/);
+  assert.doesNotMatch(source, /process\.platform === 'win32' \? 'npm\.cmd'/);
 });
 
 test('platform testing instructions and local proof ship in the source bundle', () => {
