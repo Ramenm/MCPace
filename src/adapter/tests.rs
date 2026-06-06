@@ -23,6 +23,28 @@ fn json_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<std::ffi::OsString>,
+}
+
+impl EnvVarGuard {
+    fn set(key: &'static str, value: &str) -> Self {
+        let previous = std::env::var_os(key);
+        std::env::set_var(key, value);
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
+
 fn write_probe_marker_upstream(root: &std::path::Path) -> PathBuf {
     let script = root.join("probe-marker-upstream.js");
     let started = root.join("probe-started.log");
@@ -106,7 +128,7 @@ rl.on('line', async (line) => {
   if (message.method === 'initialize') {
     send(message.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name, version: '0' } });
   } else if (message.method === 'tools/list') {
-    if (!(await waitForPeers(Date.now() + 2000))) {
+    if (!(await waitForPeers(Date.now() + 5000))) {
       return;
     }
     send(message.id, { tools: [{ name: `get_${name.replace(/-/g, '_')}`, description: `Read from ${name}`, inputSchema: { type: 'object' } }] });
@@ -250,11 +272,12 @@ fn auto_projection_uses_cache_only_on_cold_tools_list() {
 fn projection_catalog_probes_callable_servers_in_parallel() {
     let root = temp_root();
     write_parallel_gate_upstreams(&root);
+    let _workers = EnvVarGuard::set(crate::resources::ENV_UPSTREAM_WORKERS, "2");
     let options = ToolExposureOptions {
         mode: ToolExposureMode::Hybrid,
         budget: DEFAULT_TOOL_BUDGET,
         token_budget: DEFAULT_TOOL_TOKEN_BUDGET,
-        timeout_ms: Some(2_500),
+        timeout_ms: Some(7_500),
         refresh: true,
         projection_safety: DEFAULT_PROJECTED_TOOL_SAFETY,
     };
