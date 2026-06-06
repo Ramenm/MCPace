@@ -108,9 +108,7 @@ Auto mode refreshes stale registry metadata, chooses approved or trusted candida
 npm run lint:npm
 npm run test:npm
 npm run check
-cargo fmt --check
-cargo clippy --all-targets -- -D warnings
-cargo test
+npm run check:rust
 cargo build --release
 npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --concurrency 64
 ```

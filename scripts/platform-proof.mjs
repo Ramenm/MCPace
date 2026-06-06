@@ -140,6 +140,7 @@ function buildReport() {
       id: 'platform-workflow-runs-node-rust-and-binary-smoke',
       status: all(
         platformWorkflow.includes('npm run check'),
+        platformWorkflow.includes('npm run check:rust'),
         platformWorkflow.includes('npm run platform:binary-smoke'),
         platformWorkflow.includes('cargo build --release'),
         platformWorkflow.includes('dtolnay/rust-toolchain')

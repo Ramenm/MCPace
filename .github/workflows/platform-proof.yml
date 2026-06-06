@@ -85,8 +85,6 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - run: cargo fmt --check
-      - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test
+      - run: npm run check:rust
       - run: cargo build --release
       - run: npm run platform:binary-smoke

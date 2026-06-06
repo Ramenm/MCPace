@@ -35,5 +35,5 @@ body:
     id: validation
     attributes:
       label: Checks tried
-      description: For source builds, useful checks are npm run check, npm run pack:npm:dry-run, npm run release:dry-run, and cargo test.
+      description: For source builds, useful checks are npm run check, npm run pack:npm:dry-run, npm run release:dry-run, and npm run check:rust.
       render: text

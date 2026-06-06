@@ -19,7 +19,7 @@
     "ci:local:quick": "npm run check",
     "ci": "npm run check:ci",
     "build": "node scripts/cargo-task.mjs build --release",
-    "test:rust": "node scripts/cargo-task.mjs test",
+    "test:rust": "node scripts/cargo-task.mjs test -- --test-threads=1",
     "test": "npm run test:npm",
     "pack:npm:dry-run": "npm pack --workspace @mcpace/cli --json --dry-run",
     "build:release-artifacts": "node scripts/build-release-artifacts.mjs --json --out-dir dist",

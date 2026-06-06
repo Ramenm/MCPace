@@ -58,9 +58,7 @@ test('platform proof workflow is manual and runs Node Rust and binary smoke on a
   assert.match(workflow, /windows-latest/);
   assert.match(workflow, /npm run check:platform/);
   assert.match(workflow, /npm run check/);
-  assert.match(workflow, /cargo fmt --check/);
-  assert.match(workflow, /cargo clippy --all-targets -- -D warnings/);
-  assert.match(workflow, /cargo test/);
+  assert.match(workflow, /npm run check:rust/);
   assert.match(workflow, /cargo build --release/);
   assert.match(workflow, /npm run platform:binary-smoke/);
 });

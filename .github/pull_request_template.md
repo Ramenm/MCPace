@@ -7,9 +7,7 @@ Describe the change and why it is needed.
 - [ ] `npm run check`
 - [ ] `npm run pack:npm:dry-run`
 - [ ] `npm run release:dry-run`
-- [ ] `cargo fmt --check`
-- [ ] `cargo clippy --all-targets -- -D warnings`
-- [ ] `cargo test`
+- [ ] `npm run check:rust`
 
 ## Windows / MCP notes
 

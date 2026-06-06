@@ -91,7 +91,7 @@ test('release manifest includes Node script entrypoints referenced by npm script
 test('npm Rust scripts use the Cargo preflight wrapper instead of raw cargo', () => {
   const scripts = readRootPackageJson().scripts || {};
   assert.equal(scripts.build, 'node scripts/cargo-task.mjs build --release');
-  assert.equal(scripts['test:rust'], 'node scripts/cargo-task.mjs test');
+  assert.equal(scripts['test:rust'], 'node scripts/cargo-task.mjs test -- --test-threads=1');
   assert.equal(scripts['fmt:check'], 'node scripts/cargo-task.mjs fmt --check');
   assert.equal(scripts.clippy, 'node scripts/cargo-task.mjs clippy --all-targets -- -D warnings');
   assert.match(scripts['check:rust'], /fmt:check/);
@@ -430,6 +430,7 @@ test('GitHub workflows keep current action majors and pinned Rust toolchain synt
   assert.equal(workflowText.includes('actions/upload-artifact@v8'), false, 'update this test when a newer artifact major is deliberately adopted');
   assert.equal(workflowText.includes('actions/download-artifact@v7'), false, 'download-artifact should stay on v8 when paired with upload-artifact v7');
   assert.match(workflowText, /dtolnay\/rust-toolchain@1\.95\.0/);
+  assert.match(workflowText, /cargo test -- --test-threads=1/);
   assert.equal(workflowText.includes('dtolnay/rust-toolchain@stable'), false, 'explicit Rust toolchain workflows should not use the floating stable action ref');
   assert.equal(/toolchain:\s*1\.95\.0/.test(workflowText), false, 'dtolnay/rust-toolchain should use @1.95.0 rather than @stable plus a toolchain input');
 });
