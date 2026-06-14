@@ -23,6 +23,13 @@ fn json_escape(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+fn node_is_available() -> bool {
+    std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_ok()
+}
+
 struct EnvVarGuard {
     key: &'static str,
     previous: Option<std::ffi::OsString>,
@@ -176,6 +183,10 @@ rl.on('line', async (line) => {
 
 #[test]
 fn upstream_search_finds_tool_names_when_server_metadata_does_not_match() {
+    if !node_is_available() {
+        eprintln!("skipping upstream tool-name search probe because node is unavailable");
+        return;
+    }
     let root = temp_root();
     let started = write_probe_marker_upstream(&root);
 
@@ -270,6 +281,10 @@ fn auto_projection_uses_cache_only_on_cold_tools_list() {
 
 #[test]
 fn projection_catalog_probes_callable_servers_in_parallel() {
+    if !node_is_available() {
+        eprintln!("skipping parallel upstream projection probe because node is unavailable");
+        return;
+    }
     let root = temp_root();
     write_parallel_gate_upstreams(&root);
     let _workers = EnvVarGuard::set(crate::resources::ENV_UPSTREAM_WORKERS, "2");
