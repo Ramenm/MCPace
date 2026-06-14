@@ -9,7 +9,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-const APP_NAME: &str = "MCPace";
+pub(crate) const APP_NAME: &str = "MCPace";
 
 #[derive(Debug)]
 struct ParsedArgs {
@@ -429,8 +429,10 @@ fn write_autostart_script(config: &ServiceConfig) -> Result<(), String> {
         std::iter::once(config.target_app_path.as_str())
             .chain(config.target_args.iter().map(String::as_str)),
     );
+    let env_bootstrap = windows_autostart_env_bootstrap_script();
     let script = format!(
-        "Option Explicit\r\nDim shell\r\nSet shell = CreateObject(\"WScript.Shell\")\r\nshell.Run \"{}\", 0, False\r\n",
+        "Option Explicit\r\nDim shell\r\nSet shell = CreateObject(\"WScript.Shell\")\r\n{}\r\nshell.Run \"{}\", 0, False\r\n",
+        env_bootstrap,
         escape_vbscript_string(&command_line)
     );
     runtimepaths::write_text_atomic(&script_path, &script)
@@ -456,6 +458,42 @@ fn remove_autostart_script(_config: &ServiceConfig) {}
 fn escape_vbscript_string(value: &str) -> String {
     value.replace('"', "\"\"")
 }
+
+#[cfg(windows)]
+fn windows_autostart_env_bootstrap_script() -> String {
+    let mut script = String::from(
+        "Sub LoadEnvValue(name)\r\n  Dim value\r\n  On Error Resume Next\r\n  value = shell.RegRead(\"HKCU\\Environment\\\" & name)\r\n  If Err.Number <> 0 Then\r\n    Err.Clear\r\n    value = shell.RegRead(\"HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment\\\" & name)\r\n  End If\r\n  If Err.Number = 0 Then\r\n    shell.Environment(\"Process\")(name) = value\r\n  End If\r\n  Err.Clear\r\n  On Error GoTo 0\r\nEnd Sub\r\n",
+    );
+    for name in WINDOWS_AUTOSTART_ENV_KEYS {
+        script.push_str("LoadEnvValue \"");
+        script.push_str(name);
+        script.push_str("\"\r\n");
+    }
+    script
+}
+
+#[cfg(windows)]
+const WINDOWS_AUTOSTART_ENV_KEYS: &[&str] = &[
+    "MCPACE_MCP_SETTINGS",
+    "MCPACE_MCP_SETTINGS_DIRS",
+    "MCPACE_TOOL_EXPOSURE",
+    "MCPACE_UPSTREAM_TOOL_EXPOSURE",
+    "MCPACE_TOOLS_LIST_TIMEOUT_MS",
+    "MCPACE_TOOL_BUDGET",
+    "MCPACE_NATIVE_TOOL_BUDGET",
+    "MCPACE_TOOL_TOKEN_BUDGET",
+    "MCPACE_NATIVE_TOOL_TOKEN_BUDGET",
+    "MCPACE_PROJECTED_TOOL_SAFETY",
+    "MCPACE_TOOL_PROJECTION_SAFETY",
+    "MCPACE_MANAGEMENT_SURFACE",
+    "MCPACE_ALLOW_FULL_MANAGEMENT",
+    "MCPACE_STATE_ROOT",
+    "MCPACE_RUNTIME_PROFILE",
+    "MCPACE_BEARER_TOKEN",
+    "MCPHUB_BEARER_TOKEN",
+    "MCPACE_ADMIN_PASSWORD_BCRYPT",
+    "MCPACE_HTTP_AUTH_TOKEN",
+];
 
 fn command_path_string(path: &Path) -> String {
     let text = path.display().to_string();
@@ -667,4 +705,23 @@ fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
     );
     let _ = writeln!(stdout, "Backend: {}", backend);
     let _ = writeln!(stdout, "Enabled: {}", if enabled { "yes" } else { "no" });
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn windows_autostart_bootstrap_hydrates_mcpace_environment_from_registry() {
+        let script = windows_autostart_env_bootstrap_script();
+
+        assert!(script.contains("HKCU\\Environment\\"));
+        assert!(script
+            .contains("HKLM\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment\\"));
+        assert!(script.contains("shell.Environment(\"Process\")(name) = value"));
+        assert!(script.contains("LoadEnvValue \"MCPACE_MCP_SETTINGS\""));
+        assert!(script.contains("LoadEnvValue \"MCPACE_MCP_SETTINGS_DIRS\""));
+        assert!(script.contains("LoadEnvValue \"MCPACE_TOOL_EXPOSURE\""));
+        assert!(script.contains("LoadEnvValue \"MCPACE_TOOLS_LIST_TIMEOUT_MS\""));
+    }
 }

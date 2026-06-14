@@ -7,6 +7,7 @@ Use the shortest check that proves the layer you are debugging.
 | MCPace does not start | `mcpace doctor --json` |
 | Client cannot connect | Confirm `http://127.0.0.1:39022/mcp` and run `mcpace serve status`. |
 | Server was not imported | `mcpace server sources --json` |
+| Upstream catalog is empty but servers exist elsewhere | Run `mcpace server sources --json`. If only root `mcp_settings.json` appears, run `mcpace serve restart` from an environment that can see `MCPACE_MCP_SETTINGS`/`MCPACE_MCP_SETTINGS_DIRS`; Windows autostart hydrates persistent MCPace env from the registry. |
 | Wrong concurrency behavior | `mcpace server list --json` and `mcpace server instances --client-id <client> --session-id <chat> --project-root <path>` |
 | A discovered server is still plan-only | Review catalog trust level, then run `mcpace auto <query> --dry-run`. |
 | A weak server needs more evidence | `mcpace lab probe --id <server> --refresh --json` |

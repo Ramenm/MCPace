@@ -211,7 +211,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace serve [start|stop|status] [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
+        "Usage: mcpace serve [start|restart|stop|status] [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Public serve surface:");

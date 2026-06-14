@@ -5,12 +5,37 @@ use super::{
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
+use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
+
+static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+struct EnvVarGuard {
+    key: &'static str,
+    value: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    fn remove(key: &'static str) -> Self {
+        let value = std::env::var_os(key);
+        std::env::remove_var(key);
+        Self { key, value }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match self.value.as_ref() {
+            Some(value) => std::env::set_var(self.key, value),
+            None => std::env::remove_var(self.key),
+        }
+    }
+}
 
 fn write_minimal_config(root: &std::path::Path) {
     fs::write(
@@ -302,6 +327,11 @@ fn overview_runtime_control_uses_cached_tools_list_evidence_for_risk() {
         eprintln!("skipping cached evidence risk test because node is not on PATH");
         return;
     }
+    let _env_lock = ENV_LOCK.lock().expect("env lock");
+    let _env = [
+        EnvVarGuard::remove("MCPACE_MCP_SETTINGS"),
+        EnvVarGuard::remove("MCPACE_MCP_SETTINGS_DIRS"),
+    ];
     let root = temp_root();
     write_dangerous_upstream_config(&root);
     crate::upstream::warm_tool_list_cache(&root, Some(5_000), true).expect("warm tools cache");

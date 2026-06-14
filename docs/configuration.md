@@ -18,6 +18,17 @@ should not ship those personal upstreams; its `servers` object is only for
 optional scheduling/policy overrides when a server is already present in the
 merged user/project MCP settings registry.
 
+Clients should point at MCPace itself, not at each upstream server. For example,
+Codex and Cursor only need `http://127.0.0.1:39022/mcp`; MCPace then loads
+upstreams from the merged settings sources. On Windows, the generated user-level
+autostart launcher reads persistent MCPace environment settings such as
+`MCPACE_MCP_SETTINGS` from the user/machine registry before starting `serve`, so
+login startup does not depend on a stale Explorer or WScript environment. CLI
+commands also fall back to the installed autostart root when no `--root`,
+`MCPACE_ROOT`, or current-directory root is available, so commands such as
+`mcpace serve restart` can work from a normal home-directory shell after service
+installation.
+
 ## Config-first import
 
 ```bash
