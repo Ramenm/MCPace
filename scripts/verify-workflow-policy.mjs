@@ -129,7 +129,7 @@ function checkPublishWorkflow(repoRoot) {
   return [
     finding('publish-uses-oidc', /id-token:\s*write/.test(text) ? 'pass' : 'fail', 'publish workflow should request id-token: write for npm trusted publishing', { file }),
     finding('publish-no-long-lived-npm-token', /\b(?:NPM_TOKEN|NODE_AUTH_TOKEN)\b/.test(text) ? 'fail' : 'pass', 'publish workflow should not depend on long-lived npm tokens', { file }),
-    finding('publish-tag-only', /if:\s*startsWith\(github\.ref, ['"]refs\/tags\/['"]\)/.test(text) ? 'pass' : 'fail', 'publish job should run only on tag refs', { file }),
+    finding('publish-tag-or-dry-run-gated', /if:\s*startsWith\(github\.ref, ['"]refs\/tags\/['"]\)(?:\s*\|\|\s*\(github\.event_name == ['"]workflow_dispatch['"] && inputs\.dry_run == true\))?/.test(text) ? 'pass' : 'fail', 'publish job should run real publishes only on tag refs, with branch dispatch limited to dry-run', { file }),
     finding('publish-protected-environment', /environment:\s*npm-publish/.test(text) ? 'pass' : 'fail', 'publish job should use a protected npm-publish environment', { file }),
     finding('publish-native-contract-enforced', /verify-npm-publish-contract\.mjs --enforce/.test(text) ? 'pass' : 'fail', 'publish must enforce native package contract before npm publish', { file }),
     finding('publish-no-pr-trigger', /^\s*pull_request\s*:/m.test(text) || /^\s*workflow_run\s*:/m.test(text) ? 'fail' : 'pass', 'publish workflow must not be triggerable from pull_request or workflow_run', { file }),

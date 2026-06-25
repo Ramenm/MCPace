@@ -209,7 +209,7 @@ function publishWorkflowFindings() {
   const required = [
     [/id-token:\s*write/, 'publish workflow must request OIDC id-token: write for trusted publishing'],
     [/environment:\s*npm-publish/, 'publish workflow must use a protected publish environment'],
-    [/startsWith\(github\.ref, 'refs\/tags\/'\)/, 'publish workflow must be tag-only'],
+    [/startsWith\(github\.ref, 'refs\/tags\/'\)(?:\s*\|\|\s*\(github\.event_name == 'workflow_dispatch' && inputs\.dry_run == true\))?/, 'publish workflow must allow real publish only from tags; branch dispatch may run only as dry-run'],
     [/verify-npm-publish-contract\.mjs --enforce/, 'publish workflow must enforce native package contract'],
     [/npm exec --yes --package=npm@11\.13\.0 -- npm publish/, 'publish workflow must use pinned npm for publish'],
   ];

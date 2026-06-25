@@ -23,8 +23,8 @@ const checks = [
     pass: workflow.split(/\r?\n/).filter((line) => line.includes('npm publish') && !line.trim().startsWith('description:')).every((line) => line.includes('--provenance')),
   },
   {
-    name: 'publish job is protected by tag and environment',
-    pass: /if:\s*startsWith\(github\.ref, 'refs\/tags\/'\)/.test(workflow) && /environment:\s*npm-publish/.test(workflow),
+    name: 'real publish is tag-protected while branch dispatch is dry-run only',
+    pass: /if:\s*startsWith\(github\.ref, 'refs\/tags\/'\)(?:\s*\|\|\s*\(github\.event_name == 'workflow_dispatch' && inputs\.dry_run == true\))?/.test(workflow) && /environment:\s*npm-publish/.test(workflow),
   },
 ];
 const failures = checks.filter((check) => !check.pass);
