@@ -84,7 +84,7 @@ test('resolveBinary ignores accidental consumer-project target binaries outside 
   createExecutableFixture(path.join(tmp, 'target', 'release', process.platform === 'win32' ? 'mcpace.exe' : 'mcpace'));
   try {
     assert.throws(
-      () => resolveBinary({ repoRoot: tmp, ignoreVendoredBinary: true }),
+      () => resolveBinary({ repoRoot: tmp, ignoreVendoredBinary: true, ignoreInstalledBinaryPackage: true }),
       /Unable to resolve the mcpace binary/
     );
   } finally {
@@ -138,7 +138,15 @@ test('resolveBinary prefers a vendored binary next to the installed package', ()
 test('resolveBinary throws a helpful error when no binary is available', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-none-'));
   try {
-    assert.throws(() => resolveBinary({ repoRoot: tmp, ignoreDevBinary: true, ignoreVendoredBinary: true }), /Supported targets:/);
+    assert.throws(
+      () => resolveBinary({
+        repoRoot: tmp,
+        ignoreDevBinary: true,
+        ignoreVendoredBinary: true,
+        ignoreInstalledBinaryPackage: true,
+      }),
+      /Supported targets:/
+    );
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

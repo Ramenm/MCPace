@@ -315,7 +315,9 @@ export function resolveBinary(options = {}) {
     }
   }
 
-  const packagedBinary = target ? resolveFromInstalledBinaryPackage(target, packageRoot) : null;
+  const packagedBinary = target && !options.ignoreInstalledBinaryPackage
+    ? resolveFromInstalledBinaryPackage(target, packageRoot)
+    : null;
   if (packagedBinary) {
     return packagedBinary;
   }
