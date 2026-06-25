@@ -14,6 +14,11 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
   assert.equal(cliPackage.bin?.mcpace, 'bin/mcpace.js');
   assert.equal(fs.existsSync(cliBin), true, 'package.json bin target is missing');
   assert.match(fs.readFileSync(cliBin, 'utf8'), /^#!\/usr\/bin\/env node\n/);
+  const gitMode = runChecked('git', ['ls-files', '-s', '--', 'packages/npm/cli/bin/mcpace.js'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+  });
+  assert.match(gitMode.stdout, /^100755 /, 'bin/mcpace.js must keep executable mode in git for npm release tarballs');
   if (process.platform !== 'win32') {
     assert.notEqual(fs.statSync(cliBin).mode & 0o111, 0, 'bin/mcpace.js must be executable on Unix');
   }
@@ -46,6 +51,10 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
   const [manifest] = JSON.parse(pack.stdout);
   const packedFiles = new Set(manifest.files.map((entry) => entry.path));
   assert.equal(packedFiles.has('bin/mcpace.js'), true, 'npm pack omitted the executable bin shim');
+  if (process.platform !== 'win32') {
+    const binEntry = manifest.files.find((entry) => entry.path === 'bin/mcpace.js');
+    assert.equal(binEntry?.mode, 0o755, 'npm pack must preserve executable mode for the bin shim');
+  }
   assert.equal(packedFiles.has('release-targets.json'), true, 'npm pack omitted the declared target manifest');
 });
 

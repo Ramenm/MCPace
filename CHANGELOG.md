@@ -4,6 +4,12 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 
 ## Unreleased
 
+## 0.7.6
+
+### Fixed
+
+- Restored executable mode for the npm launcher bin shim so fresh installs of `@mcpace/cli` create the `mcpace` command without requiring `npm rebuild`.
+
 ## 0.7.5
 
 ### Fixed
