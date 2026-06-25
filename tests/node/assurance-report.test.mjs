@@ -59,6 +59,8 @@ test('assurance artifacts are part of the release bundle contract', () => {
     'scripts/project-assurance.mjs',
     'reports/assurance.md',
     'reports/assurance.json',
+    'reports/bundle-manifest.json',
+    'reports/frontend-qa.json',
   ]) {
     assert.ok(manifest.includePaths.includes(required), `release manifest missing ${required}`);
   }
@@ -67,4 +69,25 @@ test('assurance artifacts are part of the release bundle contract', () => {
   assert.match(packageJson.scripts.assurance, /project-assurance\.mjs --write/);
   assert.match(packageJson.scripts['check:assurance'], /project-assurance\.mjs --check/);
   assert.match(packageJson.scripts.check, /check:assurance/);
+});
+
+
+test('generated proof reports use environment-neutral root metadata', () => {
+  const commands = [
+    ['scripts/project-assurance.mjs', '--json', 'mcpace.projectAssurance.v1'],
+    ['scripts/platform-proof.mjs', '--json', 'mcpace.platformProof.v1'],
+    ['scripts/project-inventory.mjs', '--json', 'mcpace.projectInventory.v1'],
+  ];
+  for (const [script, flag, schema] of commands) {
+    const result = spawnSync(process.execPath, [script, flag], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    assert.equal(result.status, 0, result.stderr || result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.schema, schema);
+    assert.equal(report.root, '.', `${script} must not leak a machine-local absolute root`);
+    assert.equal(report.rootName, path.basename(repoRoot));
+  }
 });

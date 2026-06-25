@@ -435,16 +435,28 @@ test('GitHub workflows keep current action majors and pinned Rust toolchain synt
   assert.equal(/toolchain:\s*1\.95\.0/.test(workflowText), false, 'dtolnay/rust-toolchain should use @1.95.0 rather than @stable plus a toolchain input');
 });
 
-test('zizmor policy is explicit and optional preflight consumes it', () => {
+test('optional external tooling preflight uses scanner-specific safe inputs', () => {
   const configPath = path.join(repoRoot, '.github', 'zizmor.yml');
   const config = fs.readFileSync(configPath, 'utf8');
   assert.match(config, /unpinned-uses/);
   assert.match(config, /actions\/\*:\s*ref-pin/);
   assert.match(config, /dtolnay\/rust-toolchain:\s*ref-pin/);
+
+  const gitleaksConfig = fs.readFileSync(path.join(repoRoot, '.gitleaks.toml'), 'utf8');
+  assert.match(gitleaksConfig, /useDefault\s*=\s*true/);
+  assert.match(gitleaksConfig, /win32-\(\?:x64\|arm64\)-msvc/);
+  assert.match(gitleaksConfig, /generic-api-key/);
+
   const preflight = fs.readFileSync(path.join(repoRoot, 'scripts', 'tooling-preflight.mjs'), 'utf8');
   assert.match(preflight, /zizmor\.yml/);
   assert.match(preflight, /--config/);
   assert.match(preflight, /--color/);
+  assert.match(preflight, /workflowFileArgs\(\)/);
+  assert.doesNotMatch(preflight, /args:\s*\['\.github\/workflows'\]/, 'actionlint must receive workflow files, not a directory');
+  assert.match(preflight, /gitleaksArgs\(\)/);
+  assert.match(preflight, /prepareGitleaksScanSource/);
+  assert.doesNotMatch(preflight, /'--source', '\.'/);
+  assert.match(preflight, /\.gitleaks\.toml/);
 });
 
 test('source comments and manifests do not point at missing local Node scripts', () => {
@@ -569,6 +581,9 @@ test('dashboard HTTP surface keeps boundary checks, hardening headers, and telem
   const dashboard = fs.readFileSync(path.join(repoRoot, 'src/dashboard.rs'), 'utf8');
   const overview = fs.readFileSync(path.join(repoRoot, 'src/dashboard/overview.rs'), 'utf8');
   const html = fs.readFileSync(path.join(repoRoot, 'src/dashboard/index.html'), 'utf8');
+  const appJs = fs.readFileSync(path.join(repoRoot, 'src/dashboard/frontend/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(repoRoot, 'src/dashboard/frontend/styles.css'), 'utf8');
+  const dashboardFrontend = `${html}\n${css}\n${appJs}`;
 
   assert.match(boundary, /pub\(crate\) fn is_loopback_host/);
   assert.match(boundary, /parse::<IpAddr>\(\)/);
@@ -584,22 +599,38 @@ test('dashboard HTTP surface keeps boundary checks, hardening headers, and telem
   assert.match(dashboard, /JSON action bodies require Content-Type: application\/json/);
   assert.match(dashboard, /fn authorization_bearer_token/);
   assert.match(dashboard, /eq_ignore_ascii_case\("Bearer"\)/);
-  assert.equal((dashboard.match(/reject_forbidden_origin\(stream, request\)/g) || []).length, 1, 'origin checks should be applied once at the HTTP entry boundary');
+  assert.equal((dashboard.match(/reject_forbidden_origin\(stream, request(?:, config)?\)/g) || []).length, 1, 'origin checks should be applied once at the HTTP entry boundary');
   const mcpHttp = fs.readFileSync(path.join(repoRoot, 'src/dashboard/mcp_http.rs'), 'utf8');
   assert.doesNotMatch(mcpHttp, /reject_forbidden_origin/);
   assert.doesNotMatch(mcpHttp, /validate_origin\(request\)/);
   assert.match(overview, /requestDurationAverageMs/);
   assert.match(overview, /requestDurationMaxMs/);
-  assert.match(html, /Request duration/);
-  assert.doesNotMatch(html, /Latency histograms/);
+  assert.match(dashboardFrontend, /Request duration/);
+  assert.doesNotMatch(dashboardFrontend, /Latency histograms/);
+  assert.match(dashboard, /DASHBOARD_CSS/);
+  assert.match(dashboard, /DASHBOARD_JS/);
+  assert.match(dashboard, /GET", "\/dashboard\.css/);
+  assert.match(dashboard, /GET", "\/dashboard\.js/);
+  assert.match(response, /style-src 'self' 'unsafe-inline'/);
+  assert.match(response, /script-src 'self'/);
 });
 
-test('dashboard inline scripts stay parseable by current Node tooling', () => {
+test('dashboard frontend assets stay parseable by current Node tooling', () => {
   const html = fs.readFileSync(path.join(repoRoot, 'src/dashboard/index.html'), 'utf8');
-  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
-  assert.ok(scripts.length > 0, 'dashboard should keep its boot script in the checked HTML shell');
+  const script = fs.readFileSync(path.join(repoRoot, 'src/dashboard/frontend/app.js'), 'utf8');
+  const css = fs.readFileSync(path.join(repoRoot, 'src/dashboard/frontend/styles.css'), 'utf8');
 
-  for (const script of scripts) {
-    assert.doesNotThrow(() => new vm.Script(script, { filename: 'src/dashboard/index.html' }));
-  }
+  assert.match(html, /<link rel="stylesheet" href="\/dashboard\.css">/);
+  assert.match(html, /<script src="\/dashboard\.js" defer><\/script>/);
+  assert.doesNotMatch(html, /<script>([\s\S]*?)<\/script>/);
+  assert.match(css, /MCPace dashboard styles/);
+  assert.doesNotThrow(() => new vm.Script(script, { filename: 'src/dashboard/frontend/app.js' }));
+});
+
+test('Node syntax auto jobs retry failed children serially before failing', () => {
+  const syntax = fs.readFileSync(path.join(repoRoot, 'scripts', 'check-node-syntax.mjs'), 'utf8');
+  assert.match(syntax, /function retryFailedChecksSerial/);
+  assert.match(syntax, /runChecksParallel/);
+  assert.match(syntax, /serial-failed-auto-jobs/);
+  assert.match(syntax, /uv_cwd\/spawn ENOENT|uv_cwd/);
 });

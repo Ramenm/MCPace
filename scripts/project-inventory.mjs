@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeFileAtomicSync } from './lib/atomic-fs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -435,7 +436,8 @@ function buildInventory() {
   return {
     schema: 'mcpace.projectInventory.v1',
     generatedAt: new Date().toISOString(),
-    root: repoRoot,
+    root: '.',
+    rootName: path.basename(repoRoot),
     commands,
     groupedSubcommands: {
       server: subcommandsFromParser('src/server/args.rs'),
@@ -623,8 +625,8 @@ const inventory = buildInventory();
 if (write) {
   const reportsDir = path.join(repoRoot, 'reports');
   fs.mkdirSync(reportsDir, { recursive: true });
-  fs.writeFileSync(path.join(reportsDir, 'internal-inventory.json'), JSON.stringify(inventory, null, 2) + '\n');
-  fs.writeFileSync(path.join(reportsDir, 'internal-inventory.md'), renderMarkdown(inventory));
+  writeFileAtomicSync(path.join(reportsDir, 'internal-inventory.json'), JSON.stringify(inventory, null, 2) + '\n', { mode: 0o644 });
+  writeFileAtomicSync(path.join(reportsDir, 'internal-inventory.md'), renderMarkdown(inventory), { mode: 0o644 });
 }
 
 if (jsonOnly) {

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { repoRoot } from './lib/project-metadata.mjs';
+import { writeFileAtomicSync } from './lib/atomic-fs.mjs';
 import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
 export const SOURCE_ROOTS = Object.freeze(['packages/npm/cli', 'scripts', 'tests/node', 'tests/fixtures', 'examples']);
@@ -193,6 +194,22 @@ async function runChecksParallel(files, root, jobs) {
   return results;
 }
 
+function retryFailedChecksSerial(files, results, root) {
+  let retried = false;
+  const repaired = [...results];
+  for (let index = 0; index < repaired.length; index += 1) {
+    if (repaired[index]?.status === 'pass') continue;
+    retried = true;
+    const retry = checkOne(files[index], root);
+    // Keep the original failure only when the deterministic serial retry also fails.
+    // This makes auto jobs fast on normal machines but avoids false negatives from
+    // constrained runners that occasionally report uv_cwd/spawn ENOENT while many
+    // node --check children start together.
+    if (retry.status === 'pass') repaired[index] = retry;
+  }
+  return { results: repaired, retried };
+}
+
 function buildReport({ root, files, results, jobs, options }) {
   const failures = results.filter((result) => result.status !== 'pass');
   return {
@@ -228,8 +245,11 @@ export async function runSyntaxCheckAsync(options = {}) {
   const files = discoverNodeSourceFiles({ root });
   const jobs = resolveJobs(options, files.length);
   if (jobs === 1) return runSyntaxCheck({ ...options, root });
-  const results = await runChecksParallel(files, root, jobs);
-  return buildReport({ root, files, results, jobs, options });
+  const parallelResults = await runChecksParallel(files, root, jobs);
+  const { results, retried } = retryFailedChecksSerial(files, parallelResults, root);
+  const report = buildReport({ root, files, results, jobs, options });
+  if (retried) report.retryMode = 'serial-failed-auto-jobs';
+  return report;
 }
 
 function writeFileEnsuringDir(filePath, contents) {

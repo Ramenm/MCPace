@@ -1,7 +1,8 @@
 {
   "schema": "mcpace.platformProof.v1",
-  "generatedAt": "2026-06-05T11:05:55.168Z",
-  "root": "/mnt/data/mcpace_logic/mcpace-v0.6.9-050626-105256",
+  "generatedAt": "2026-06-25T11:35:20.370Z",
+  "root": ".",
+  "rootName": "mcpace-v0.7.5-250626-133355",
   "overall": "pass",
   "summary": {
     "pass": 8,

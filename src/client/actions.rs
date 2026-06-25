@@ -655,6 +655,14 @@ impl ClientInstallPlan {
             .parent()
             .ok_or_else(|| "failed to resolve the target client config directory".to_string())?;
         let would_create_config_dir = !config_dir.is_dir();
+        let _config_lock = if options.dry_run {
+            None
+        } else {
+            Some(runtimepaths::acquire_exclusive_file_lock(
+                &self.config_path,
+                "client config install",
+            )?)
+        };
         let created_config_dir = if would_create_config_dir && !options.dry_run {
             fs::create_dir_all(config_dir).map_err(|error| {
                 format!(

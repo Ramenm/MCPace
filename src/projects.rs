@@ -298,6 +298,8 @@ fn project_id_for_path(path: &str) -> String {
 }
 
 fn upsert_project(path: &Path, summary: &ProjectSummary) -> Result<(), String> {
+    let _registry_lock =
+        runtimepaths::acquire_exclusive_file_lock(path, "project registry update")?;
     let mut root = if path.is_file() {
         json_helpers::read_json_file(path)?
     } else {

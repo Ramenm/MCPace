@@ -25,7 +25,8 @@ test('published npm bin shim exists, is executable, and delegates args without s
   if (process.platform !== 'win32') fs.chmodSync(native, 0o755);
 
   try {
-    const result = spawnSync(process.execPath, [shimPath, 'server', 'list', 'name;rm -rf /'], {
+    const trickyArg = 'name & rm -rf / "quoted"';
+    const result = spawnSync(process.execPath, [shimPath, 'server', 'list', trickyArg], {
       cwd: packageRoot,
       encoding: 'utf8',
       env: {
@@ -36,7 +37,7 @@ test('published npm bin shim exists, is executable, and delegates args without s
       windowsHide: true,
     });
     assert.equal(result.status, 0, result.stderr || result.stdout);
-    assert.deepEqual(JSON.parse(fs.readFileSync(out, 'utf8')), ['server', 'list', 'name;rm -rf /']);
+    assert.deepEqual(JSON.parse(fs.readFileSync(out, 'utf8')), ['server', 'list', trickyArg]);
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

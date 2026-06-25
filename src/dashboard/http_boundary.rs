@@ -1,27 +1,41 @@
 use super::HttpRequest;
 use std::net::IpAddr;
 
+#[allow(dead_code)]
 pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), String> {
+    validate_origin_for_bind(request, false)
+}
+
+pub(super) fn validate_origin_for_bind(
+    request: &HttpRequest,
+    allow_nonlocal_host: bool,
+) -> Result<(), String> {
     let mut hosts = request.headers.iter().filter(|(key, _)| key == "host");
     let Some((_, host)) = hosts.next() else {
-        return Err("missing required Host header for local MCPace serve mode".to_string());
+        return Err("missing required Host header for MCPace serve mode".to_string());
     };
     if hosts.next().is_some() {
-        return Err(
-            "multiple Host headers are not allowed for local MCPace serve mode".to_string(),
-        );
+        return Err("multiple Host headers are not allowed for MCPace serve mode".to_string());
     }
-    if !is_allowed_local_host(host.trim()) {
+    let host = host.trim();
+    if !host_allowed_for_bind(host, allow_nonlocal_host) {
         return Err(format!(
-            "host '{}' is not allowed for local MCPace serve mode",
+            "host '{}' is not allowed for MCPace serve mode",
             host
         ));
     }
 
-    if let Some((_, origin)) = request.headers.iter().find(|(key, _)| key == "origin") {
-        if !is_allowed_local_origin(origin.trim()) {
+    let mut origins = request.headers.iter().filter(|(key, _)| key == "origin");
+    if let Some((_, origin)) = origins.next() {
+        if origins.next().is_some() {
+            return Err(
+                "multiple Origin headers are not allowed for MCPace serve mode".to_string(),
+            );
+        }
+        let origin = origin.trim();
+        if !origin_allowed_for_bind(origin, host, allow_nonlocal_host) {
             return Err(format!(
-                "origin '{}' is not allowed for local MCPace serve mode",
+                "origin '{}' is not allowed for MCPace serve mode",
                 origin
             ));
         }
@@ -62,24 +76,41 @@ pub(super) fn is_valid_http_header_value(value: &str) -> bool {
 }
 
 pub(crate) fn is_allowed_local_origin(origin: &str) -> bool {
-    if origin == "null" {
-        return false;
-    }
-    let Some(authority) = origin
-        .strip_prefix("http://")
-        .or_else(|| origin.strip_prefix("https://"))
-    else {
+    let Some(authority) = origin_authority(origin) else {
         return false;
     };
     is_allowed_local_authority(authority)
 }
 
+#[allow(dead_code)]
 pub(crate) fn is_allowed_local_host(host_header: &str) -> bool {
     is_allowed_local_authority(host_header)
 }
 
+fn host_allowed_for_bind(host_header: &str, allow_nonlocal_host: bool) -> bool {
+    if allow_nonlocal_host {
+        is_valid_http_authority(host_header)
+    } else {
+        is_allowed_local_authority(host_header)
+    }
+}
+
+fn origin_allowed_for_bind(origin: &str, host_header: &str, allow_nonlocal_host: bool) -> bool {
+    if is_allowed_local_origin(origin) {
+        return true;
+    }
+    if !allow_nonlocal_host {
+        return false;
+    }
+    let Some(origin_authority) = origin_authority(origin) else {
+        return false;
+    };
+    is_valid_http_authority(origin_authority)
+        && normalized_authority(origin_authority) == normalized_authority(host_header)
+}
+
 fn is_allowed_local_authority(authority: &str) -> bool {
-    if authority.is_empty() || authority.contains('/') || authority.contains('@') {
+    if !is_valid_http_authority(authority) {
         return false;
     }
 
@@ -87,6 +118,44 @@ fn is_allowed_local_authority(authority: &str) -> bool {
         return false;
     };
     is_loopback_host(host)
+}
+
+fn is_valid_http_authority(authority: &str) -> bool {
+    if authority.is_empty()
+        || authority.contains('/')
+        || authority.contains('@')
+        || authority
+            .chars()
+            .any(|ch| ch.is_control() || ch.is_whitespace())
+    {
+        return false;
+    }
+    if (authority.contains('[') || authority.contains(']')) && !authority.starts_with('[') {
+        return false;
+    }
+
+    let Some(host) = origin_host(authority) else {
+        return false;
+    };
+    let bare_host = host
+        .strip_prefix('[')
+        .and_then(|value| value.strip_suffix(']'))
+        .unwrap_or(host);
+    !bare_host.is_empty() && !bare_host.contains('[') && !bare_host.contains(']')
+}
+
+fn origin_authority(origin: &str) -> Option<&str> {
+    if origin == "null" {
+        return None;
+    }
+    origin
+        .strip_prefix("http://")
+        .or_else(|| origin.strip_prefix("https://"))
+        .filter(|authority| is_valid_http_authority(authority))
+}
+
+fn normalized_authority(authority: &str) -> String {
+    authority.trim().to_ascii_lowercase()
 }
 
 pub(crate) fn is_loopback_host(host: &str) -> bool {
@@ -130,7 +199,7 @@ fn valid_port_suffix(value: &str) -> bool {
 }
 
 fn valid_port(value: &str) -> bool {
-    value.parse::<u16>().is_ok()
+    value.parse::<u16>().map(|port| port > 0).unwrap_or(false)
 }
 
 pub(super) fn accepts(request: &HttpRequest, media_type: &str) -> bool {

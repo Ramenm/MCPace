@@ -7,9 +7,10 @@ use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::resources;
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 pub(super) fn cached_health_json(
     config: &DashboardConfig,
@@ -239,6 +240,10 @@ pub(super) fn runtime_resources_response(config: &DashboardConfig) -> JsonValue 
 
 pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
     let metrics = config.metrics.snapshot();
+    let process_resource_snapshot = resources::process_resource_snapshot_json(std::process::id());
+    let resource_governor_snapshot = config
+        .resource_governor
+        .snapshot_json(&process_resource_snapshot);
     let mut upstream_pool_size = 0usize;
     let mut upstream_pool_max_size = 0usize;
     let mut upstream_pool_idle_ttl_ms = 0u128;
@@ -268,6 +273,28 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
         .lock()
         .map(|mut store| store.snapshot(now_ms()))
         .ok();
+    let http_latency_snapshot = config
+        .request_latencies
+        .lock()
+        .map(|tracker| tracker.snapshot_json())
+        .unwrap_or_else(|_| {
+            JsonValue::object([("error", JsonValue::string("latency tracker lock poisoned"))])
+        });
+    let http_operation_snapshot = config
+        .operation_traces
+        .lock()
+        .map(|tracker| tracker.snapshot_json())
+        .unwrap_or_else(|_| {
+            JsonValue::object([("error", JsonValue::string("operation trace lock poisoned"))])
+        });
+    let http_rate_limit_snapshot = config
+        .rate_limiter
+        .lock()
+        .map(|limiter| limiter.snapshot_json())
+        .unwrap_or_else(|_| {
+            JsonValue::object([("error", JsonValue::string("rate limiter lock poisoned"))])
+        });
+    let http_admission_snapshot = config.admission.snapshot_json();
 
     JsonValue::object([
         (
@@ -281,6 +308,8 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
             "availableParallelism",
             JsonValue::number(resources::available_parallelism()),
         ),
+        ("processResource", process_resource_snapshot.clone()),
+        ("resourceGovernor", resource_governor_snapshot.clone()),
         (
             "http",
             JsonValue::object([
@@ -338,6 +367,11 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
                     "maxHeaderCount",
                     JsonValue::number(resources::MAX_HTTP_HEADER_COUNT),
                 ),
+                ("latency", http_latency_snapshot),
+                ("operations", http_operation_snapshot),
+                ("rateLimit", http_rate_limit_snapshot),
+                ("admission", http_admission_snapshot),
+                ("resourceGovernor", resource_governor_snapshot),
             ]),
         ),
         (
@@ -590,12 +624,23 @@ pub(super) fn build_overview_json(root_path: &Path) -> Result<JsonValue, String>
         build_user_readiness_json(&operator_plan, &servers, &clients, &hub, &readiness);
     let cached_tool_evidence = crate::upstream::callable_tools_cached_catalog(root_path)
         .unwrap_or_else(cached_tool_evidence_error_json);
+    let dashboard_foundation = build_dashboard_foundation_json(
+        &hub,
+        &readiness,
+        &servers,
+        &clients,
+        &operator_plan,
+        &cached_tool_evidence,
+    );
+    let access_review = build_dashboard_access_review_json(&servers, &cached_tool_evidence);
     let runtime_control_plane = build_runtime_control_plane_json(
         &servers,
         &instances,
         &operator_plan,
         &cached_tool_evidence,
     );
+    let automation = build_dashboard_automation_json(root_path, &cached_tool_evidence);
+    let discovery_control = build_discovery_control_json(root_path);
 
     Ok(JsonValue::object([
         ("generatedAtMs", JsonValue::number(now_ms())),
@@ -611,10 +656,775 @@ pub(super) fn build_overview_json(root_path: &Path) -> Result<JsonValue, String>
         ("clients", clients),
         ("leases", leases),
         ("cachedToolEvidence", cached_tool_evidence),
+        ("dashboardFoundation", dashboard_foundation),
+        ("accessReview", access_review),
+        ("automation", automation),
+        ("discoveryControl", discovery_control),
         ("operatorPlan", operator_plan),
         ("userReadiness", user_readiness),
         ("runtimeControlPlane", runtime_control_plane),
     ]))
+}
+
+fn build_dashboard_foundation_json(
+    hub: &JsonValue,
+    readiness: &JsonValue,
+    servers: &JsonValue,
+    clients: &JsonValue,
+    operator_plan: &JsonValue,
+    cached_tool_evidence: &JsonValue,
+) -> JsonValue {
+    let server_items = json_items(servers, &["servers", "items"]);
+    let client_items = json_items(clients, &["targets", "clients", "items"]);
+    let client_configured = json_string_opt(clients, "configuredClientKeyName")
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    let summary = operator_plan.get("summary").unwrap_or(&JsonValue::Null);
+    let total_servers = server_items.len();
+    let enabled_servers = server_items
+        .iter()
+        .filter(|server| json_bool(server, "effectiveEnabled", false))
+        .count();
+    let parked_servers = total_servers.saturating_sub(enabled_servers);
+    let blocked_servers = json_usize(summary, "blocked", 0);
+    let policy_changes = json_usize(summary, "policyChanges", 0);
+    let unchecked_servers = json_usize(summary, "unchecked", 0);
+    let cached_ok = json_usize(cached_tool_evidence, "okCount", 0);
+    let cached_miss = json_usize(cached_tool_evidence, "cacheMissCount", 0).max(json_usize(
+        cached_tool_evidence,
+        "failedCount",
+        0,
+    ));
+    let tool_count = json_usize(cached_tool_evidence, "toolCount", 0);
+    let runtime_ready = json_helpers::bool_at_path(readiness, &["runtimePrerequisitesReady"])
+        .or_else(|| json_helpers::bool_at_path(hub, &["readyForRuntimeOps"]))
+        .unwrap_or(false);
+    let endpoint = json_string(hub, "endpoint", "/mcp");
+    let client_count = client_items.len();
+    let enabled_without_evidence = enabled_servers.saturating_sub(cached_ok);
+    let remote_sources = server_items
+        .iter()
+        .filter(|server| server_source_is_remote(server))
+        .count();
+    let secret_bearing_sources = server_items
+        .iter()
+        .filter(|server| server_has_secret_boundary(server))
+        .count();
+    let safety_status = if blocked_servers > 0 {
+        "bad"
+    } else if enabled_without_evidence > 0
+        || remote_sources > 0
+        || secret_bearing_sources > 0
+        || policy_changes > 0
+    {
+        "warn"
+    } else {
+        "good"
+    };
+    let safety_title = if blocked_servers > 0 {
+        "Fix blockers before enabling"
+    } else if enabled_without_evidence > 0 {
+        "Test enabled sources before use"
+    } else if remote_sources > 0 {
+        "Review remote sources"
+    } else if secret_bearing_sources > 0 {
+        "Secrets referenced, values hidden"
+    } else {
+        "Source safety stays simple"
+    };
+    let safety_body = if blocked_servers > 0 {
+        "Required source or runtime blockers are present. Keep affected servers off until the blocker is resolved."
+    } else if enabled_without_evidence > 0 {
+        "Enabled sources without tools/list evidence should be tested before a user relies on their tools."
+    } else if remote_sources > 0 {
+        "Remote HTTP sources need an explicit origin/auth review; do not treat reachability as trust."
+    } else if secret_bearing_sources > 0 {
+        "The dashboard may show secret names for review, but never raw environment or header values."
+    } else {
+        "No obvious enable-time blocker is visible in the current overview. Keep preview, save disabled, review, enable, then test as the default path."
+    };
+
+    // If /api/overview could be built, the dashboard backend is reachable.
+    // Runtime prerequisites are a separate concern and belong to the routing/use step,
+    // otherwise the first card says "backend problem" when the real next action is repair/setup.
+    let backend_status = "good";
+    let client_status = if client_configured { "good" } else { "warn" };
+    let source_status = if total_servers > 0 { "good" } else { "warn" };
+    let tools_status = if cached_ok > 0 { "good" } else { "warn" };
+    let routing_ready = runtime_ready
+        && enabled_servers > 0
+        && cached_ok > 0
+        && blocked_servers == 0
+        && policy_changes == 0;
+    let routing_status = if routing_ready { "good" } else { "warn" };
+
+    let steps = vec![
+        foundation_step(
+            "backend",
+            "Backend",
+            backend_status,
+            "Backend online",
+            "The dashboard API returned overview data. Runtime readiness is checked later, before use.",
+            "refresh",
+            "Refresh",
+        ),
+        foundation_step(
+            "client",
+            "Client",
+            client_status,
+            if client_configured { "Client wired" } else { "Connect a client" },
+            if client_configured {
+                "A local client key is configured for the MCPace endpoint."
+            } else if client_count > 0 {
+                "Preview a client patch first. A target catalog is not the same as a wired client."
+            } else {
+                "Pick Claude, Cursor, VS Code, or a custom client and preview the patch first."
+            },
+            "clients",
+            if client_configured { "Open client" } else { "Connect" },
+        ),
+        foundation_step(
+            "source",
+            "Source",
+            source_status,
+            if total_servers > 0 { "Server source saved" } else { "Add one source" },
+            if total_servers > 0 {
+                "Sources are tracked separately from enablement so they can stay parked."
+            } else {
+                "Import an existing MCP config first; otherwise discover or add a command manually."
+            },
+            if total_servers > 0 { "servers" } else { "import-server" },
+            if total_servers > 0 { "Open sources" } else { "Import" },
+        ),
+        foundation_step(
+            "tools",
+            "Tools",
+            tools_status,
+            if cached_ok > 0 { "Tools evidence exists" } else { "Run Test" },
+            if cached_ok > 0 {
+                "At least one source has cached tools/list evidence."
+            } else if total_servers > 0 {
+                "A saved source is not enough; run Test before trusting exposed tools."
+            } else {
+                "Tools can only be checked after a source exists."
+            },
+            "servers",
+            if cached_ok > 0 { "Open tools" } else { "Run test" },
+        ),
+        foundation_step(
+            "routing",
+            "Routing",
+            routing_status,
+            if routing_status == "good" {
+                "Safe by default"
+            } else if !runtime_ready {
+                "Repair runtime"
+            } else {
+                "Review policy"
+            },
+            if routing_status == "good" {
+                "Tools evidence exists and no blocked source or obvious policy fix is waiting."
+            } else if !runtime_ready {
+                "Runtime prerequisites are not ready, so keep routing conservative until repair passes."
+            } else if total_servers == 0 {
+                "Routing becomes meaningful after at least one source is saved."
+            } else if enabled_servers == 0 {
+                "Saved sources are still parked. Review one source, enable deliberately, then run Test before use."
+            } else if cached_ok == 0 {
+                "Keep routing conservative until Test creates tools/list evidence."
+            } else {
+                "Keep routing conservative until blockers and recommended policy fixes are handled."
+            },
+            if !runtime_ready { "repair" } else { "servers" },
+            if !runtime_ready {
+                "Repair"
+            } else if routing_status == "good" {
+                "Open routing"
+            } else if enabled_servers == 0 {
+                "Enable"
+            } else {
+                "Review"
+            },
+        ),
+    ];
+    let complete = steps
+        .iter()
+        .filter(|step| step.get("status").and_then(JsonValue::as_str) == Some("good"))
+        .count();
+    let next_step = steps
+        .iter()
+        .find(|step| step.get("status").and_then(JsonValue::as_str) != Some("good"))
+        .cloned()
+        .unwrap_or_else(|| {
+            foundation_step(
+                "ready",
+                "Ready",
+                "good",
+                "Base setup is ready",
+                "Normal use can stay on the server rows; open setup tools only when changing config.",
+                "servers",
+                "Open servers",
+            )
+        });
+    let status = if complete == steps.len() {
+        "good"
+    } else {
+        "warn"
+    };
+    let next_step_key = json_string(&next_step, "key", "ready");
+    let title = match next_step_key.as_str() {
+        "backend" => "Start with the local backend",
+        "client" => "Connect one local client",
+        "source" => "Add one MCP server source",
+        "tools" => "Test tools before use",
+        "routing" if !runtime_ready => "Repair runtime before use",
+        "routing" if enabled_servers == 0 => "Enable one reviewed source",
+        "routing" => "Review routing before widening access",
+        _ => "Base setup is ready",
+    };
+    let body = match next_step_key.as_str() {
+        "backend" => "The safest base path is: start or reconnect the dashboard backend, then refresh before reading server state.",
+        "client" => "MCPace is useful only when a client points at its local endpoint. Preview that patch before editing files.",
+        "source" => "Bring in one source, save it parked, review it, enable deliberately, then run Test before normal use.",
+        "tools" => "A saved or enabled source is not enough; wait for initialize/tools-list evidence before treating tools as available.",
+        "routing" if !runtime_ready => "Runtime prerequisites are checked at the routing/use boundary. Repair them after client, source, and tool setup are clear.",
+        "routing" if enabled_servers == 0 => "Saved sources are still parked. Review one, enable it deliberately, then run Test before normal routing.",
+        "routing" => "Solve blockers and policy fixes before adding workers or exposing more servers.",
+        _ => "Normal use can stay on the server rows. Open setup tools only for import, discovery, clients, or diagnostics.",
+    };
+    let primary_action_label = json_string(&next_step, "actionLabel", "Refresh");
+    let primary_action_key = json_string(&next_step, "action", "refresh");
+    let primary_action = foundation_action(&primary_action_label, &primary_action_key);
+
+    JsonValue::object([
+        ("schema", JsonValue::string("mcpace.dashboardFoundation.v1")),
+        (
+            "stateKey",
+            JsonValue::string(json_string(&next_step, "key", "ready")),
+        ),
+        (
+            "nextStepKey",
+            JsonValue::string(json_string(&next_step, "key", "ready")),
+        ),
+        ("status", JsonValue::string(status)),
+        ("title", JsonValue::string(title)),
+        ("body", JsonValue::string(body)),
+        ("complete", JsonValue::number(complete)),
+        ("total", JsonValue::number(steps.len())),
+        (
+            "progressPct",
+            JsonValue::number(complete.saturating_mul(100) / steps.len().max(1)),
+        ),
+        ("endpoint", JsonValue::string(endpoint)),
+        (
+            "counts",
+            JsonValue::object([
+                ("clients", JsonValue::number(client_count)),
+                ("clientConfigured", JsonValue::bool(client_configured)),
+                ("servers", JsonValue::number(total_servers)),
+                ("enabledServers", JsonValue::number(enabled_servers)),
+                ("parkedServers", JsonValue::number(parked_servers)),
+                ("cachedToolServers", JsonValue::number(cached_ok)),
+                ("cachedToolMisses", JsonValue::number(cached_miss)),
+                ("cachedTools", JsonValue::number(tool_count)),
+                ("blockedServers", JsonValue::number(blocked_servers)),
+                ("uncheckedServers", JsonValue::number(unchecked_servers)),
+                ("policyChanges", JsonValue::number(policy_changes)),
+                ("runtimeReady", JsonValue::bool(runtime_ready)),
+                ("routingReady", JsonValue::bool(routing_ready)),
+                ("backendReachable", JsonValue::bool(true)),
+            ]),
+        ),
+        ("nextStep", next_step),
+        ("steps", JsonValue::array(steps)),
+        ("actions", foundation_actions_json(primary_action)),
+        (
+            "displayRules",
+            JsonValue::array([
+                JsonValue::string("Show backend, client, source, tools, and routing before advanced controls."),
+                JsonValue::string("Backend online only means /api/overview responded; runtime readiness is checked before routing/use."),
+                JsonValue::string("Keep workers, raw env, headers, leases, and protocol diagnostics folded."),
+                JsonValue::string("Use preview, save disabled, review, enable, then test as the default change path."),
+                JsonValue::string("Render secret values as names only; keep raw env, headers, and tokens hidden or folded."),
+            ]),
+        ),
+        (
+            "safety",
+            JsonValue::object([
+                ("schema", JsonValue::string("mcpace.dashboardSafety.v1")),
+                ("status", JsonValue::string(safety_status)),
+                ("title", JsonValue::string(safety_title)),
+                ("body", JsonValue::string(safety_body)),
+                (
+                    "counts",
+                    JsonValue::object([
+                        (
+                            "enabledWithoutEvidence",
+                            JsonValue::number(enabled_without_evidence),
+                        ),
+                        ("remoteSources", JsonValue::number(remote_sources)),
+                        (
+                            "secretBearingSources",
+                            JsonValue::number(secret_bearing_sources),
+                        ),
+                        ("blockedServers", JsonValue::number(blocked_servers)),
+                        ("policyChanges", JsonValue::number(policy_changes)),
+                    ]),
+                ),
+                (
+                    "rules",
+                    JsonValue::array([
+                        JsonValue::string("names-only-secrets"),
+                        JsonValue::string("preview-before-write"),
+                        JsonValue::string("localhost-or-https-auth"),
+                    ]),
+                ),
+            ]),
+        ),
+    ])
+}
+
+fn server_source_is_remote(server: &JsonValue) -> bool {
+    let source_url = json_string(server, "sourceUrl", "").to_ascii_lowercase();
+    let source_type = json_string(server, "sourceType", "").to_ascii_lowercase();
+    let transport = json_string(server, "transport", "").to_ascii_lowercase();
+    let url_is_remote = (source_url.starts_with("http://") || source_url.starts_with("https://"))
+        && !source_url.starts_with("http://localhost")
+        && !source_url.starts_with("https://localhost")
+        && !source_url.starts_with("http://127.0.0.1")
+        && !source_url.starts_with("https://127.0.0.1")
+        && !source_url.starts_with("http://[::1]")
+        && !source_url.starts_with("https://[::1]");
+    url_is_remote
+        || source_type.contains("http")
+        || source_type.contains("sse")
+        || transport.contains("http")
+        || transport.contains("sse")
+}
+
+fn server_has_secret_boundary(server: &JsonValue) -> bool {
+    let env_names = json_array_len(server, "sourceEnvNames");
+    let header_names = json_array_len(server, "sourceHeaderNames");
+    let credential_binding = json_string(server, "credentialBinding", "").to_ascii_lowercase();
+    env_names > 0
+        || header_names > 0
+        || credential_binding.contains("credential")
+        || credential_binding.contains("secret")
+        || credential_binding.contains("token")
+        || credential_binding.contains("auth")
+}
+
+fn json_array_len(value: &JsonValue, key: &str) -> usize {
+    value
+        .get(key)
+        .and_then(JsonValue::as_array)
+        .map(|items| items.len())
+        .unwrap_or(0)
+}
+
+fn foundation_step(
+    key: &str,
+    label: &str,
+    status: &str,
+    title: &str,
+    body: &str,
+    action: &str,
+    action_label: &str,
+) -> JsonValue {
+    JsonValue::object([
+        ("key", JsonValue::string(key)),
+        ("label", JsonValue::string(label)),
+        ("status", JsonValue::string(status)),
+        ("title", JsonValue::string(title)),
+        ("body", JsonValue::string(body)),
+        ("action", JsonValue::string(action)),
+        ("actionLabel", JsonValue::string(action_label)),
+    ])
+}
+
+fn foundation_action(label: &str, action: &str) -> JsonValue {
+    JsonValue::object([
+        ("label", JsonValue::string(label)),
+        ("action", JsonValue::string(action)),
+    ])
+}
+
+fn foundation_actions_json(primary_action: JsonValue) -> JsonValue {
+    let mut actions = vec![primary_action];
+    for action in [
+        foundation_action("Import", "import-server"),
+        foundation_action("Client", "clients"),
+        foundation_action("Servers", "servers"),
+    ] {
+        let action_key = json_string(&action, "action", "");
+        let already_present = actions
+            .iter()
+            .any(|existing| json_string(existing, "action", "") == action_key);
+        if !already_present {
+            actions.push(action);
+        }
+    }
+    JsonValue::array(actions)
+}
+
+fn dashboard_config_json(root_path: &Path) -> Option<JsonValue> {
+    json_helpers::read_json_file(&root_path.join("mcpace.config.json")).ok()
+}
+
+fn config_value<'a>(config: Option<&'a JsonValue>, path: &[&str]) -> Option<&'a JsonValue> {
+    config.and_then(|value| json_helpers::value_at_path(value, path))
+}
+
+fn config_string(config: Option<&JsonValue>, path: &[&str], fallback: &str) -> String {
+    config_value(config, path)
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(ToOwned::to_owned)
+        .unwrap_or_else(|| fallback.to_string())
+}
+
+fn config_bool(config: Option<&JsonValue>, path: &[&str], fallback: bool) -> bool {
+    config_value(config, path)
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(fallback)
+}
+
+fn config_usize(config: Option<&JsonValue>, path: &[&str], fallback: usize) -> usize {
+    config_value(config, path)
+        .and_then(JsonValue::as_i64)
+        .filter(|value| *value >= 0)
+        .map(|value| value as usize)
+        .unwrap_or(fallback)
+}
+
+fn configured_string_count(config: Option<&JsonValue>, path: &[&str]) -> usize {
+    config
+        .and_then(|value| json_helpers::array_at_path(value, path))
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(JsonValue::as_str)
+                .filter(|value| !value.trim().is_empty())
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+fn string_array(values: &[&str]) -> JsonValue {
+    JsonValue::array(values.iter().map(|value| JsonValue::string(*value)))
+}
+
+fn resolve_config_path(root_path: &Path, configured_path: &str) -> PathBuf {
+    let path = PathBuf::from(configured_path);
+    if path.is_absolute() {
+        path
+    } else {
+        root_path.join(path)
+    }
+}
+
+fn cache_age_ms(path: &Path) -> Option<u128> {
+    let modified = fs::metadata(path).ok()?.modified().ok()?;
+    SystemTime::now()
+        .duration_since(modified)
+        .ok()
+        .map(|duration| duration.as_millis())
+}
+
+fn registry_cache_json(root_path: &Path, config: Option<&JsonValue>) -> JsonValue {
+    let configured_path = config_string(
+        config,
+        &["dynamicDiscovery", "registryCachePath"],
+        "./catalog/registry-cache.json",
+    );
+    let path = resolve_config_path(root_path, &configured_path);
+    let exists = path.exists();
+    JsonValue::object([
+        ("configuredPath", JsonValue::string(configured_path)),
+        ("exists", JsonValue::bool(exists)),
+        (
+            "ageMs",
+            cache_age_ms(&path)
+                .map(JsonValue::number)
+                .unwrap_or(JsonValue::Null),
+        ),
+        (
+            "ttlHours",
+            JsonValue::number(config_usize(
+                config,
+                &["dynamicDiscovery", "registryCacheTtlHours"],
+                24,
+            )),
+        ),
+        (
+            "autoRefresh",
+            JsonValue::bool(config_bool(
+                config,
+                &["dynamicDiscovery", "autoRefreshRegistry"],
+                false,
+            )),
+        ),
+    ])
+}
+
+fn build_dashboard_automation_json(
+    root_path: &Path,
+    cached_tool_evidence: &JsonValue,
+) -> JsonValue {
+    let config_value = dashboard_config_json(root_path);
+    let config = config_value.as_ref();
+    let ui_refresh_ms = config_usize(config, &["uiSurface", "refreshIntervalMs"], 15_000);
+    let dynamic_enabled = config_bool(config, &["dynamicDiscovery", "enabled"], false);
+    let include_paths = configured_string_count(config, &["mcpSettings", "includePaths"]);
+    let include_dirs = configured_string_count(config, &["mcpSettings", "includeDirs"]);
+    let catalog_paths = configured_string_count(config, &["dynamicDiscovery", "catalogPaths"]);
+    let registry_endpoints =
+        configured_string_count(config, &["dynamicDiscovery", "registryEndpoints"]);
+    let tool_server_count = json_usize(cached_tool_evidence, "serverCount", 0);
+    let tool_count = json_usize(cached_tool_evidence, "toolCount", 0);
+    let cache_hit = json_bool(cached_tool_evidence, "cacheHit", false);
+    let cache_mode = json_string(cached_tool_evidence, "mode", "raw-callable-tools-cache");
+
+    JsonValue::object([
+        ("schema", JsonValue::string("mcpace.dashboardAutomation.v1")),
+        (
+            "overviewRefresh",
+            JsonValue::object([
+                ("kind", JsonValue::string("live")),
+                ("intervalMs", JsonValue::number(ui_refresh_ms)),
+                ("source", JsonValue::string("uiSurface.refreshIntervalMs")),
+                ("userControlled", JsonValue::bool(true)),
+            ]),
+        ),
+        (
+            "serverSources",
+            JsonValue::object([
+                ("kind", JsonValue::string("config")),
+                ("baseFile", JsonValue::string("mcp_settings.json")),
+                ("includePathCount", JsonValue::number(include_paths)),
+                ("includeDirCount", JsonValue::number(include_dirs)),
+                ("importSupported", JsonValue::bool(true)),
+                (
+                    "importCommand",
+                    JsonValue::string("mcpace server import --from <mcp-settings.json> --dry-run"),
+                ),
+            ]),
+        ),
+        (
+            "discoveryJob",
+            JsonValue::object([
+                ("kind", JsonValue::string("config")),
+                ("enabled", JsonValue::bool(dynamic_enabled)),
+                (
+                    "mode",
+                    JsonValue::string(config_string(
+                        config,
+                        &["dynamicDiscovery", "mode"],
+                        "manual",
+                    )),
+                ),
+                (
+                    "autoInstall",
+                    JsonValue::string(config_string(
+                        config,
+                        &["dynamicDiscovery", "autoInstall"],
+                        "manual-only",
+                    )),
+                ),
+                (
+                    "unknownServers",
+                    JsonValue::string(config_string(
+                        config,
+                        &["dynamicDiscovery", "installUnknown"],
+                        "plan-only",
+                    )),
+                ),
+                ("catalogPathCount", JsonValue::number(catalog_paths)),
+                (
+                    "registryEndpointCount",
+                    JsonValue::number(registry_endpoints),
+                ),
+                ("registryCache", registry_cache_json(root_path, config)),
+            ]),
+        ),
+        (
+            "toolEvidenceCache",
+            JsonValue::object([
+                ("kind", JsonValue::string("live-cache")),
+                ("mode", JsonValue::string(cache_mode)),
+                ("cacheHit", JsonValue::bool(cache_hit)),
+                ("serverCount", JsonValue::number(tool_server_count)),
+                ("toolCount", JsonValue::number(tool_count)),
+            ]),
+        ),
+        (
+            "policyPlan",
+            JsonValue::object([
+                ("kind", JsonValue::string("derived")),
+                (
+                    "from",
+                    string_array(&["source config", "runtime policy", "live tool evidence"]),
+                ),
+                (
+                    "safeDefault",
+                    JsonValue::string(config_string(
+                        config,
+                        &["executionDefaults", "mode"],
+                        "serialized",
+                    )),
+                ),
+                ("manualOverride", JsonValue::bool(true)),
+            ]),
+        ),
+        (
+            "fieldPolicy",
+            JsonValue::object([
+                (
+                    "live",
+                    string_array(&[
+                        "backend link",
+                        "runtime",
+                        "tests",
+                        "active locks",
+                        "tool evidence",
+                    ]),
+                ),
+                (
+                    "config",
+                    string_array(&[
+                        "server source",
+                        "enabled state",
+                        "routing policy",
+                        "discovery settings",
+                    ]),
+                ),
+                (
+                    "derived",
+                    string_array(&[
+                        "next step",
+                        "server lane",
+                        "policy plan",
+                        "readiness confidence",
+                    ]),
+                ),
+                (
+                    "hidden",
+                    string_array(&[
+                        "secret values",
+                        "raw env",
+                        "raw headers",
+                        "full internals until diagnostics",
+                    ]),
+                ),
+            ]),
+        ),
+        (
+            "setupFlow",
+            string_array(&["Import", "Discover", "Test", "Enable", "Use"]),
+        ),
+    ])
+}
+
+fn build_discovery_control_json(root_path: &Path) -> JsonValue {
+    let config_value = dashboard_config_json(root_path);
+    let config = config_value.as_ref();
+    JsonValue::object([
+        ("schema", JsonValue::string("mcpace.discoveryControl.v1")),
+        (
+            "enabled",
+            JsonValue::bool(config_bool(config, &["dynamicDiscovery", "enabled"], false)),
+        ),
+        (
+            "mode",
+            JsonValue::string(config_string(
+                config,
+                &["dynamicDiscovery", "mode"],
+                "manual",
+            )),
+        ),
+        (
+            "defaultCommand",
+            JsonValue::string(config_string(
+                config,
+                &["dynamicDiscovery", "defaultCommand"],
+                "manual",
+            )),
+        ),
+        (
+            "autoInstall",
+            JsonValue::string(config_string(
+                config,
+                &["dynamicDiscovery", "autoInstall"],
+                "manual-only",
+            )),
+        ),
+        (
+            "installUnknown",
+            JsonValue::string(config_string(
+                config,
+                &["dynamicDiscovery", "installUnknown"],
+                "plan-only",
+            )),
+        ),
+        (
+            "maxAutoInstallsPerRun",
+            JsonValue::number(config_usize(
+                config,
+                &["dynamicDiscovery", "maxAutoInstallsPerRun"],
+                0,
+            )),
+        ),
+        (
+            "probeAfterInstall",
+            JsonValue::bool(config_bool(
+                config,
+                &["dynamicDiscovery", "probeAfterInstall"],
+                true,
+            )),
+        ),
+        (
+            "refreshRegistryOnDiscover",
+            JsonValue::bool(config_bool(
+                config,
+                &["dynamicDiscovery", "refreshRegistryOnDiscover"],
+                false,
+            )),
+        ),
+        (
+            "autoRefreshRegistry",
+            JsonValue::bool(config_bool(
+                config,
+                &["dynamicDiscovery", "autoRefreshRegistry"],
+                false,
+            )),
+        ),
+        ("registryCache", registry_cache_json(root_path, config)),
+        (
+            "catalogPathCount",
+            JsonValue::number(configured_string_count(
+                config,
+                &["dynamicDiscovery", "catalogPaths"],
+            )),
+        ),
+        (
+            "registryEndpointCount",
+            JsonValue::number(configured_string_count(
+                config,
+                &["dynamicDiscovery", "registryEndpoints"],
+            )),
+        ),
+        (
+            "safeFlow",
+            string_array(&["Preview", "Save disabled", "Review", "Enable", "Test"]),
+        ),
+        (
+            "guardrail",
+            JsonValue::string(
+                "Dashboard discovery never enables a new server without an explicit user action.",
+            ),
+        ),
+    ])
 }
 
 fn cached_tool_evidence_error_json(error: String) -> JsonValue {
@@ -628,6 +1438,234 @@ fn cached_tool_evidence_error_json(error: String) -> JsonValue {
         ("toolCount", JsonValue::number(0)),
         ("servers", JsonValue::array([])),
         ("error", JsonValue::string(error)),
+    ])
+}
+
+fn build_dashboard_access_review_json(
+    servers: &JsonValue,
+    cached_tool_evidence: &JsonValue,
+) -> JsonValue {
+    let server_items = json_items(servers, &["servers", "items"]);
+    let mut enabled = 0usize;
+    let mut remote_http = 0usize;
+    let mut credential_sources = 0usize;
+    let mut hidden_secret_names = 0usize;
+    let mut approval_required = 0usize;
+    let mut destructive = 0usize;
+    let mut mutating_or_open_world = 0usize;
+    let mut read_only = 0usize;
+    let mut enabled_without_evidence = 0usize;
+    let mut sensitive_without_evidence = 0usize;
+    let mut category_counts = BTreeMap::<String, usize>::new();
+    let mut rows = Vec::new();
+
+    for server in server_items {
+        let name = json_string(server, "name", "server");
+        let effective_enabled = json_bool(server, "effectiveEnabled", false);
+        if effective_enabled {
+            enabled = enabled.saturating_add(1);
+        }
+
+        let source_text = format!(
+            "{} {} {} {} {}",
+            json_string(server, "sourceType", ""),
+            json_string(server, "sourceCommand", ""),
+            json_string(server, "sourceUrl", ""),
+            json_string(server, "url", ""),
+            json_string(server, "transportPreference", "")
+        )
+        .to_ascii_lowercase();
+        let remote = source_text.contains("http://")
+            || source_text.contains("https://")
+            || source_text.contains("streamable-http")
+            || source_text.contains("sse");
+        if remote {
+            remote_http = remote_http.saturating_add(1);
+        }
+
+        let secret_name_count = json_array(server, "sourceEnvNames")
+            .len()
+            .saturating_add(json_array(server, "sourceHeaderNames").len());
+        hidden_secret_names = hidden_secret_names.saturating_add(secret_name_count);
+        let credential_hint = secret_name_count > 0
+            || json_string(server, "credentialBinding", "")
+                .to_ascii_lowercase()
+                .contains("credential")
+            || source_text.contains("oauth")
+            || source_text.contains("token")
+            || source_text.contains("auth");
+        if credential_hint {
+            credential_sources = credential_sources.saturating_add(1);
+        }
+
+        let cached_tools = cached_tools_for_server(cached_tool_evidence, &name);
+        let evidence_state = evidence_state_for_server(server, cached_tools.as_ref());
+        let has_evidence = has_live_tool_evidence(&evidence_state);
+        if effective_enabled && !has_evidence {
+            enabled_without_evidence = enabled_without_evidence.saturating_add(1);
+        }
+
+        let tool_risk = infer_tool_risk(server, cached_tools.as_ref());
+        for category in &tool_risk.categories {
+            *category_counts.entry(category.clone()).or_default() += 1;
+        }
+        if tool_risk.approval_required {
+            approval_required = approval_required.saturating_add(1);
+        }
+        match tool_risk.risk.as_str() {
+            "destructive" => destructive = destructive.saturating_add(1),
+            "read-only" => read_only = read_only.saturating_add(1),
+            "mutating" | "credential" | "network" | "filesystem" | "unknown" => {
+                mutating_or_open_world = mutating_or_open_world.saturating_add(1)
+            }
+            _ => {}
+        }
+        if effective_enabled
+            && !has_evidence
+            && (tool_risk.approval_required || remote || credential_hint)
+        {
+            sensitive_without_evidence = sensitive_without_evidence.saturating_add(1);
+        }
+
+        rows.push(JsonValue::object([
+            ("name", JsonValue::string(name)),
+            ("enabled", JsonValue::bool(effective_enabled)),
+            ("evidenceState", JsonValue::string(evidence_state)),
+            ("risk", JsonValue::string(tool_risk.risk)),
+            (
+                "approvalRequired",
+                JsonValue::bool(tool_risk.approval_required),
+            ),
+            ("remote", JsonValue::bool(remote)),
+            ("credentialHints", JsonValue::bool(credential_hint)),
+            (
+                "hiddenSecretNameCount",
+                JsonValue::number(secret_name_count),
+            ),
+            (
+                "categories",
+                JsonValue::array(tool_risk.categories.into_iter().map(JsonValue::string)),
+            ),
+        ]));
+    }
+
+    let total = server_items.len();
+    let status = if sensitive_without_evidence > 0 {
+        "bad"
+    } else if total == 0
+        || enabled_without_evidence > 0
+        || approval_required > 0
+        || remote_http > 0
+        || credential_sources > 0
+    {
+        "warn"
+    } else {
+        "good"
+    };
+    let title = if total == 0 {
+        "Access review waits for one source"
+    } else if sensitive_without_evidence > 0 {
+        "Review access before enabling"
+    } else if approval_required > 0 || remote_http > 0 || credential_sources > 0 {
+        "Access needs explicit review"
+    } else {
+        "Access boundary looks quiet"
+    };
+    let body = if total == 0 {
+        "Add or import one source first. MCPace should not describe permissions for tools that do not exist yet."
+    } else if sensitive_without_evidence > 0 {
+        "Some enabled sources look sensitive but have no tools/list evidence. Test them or park them before normal use."
+    } else if approval_required > 0 {
+        "Write, destructive, network, credential, or unknown tools stay approval-first; annotations are hints, not proof."
+    } else {
+        "No obvious sensitive tool category is waiting in the current overview. Keep secrets hidden and retest after config changes."
+    };
+    let primary_action = if total == 0 {
+        foundation_action("Import config", "import-server")
+    } else if enabled_without_evidence > 0 || sensitive_without_evidence > 0 {
+        foundation_action("Open servers", "servers")
+    } else {
+        foundation_action("Refresh", "refresh")
+    };
+
+    JsonValue::object([
+        ("schema", JsonValue::string("mcpace.dashboardAccessReview.v1")),
+        ("status", JsonValue::string(status)),
+        ("title", JsonValue::string(title)),
+        ("body", JsonValue::string(body)),
+        ("primaryAction", primary_action),
+        (
+            "counts",
+            JsonValue::object([
+                ("servers", JsonValue::number(total)),
+                ("enabled", JsonValue::number(enabled)),
+                ("remoteHttp", JsonValue::number(remote_http)),
+                ("credentialSources", JsonValue::number(credential_sources)),
+                ("hiddenSecretNames", JsonValue::number(hidden_secret_names)),
+                ("approvalRequired", JsonValue::number(approval_required)),
+                ("destructive", JsonValue::number(destructive)),
+                ("mutatingOrOpenWorld", JsonValue::number(mutating_or_open_world)),
+                ("readOnly", JsonValue::number(read_only)),
+                ("enabledWithoutEvidence", JsonValue::number(enabled_without_evidence)),
+                ("sensitiveWithoutEvidence", JsonValue::number(sensitive_without_evidence)),
+            ]),
+        ),
+        (
+            "categoryCounts",
+            JsonValue::object(
+                category_counts
+                    .into_iter()
+                    .map(|(key, value)| (key, JsonValue::number(value))),
+            ),
+        ),
+        (
+            "items",
+            JsonValue::array([
+                access_review_item(
+                    "Approval",
+                    approval_required,
+                    if approval_required > 0 { "warn" } else { "good" },
+                    "Write, destructive, open-world, credential, and unknown tools should ask before use.",
+                ),
+                access_review_item(
+                    "Secrets",
+                    hidden_secret_names,
+                    if hidden_secret_names > 0 { "warn" } else { "good" },
+                    "Show env/header names only. Never render secret values in the dashboard.",
+                ),
+                access_review_item(
+                    "Remote/Auth",
+                    remote_http.saturating_add(credential_sources),
+                    if remote_http > 0 || credential_sources > 0 { "warn" } else { "good" },
+                    "Remote HTTP and auth-backed sources need explicit origin and scope review.",
+                ),
+                access_review_item(
+                    "Evidence",
+                    enabled_without_evidence,
+                    if enabled_without_evidence > 0 { "bad" } else { "good" },
+                    "Enabled sources need initialize/tools-list evidence before normal routing.",
+                ),
+            ]),
+        ),
+        ("serverRows", JsonValue::array(rows)),
+        (
+            "displayRules",
+            JsonValue::array([
+                JsonValue::string("Surface access summary after the five basics, not before them."),
+                JsonValue::string("Treat tool annotations as hints until source trust and live evidence exist."),
+                JsonValue::string("Human approval is required for sampling, destructive tools, credentials, and unknown access."),
+                JsonValue::string("Secret values stay hidden; only names and counts are visible."),
+            ]),
+        ),
+    ])
+}
+
+fn access_review_item(label: &str, count: usize, status: &str, body: &str) -> JsonValue {
+    JsonValue::object([
+        ("label", JsonValue::string(label)),
+        ("count", JsonValue::number(count)),
+        ("status", JsonValue::string(status)),
+        ("body", JsonValue::string(body)),
     ])
 }
 
@@ -1583,7 +2621,7 @@ fn build_operator_plan_json(
                 ]),
                 JsonValue::object([
                     ("stage", JsonValue::string("source")),
-                    ("description", JsonValue::string("Each server has a launch command or Streamable HTTP URL, stored disabled until explicitly enabled/tested.")),
+                    ("description", JsonValue::string("Each server has a launch command or Streamable HTTP URL, stored disabled until explicitly tested/enabled.")),
                 ]),
                 JsonValue::object([
                     ("stage", JsonValue::string("evidence")),
@@ -1797,7 +2835,7 @@ fn operator_plan_for_server(server: &JsonValue, instances: &[JsonValue]) -> Serv
             "off",
             "warn",
             4,
-            "Keep off until a workflow needs it, then enable and test",
+            "Keep off until a workflow needs it, then test and enable",
             "Disabled sources do not expose tools to clients and should stay parked by default.",
         )
     } else if !has_tool_evidence || unknown {

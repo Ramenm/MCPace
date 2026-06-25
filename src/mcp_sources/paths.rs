@@ -3,6 +3,8 @@ use crate::json::JsonValue;
 use crate::json_helpers;
 use std::collections::BTreeSet;
 use std::env;
+use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
@@ -129,23 +131,34 @@ fn collect_directory_sources(
     sources: &mut Vec<SourcePath>,
     seen: &mut BTreeSet<PathBuf>,
 ) {
-    if !directory.exists() {
-        if warn_if_missing {
+    match fs::symlink_metadata(directory) {
+        Ok(metadata) if metadata.file_type().is_symlink() || !metadata.is_dir() => {
             warnings.push(format!(
-                "MCP settings directory '{}' does not exist; skipping",
+                "MCP settings directory '{}' must be a real directory; skipping",
                 directory.display()
             ));
+            return;
         }
-        return;
+        Ok(_) => {}
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            if warn_if_missing {
+                warnings.push(format!(
+                    "MCP settings directory '{}' does not exist; skipping",
+                    directory.display()
+                ));
+            }
+            return;
+        }
+        Err(error) => {
+            warnings.push(format!(
+                "failed to inspect MCP settings directory '{}': {}; skipping",
+                directory.display(),
+                error
+            ));
+            return;
+        }
     }
-    if !directory.is_dir() {
-        warnings.push(format!(
-            "MCP settings directory '{}' is not a directory; skipping",
-            directory.display()
-        ));
-        return;
-    }
-    let entries = match std::fs::read_dir(directory) {
+    let entries = match fs::read_dir(directory) {
         Ok(entries) => entries,
         Err(error) => {
             warnings.push(format!(
@@ -161,7 +174,11 @@ fn collect_directory_sources(
         match entry {
             Ok(entry) => {
                 let path = entry.path();
-                if path.is_file()
+                let is_regular_file = entry
+                    .file_type()
+                    .map(|file_type| file_type.is_file() && !file_type.is_symlink())
+                    .unwrap_or(false);
+                if is_regular_file
                     && path
                         .extension()
                         .and_then(|extension| extension.to_str())

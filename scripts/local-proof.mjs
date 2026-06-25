@@ -2,11 +2,10 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const repoRoot = path.resolve(here, '..');
+import { readTextIfFileSync, writeFileAtomicSync } from './lib/atomic-fs.mjs';
+import { commandExists, runCommand, runCommandInherited } from './lib/command-runner.mjs';
+import { repoRoot } from './lib/project-metadata.mjs';
+import { trustedNpmCliPath } from './lib/process.mjs';
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
 const jsonOnly = args.has('--json');
@@ -34,63 +33,22 @@ if (args.has('-h') || args.has('--help')) {
   process.exit(0);
 }
 
-function commandExists(command) {
-  const probe = process.platform === 'win32'
-    ? spawnSync('where.exe', [command], { encoding: 'utf8', windowsHide: true })
-    : spawnSync('command', ['-v', command], { encoding: 'utf8', shell: true });
-  return probe.status === 0;
-}
-
 function runCapture(command, commandArgs, options = {}) {
-  const started = Date.now();
-  const result = spawnSync(command, commandArgs, {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    timeout: options.timeoutMs ?? 300_000,
-    windowsHide: true,
-    shell: false,
-  });
-  return {
-    command: [command, ...commandArgs].join(' '),
-    status: result.error ? 'failed' : result.status === 0 ? 'pass' : 'fail',
-    exitCode: result.status,
-    signal: result.signal,
-    durationMs: Date.now() - started,
-    stdoutTail: (result.stdout ?? '').slice(-4000),
-    stderrTail: (result.stderr ?? '').slice(-4000),
-    error: result.error ? String(result.error.message ?? result.error) : null,
-  };
+  return runCommand(command, commandArgs, { cwd: repoRoot, timeoutMs: options.timeoutMs ?? 300_000, env: options.env });
 }
 
 function runInherited(command, commandArgs, options = {}) {
-  const started = Date.now();
-  const result = spawnSync(command, commandArgs, {
-    cwd: repoRoot,
-    stdio: 'inherit',
-    timeout: options.timeoutMs ?? 300_000,
-    windowsHide: true,
-    shell: false,
-  });
-  return {
-    command: [command, ...commandArgs].join(' '),
-    status: result.error ? 'failed' : result.status === 0 ? 'pass' : 'fail',
-    exitCode: result.status,
-    signal: result.signal,
-    durationMs: Date.now() - started,
-    stdoutTail: '',
-    stderrTail: '',
-    error: result.error ? String(result.error.message ?? result.error) : null,
-  };
+  return runCommandInherited(command, commandArgs, { cwd: repoRoot, timeoutMs: options.timeoutMs ?? 300_000, env: options.env });
 }
 
 function npmCommandParts(commandArgs = []) {
-  const npmExecPath = process.env.npm_execpath;
-  if (npmExecPath && fs.existsSync(npmExecPath)) {
+  const npmExecPath = trustedNpmCliPath('npm');
+  if (npmExecPath) {
     return [process.execPath, npmExecPath, ...commandArgs];
   }
 
   if (process.platform === 'win32') {
-    return ['cmd.exe', '/d', '/s', '/c', 'npm.cmd', ...commandArgs];
+    throw new Error('unable to locate a trusted npm CLI path under the current Node.js installation');
   }
 
   return ['npm', ...commandArgs];
@@ -104,10 +62,52 @@ function targetBinary() {
   return path.join(repoRoot, 'target', 'release', process.platform === 'win32' ? 'mcpace.exe' : 'mcpace');
 }
 
+function normalizeSlashes(value) {
+  return value.split(path.sep).join('/');
+}
+
+function sanitizeReportString(value) {
+  const npmExecPath = trustedNpmCliPath('npm');
+  const replacements = [
+    [repoRoot, '<repo>'],
+    [normalizeSlashes(repoRoot), '<repo>'],
+    [path.dirname(repoRoot), '<workspace>'],
+    [normalizeSlashes(path.dirname(repoRoot)), '<workspace>'],
+    [targetBinary(), process.platform === 'win32' ? '.\\target\\release\\mcpace.exe' : './target/release/mcpace'],
+    [normalizeSlashes(targetBinary()), './target/release/mcpace'],
+    [process.execPath, 'node'],
+    [normalizeSlashes(process.execPath), 'node'],
+    [npmExecPath ?? '', 'npm'],
+    [npmExecPath ? normalizeSlashes(npmExecPath) : '', 'npm'],
+  ].filter(([from]) => from);
+  let sanitized = String(value);
+  for (const [from, to] of replacements) {
+    sanitized = sanitized.split(from).join(to);
+  }
+  return sanitized;
+}
+
+function displayCommand(commandParts) {
+  const npmExecPath = trustedNpmCliPath('npm');
+  if (npmExecPath && commandParts[0] === process.execPath && commandParts[1] === npmExecPath) {
+    return ['npm', ...commandParts.slice(2)].map(sanitizeReportString).join(' ');
+  }
+  return commandParts.map(sanitizeReportString).join(' ');
+}
+
+function sanitizeReportValue(value) {
+  if (typeof value === 'string') return sanitizeReportString(value);
+  if (Array.isArray(value)) return value.map(sanitizeReportValue);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, sanitizeReportValue(item)]));
+  }
+  return value;
+}
+
 function readToolchain() {
   const file = path.join(repoRoot, 'rust-toolchain.toml');
-  if (!fs.existsSync(file)) return null;
-  const text = fs.readFileSync(file, 'utf8');
+  const text = readTextIfFileSync(file);
+  if (!text) return null;
   return text.match(/^\s*channel\s*=\s*"([^"]+)"\s*$/m)?.[1] ?? null;
 }
 
@@ -180,12 +180,15 @@ function buildReport() {
       }
       const [command, ...commandArgs] = item.command;
       const result = jsonOnly ? runCapture(command, commandArgs) : runInherited(command, commandArgs);
-      results.push({ ...item, command: item.command.join(' '), ...result });
+      const reportResult = sanitizeReportValue({ ...item, ...result, command: displayCommand(item.command) });
+      results.push(reportResult);
       if (item.required && result.status !== 'pass') break;
     }
   }
 
-  const effective = planOnly ? plan.map((item) => item.skipped ? { ...item, command: null, status: item.status ?? 'warn' } : { ...item, command: item.command.join(' '), status: 'planned' }) : results;
+  const effective = planOnly
+    ? plan.map((item) => item.skipped ? { ...item, command: null, status: item.status ?? 'warn' } : sanitizeReportValue({ ...item, command: displayCommand(item.command), status: 'planned' }))
+    : results;
   const fail = effective.filter((item) => item.status === 'fail' || item.status === 'failed').length;
   const warn = effective.filter((item) => item.status === 'warn').length;
   const pass = effective.filter((item) => item.status === 'pass').length;
@@ -239,8 +242,8 @@ const report = buildReport();
 if (write) {
   fs.mkdirSync(outDir, { recursive: true });
   const base = `local-proof-${process.platform}`;
-  fs.writeFileSync(path.join(outDir, `${base}.json`), `${JSON.stringify(report, null, 2)}\n`);
-  fs.writeFileSync(path.join(outDir, `${base}.md`), renderMarkdown(report));
+  writeFileAtomicSync(path.join(outDir, `${base}.json`), `${JSON.stringify(report, null, 2)}\n`, { mode: 0o644 });
+  writeFileAtomicSync(path.join(outDir, `${base}.md`), renderMarkdown(report), { mode: 0o644 });
 }
 
 if (jsonOnly) {

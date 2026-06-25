@@ -23,6 +23,7 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
   assert.match(shimSource, /cmd\.exe/);
   assert.match(shimSource, /\/d', '\/s', '\/c'/);
   assert.match(shimSource, /child\.on\('close'/);
+  assert.match(shimSource, /reportStartupError/);
 
   for (const entry of cliPackage.files || []) {
     assert.equal(
@@ -32,6 +33,11 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
     );
   }
 
+  assert.equal(cliPackage.mcpace?.targetManifest, 'release-targets.json');
+  const rootTargets = JSON.parse(fs.readFileSync(path.join(repoRoot, 'release-targets.json'), 'utf8'));
+  const packageTargets = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages', 'npm', 'cli', 'release-targets.json'), 'utf8'));
+  assert.deepEqual(packageTargets, rootTargets, 'npm package target manifest must mirror the root release-targets.json');
+
   const pack = runChecked('npm', ['pack', '--workspace', '@mcpace/cli', '--json', '--dry-run'], {
     cwd: repoRoot,
     encoding: 'utf8',
@@ -40,6 +46,7 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
   const [manifest] = JSON.parse(pack.stdout);
   const packedFiles = new Set(manifest.files.map((entry) => entry.path));
   assert.equal(packedFiles.has('bin/mcpace.js'), true, 'npm pack omitted the executable bin shim');
+  assert.equal(packedFiles.has('release-targets.json'), true, 'npm pack omitted the declared target manifest');
 });
 
 test('npm bin shim launches the resolved native binary with user arguments', () => {
@@ -49,7 +56,7 @@ test('npm bin shim launches the resolved native binary with user arguments', () 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-bin-shim-'));
   const native = path.join(tmp, 'mcpace-native-fixture');
   const out = path.join(tmp, 'argv.txt');
-  fs.writeFileSync(native, `#!/usr/bin/env sh\nprintf '%s\\n' "$@" > ${JSON.stringify(out)}\n`, 'utf8');
+  fs.writeFileSync(native, `#!/usr/bin/env sh\nprintf '%s\n' "$@" > ${JSON.stringify(out)}\n`, 'utf8');
   fs.chmodSync(native, 0o755);
 
   const env = { ...process.env, MCPACE_BINARY_PATH: native };
@@ -62,6 +69,25 @@ test('npm bin shim launches the resolved native binary with user arguments', () 
   try {
     assert.equal(result.status, 0, result.stderr || result.stdout);
     assert.equal(fs.readFileSync(out, 'utf8'), 'serve\n--port\n0\n');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('npm bin shim reports startup resolution errors without a Node stack trace', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-bin-missing-'));
+  try {
+    const env = { ...process.env, MCPACE_BINARY_PATH: path.join(tmp, 'missing-mcpace') };
+    const result = spawnSync(process.execPath, [cliBin, '--version'], {
+      cwd: repoRoot,
+      env,
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    assert.equal(result.status, 1, result.stderr || result.stdout);
+    assert.match(result.stderr, /^mcpace: MCPACE binary path does not exist:/);
+    assert.doesNotMatch(result.stderr, /\n\s*at\s+/, 'startup error should not print a Node stack trace');
+    assert.doesNotMatch(result.stderr, /^Error:/m, 'startup error should be formatted as CLI output, not an exception dump');
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }

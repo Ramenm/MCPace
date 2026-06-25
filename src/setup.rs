@@ -1031,11 +1031,46 @@ fn import_existing_home_mcp_servers(
     endpoint: &str,
     warnings: &mut Vec<String>,
 ) -> CommandResult {
-    let sources = collect_existing_home_mcp_sources(root_path, warnings);
     let target_path = root_path
         .join("mcp_settings.d")
         .join("auto-imported-home.json");
     let target_text = target_path.display().to_string();
+    let _namespace_lock = match mcp_sources::acquire_mcp_settings_namespace_lock(root_path) {
+        Ok(lock) => lock,
+        Err(error) => {
+            return CommandResult {
+                ok: false,
+                exit_code: 1,
+                json: Some(JsonValue::object([
+                    ("mode", JsonValue::string("home-import")),
+                    ("ok", JsonValue::bool(false)),
+                    ("targetPath", JsonValue::string(target_text)),
+                    ("error", JsonValue::string(error.clone())),
+                ])),
+                stdout: String::new(),
+                stderr: error,
+            };
+        }
+    };
+    let _target_lock =
+        match runtimepaths::acquire_exclusive_file_lock(&target_path, "home MCP import") {
+            Ok(lock) => lock,
+            Err(error) => {
+                return CommandResult {
+                    ok: false,
+                    exit_code: 1,
+                    json: Some(JsonValue::object([
+                        ("mode", JsonValue::string("home-import")),
+                        ("ok", JsonValue::bool(false)),
+                        ("targetPath", JsonValue::string(target_text)),
+                        ("error", JsonValue::string(error.clone())),
+                    ])),
+                    stdout: String::new(),
+                    stderr: error,
+                };
+            }
+        };
+    let sources = collect_existing_home_mcp_sources(root_path, warnings);
 
     let mut imported = BTreeMap::<String, (String, JsonValue, String, String)>::new();
     let mut skipped = Vec::new();
@@ -1170,7 +1205,7 @@ fn import_existing_home_mcp_servers(
 
     let mut serialized = output.to_pretty_string();
     serialized.push('\n');
-    if let Err(error) = runtimepaths::write_text_atomic(&target_path, &serialized) {
+    if let Err(error) = runtimepaths::write_private_text_atomic(&target_path, &serialized) {
         let message = format!(
             "failed to write home MCP import file '{}': {}",
             target_path.display(),

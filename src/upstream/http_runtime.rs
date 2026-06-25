@@ -463,6 +463,12 @@ fn parse_http_url(url: &str) -> Result<ParsedHttpUrl, String> {
         .ok_or_else(|| format!("HTTP upstream URL must start with http://: {}", url))?;
     let (authority, path) = split_http_authority_and_path(rest)?;
     let (host, port, host_header) = parse_http_authority(authority)?;
+    if !plain_http_upstream_host_is_loopback(&host) {
+        return Err(format!(
+            "direct plain-HTTP MCP upstreams are limited to loopback hosts; '{}' must be fronted by a local gateway or stdio/TLS adapter",
+            host
+        ));
+    }
     Ok(ParsedHttpUrl {
         host,
         port,
@@ -550,6 +556,14 @@ fn parse_http_authority(authority: &str) -> Result<(String, u16, String), String
     Ok((host.to_string(), port, host_header))
 }
 
+fn plain_http_upstream_host_is_loopback(host: &str) -> bool {
+    let normalized = host.trim().trim_matches(['[', ']']).to_ascii_lowercase();
+    normalized == "localhost"
+        || normalized == "::1"
+        || normalized == "0:0:0:0:0:0:0:1"
+        || normalized.starts_with("127.")
+}
+
 fn parse_optional_http_port(suffix: &str, authority: &str) -> Result<u16, String> {
     if suffix.is_empty() {
         return Ok(80);
@@ -598,6 +612,21 @@ mod tests {
         assert_eq!(parsed.port, 80);
         assert_eq!(parsed.path, "/?x=1");
         assert_eq!(parsed.host_header, "127.0.0.1");
+    }
+
+    #[test]
+    fn parse_http_url_rejects_non_loopback_plain_http_upstreams() {
+        for url in [
+            "http://example.com/mcp",
+            "http://10.0.0.10/mcp",
+            "http://172.16.0.10/mcp",
+            "http://192.168.1.10/mcp",
+        ] {
+            assert!(
+                parse_http_url(url).is_err(),
+                "plain HTTP upstream should be loopback-only: {url:?}"
+            );
+        }
     }
 
     #[test]

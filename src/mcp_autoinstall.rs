@@ -157,7 +157,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
 
     if let Some(command) = explicit_command {
         if let Some(command_like) = command_like_spec(&command)? {
-            return Ok(command_like_install_plan(options, spec, command_like));
+            return command_like_install_plan(options, spec, command_like);
         }
         let name = resolve_name(options, || name_from_spec(spec, "local-command"));
         let mut args = options.extra_args.clone();
@@ -181,13 +181,13 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
     }
 
     if let Some(command_like) = command_like_spec(spec)? {
-        return Ok(command_like_install_plan(options, spec, command_like));
+        return command_like_install_plan(options, spec, command_like);
     }
 
     let method = choose_package_method(spec, explicit_type.as_deref());
     match method.as_str() {
         "npm" => {
-            let package = strip_known_prefix(spec, "npm:").to_string();
+            let package = validate_install_identifier("npm", strip_known_prefix(spec, "npm:"))?;
             let name = resolve_name(options, || name_from_spec(&package, "npm"));
             let mut args = vec!["-y".to_string(), package.clone()];
             args.extend(options.extra_args.iter().cloned());
@@ -212,7 +212,10 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
             })
         }
         "pypi" => {
-            let package = strip_known_prefix(strip_known_prefix(spec, "pypi:"), "uvx:").to_string();
+            let package = validate_install_identifier(
+                "pypi",
+                strip_known_prefix(strip_known_prefix(spec, "pypi:"), "uvx:"),
+            )?;
             let name = resolve_name(options, || name_from_spec(&package, "pypi"));
             let mut args = vec![package.clone()];
             args.extend(options.extra_args.iter().cloned());
@@ -237,7 +240,10 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
             })
         }
         "oci" => {
-            let image = strip_known_prefix(strip_known_prefix(spec, "oci:"), "docker:").to_string();
+            let image = validate_install_identifier(
+                "oci",
+                strip_known_prefix(strip_known_prefix(spec, "oci:"), "docker:"),
+            )?;
             let name = resolve_name(options, || name_from_spec(&image, "oci"));
             let mut args = vec!["run".to_string(), "--rm".to_string(), image.clone()];
             args.extend(options.extra_args.iter().cloned());
@@ -274,12 +280,15 @@ fn command_like_install_plan(
     options: &McpAutoInstallOptions,
     spec: &str,
     command_like: CommandLikeSpec,
-) -> McpAutoInstallPlan {
+) -> Result<McpAutoInstallPlan, String> {
+    if let Some(package) = command_like.package.as_deref() {
+        let _ = validate_install_identifier(&command_like.method, package)?;
+    }
     let name = resolve_name(options, || name_from_command_like(&command_like, spec));
     let mut args = command_like.args.clone();
     args.extend(options.extra_args.iter().cloned());
     args.extend(options.paths.iter().cloned());
-    McpAutoInstallPlan {
+    Ok(McpAutoInstallPlan {
         original_spec: spec.to_string(),
         name: name.clone(),
         method: command_like.method.clone(),
@@ -291,7 +300,60 @@ fn command_like_install_plan(
         args,
         assumptions: assumptions_for_command_like(&command_like),
         next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+    })
+}
+
+fn validate_install_identifier(method: &str, value: &str) -> Result<String, String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return Err(format!(
+            "server install {} package/image identifier cannot be empty",
+            method
+        ));
     }
+    if trimmed.starts_with('-') {
+        return Err(format!(
+            "server install {} package/image identifier '{}' must not start with '-'",
+            method, trimmed
+        ));
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch.is_control() || ch.is_whitespace())
+    {
+        return Err(format!(
+            "server install {} package/image identifier '{}' must not contain whitespace or control characters",
+            method, trimmed
+        ));
+    }
+    if text_utils::uses_shell_composition(trimmed) {
+        return Err(format!(
+            "server install {} package/image identifier '{}' must be a single registry identifier, not a shell expression",
+            method, trimmed
+        ));
+    }
+    if trimmed.contains("://") {
+        return Err(format!(
+            "server install {} package/image identifier '{}' must not be a URL; use --url for remote MCP endpoints",
+            method, trimmed
+        ));
+    }
+    if method != "oci" {
+        let lower = trimmed.to_ascii_lowercase();
+        if trimmed.contains(':')
+            || lower.starts_with("file:")
+            || lower.starts_with("path:")
+            || trimmed.starts_with('.')
+            || trimmed.starts_with('/')
+            || trimmed.starts_with('\\')
+        {
+            return Err(format!(
+                "server install {} package identifier '{}' must be a registry package name/version, not a path, URL, or alias expression",
+                method, trimmed
+            ));
+        }
+    }
+    Ok(trimmed.to_string())
 }
 
 fn profile_hints_for_plan(plan: &McpAutoInstallPlan) -> Vec<String> {

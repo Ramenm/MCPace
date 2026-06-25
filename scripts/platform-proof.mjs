@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeFileAtomicSync } from './lib/atomic-fs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -184,7 +185,8 @@ function buildReport() {
   return {
     schema: 'mcpace.platformProof.v1',
     generatedAt: new Date().toISOString(),
-    root: repoRoot,
+    root: '.',
+    rootName: path.basename(repoRoot),
     overall: failCount > 0 ? 'fail' : warnCount > 0 ? 'warn' : 'pass',
     summary: {
       pass: checks.filter((check) => check.status === 'pass').length,
@@ -302,8 +304,8 @@ function renderMarkdown(report) {
 const report = buildReport();
 if (write) {
   fs.mkdirSync(path.join(repoRoot, 'reports'), { recursive: true });
-  fs.writeFileSync(path.join(repoRoot, 'reports/platform-proof.json'), JSON.stringify(report, null, 2) + '\n');
-  fs.writeFileSync(path.join(repoRoot, 'reports/platform-proof.md'), renderMarkdown(report));
+  writeFileAtomicSync(path.join(repoRoot, 'reports/platform-proof.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o644 });
+  writeFileAtomicSync(path.join(repoRoot, 'reports/platform-proof.md'), renderMarkdown(report), { mode: 0o644 });
 }
 
 if (jsonOnly) {

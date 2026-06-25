@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeFileAtomicSync } from './lib/atomic-fs.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -56,6 +57,9 @@ function buildAssurance() {
   const packageJson = readJson('package.json');
   const manifest = readJson('release-manifest.json');
   const dashboardHtml = read('src/dashboard/index.html');
+  const dashboardCss = read('src/dashboard/frontend/styles.css');
+  const dashboardApp = read('src/dashboard/frontend/app.js');
+  const dashboardFrontend = `${dashboardHtml}\n${dashboardCss}\n${dashboardApp}`;
   const dashboardBackend = read('src/dashboard.rs');
   const overview = read('src/dashboard/overview.rs');
   const httpBoundary = read('src/dashboard/http_boundary.rs');
@@ -82,30 +86,31 @@ function buildAssurance() {
     }),
     claim({
       id: 'user-readiness',
-      title: 'Dashboard has a user-level readiness verdict, not only raw internals',
-      status: all(overview.includes('mcpace.userReadiness.v1'), dashboardHtml.includes('renderUserReadiness(overview.userReadiness'),
-        dashboardHtml.includes('id="user-readiness-title"')) ? 'pass' : 'fail',
-      why: 'The first screen should answer whether the product is usable, what is missing, and what the next action is.',
-      evidence: ['src/dashboard/overview.rs:userReadiness', 'src/dashboard/index.html:renderUserReadiness'],
-      failureMode: 'Users see many facts but cannot decide whether to trust the setup.',
-      nextCheck: 'Open dashboard after mcpace up and confirm the top verdict changes when no servers, parked servers, unchecked servers, and ready servers are present.',
+      title: 'Dashboard starts with a backend-owned foundation verdict, not raw internals',
+      status: all(overview.includes('mcpace.dashboardFoundation.v1'), overview.includes('build_dashboard_foundation_json'),
+        dashboardHtml.includes('id="base-setup"'), dashboardFrontend.includes('renderBaseSetup'),
+        dashboardFrontend.includes('buildFoundationModelFromOverview(overview.dashboardFoundation)')) ? 'pass' : 'fail',
+      why: 'The first screen should answer the base setup path: backend, client, source, tools, and routing.',
+      evidence: ['src/dashboard/overview.rs:dashboardFoundation', 'src/dashboard/frontend/app.js:renderBaseSetup'],
+      failureMode: 'Users see many facts but cannot decide what basic setup step to complete next.',
+      nextCheck: 'Open dashboard after mcpace up and confirm the base foundation changes when no servers, parked servers, unchecked servers, and ready servers are present.',
     }),
     claim({
       id: 'operator-plan',
       title: 'Backend produces a per-server operator plan and runbook',
       status: all(overview.includes('mcpace.operatorPlan.v1'), overview.includes('build_operator_plan_json'),
-        overview.includes('operator_commands'), dashboardHtml.includes('renderServerRunbook')) ? 'pass' : 'fail',
+        overview.includes('operator_commands'), dashboardFrontend.includes('renderServerRunbook')) ? 'pass' : 'fail',
       why: 'Per-server UI should be driven by backend evidence: lane, blocker, next action, and commands to run.',
-      evidence: ['src/dashboard/overview.rs:operatorPlan', 'src/dashboard/index.html:renderServerRunbook'],
+      evidence: ['src/dashboard/overview.rs:operatorPlan', 'src/dashboard/frontend/app.js:renderServerRunbook'],
       failureMode: 'Frontend invents readiness from partial fields and drifts away from backend runtime truth.',
       nextCheck: 'Compare each server row with mcpace server capabilities <name> --json and verify the same launch/evidence/policy direction.',
     }),
     claim({
       id: 'runtime-control-plane',
       title: 'Runtime control combines live evidence, risk, parallelism, isolation, and resource budgets',
-      status: all(overview.includes('mcpace.runtimeControlPlane.v1'), overview.includes('toolRisk'), overview.includes('parallelism'), overview.includes('isolation'), overview.includes('resourceBudget'), overview.includes('mcpace.serverResourceMonitoring.v1'), dashboardHtml.includes('renderRuntimeControl')) ? 'pass' : 'fail',
+      status: all(overview.includes('mcpace.runtimeControlPlane.v1'), overview.includes('toolRisk'), overview.includes('parallelism'), overview.includes('isolation'), overview.includes('resourceBudget'), overview.includes('mcpace.serverResourceMonitoring.v1'), dashboardFrontend.includes('renderRuntimeControl')) ? 'pass' : 'fail',
       why: 'A useful MCP runtime manager must not stop at server lists; it should explain when to probe, serialize, approve, restrict, or sandbox each server.',
-      evidence: ['src/dashboard/overview.rs:runtimeControlPlane', 'src/dashboard/overview.rs:serverResourceMonitoring', 'src/dashboard/index.html:renderRuntimeControl'],
+      evidence: ['src/dashboard/overview.rs:runtimeControlPlane', 'src/dashboard/overview.rs:serverResourceMonitoring', 'src/dashboard/frontend/app.js:renderRuntimeControl'],
       failureMode: 'The UI claims readiness without connecting tool evidence, risk, concurrency, isolation, and observed resource use.',
       nextCheck: 'Run a harmless upstream_call and verify /api/resources reports a live per-server session row with pid/resource data.',
     }),
@@ -123,7 +128,7 @@ function buildAssurance() {
       id: 'server-launch-visible',
       title: 'Each server exposes how it starts without leaking secrets',
       status: all(serverModel.includes('sourceCommand'), serverModel.includes('sourceArgs'), serverModel.includes('sourceEnvNames'),
-        serverModel.includes('sourceHeaderNames'), overview.includes('launch_command_for_server'), dashboardHtml.includes('sourceEnvNames')) ? 'pass' : 'fail',
+        serverModel.includes('sourceHeaderNames'), overview.includes('launch_command_for_server'), dashboardFrontend.includes('sourceEnvNames')) ? 'pass' : 'fail',
       why: 'A user must see command/URL, but only names of env/header keys, never secret values.',
       evidence: ['src/server/model.rs:sourceCommand/sourceArgs/sourceEnvNames/sourceHeaderNames', 'src/dashboard/overview.rs:launch_command_for_server'],
       failureMode: 'The dashboard either cannot explain what will run, or it leaks tokens/API keys.',
@@ -132,11 +137,11 @@ function buildAssurance() {
     claim({
       id: 'add-server-preflight',
       title: 'Adding a server by command is preflighted and does not execute shell compositions',
-      status: all(dashboardBackend.includes('command_line_uses_shell_composition'), dashboardHtml.includes('commandLineLooksComposed'),
+      status: all(dashboardBackend.includes('command_line_uses_shell_composition'), dashboardFrontend.includes('commandLineLooksComposed'),
         dashboardBackend.includes('server install commandLine cannot contain control characters or newlines'),
-        dashboardHtml.includes('postServerAction("server-install-command"')) ? 'pass' : 'fail',
+        dashboardFrontend.includes('postServerAction("server-install-command"')) ? 'pass' : 'fail',
       why: 'Paste-a-command UX is useful only if it is a source-record workflow, not a hidden arbitrary shell execution path.',
-      evidence: ['src/dashboard.rs:write_server_install_command_action', 'src/dashboard/index.html:commandLineLooksComposed'],
+      evidence: ['src/dashboard.rs:write_server_install_command_action', 'src/dashboard/frontend/app.js:commandLineLooksComposed'],
       failureMode: 'A malicious or accidental command line can chain extra operations through ;, &&, pipes, redirects, backticks, or command substitution.',
       nextCheck: 'Try npx/uvx/url/local-path examples and then try blocked shell-composition strings; all blocked strings should be rejected before install.',
     }),
@@ -155,9 +160,9 @@ function buildAssurance() {
       id: 'human-in-loop-tools',
       title: 'Tools are not treated as trusted until visible evidence and an explicit operator action exist',
       status: all(overview.includes('tools/list evidence'), overview.includes('no tools/list evidence is assumed'),
-        overview.includes('Run Test to collect initialize and tools/list evidence'), dashboardHtml.includes('Test')) ? 'pass' : 'fail',
+        overview.includes('Run Test to collect initialize and tools/list evidence'), dashboardFrontend.includes('Test')) ? 'pass' : 'fail',
       why: 'MCP tools expose external actions; the UI should make tool exposure and evidence visible instead of quietly trusting package names.',
-      evidence: ['src/dashboard/overview.rs:operator_plan_for_server', 'src/dashboard/index.html:server-test'],
+      evidence: ['src/dashboard/overview.rs:operator_plan_for_server', 'src/dashboard/frontend/app.js:server-test'],
       failureMode: 'The user thinks a server is ready just because it is configured, even though no live initialize/tools-list proof exists.',
       nextCheck: 'For a new server: add disabled, enable intentionally, run Test once, compare tool names/count with server capabilities JSON.',
     }),
@@ -191,12 +196,12 @@ function buildAssurance() {
     }),
     claim({
       id: 'rust-runtime-unverified-here',
-      title: 'Rust compile/clippy/test pass is still a required external gate',
+      title: 'Rust compile/clippy/test pass remains a required live gate',
       status: 'warn',
-      why: 'This environment does not provide cargo/rustc, so Node-side assurance cannot prove the Rust binary compiles or executes live MCP flows.',
+      why: 'Static assurance does not execute cargo itself; the release gate still requires rustfmt, clippy, tests, and a release build on a Rust 1.95.0 host.',
       evidence: ['package.json:check:rust', 'scripts/cargo-task.mjs', 'rust-toolchain.toml'],
       failureMode: 'Dashboard/static contracts are green but the shipped native binary fails to build or runtime paths fail under Cargo tests.',
-      nextCheck: 'On a Rust host run: rustup toolchain install 1.95.0 && npm run check:rust && cargo build --release.',
+      nextCheck: 'Run on a Rust host: rustup toolchain install 1.95.0 && npm run check:rust && cargo build --release.',
     }),
     claim({
       id: 'live-e2e-unverified-here',
@@ -217,7 +222,8 @@ function buildAssurance() {
   return {
     schema: 'mcpace.projectAssurance.v1',
     generatedAt: new Date().toISOString(),
-    root: repoRoot,
+    root: '.',
+    rootName: path.basename(repoRoot),
     overall,
     summary: {
       pass: passCount,
@@ -302,8 +308,8 @@ const report = buildAssurance();
 if (write) {
   const reportsDir = path.join(repoRoot, 'reports');
   fs.mkdirSync(reportsDir, { recursive: true });
-  fs.writeFileSync(path.join(reportsDir, 'assurance.json'), JSON.stringify(report, null, 2) + '\n');
-  fs.writeFileSync(path.join(reportsDir, 'assurance.md'), renderMarkdown(report));
+  writeFileAtomicSync(path.join(reportsDir, 'assurance.json'), JSON.stringify(report, null, 2) + '\n', { mode: 0o644 });
+  writeFileAtomicSync(path.join(reportsDir, 'assurance.md'), renderMarkdown(report), { mode: 0o644 });
 }
 
 if (jsonOnly) {

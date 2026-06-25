@@ -139,6 +139,17 @@ pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
         }
     }
 
+    if matches!(
+        parsed.action.as_deref(),
+        Some("export" | "install" | "restore")
+    ) && parsed.client_id.is_none()
+    {
+        let action = parsed.action.clone().unwrap_or_default();
+        parsed.error = Some(format!(
+            "client {action} requires a client target; use 'mcpace client list' to inspect supported surfaces"
+        ));
+    }
+
     parsed
 }
 

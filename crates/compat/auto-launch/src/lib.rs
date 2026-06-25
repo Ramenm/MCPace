@@ -36,6 +36,7 @@ pub struct AutoLaunchBuilder {
     app_name: String,
     app_path: String,
     args: Vec<String>,
+    agent_extra_config: String,
 }
 impl AutoLaunchBuilder {
     pub fn new() -> Self {
@@ -56,7 +57,8 @@ impl AutoLaunchBuilder {
     pub fn set_macos_launch_mode(&mut self, _: MacOSLaunchMode) -> &mut Self {
         self
     }
-    pub fn set_agent_extra_config(&mut self, _: &str) -> &mut Self {
+    pub fn set_agent_extra_config(&mut self, value: &str) -> &mut Self {
+        self.agent_extra_config = value.into();
         self
     }
     pub fn set_windows_enable_mode(&mut self, _: WindowsEnableMode) -> &mut Self {
@@ -76,6 +78,7 @@ impl AutoLaunchBuilder {
             app_name: self.app_name.clone(),
             app_path: self.app_path.clone(),
             args: self.args.clone(),
+            agent_extra_config: self.agent_extra_config.clone(),
         })
     }
 }
@@ -85,6 +88,7 @@ pub struct AutoLaunch {
     app_name: String,
     app_path: String,
     args: Vec<String>,
+    agent_extra_config: String,
 }
 impl AutoLaunch {
     pub fn is_support() -> bool {
@@ -157,7 +161,7 @@ impl AutoLaunch {
     fn launch_file_body(&self) -> String {
         #[cfg(target_os = "linux")]
         {
-            return format!("[Unit]\nDescription={} autostart\n\n[Service]\nType=simple\nExecStart={}\nRestart=on-failure\nRestartSec=5\n\n[Install]\nWantedBy=default.target\n", self.app_name, shell_command(&self.app_path, &self.args));
+            return format!("[Unit]\nDescription={} autostart\n\n[Service]\nType=simple\nExecStart={}\nRestart=on-failure\nRestartSec=5\n{}\n[Install]\nWantedBy=default.target\n", self.app_name, shell_command(&self.app_path, &self.args), service_extra_config(&self.agent_extra_config));
         }
         #[cfg(target_os = "macos")]
         {
@@ -166,10 +170,11 @@ impl AutoLaunch {
                 .map(|a| format!("    <string>{}</string>", xml_escape(a)))
                 .collect::<Vec<_>>()
                 .join("\n");
-            return format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>Label</key><string>com.mcpace.{}</string><key>ProgramArguments</key><array>\n{}\n</array><key>RunAtLoad</key><true/></dict></plist>\n", safe_identifier(&self.app_name).to_ascii_lowercase(), args);
+            return format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>Label</key><string>com.mcpace.{}</string><key>ProgramArguments</key><array>\n{}\n</array><key>RunAtLoad</key><true/>{}</dict></plist>\n", safe_identifier(&self.app_name).to_ascii_lowercase(), args, self.agent_extra_config);
         }
         #[cfg(windows)]
         {
+            let _ = &self.agent_extra_config;
             return format!(
                 "@echo off\r\nstart \"{}\" {}\r\n",
                 self.app_name,
@@ -178,10 +183,22 @@ impl AutoLaunch {
         }
         #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
         {
+            let _ = &self.agent_extra_config;
             String::new()
         }
     }
 }
+
+#[cfg(target_os = "linux")]
+fn service_extra_config(value: &str) -> String {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        "\n".to_string()
+    } else {
+        format!("{}\n\n", trimmed)
+    }
+}
+
 fn safe_identifier(value: &str) -> String {
     let mut out = String::new();
     for ch in value.chars() {
@@ -270,4 +287,28 @@ fn windows_quote(value: &str) -> String {
     quoted.push_str(&"\\".repeat(backslashes * 2));
     quoted.push('"');
     quoted
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn linux_systemd_unit_includes_extra_service_controls() {
+        let launcher = AutoLaunchBuilder::new()
+            .set_app_name("MCPace")
+            .set_app_path("/opt/mcpace/bin/mcpace")
+            .set_args(&["serve".to_string(), "--managed-service".to_string()])
+            .set_agent_extra_config("MemoryAccounting=yes\nTasksMax=256\nLimitNOFILE=4096")
+            .build()
+            .unwrap();
+
+        let body = launcher.launch_file_body();
+        assert!(body.contains("ExecStart=/opt/mcpace/bin/mcpace serve --managed-service"));
+        assert!(body.contains("Restart=on-failure"));
+        assert!(body.contains("RestartSec=5"));
+        assert!(body.contains("MemoryAccounting=yes"));
+        assert!(body.contains("TasksMax=256"));
+        assert!(body.contains("LimitNOFILE=4096"));
+    }
 }

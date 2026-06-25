@@ -62,6 +62,17 @@ pub(super) fn run(
     };
 
     let config_path = root_path.join("mcpace.config.json");
+    let _config_lock = if parsed.dry_run {
+        None
+    } else {
+        match runtimepaths::acquire_exclusive_file_lock(&config_path, "server policy update") {
+            Ok(lock) => Some(lock),
+            Err(error) => {
+                let _ = writeln!(stderr, "{}", error);
+                return 1;
+            }
+        }
+    };
     let raw = match fs::read_to_string(&config_path) {
         Ok(value) => value,
         Err(error) => {

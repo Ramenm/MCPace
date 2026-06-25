@@ -3,8 +3,10 @@ use crate::json::{self, JsonValue};
 use crate::json_helpers;
 use crate::mcp_autoinstall::{self, McpAutoInstallOptions};
 use crate::mcp_sources;
+use crate::runtimepaths;
 use crate::upstream;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
+use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -94,7 +96,8 @@ fn discover_servers(
                 json_helpers::bool_at_path(value, &["dynamicDiscovery", "probeAfterInstall"])
             })
             .unwrap_or(false);
-    let registry_endpoints = registry_endpoints(config.as_ref());
+    let mut warnings = Vec::new();
+    let registry_endpoints = registry_endpoints(config.as_ref(), &mut warnings);
     let registry_cache_path = registry_cache_path(root_path, config.as_ref());
     let cache_ttl_hours = registry_cache_ttl_hours(config.as_ref());
     let registry_cache_needs_refresh =
@@ -111,7 +114,6 @@ fn discover_servers(
             json_helpers::bool_at_path(value, &["dynamicDiscovery", "autoRefreshRegistry"])
         })
         .unwrap_or(true);
-    let mut warnings = Vec::new();
     let mut registry_refresh = JsonValue::Null;
     let effective_refresh = parsed.refresh
         || refresh_on_discover
@@ -143,6 +145,14 @@ fn discover_servers(
                 error
             )),
         }
+    }
+
+    let duplicate_candidate_count = deduplicate_discovery_candidates(&mut candidates);
+    if duplicate_candidate_count > 0 {
+        warnings.push(format!(
+            "deduplicated {} duplicate MCP discovery candidates by normalized name using trust/source precedence",
+            duplicate_candidate_count
+        ));
     }
 
     candidates.sort_by(|left, right| {
@@ -328,16 +338,48 @@ fn max_auto_installs_per_run(config: Option<&JsonValue>) -> usize {
         .unwrap_or(4)
 }
 
-fn registry_endpoints(config: Option<&JsonValue>) -> Vec<String> {
-    let mut endpoints = json_helpers::strings_from_array(config.and_then(|value| {
+fn registry_endpoints(config: Option<&JsonValue>, warnings: &mut Vec<String>) -> Vec<String> {
+    let raw_endpoints = json_helpers::strings_from_array(config.and_then(|value| {
         json_helpers::array_at_path(value, &["dynamicDiscovery", "registryEndpoints"])
     }));
+    let mut endpoints = Vec::new();
+    for endpoint in raw_endpoints {
+        match normalize_registry_endpoint(&endpoint) {
+            Some(normalized) => endpoints.push(normalized),
+            None => warnings.push(format!(
+                "ignored unsafe MCP registry endpoint '{}'; registry refresh endpoints must be https:// URLs without credentials, fragments, whitespace, or control characters",
+                endpoint
+            )),
+        }
+    }
     if endpoints.is_empty() {
         endpoints.push(OFFICIAL_REGISTRY_HINT.to_string());
     }
     endpoints.sort();
     endpoints.dedup();
     endpoints
+}
+
+fn normalize_registry_endpoint(value: &str) -> Option<String> {
+    let trimmed = value.trim().trim_end_matches('/');
+    if trimmed.is_empty() || trimmed.contains('#') {
+        return None;
+    }
+    if trimmed
+        .chars()
+        .any(|ch| ch.is_control() || ch.is_whitespace())
+    {
+        return None;
+    }
+    if !trimmed.to_ascii_lowercase().starts_with("https://") {
+        return None;
+    }
+    let rest = &trimmed["https://".len()..];
+    let authority = rest.split(['/', '?']).next().unwrap_or("");
+    if authority.is_empty() || authority.contains('@') {
+        return None;
+    }
+    Some(trimmed.to_string())
 }
 
 fn registry_cache_path(root_path: &Path, config: Option<&JsonValue>) -> PathBuf {
@@ -384,7 +426,7 @@ fn catalog_paths(
 ) -> Vec<PathBuf> {
     let mut paths = Vec::new();
     paths.push(root_path.join(DEFAULT_APPROVED_CATALOG));
-    if registry_cache.exists() {
+    if registry_cache_is_regular_file(registry_cache) {
         paths.push(registry_cache.to_path_buf());
     }
     for value in json_helpers::strings_from_array(
@@ -402,6 +444,12 @@ fn catalog_paths(
         .into_iter()
         .filter(|path| seen.insert(path.display().to_string()))
         .collect()
+}
+
+fn registry_cache_is_regular_file(path: &Path) -> bool {
+    fs::symlink_metadata(path)
+        .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+        .unwrap_or(false)
 }
 
 fn resolve_under_root(root_path: &Path, value: &str) -> PathBuf {
@@ -422,6 +470,13 @@ fn refresh_registry_cache(
         .first()
         .map(String::as_str)
         .unwrap_or(OFFICIAL_REGISTRY_HINT);
+    let cache_path = if cache_path.is_absolute() {
+        cache_path.to_path_buf()
+    } else {
+        root_path.join(cache_path)
+    };
+    let _cache_lock =
+        runtimepaths::acquire_exclusive_file_lock(&cache_path, "MCP registry cache refresh")?;
     let mut servers = Vec::new();
     let mut next_cursor: Option<String> = None;
     let mut pages = 0usize;
@@ -471,16 +526,9 @@ fn refresh_registry_cache(
             ]),
         ),
     ]);
-    let cache_path = if cache_path.is_absolute() {
-        cache_path.to_path_buf()
-    } else {
-        root_path.join(cache_path)
-    };
-    if let Some(parent) = cache_path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create catalog cache directory: {}", error))?;
-    }
-    fs::write(&cache_path, cache_value.to_pretty_string()).map_err(|error| {
+    let mut serialized = cache_value.to_pretty_string();
+    serialized.push('\n');
+    runtimepaths::write_private_text_atomic(&cache_path, &serialized).map_err(|error| {
         format!(
             "failed to write registry cache '{}': {}",
             cache_path.display(),
@@ -538,46 +586,121 @@ fn url_query_escape(value: &str) -> String {
 
 fn fetch_url(url: &str) -> Result<String, String> {
     let mut errors = Vec::new();
-    match Command::new("curl")
-        .args(["-fsSL", "--max-time", "15", url])
-        .output()
-    {
-        Ok(output) if output.status.success() => {
-            return String::from_utf8(output.stdout)
-                .map_err(|error| format!("curl output was not UTF-8: {}", error));
-        }
-        Ok(output) => errors.push(format!(
-            "curl exited with {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr).trim()
-        )),
-        Err(error) => errors.push(format!("curl unavailable: {}", error)),
-    }
-
-    for command in ["pwsh", "powershell"] {
-        let script = format!(
-            "(Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 -Uri '{}').Content",
-            url.replace('\'', "''")
-        );
-        match Command::new(command)
-            .args(["-NoProfile", "-Command", &script])
-            .output()
-        {
+    for curl_path in trusted_fetch_program_candidates("curl") {
+        let mut command = Command::new(&curl_path);
+        command.args(["-fsSL", "--max-time", "15", "--", url]);
+        configure_fetch_env(&mut command);
+        match command.output() {
             Ok(output) if output.status.success() => {
-                return String::from_utf8(output.stdout)
-                    .map_err(|error| format!("{} output was not UTF-8: {}", command, error));
+                return String::from_utf8(output.stdout).map_err(|error| {
+                    format!("{} output was not UTF-8: {}", curl_path.display(), error)
+                });
             }
             Ok(output) => errors.push(format!(
                 "{} exited with {}: {}",
-                command,
+                curl_path.display(),
                 output.status,
                 String::from_utf8_lossy(&output.stderr).trim()
             )),
-            Err(error) => errors.push(format!("{} unavailable: {}", command, error)),
+            Err(error) => errors.push(format!("{} unavailable: {}", curl_path.display(), error)),
         }
     }
 
-    Err(errors.join("; "))
+    for powershell_path in trusted_fetch_program_candidates("powershell") {
+        let script = "param([string]$Uri); (Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 -Uri $Uri).Content";
+        let mut command = Command::new(&powershell_path);
+        command.args(["-NoProfile", "-NonInteractive", "-Command", script, url]);
+        configure_fetch_env(&mut command);
+        match command.output() {
+            Ok(output) if output.status.success() => {
+                return String::from_utf8(output.stdout).map_err(|error| {
+                    format!(
+                        "{} output was not UTF-8: {}",
+                        powershell_path.display(),
+                        error
+                    )
+                });
+            }
+            Ok(output) => errors.push(format!(
+                "{} exited with {}: {}",
+                powershell_path.display(),
+                output.status,
+                String::from_utf8_lossy(&output.stderr).trim()
+            )),
+            Err(error) => errors.push(format!(
+                "{} unavailable: {}",
+                powershell_path.display(),
+                error
+            )),
+        }
+    }
+
+    Err(format!("failed to fetch {} ({})", url, errors.join("; ")))
+}
+
+fn trusted_fetch_program_candidates(kind: &str) -> Vec<PathBuf> {
+    let raw_candidates: &[&str] = match kind {
+        "curl" => {
+            #[cfg(windows)]
+            {
+                &[r"C:\Windows\System32\curl.exe"]
+            }
+            #[cfg(not(windows))]
+            {
+                &["/usr/bin/curl", "/bin/curl", "/usr/local/bin/curl"]
+            }
+        }
+        "powershell" => {
+            #[cfg(windows)]
+            {
+                &[
+                    r"C:\Program Files\PowerShell\7\pwsh.exe",
+                    r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
+                ]
+            }
+            #[cfg(not(windows))]
+            {
+                &["/usr/bin/pwsh", "/usr/local/bin/pwsh"]
+            }
+        }
+        _ => &[],
+    };
+    raw_candidates
+        .iter()
+        .map(PathBuf::from)
+        .filter(|path| trusted_fetch_program_path(path))
+        .collect()
+}
+
+fn trusted_fetch_program_path(path: &Path) -> bool {
+    path.is_absolute()
+        && fs::symlink_metadata(path)
+            .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
+            .unwrap_or(false)
+}
+
+fn configure_fetch_env(command: &mut Command) {
+    command.env_clear();
+    for key in [
+        "SystemRoot",
+        "WINDIR",
+        "HOME",
+        "HTTPS_PROXY",
+        "https_proxy",
+        "NO_PROXY",
+        "no_proxy",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+    ] {
+        if let Ok(value) = env::var(key) {
+            if !value
+                .chars()
+                .any(|ch| ch == '\0' || ch == '\r' || ch == '\n')
+            {
+                command.env(key, value);
+            }
+        }
+    }
 }
 
 fn installed_server_names(root_path: &Path) -> BTreeSet<String> {
@@ -796,6 +919,54 @@ fn candidate_score(candidate: &DiscoveryCandidate, terms: &[String]) -> usize {
         }
     }
     score
+}
+
+fn deduplicate_discovery_candidates(candidates: &mut Vec<DiscoveryCandidate>) -> usize {
+    let original_len = candidates.len();
+    let mut by_name = BTreeMap::<String, DiscoveryCandidate>::new();
+    for candidate in std::mem::take(candidates) {
+        match by_name.get_mut(&candidate.normalized_name) {
+            Some(existing) if candidate_precedence(&candidate) > candidate_precedence(existing) => {
+                *existing = candidate;
+            }
+            Some(_) => {}
+            None => {
+                by_name.insert(candidate.normalized_name.clone(), candidate);
+            }
+        }
+    }
+    candidates.extend(by_name.into_values());
+    original_len.saturating_sub(candidates.len())
+}
+
+fn candidate_precedence(candidate: &DiscoveryCandidate) -> (usize, usize, usize, usize) {
+    (
+        usize::from(candidate.installed),
+        candidate_trust_rank(&candidate.trust_level),
+        candidate_source_rank(&candidate.source),
+        candidate.score,
+    )
+}
+
+fn candidate_trust_rank(value: &str) -> usize {
+    match value.trim().to_ascii_lowercase().as_str() {
+        "trusted" | "approved" | "curated" => 5,
+        "review" | "manual-review" => 3,
+        "unknown" | "unreviewed" => 1,
+        "blocked" | "deny" | "malware" => 0,
+        _ => 2,
+    }
+}
+
+fn candidate_source_rank(source: &str) -> usize {
+    let normalized = source.replace('\\', "/").to_ascii_lowercase();
+    if normalized.ends_with(DEFAULT_APPROVED_CATALOG) {
+        5
+    } else if normalized.contains("registry-cache") {
+        2
+    } else {
+        3
+    }
 }
 
 fn selected_install_candidate(candidates: &[DiscoveryCandidate], query: &str) -> Option<usize> {

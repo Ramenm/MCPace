@@ -1,0 +1,138 @@
+{
+  "schema": "mcpace.localProof.v1",
+  "generatedAt": "2026-06-06T19:52:39.950Z",
+  "mode": {
+    "full": true,
+    "install": false,
+    "planOnly": false
+  },
+  "host": {
+    "platform": "win32",
+    "arch": "x64",
+    "osType": "Windows_NT",
+    "osRelease": "10.0.26200",
+    "hostname": "DESKTOP-QULQE1B",
+    "node": "v24.15.0",
+    "npm": "11.4.2",
+    "cargo": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
+    "rustc": "rustc 1.95.0 (59807616e 2026-04-14)",
+    "pinnedRustToolchain": "1.95.0"
+  },
+  "rootName": "mcpace",
+  "overall": "pass",
+  "summary": {
+    "pass": 8,
+    "warn": 0,
+    "fail": 0,
+    "total": 8
+  },
+  "results": [
+    {
+      "id": "node-contracts",
+      "kind": "node",
+      "required": true,
+      "command": "C:\\Program Files\\nodejs\\node.exe C:\\Users\\rmatv\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js run check",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 4316,
+      "stdoutTail": "",
+      "stderrTail": "",
+      "error": null
+    },
+    {
+      "id": "npm-package-contract",
+      "kind": "node",
+      "required": true,
+      "command": "C:\\Program Files\\nodejs\\node.exe C:\\Users\\rmatv\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js run check:package",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 1010,
+      "stdoutTail": "",
+      "stderrTail": "",
+      "error": null
+    },
+    {
+      "id": "release-dry-run",
+      "kind": "release",
+      "required": true,
+      "command": "C:\\Program Files\\nodejs\\node.exe C:\\Users\\rmatv\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js run release:dry-run",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 714,
+      "stdoutTail": "",
+      "stderrTail": "",
+      "error": null
+    },
+    {
+      "id": "npm-pack-dry-run",
+      "kind": "release",
+      "required": true,
+      "command": "C:\\Program Files\\nodejs\\node.exe C:\\Users\\rmatv\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js run pack:npm:dry-run",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 721,
+      "stdoutTail": "",
+      "stderrTail": "",
+      "error": null
+    },
+    {
+      "id": "source-zip-build",
+      "kind": "release",
+      "required": true,
+      "command": "C:\\Program Files\\nodejs\\node.exe C:\\Users\\rmatv\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js run build:release-artifacts",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 915,
+      "stdoutTail": "",
+      "stderrTail": "",
+      "error": null
+    },
+    {
+      "id": "rust-contracts",
+      "kind": "rust",
+      "required": true,
+      "command": "C:\\Program Files\\nodejs\\node.exe C:\\Users\\rmatv\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js run check:rust",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 7285,
+      "stdoutTail": "",
+      "stderrTail": "",
+      "error": null
+    },
+    {
+      "id": "rust-release-build",
+      "kind": "rust",
+      "required": true,
+      "command": "C:\\Program Files\\nodejs\\node.exe C:\\Users\\rmatv\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js run build",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 373,
+      "stdoutTail": "",
+      "stderrTail": "",
+      "error": null
+    },
+    {
+      "id": "native-binary-smoke",
+      "kind": "rust",
+      "required": true,
+      "command": "C:\\Program Files\\nodejs\\node.exe C:\\Users\\rmatv\\AppData\\Roaming\\npm\\node_modules\\npm\\bin\\npm-cli.js run platform:binary-smoke -- --binary C:\\Users\\rmatv\\Projects\\mcpace\\target\\release\\mcpace.exe",
+      "status": "pass",
+      "exitCode": 0,
+      "signal": null,
+      "durationMs": 3891,
+      "stdoutTail": "",
+      "stderrTail": "",
+      "error": null
+    }
+  ],
+  "nextSteps": [
+    "This host passed Node, package, release, Rust, build, and native binary smoke gates. Run the same proof on the remaining OS families."
+  ]
+}

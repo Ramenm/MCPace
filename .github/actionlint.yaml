@@ -1,0 +1,7 @@
+# actionlint v1.7.x does not yet ship every hosted-runner label that GitHub has
+# announced/documented for the current release matrix. Keep these labels here so
+# static workflow linting remains strict while allowing the project's target lanes.
+self-hosted-runner:
+  labels:
+    - macos-15-intel
+    - windows-11-arm

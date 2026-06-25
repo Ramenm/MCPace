@@ -1,6 +1,6 @@
 [package]
 name = "mcpace"
-version = "0.6.9"
+version = "0.7.5"
 edition = "2021"
 license = "Apache-2.0"
 publish = false
@@ -15,6 +15,17 @@ which = { path = "crates/compat/which" }
 # Optimize the shipped CLI/runtime binary for maximum shipped artifact compactness.
 # Fat LTO + opt-level z + stripped symbols are used for this ready release binary.
 opt-level = "z"
+lto = "fat"
+codegen-units = 1
+strip = "symbols"
+panic = "abort"
+incremental = false
+debug = false
+
+[profile.perf]
+# Speed-oriented profile for A/B latency checks against the compact release profile.
+inherits = "release"
+opt-level = 3
 lto = "fat"
 codegen-units = 1
 strip = "symbols"

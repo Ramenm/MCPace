@@ -3,11 +3,16 @@ use super::write_helpers::{
     build_server_entry, normalize_server_type, parse_key_value_pairs, validate_env_name,
     validate_http_header_name, validate_remote_mcp_url,
 };
-use super::{load_mcp_server_registry, normalize_server_name, DEFAULT_SETTINGS_DIR};
+use super::{
+    acquire_mcp_settings_namespace_lock, normalize_server_name, source_paths_for_normalized_server,
+    DEFAULT_SETTINGS_DIR,
+};
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::runtimepaths;
 use std::collections::BTreeMap;
+use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Default)]
@@ -142,14 +147,22 @@ pub fn write_mcp_server_entry(
         .map(|path| resolve_under_root(root_path, path))
         .unwrap_or_else(|| default_mcp_server_fragment_path(root_path, &normalized_name));
 
-    let mut root_value = if target_path.is_file() {
-        json_helpers::read_json_file(&target_path)?
+    let _namespace_lock = if options.dry_run {
+        None
     } else {
-        JsonValue::object([(
-            String::from("mcpServers"),
-            JsonValue::Object(BTreeMap::new()),
-        )])
+        Some(acquire_mcp_settings_namespace_lock(root_path)?)
     };
+    reject_cross_source_shadowing(root_path, &normalized_name, &target_path)?;
+    let _settings_lock = if options.dry_run {
+        None
+    } else {
+        Some(runtimepaths::acquire_exclusive_file_lock(
+            &target_path,
+            "MCP settings update",
+        )?)
+    };
+
+    let mut root_value = read_settings_or_empty(&target_path)?;
     let JsonValue::Object(root_object) = &mut root_value else {
         return Err(format!(
             "MCP settings source '{}' must contain a JSON object",
@@ -202,18 +215,9 @@ pub fn write_mcp_server_entry(
         }
     }
     servers.insert(display_name, entry);
-    if let Some(parent) = target_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| {
-            format!(
-                "failed to create MCP settings directory '{}': {}",
-                parent.display(),
-                error
-            )
-        })?;
-    }
     let mut serialized = root_value.to_pretty_string();
     serialized.push('\n');
-    runtimepaths::write_text_atomic(&target_path, &serialized)?;
+    runtimepaths::write_private_text_atomic(&target_path, &serialized)?;
     Ok(result)
 }
 
@@ -233,6 +237,11 @@ pub fn remove_mcp_server_entry(
         ));
     }
 
+    let _namespace_lock = if options.dry_run {
+        None
+    } else {
+        Some(acquire_mcp_settings_namespace_lock(root_path)?)
+    };
     let target_path = match options.settings_path.as_ref() {
         Some(path) => resolve_under_root(root_path, path),
         None => find_source_path_for_server(root_path, &normalized_name)?.ok_or_else(|| {
@@ -242,15 +251,16 @@ pub fn remove_mcp_server_entry(
             )
         })?,
     };
+    let _settings_lock = if options.dry_run {
+        None
+    } else {
+        Some(runtimepaths::acquire_exclusive_file_lock(
+            &target_path,
+            "MCP settings update",
+        )?)
+    };
 
-    if !target_path.is_file() {
-        return Err(format!(
-            "MCP settings source '{}' does not exist",
-            target_path.display()
-        ));
-    }
-
-    let mut root_value = json_helpers::read_json_file(&target_path)?;
+    let mut root_value = read_existing_settings(&target_path)?;
     let mut existed_before = false;
     let remaining_server_count;
     match &mut root_value {
@@ -294,7 +304,7 @@ pub fn remove_mcp_server_entry(
     if !options.dry_run {
         let mut serialized = root_value.to_pretty_string();
         serialized.push('\n');
-        runtimepaths::write_text_atomic(&target_path, &serialized)?;
+        runtimepaths::write_private_text_atomic(&target_path, &serialized)?;
     }
 
     Ok(McpServerRemoveResult {
@@ -324,6 +334,11 @@ pub fn set_mcp_server_enabled(
         ));
     }
 
+    let _namespace_lock = if options.dry_run {
+        None
+    } else {
+        Some(acquire_mcp_settings_namespace_lock(root_path)?)
+    };
     let target_path = match options.settings_path.as_ref() {
         Some(path) => resolve_under_root(root_path, path),
         None => find_source_path_for_server(root_path, &normalized_name)?.ok_or_else(|| {
@@ -333,15 +348,16 @@ pub fn set_mcp_server_enabled(
             )
         })?,
     };
+    let _settings_lock = if options.dry_run {
+        None
+    } else {
+        Some(runtimepaths::acquire_exclusive_file_lock(
+            &target_path,
+            "MCP settings update",
+        )?)
+    };
 
-    if !target_path.is_file() {
-        return Err(format!(
-            "MCP settings source '{}' does not exist",
-            target_path.display()
-        ));
-    }
-
-    let mut root_value = json_helpers::read_json_file(&target_path)?;
+    let mut root_value = read_existing_settings(&target_path)?;
     let mut existed_before = false;
     let mut previous_enabled = None;
     let server_count;
@@ -394,7 +410,7 @@ pub fn set_mcp_server_enabled(
     if !options.dry_run {
         let mut serialized = root_value.to_pretty_string();
         serialized.push('\n');
-        runtimepaths::write_text_atomic(&target_path, &serialized)?;
+        runtimepaths::write_private_text_atomic(&target_path, &serialized)?;
     }
 
     let action = if options.enabled { "enable" } else { "disable" }.to_string();
@@ -572,9 +588,104 @@ fn find_source_path_for_server(
     root_path: &Path,
     normalized_name: &str,
 ) -> Result<Option<PathBuf>, String> {
-    let registry = load_mcp_server_registry(root_path)?;
-    Ok(registry
-        .servers
-        .get(normalized_name)
-        .map(|entry| PathBuf::from(&entry.source)))
+    let matches = source_paths_for_normalized_server(root_path, normalized_name)?;
+    match matches.len() {
+        0 => Ok(None),
+        1 => Ok(matches.into_iter().next()),
+        _ => Err(format!(
+            "MCP server '{}' exists in multiple settings sources ({}); pass --settings <path> to choose the exact source",
+            normalized_name,
+            matches
+                .iter()
+                .map(|path| path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        )),
+    }
+}
+
+fn reject_cross_source_shadowing(
+    root_path: &Path,
+    normalized_name: &str,
+    target_path: &Path,
+) -> Result<(), String> {
+    let matches = source_paths_for_normalized_server(root_path, normalized_name)?;
+    let shadowing = matches
+        .into_iter()
+        .filter(|path| !same_settings_path(path, target_path))
+        .collect::<Vec<_>>();
+    if shadowing.is_empty() {
+        return Ok(());
+    }
+    Err(format!(
+        "MCP server '{}' already exists in another settings source ({}); pass --settings <existing path> with --force, remove the old entry first, or choose a different server name",
+        normalized_name,
+        shadowing
+            .iter()
+            .map(|path| path.display().to_string())
+            .collect::<Vec<_>>()
+            .join(", ")
+    ))
+}
+
+fn same_settings_path(left: &Path, right: &Path) -> bool {
+    runtimepaths::canonicalize_or_original(left) == runtimepaths::canonicalize_or_original(right)
+}
+
+fn read_settings_or_empty(path: &Path) -> Result<JsonValue, String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "MCP settings source '{}' must be a regular file, not a symlink",
+                    path.display()
+                ));
+            }
+            if !metadata.is_file() {
+                return Err(format!(
+                    "MCP settings source '{}' must be a regular file",
+                    path.display()
+                ));
+            }
+            json_helpers::read_json_file(path)
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(JsonValue::object([(
+            String::from("mcpServers"),
+            JsonValue::Object(BTreeMap::new()),
+        )])),
+        Err(error) => Err(format!(
+            "failed to inspect MCP settings source '{}': {}",
+            path.display(),
+            error
+        )),
+    }
+}
+
+fn read_existing_settings(path: &Path) -> Result<JsonValue, String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "MCP settings source '{}' must be a regular file, not a symlink",
+                    path.display()
+                ));
+            }
+            if !metadata.is_file() {
+                return Err(format!(
+                    "MCP settings source '{}' must be a regular file",
+                    path.display()
+                ));
+            }
+            json_helpers::read_json_file(path)
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Err(format!(
+            "MCP settings source '{}' does not exist",
+            path.display()
+        )),
+        Err(error) => Err(format!(
+            "failed to inspect MCP settings source '{}': {}",
+            path.display(),
+            error
+        )),
+    }
 }

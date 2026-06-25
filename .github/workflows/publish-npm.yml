@@ -18,11 +18,113 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  native-packages:
+    if: startsWith(github.ref, 'refs/tags/')
+    name: native package / ${{ matrix.key }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: linux-x64-gnu
+            runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-gnu
+            binary_name: mcpace
+          - key: linux-arm64-gnu
+            runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-gnu
+            binary_name: mcpace
+          - key: darwin-x64
+            runner: macos-15-intel
+            rust_target: x86_64-apple-darwin
+            binary_name: mcpace
+          - key: darwin-arm64
+            runner: macos-15
+            rust_target: aarch64-apple-darwin
+            binary_name: mcpace
+          - key: win32-x64-msvc
+            runner: windows-2025
+            rust_target: x86_64-pc-windows-msvc
+            binary_name: mcpace.exe
+          - key: win32-arm64-msvc
+            runner: windows-11-arm
+            rust_target: aarch64-pc-windows-msvc
+            binary_name: mcpace.exe
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Install locked Node tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Rust target
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+        run: rustup target add "$MCPACE_RUST_TARGET"
+        shell: bash
+
+      - name: Check Rust formatting
+        run: cargo fmt --check
+        shell: bash
+
+      - name: Check Rust target with clippy
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+        run: cargo clippy --all-targets --target "$MCPACE_RUST_TARGET" -- -D warnings
+        shell: bash
+
+      - name: Test Rust target
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+        run: cargo test --target "$MCPACE_RUST_TARGET" -- --test-threads=1
+        shell: bash
+
+      - name: Build native binary
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+        run: cargo build --release --target "$MCPACE_RUST_TARGET"
+        shell: bash
+
+      - name: Pack native npm package
+        env:
+          MCPACE_TARGET_KEY: ${{ matrix.key }}
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+          MCPACE_BINARY_NAME: ${{ matrix.binary_name }}
+        run: |
+          set -euo pipefail
+          binary="target/${MCPACE_RUST_TARGET}/release/${MCPACE_BINARY_NAME}"
+          node scripts/build-native-npm-package.mjs --target "$MCPACE_TARGET_KEY" --binary "$binary" --out-dir dist/npm --json
+        shell: bash
+
+      - name: Upload native npm tarball
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-package-${{ matrix.key }}
+          path: dist/npm/*.tgz
+          if-no-files-found: error
+
   publish:
     if: startsWith(github.ref, 'refs/tags/')
+    needs: native-packages
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - uses: actions/checkout@v6
         with:
@@ -40,6 +142,13 @@ jobs:
       - name: Verify exact npm version for trusted publishing
         run: npm exec --yes --package=npm@11.13.0 -- npm --version
 
+      - name: Download native package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: native-package-*
+          path: dist/npm
+          merge-multiple: true
+
       - name: Validate source and publish contracts
         run: |
           npm run check
@@ -49,11 +158,32 @@ jobs:
       - name: Refuse incomplete native package publication
         run: node scripts/verify-npm-publish-contract.mjs --enforce
 
+      - name: Publish native npm packages
+        env:
+          MCPACE_PUBLISH_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tarballs=(dist/npm/*.tgz)
+          if [ "${#tarballs[@]}" -ne 6 ]; then
+            echo "expected 6 native npm tarballs, found ${#tarballs[@]}" >&2
+            exit 1
+          fi
+          for tarball in "${tarballs[@]}"; do
+            if [ "$MCPACE_PUBLISH_DRY_RUN" = "true" ]; then
+              npm exec --yes --package=npm@11.13.0 -- npm publish "$tarball" --dry-run --access public --provenance
+            else
+              npm exec --yes --package=npm@11.13.0 -- npm publish "$tarball" --access public --provenance
+            fi
+          done
+
       - name: Publish main npm launcher
         working-directory: packages/npm/cli
+        env:
+          MCPACE_PUBLISH_DRY_RUN: ${{ inputs.dry_run }}
         run: |
-          if [ "${{ inputs.dry_run }}" = "true" ]; then
-            npm exec --yes --package=npm@11.13.0 -- npm publish --dry-run --access public
+          if [ "$MCPACE_PUBLISH_DRY_RUN" = "true" ]; then
+            npm exec --yes --package=npm@11.13.0 -- npm publish --dry-run --access public --provenance
           else
-            npm exec --yes --package=npm@11.13.0 -- npm publish --access public
+            npm exec --yes --package=npm@11.13.0 -- npm publish --access public --provenance
           fi

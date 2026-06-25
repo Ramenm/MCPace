@@ -13,7 +13,7 @@ test('server loader exposes explicit stateless/stateful runtime classification',
   const clientModel = read('src', 'client', 'model.rs');
   const clientRender = read('src', 'client', 'render.rs');
   const instances = read('src', 'server', 'instances.rs');
-  const dashboard = read('src', 'dashboard', 'index.html');
+  const dashboard = read('src', 'dashboard', 'frontend', 'app.js');
 
   assert.match(model, /pub runtime_type: String/);
   assert.match(model, /pub state_class: String/);

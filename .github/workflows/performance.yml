@@ -1,0 +1,101 @@
+name: performance-proof
+
+# Manual latency/soak proof. This intentionally stays out of push/PR CI because it
+# compiles Rust and runs live HTTP/MCP load against the native binary.
+on:
+  workflow_dispatch:
+    inputs:
+      duration_ms:
+        description: Duration per scenario in milliseconds.
+        required: false
+        default: '30000'
+        type: string
+      concurrency:
+        description: Concurrent request loops per scenario.
+        required: false
+        default: '64'
+        type: string
+      profile:
+        description: Build profile to load-test.
+        required: false
+        default: both
+        type: choice
+        options:
+          - release
+          - perf
+          - both
+
+permissions:
+  contents: read
+
+concurrency:
+  group: performance-proof-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-load-proof:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+        with:
+          components: rustfmt, clippy
+
+      - name: Install locked Node tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Verify source contracts before load
+        run: npm run check
+
+      - name: Build compact release binary
+        if: ${{ inputs.profile == 'release' || inputs.profile == 'both' }}
+        run: cargo build --release
+
+      - name: Load-test compact release binary
+        if: ${{ inputs.profile == 'release' || inputs.profile == 'both' }}
+        env:
+          MCPACE_LOAD_DURATION_MS: ${{ inputs.duration_ms }}
+          MCPACE_LOAD_CONCURRENCY: ${{ inputs.concurrency }}
+        run: |
+          mkdir -p reports/load
+          npm run load:local -- \
+            --binary ./target/release/mcpace \
+            --duration-ms "$MCPACE_LOAD_DURATION_MS" \
+            --concurrency "$MCPACE_LOAD_CONCURRENCY" \
+            --json > reports/load/release.json
+          npm run check:load-result -- reports/load/release.json --json > reports/load/release.check.json
+
+      - name: Build speed-oriented perf binary
+        if: ${{ inputs.profile == 'perf' || inputs.profile == 'both' }}
+        run: cargo build --profile perf
+
+      - name: Load-test speed-oriented perf binary
+        if: ${{ inputs.profile == 'perf' || inputs.profile == 'both' }}
+        env:
+          MCPACE_LOAD_DURATION_MS: ${{ inputs.duration_ms }}
+          MCPACE_LOAD_CONCURRENCY: ${{ inputs.concurrency }}
+        run: |
+          mkdir -p reports/load
+          npm run load:local -- \
+            --binary ./target/perf/mcpace \
+            --duration-ms "$MCPACE_LOAD_DURATION_MS" \
+            --concurrency "$MCPACE_LOAD_CONCURRENCY" \
+            --json > reports/load/perf.json
+          npm run check:load-result -- reports/load/perf.json --json > reports/load/perf.check.json
+
+      - name: Upload load reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: performance-proof-reports
+          path: reports/load/**
+          if-no-files-found: ignore

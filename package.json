@@ -1,6 +1,6 @@
 {
   "name": "mcpace-workspace",
-  "version": "0.6.9",
+  "version": "0.7.5",
   "private": true,
   "workspaces": [
     "packages/npm/cli"
@@ -10,12 +10,12 @@
     "npm": ">=10.0.0"
   },
   "scripts": {
-    "lint:npm": "node scripts/check-node-syntax.mjs --json",
-    "test:npm": "node --test packages/npm/cli/test/*.test.mjs tests/node/*.test.mjs",
+    "lint:npm": "node scripts/check-node-syntax.mjs --json && npm run lint:rust-static",
+    "test:npm": "node scripts/run-node-tests.mjs --quiet",
     "check": "npm run lint:npm && npm run test:npm && npm run check:platform && npm run check:assurance",
     "inventory": "node scripts/project-inventory.mjs --write",
     "check:package": "publint packages/npm/cli",
-    "check:ci": "npm run check && npm run check:package && npm run release:dry-run",
+    "check:ci": "npm run check && npm run check:dependency-policy && npm run check:workflow-policy && npm run check:security-policy && npm run check:package && npm run check:install-smoke && npm run check:terminal && npm run proof:browser-lifecycle && npm run check:publish-trust && npm run release:dry-run",
     "ci:local:quick": "npm run check",
     "ci": "npm run check:ci",
     "build": "node scripts/cargo-task.mjs build --release",
@@ -36,7 +36,26 @@
     "platform:binary-smoke": "node scripts/platform-binary-smoke.mjs",
     "proof:local": "node scripts/local-proof.mjs --write",
     "proof:local:plan": "node scripts/local-proof.mjs --plan-only --json",
-    "check:publish-contract": "node scripts/verify-npm-publish-contract.mjs --json"
+    "check:publish-contract": "node scripts/verify-npm-publish-contract.mjs --json --enforce",
+    "check:security-policy": "node scripts/security-policy-check.mjs",
+    "check:dependency-policy": "node scripts/verify-dependency-policy.mjs --json",
+    "check:workflow-policy": "node scripts/verify-workflow-policy.mjs --json",
+    "pack:native": "node scripts/build-native-npm-package.mjs",
+    "check:load-result": "node scripts/check-load-result.mjs",
+    "build:perf": "node scripts/cargo-task.mjs build --profile perf",
+    "check:install-smoke": "node scripts/install-smoke.mjs",
+    "doctor:terminal": "node scripts/terminal-doctor.mjs",
+    "check:terminal": "node scripts/terminal-contract.mjs",
+    "latency:report": "node scripts/latency-report.mjs",
+    "proof:runtime": "node scripts/runtime-proof.mjs",
+    "fault:slow-client": "node scripts/slow-client-probe.mjs",
+    "latency:compare": "node scripts/latency-compare.mjs",
+    "probe:session-churn": "node scripts/session-churn-probe.mjs",
+    "probe:slowloris": "node scripts/slowloris-probe.mjs",
+    "evidence:runtime": "node scripts/runtime-evidence.mjs",
+    "lint:rust-static": "node scripts/rust-static-guard.mjs --json",
+    "proof:browser-lifecycle": "node scripts/browser-lifecycle-proof.mjs",
+    "check:publish-trust": "node scripts/publish-trust-preflight.mjs"
   },
   "packageManager": "npm@10.9.2",
   "devEngines": {

@@ -8,10 +8,11 @@ use crate::json_helpers;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::Mutex;
 use std::thread;
+use std::time::{Duration, Instant};
 
 static ENV_LOCK: Mutex<()> = Mutex::new(());
 
@@ -71,6 +72,39 @@ fn temp_root() -> PathBuf {
     let path = std::env::temp_dir().join(unique);
     fs::create_dir_all(&path).unwrap();
     path
+}
+
+fn bind_loopback_test_listener() -> TcpListener {
+    let mut last_error = String::new();
+    for _ in 0..64 {
+        let listener = match TcpListener::bind(("127.0.0.1", 0)) {
+            Ok(listener) => listener,
+            Err(error) => {
+                last_error = error.to_string();
+                continue;
+            }
+        };
+        let addr = match listener.local_addr() {
+            Ok(addr) => addr,
+            Err(error) => {
+                last_error = error.to_string();
+                continue;
+            }
+        };
+        match TcpStream::connect_timeout(&addr, Duration::from_millis(250)) {
+            Ok(probe_stream) => match listener.accept() {
+                Ok((accepted_stream, _)) => {
+                    drop(accepted_stream);
+                    drop(probe_stream);
+                    return listener;
+                }
+                Err(error) => last_error = error.to_string(),
+            },
+            Err(error) => last_error = error.to_string(),
+        }
+    }
+
+    panic!("failed to bind reachable loopback test listener: {last_error}");
 }
 
 fn write_fake_upstream_config(root: &std::path::Path) {
@@ -213,64 +247,73 @@ rl.on('line', (line) => {
     .unwrap();
 }
 
-fn assert_dashboard_html_lacks(parts: &[&str]) {
+fn dashboard_ui_assets() -> String {
+    [
+        super::DASHBOARD_HTML,
+        super::DASHBOARD_JS,
+        super::DASHBOARD_CSS,
+    ]
+    .join("\n")
+}
+
+fn assert_dashboard_assets_lack(parts: &[&str]) {
     let marker = parts.concat();
+    let assets = dashboard_ui_assets();
     assert!(
-        !super::DASHBOARD_HTML.contains(&marker),
-        "dashboard HTML still contains removed marker: {}",
+        !assets.contains(&marker),
+        "dashboard UI assets still contain removed marker: {}",
         marker
     );
 }
 
 #[test]
 fn dashboard_ui_exposes_production_cockpit_without_probe_loop_copy() {
-    assert!(super::DASHBOARD_HTML.contains("Production cockpit"));
-    assert!(super::DASHBOARD_HTML.contains("backend-check-button"));
-    assert!(super::DASHBOARD_HTML.contains("server-fleet-board"));
-    assert!(super::DASHBOARD_HTML.contains("function serverVerdict"));
-    assert!(super::DASHBOARD_HTML.contains("function serverDecision"));
-    assert!(super::DASHBOARD_HTML.contains("function serverViewModel"));
-    assert!(super::DASHBOARD_HTML.contains("function serverBucket"));
-    assert!(super::DASHBOARD_HTML.contains("function serverSensitivity"));
-    assert!(super::DASHBOARD_HTML.contains("reset group filter"));
-    assert!(super::DASHBOARD_HTML.contains("Run test"));
-    assert!(super::DASHBOARD_HTML.contains("server-guide"));
-    assert!(super::DASHBOARD_HTML.contains("function serverToolEvidence"));
-    assert!(super::DASHBOARD_HTML.contains("function normalizeProbeEvidence"));
-    assert!(super::DASHBOARD_HTML.contains("function serverEvidenceSummary"));
-    assert_dashboard_html_lacks(&["SERVER", "_USE", "_GUIDANCE"]);
-    assert_dashboard_html_lacks(&["function server", "Use", "Guidance"]);
-    assert_dashboard_html_lacks(&["Browser", " QA"]);
-    assert_dashboard_html_lacks(&["Sentry", " issues"]);
-    assert_dashboard_html_lacks(&["Example MCP", " sandbox"]);
-    assert!(super::DASHBOARD_HTML.contains("function serverSettingProfile"));
-    assert!(super::DASHBOARD_HTML.contains("function serverHumanSummary"));
-    assert!(super::DASHBOARD_HTML.contains("server-human-card"));
-    assert!(super::DASHBOARD_HTML.contains("Live evidence"));
-    assert!(super::DASHBOARD_HTML.contains("Current state"));
-    assert!(super::DASHBOARD_HTML.contains("Tools not checked"));
-    assert!(super::DASHBOARD_HTML.contains("No live tools evidence"));
-    assert!(super::DASHBOARD_HTML.contains("Tool evidence"));
-    assert!(super::DASHBOARD_HTML.contains("Best setting"));
-    assert!(super::DASHBOARD_HTML.contains("Routing and workers"));
-    assert!(super::DASHBOARD_HTML.contains("Enable to apply"));
-    assert!(super::DASHBOARD_HTML.contains("Manual override: routing and workers"));
-    assert!(super::DASHBOARD_HTML.contains("Recommended next step"));
-    assert!(super::DASHBOARD_HTML.contains("allowHidden"));
-    assert!(super::DASHBOARD_HTML
-        .contains("refreshDashboard({ allowHidden: true, reason: \"initial\" })"));
-    assert!(super::DASHBOARD_HTML.contains("const MAX_SERVER_ROWS = 64"));
-    assert!(super::DASHBOARD_HTML.contains("server-autotune"));
-    assert!(super::DASHBOARD_HTML.contains("/api/actions/ping"));
-    assert!(super::DASHBOARD_HTML.contains("/api/resources"));
-    assert!(super::DASHBOARD_HTML.contains("REQUEST_TIMEOUT_MS"));
-    assert!(!super::DASHBOARD_HTML.contains("Auto</strong> ${tuned ? \"OK\""));
-    assert_dashboard_html_lacks(&["mcpace lab", " probe"]);
-    assert_dashboard_html_lacks(&["cannot safely", " prove"]);
-    assert_dashboard_html_lacks(&["before increasing", " workers"]);
-    assert_dashboard_html_lacks(&["auto", "-safe"]);
-    assert_dashboard_html_lacks(&["Safety", " Automatic"]);
-    assert_dashboard_html_lacks(&["Safe", " On"]);
+    let assets = dashboard_ui_assets();
+    assert!(assets.contains("Make the simple path work first"));
+    assert!(assets.contains("server-fleet-board"));
+    assert!(assets.contains("function serverVerdict"));
+    assert!(assets.contains("function serverDecision"));
+    assert!(assets.contains("function serverViewModel"));
+    assert!(assets.contains("function serverBucket"));
+    assert!(assets.contains("function serverSensitivity"));
+    assert!(assets.contains("reset group filter"));
+    assert!(assets.contains("Run test"));
+    assert!(assets.contains("server-guide"));
+    assert!(assets.contains("function serverToolEvidence"));
+    assert!(assets.contains("function normalizeProbeEvidence"));
+    assert!(assets.contains("function serverEvidenceSummary"));
+    assert_dashboard_assets_lack(&["SERVER", "_USE", "_GUIDANCE"]);
+    assert_dashboard_assets_lack(&["function server", "Use", "Guidance"]);
+    assert_dashboard_assets_lack(&["Browser", " QA"]);
+    assert_dashboard_assets_lack(&["Sentry", " issues"]);
+    assert_dashboard_assets_lack(&["Example MCP", " sandbox"]);
+    assert!(assets.contains("function serverSettingProfile"));
+    assert!(assets.contains("function serverHumanSummary"));
+    assert!(assets.contains("server-human-card"));
+    assert!(assets.contains("Live evidence"));
+    assert!(assets.contains("Current state"));
+    assert!(assets.contains("Tools not checked"));
+    assert!(assets.contains("No live tools evidence"));
+    assert!(assets.contains("Tool evidence"));
+    assert!(assets.contains("Best setting"));
+    assert!(assets.contains("Routing and workers"));
+    assert!(assets.contains("Enable to apply"));
+    assert!(assets.contains("Manual override: routing and workers"));
+    assert!(assets.contains("Recommended next step"));
+    assert!(assets.contains("allowHidden"));
+    assert!(assets.contains("refreshDashboard({ allowHidden: true, reason: \"initial\" })"));
+    assert!(assets.contains("const MAX_SERVER_ROWS = 64"));
+    assert!(assets.contains("server-autotune"));
+    assert!(assets.contains("/api/actions/ping"));
+    assert!(assets.contains("/api/resources"));
+    assert!(assets.contains("REQUEST_TIMEOUT_MS"));
+    assert!(!assets.contains("Auto</strong> ${tuned ? \"OK\""));
+    assert_dashboard_assets_lack(&["mcpace lab", " probe"]);
+    assert_dashboard_assets_lack(&["cannot safely", " prove"]);
+    assert_dashboard_assets_lack(&["before increasing", " workers"]);
+    assert_dashboard_assets_lack(&["auto", "-safe"]);
+    assert_dashboard_assets_lack(&["Safety", " Automatic"]);
+    assert_dashboard_assets_lack(&["Safe", " On"]);
 }
 
 fn response_header(response: &str, name: &str) -> Option<String> {
@@ -282,6 +325,38 @@ fn response_header(response: &str, name: &str) -> Option<String> {
             None
         }
     })
+}
+
+fn connect_to_test_listener(addr: SocketAddr) -> TcpStream {
+    let started_at = Instant::now();
+    let retry_for = Duration::from_secs(10);
+    let connect_timeout = Duration::from_millis(250);
+    let retry_sleep = Duration::from_millis(25);
+    let mut attempts = 0usize;
+
+    loop {
+        attempts = attempts.saturating_add(1);
+        match TcpStream::connect_timeout(&addr, connect_timeout) {
+            Ok(stream) => {
+                let _ = stream.set_read_timeout(Some(Duration::from_secs(30)));
+                let _ = stream.set_write_timeout(Some(Duration::from_secs(30)));
+                return stream;
+            }
+            Err(error) if started_at.elapsed() < retry_for => {
+                let _ = error;
+                thread::sleep(retry_sleep);
+            }
+            Err(error) => {
+                panic!(
+                    "failed to connect to dashboard test listener at {} after {} attempts over {:?}: {}",
+                    addr,
+                    attempts,
+                    started_at.elapsed(),
+                    error
+                );
+            }
+        }
+    }
 }
 
 fn test_config(
@@ -299,11 +374,17 @@ fn test_config(
         health_cache_ttl: crate::resources::default_dashboard_health_cache_ttl(),
         overview_cache: Mutex::new(None),
         health_cache: Mutex::new(None),
+        request_latencies: Mutex::new(super::RequestLatencyTracker::default()),
+        operation_traces: Mutex::new(super::OperationTraceTracker::default()),
+        rate_limiter: Mutex::new(super::HttpRateLimiter::default()),
+        admission: super::admission::HttpAdmissionController::default(),
+        resource_governor: super::GlobalResourceGovernor::default(),
         http_session_store: Mutex::new(super::http_session::McpHttpSessionStore::default()),
         metrics: super::HttpRuntimeMetrics::default(),
         surface,
         upstream_session_pools: super::new_upstream_session_pools(),
         auth_token: None,
+        allow_nonlocal_host: false,
     }
 }
 
@@ -910,6 +991,34 @@ fn host_validation_allows_only_exact_loopback_authorities() {
     }
 }
 
+fn origin_policy_request(host: &str, origin: Option<&str>) -> super::HttpRequest {
+    let mut headers = vec![("host".to_string(), host.to_string())];
+    if let Some(origin) = origin {
+        headers.push(("origin".to_string(), origin.to_string()));
+    }
+    super::HttpRequest {
+        method: "GET".to_string(),
+        path: "/healthz".to_string(),
+        query: String::new(),
+        headers,
+        body: Vec::new(),
+    }
+}
+
+#[test]
+fn nonlocal_origin_policy_matches_explicit_bind_mode() {
+    let request = origin_policy_request("192.168.1.10:39022", Some("http://192.168.1.10:39022"));
+    assert!(super::http_boundary::validate_origin_for_bind(&request, true).is_ok());
+    assert!(super::http_boundary::validate_origin_for_bind(&request, false).is_err());
+
+    let cross_origin =
+        origin_policy_request("192.168.1.10:39022", Some("http://attacker.example:39022"));
+    assert!(super::http_boundary::validate_origin_for_bind(&cross_origin, true).is_err());
+
+    let spoofed_loopback = origin_policy_request("localhost.evil.example", None);
+    assert!(super::http_boundary::validate_origin_for_bind(&spoofed_loopback, false).is_err());
+}
+
 #[test]
 fn serve_refuses_nonlocal_bind_without_explicit_opt_in() {
     let root = temp_root();
@@ -982,7 +1091,7 @@ fn dashboard_serves_root_and_overview() {
     let root = temp_root();
     write_minimal_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -995,7 +1104,7 @@ fn dashboard_serves_root_and_overview() {
     });
 
     let mut root_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET / HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
@@ -1009,7 +1118,7 @@ fn dashboard_serves_root_and_overview() {
     assert!(root_response.contains("Content-Security-Policy:"));
 
     let mut favicon_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET /favicon.ico HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
@@ -1022,7 +1131,7 @@ fn dashboard_serves_root_and_overview() {
     assert!(favicon_response.contains("<svg"));
 
     let mut api_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET /api/overview HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
@@ -1034,7 +1143,7 @@ fn dashboard_serves_root_and_overview() {
     assert!(api_response.contains("\"servers\""));
 
     let mut resources_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET /api/resources HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
@@ -1046,7 +1155,7 @@ fn dashboard_serves_root_and_overview() {
     assert!(resources_response.contains("\"activeConnections\""));
 
     let mut ping_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /api/actions/ping HTTP/1.1\r\nHost: {}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -1070,7 +1179,7 @@ fn dashboard_rejects_http_payloads_above_limit_without_reading_body() {
     let root = temp_root();
     write_minimal_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1082,7 +1191,7 @@ fn dashboard_rejects_http_payloads_above_limit_without_reading_body() {
     });
 
     let mut response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: 128\r\nConnection: close\r\n\r\n",
@@ -1109,7 +1218,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
     let root = temp_root();
     write_minimal_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1122,7 +1231,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
     });
 
     let mut health_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET /healthz HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
@@ -1135,7 +1244,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
 
     let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"serve-test","version":"0.1.0"}}}"#;
     let mut mcp_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1152,7 +1261,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
 
     let initialized = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
     let mut initialized_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1175,7 +1284,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
     );
 
     let mut sse_get_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET /mcp HTTP/1.1\r\nHost: {}\r\nAccept: text/event-stream\r\nConnection: close\r\n\r\n",
@@ -1196,7 +1305,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
 
     let tools_list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
     let mut tools_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1223,7 +1332,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
 
     let unsupported_call = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"unsupported_tool","arguments":{}}}"#;
     let mut unsupported_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1247,7 +1356,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
 
     let diagnostics_call = r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"runtime_diagnostics","arguments":{}}}"#;
     let mut diagnostics_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1276,7 +1385,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
 
     let malformed_body = "{ definitely-not-json";
     let mut malformed_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1314,7 +1423,7 @@ fn unified_serve_generates_session_id_instead_of_trusting_initialize_header() {
     let root = temp_root();
     write_minimal_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1328,7 +1437,7 @@ fn unified_serve_generates_session_id_instead_of_trusting_initialize_header() {
 
     let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"fixation-test","version":"0.1.0"}}}"#;
     let mut initialize_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: attacker-fixed-session\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1347,7 +1456,7 @@ fn unified_serve_generates_session_id_instead_of_trusting_initialize_header() {
 
     let tools_list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
     let mut fixed_session_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: attacker-fixed-session\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1365,7 +1474,7 @@ fn unified_serve_generates_session_id_instead_of_trusting_initialize_header() {
 
     let initialized = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
     let mut initialized_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1383,7 +1492,7 @@ fn unified_serve_generates_session_id_instead_of_trusting_initialize_header() {
     );
 
     let mut generated_session_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1414,7 +1523,7 @@ fn unified_serve_enforces_mcp_http_session_lifecycle() {
     let root = temp_root();
     write_minimal_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1428,7 +1537,7 @@ fn unified_serve_enforces_mcp_http_session_lifecycle() {
 
     let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"session-test","version":"0.1.0"}}}"#;
     let mut initialize_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1448,7 +1557,7 @@ fn unified_serve_enforces_mcp_http_session_lifecycle() {
 
     let tools_list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
     let mut missing_session_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1472,7 +1581,7 @@ fn unified_serve_enforces_mcp_http_session_lifecycle() {
     );
 
     let mut unknown_session_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: mcpace-unknown-session\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1496,7 +1605,7 @@ fn unified_serve_enforces_mcp_http_session_lifecycle() {
     );
 
     let mut protocol_mismatch_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1
@@ -1531,7 +1640,7 @@ Connection: close
 
     let pre_initialized_tools_list = r#"{"jsonrpc":"2.0","id":3,"method":"tools/list"}"#;
     let mut pre_initialized_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1557,7 +1666,7 @@ Connection: close
 
     let initialized = r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#;
     let mut initialized_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1576,7 +1685,7 @@ Connection: close
 
     let duplicate_pre_initialized_id = r#"{"jsonrpc":"2.0","id":3,"method":"ping"}"#;
     let mut duplicate_id_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1
@@ -1608,7 +1717,7 @@ Connection: close
 
     let tools_list = r#"{"jsonrpc":"2.0","id":4,"method":"tools/list"}"#;
     let mut valid_session_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1627,7 +1736,7 @@ Connection: close
     assert!(valid_session_response.contains("adapter_profile"));
 
     let mut delete_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "DELETE /mcp HTTP/1.1\r\nHost: {}\r\nMcp-Session-Id: {}\r\nConnection: close\r\n\r\n",
@@ -1642,7 +1751,7 @@ Connection: close
     );
 
     let mut closed_session_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Session-Id: {}\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1671,7 +1780,7 @@ fn unified_serve_rejects_mcp_cross_origin_and_missing_accept() {
     let root = temp_root();
     write_minimal_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1684,7 +1793,7 @@ fn unified_serve_rejects_mcp_cross_origin_and_missing_accept() {
     });
 
     let mut cross_origin_get = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "GET /mcp HTTP/1.1\r\nHost: {}\r\nOrigin: http://127.0.0.1.evil.example\r\nAccept: text/event-stream\r\nConnection: close\r\n\r\n",
@@ -1700,7 +1809,7 @@ fn unified_serve_rejects_mcp_cross_origin_and_missing_accept() {
 
     let initialize = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"origin-test","version":"0.1.0"}}}"#;
     let mut cross_origin_post = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nOrigin: http://localhost.evil.example\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1717,7 +1826,7 @@ fn unified_serve_rejects_mcp_cross_origin_and_missing_accept() {
     );
 
     let mut missing_accept_post = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1740,7 +1849,7 @@ fn unified_serve_rejects_mcp_cross_origin_and_missing_accept() {
 
     let mismatched_method = r#"{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"upstream_tools","arguments":{}}}"#;
     let mut mismatched_method_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Method: tools/list\r\nMcp-Name: upstream_tools\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1765,7 +1874,7 @@ fn unified_serve_rejects_mcp_cross_origin_and_missing_accept() {
 
     let mismatched_name = r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"upstream_tools","arguments":{}}}"#;
     let mut mismatched_name_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMcp-Method: tools/call\r\nMcp-Name: upstream_call\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1800,7 +1909,7 @@ fn unified_serve_rejects_spoofed_host_for_non_mcp_routes() {
     let root = temp_root();
     write_minimal_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1813,7 +1922,7 @@ fn unified_serve_rejects_spoofed_host_for_non_mcp_routes() {
     });
 
     let mut health_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET /healthz HTTP/1.1\r\nHost: 127.0.0.1.evil.example\r\nConnection: close\r\n\r\n"
@@ -1827,7 +1936,7 @@ fn unified_serve_rejects_spoofed_host_for_non_mcp_routes() {
     );
 
     let mut overview_response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET /api/overview HTTP/1.1\r\nHost: localhost.evil.example\r\nConnection: close\r\n\r\n"
@@ -1852,7 +1961,7 @@ fn dashboard_returns_json_500_for_internal_route_errors() {
     let root = temp_root();
     fs::remove_dir_all(&root).unwrap();
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1865,7 +1974,7 @@ fn dashboard_returns_json_500_for_internal_route_errors() {
     });
 
     let mut response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "GET /api/overview?refresh=1 HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
@@ -1900,7 +2009,7 @@ fn dashboard_actions_reject_cross_origin_posts() {
     let root = temp_root();
     write_minimal_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1913,7 +2022,7 @@ fn dashboard_actions_reject_cross_origin_posts() {
     });
 
     let mut response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
             stream,
             "POST /api/actions/repair HTTP/1.1\r\nHost: {}\r\nOrigin: http://localhost.evil.example\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -1927,7 +2036,7 @@ fn dashboard_actions_reject_cross_origin_posts() {
         response
     );
     assert!(
-        response.contains("not allowed for local MCPace serve mode"),
+        response.contains("not allowed for MCPace serve mode"),
         "action response: {}",
         response
     );
@@ -1944,7 +2053,7 @@ fn dashboard_server_toggle_action_updates_source_enabled_flag() {
     let root = temp_root();
     write_fake_upstream_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -1958,7 +2067,7 @@ fn dashboard_server_toggle_action_updates_source_enabled_flag() {
 
     let body = r#"{"server":"fake"}"#;
     let mut response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /api/actions/server-disable HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -1993,7 +2102,7 @@ fn dashboard_server_policy_action_updates_workers_and_mode() {
     let root = temp_root();
     write_fake_upstream_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -2007,7 +2116,7 @@ fn dashboard_server_policy_action_updates_workers_and_mode() {
 
     let body = r#"{"server":"fake","mode":"pool","maxWorkers":3,"maxInFlightPerWorker":2}"#;
     let mut response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /api/actions/server-policy HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -2055,7 +2164,7 @@ fn dashboard_server_test_action_invokes_server_test_with_payload() {
     let root = temp_root();
     write_fake_upstream_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -2069,7 +2178,7 @@ fn dashboard_server_test_action_invokes_server_test_with_payload() {
 
     let body = r#"{"server":"fake","timeoutMs":5000}"#;
     let mut response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /api/actions/server-test HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -2098,7 +2207,7 @@ fn dashboard_server_autotune_action_batches_policy_updates() {
     let root = temp_root();
     write_fake_upstream_config(&root);
 
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = bind_loopback_test_listener();
     let addr = listener.local_addr().unwrap();
     let server_root = root.clone();
     let handle = thread::spawn(move || {
@@ -2112,7 +2221,7 @@ fn dashboard_server_autotune_action_batches_policy_updates() {
 
     let body = r#"{"changes":[{"server":"fake","mode":"serialized","maxWorkers":1,"maxInFlightPerWorker":1}]}"#;
     let mut response = String::new();
-    let mut stream = TcpStream::connect(addr).unwrap();
+    let mut stream = connect_to_test_listener(addr);
     write!(
         stream,
         "POST /api/actions/server-autotune HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",

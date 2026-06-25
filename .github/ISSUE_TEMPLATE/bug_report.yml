@@ -1,7 +1,7 @@
 name: Bug report
 description: Report a reproducible MCPace bug.
 title: "bug: "
-labels: [type:bug]
+labels: ["type:bug"]
 body:
   - type: textarea
     id: summary
@@ -14,7 +14,7 @@ body:
     id: version
     attributes:
       label: MCPace version
-      placeholder: mcpace 0.6.9
+      placeholder: mcpace 0.7.2
   - type: dropdown
     id: os
     attributes:

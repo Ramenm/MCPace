@@ -51,7 +51,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  mcpace server install <path|package|url|command...> [--as <name>] [--path <path>...] [--dry-run]");
     let _ = writeln!(
         stdout,
-        "  mcpace server import <mcp.json> [--dry-run] [--force]"
+        "  mcpace server import <mcp.json> [--dry-run] [--force] [--disabled]"
     );
     let _ = writeln!(
         stdout,
@@ -101,7 +101,7 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
         "  mcpace server install npx -y @modelcontextprotocol/server-filesystem . --as filesystem"
     );
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Import accepts either top-level mcpServers (Claude/Cursor style) or servers (VS Code style), skips MCPace's own client entry, preserves unrelated fields, and auto-fills enabled/type when possible.");
+    let _ = writeln!(stdout, "Import accepts either top-level mcpServers (Claude/Cursor style) or servers (VS Code style), skips MCPace's own client entry, preserves unrelated fields, auto-fills enabled/type when possible, and can park imported sources with --disabled.");
     let _ = writeln!(stdout, "Advanced still available: capabilities, candidates, add, --settings, --force, --disabled, --env, --header, --type.");
     let _ = writeln!(stdout, "Dynamic discovery examples:");
     let _ = writeln!(stdout, "  mcpace server auto --dry-run              # one-command auto mode: refresh when needed, install approved/trusted, probe");

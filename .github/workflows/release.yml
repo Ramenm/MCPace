@@ -53,6 +53,11 @@ jobs:
       - name: Build source release artifact bundle
         run: npm run build:release-artifacts
 
+      - name: Generate source release artifact attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/*
+
       - name: Upload source release artifacts
         uses: actions/upload-artifact@v7
         with:

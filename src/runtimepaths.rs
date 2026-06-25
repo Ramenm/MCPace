@@ -2,6 +2,9 @@ use crate::json::JsonValue;
 use crate::json_helpers;
 use std::env;
 use std::fs;
+use std::io::Write;
+#[cfg(unix)]
+use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -9,28 +12,240 @@ use std::time::{SystemTime, UNIX_EPOCH};
 static ATOMIC_WRITE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 pub fn write_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
+    write_text_atomic_with_mode(path, contents, None)
+}
+
+pub fn write_private_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
+    write_text_atomic_with_mode(path, contents, Some(0o600))
+}
+
+fn write_text_atomic_with_mode(
+    path: &Path,
+    contents: &str,
+    requested_unix_mode: Option<u32>,
+) -> Result<(), String> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
+
+    #[cfg(unix)]
+    let target_mode = requested_unix_mode
+        .or_else(|| existing_file_mode(path))
+        .unwrap_or(0o644);
+    #[cfg(not(unix))]
+    let _ = requested_unix_mode;
+
+    let mut last_temp_error = None;
+    for _ in 0..100 {
+        let temp_path = atomic_temp_path(parent, path);
+        let mut options = fs::OpenOptions::new();
+        options.write(true).create_new(true);
+        #[cfg(unix)]
+        options.mode(0o600);
+
+        let mut file = match options.open(&temp_path) {
+            Ok(value) => value,
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                last_temp_error = Some(error);
+                continue;
+            }
+            Err(error) => {
+                return Err(format!(
+                    "failed to create temporary file {}: {}",
+                    temp_path.display(),
+                    error
+                ));
+            }
+        };
+
+        let write_result = (|| -> Result<(), String> {
+            file.write_all(contents.as_bytes())
+                .map_err(|error| format!("failed to write {}: {}", temp_path.display(), error))?;
+            file.sync_all()
+                .map_err(|error| format!("failed to fsync {}: {}", temp_path.display(), error))?;
+            Ok(())
+        })();
+        drop(file);
+
+        if let Err(error) = write_result {
+            let _ = fs::remove_file(&temp_path);
+            return Err(error);
+        }
+
+        match replace_file_atomic(&temp_path, path) {
+            Ok(()) => {
+                #[cfg(unix)]
+                {
+                    fs::set_permissions(path, fs::Permissions::from_mode(target_mode)).map_err(
+                        |error| {
+                            format!("failed to set permissions on {}: {}", path.display(), error)
+                        },
+                    )?;
+                    if let Ok(file) = fs::File::open(path) {
+                        let _ = file.sync_all();
+                    }
+                }
+                fsync_parent_dir_best_effort(parent);
+                return Ok(());
+            }
+            Err(error) => {
+                let _ = fs::remove_file(&temp_path);
+                return Err(format!(
+                    "failed to move {} to {}: {}",
+                    temp_path.display(),
+                    path.display(),
+                    error
+                ));
+            }
+        }
     }
-    let temp_path = path.with_extension(format!(
-        "tmp-{}-{}-{}",
+
+    Err(format!(
+        "failed to create a unique temporary file next to {}{}",
+        path.display(),
+        last_temp_error
+            .map(|error| format!(": {}", error))
+            .unwrap_or_default()
+    ))
+}
+
+pub struct ExclusiveFileLockGuard {
+    path: PathBuf,
+    _file: fs::File,
+}
+
+impl Drop for ExclusiveFileLockGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+pub fn acquire_exclusive_file_lock(
+    target_path: &Path,
+    purpose: &str,
+) -> Result<ExclusiveFileLockGuard, String> {
+    let parent = target_path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent).map_err(|error| {
+        format!(
+            "failed to create lock directory '{}': {}",
+            parent.display(),
+            error
+        )
+    })?;
+    let parent_metadata = fs::symlink_metadata(parent).map_err(|error| {
+        format!(
+            "failed to inspect lock directory '{}': {}",
+            parent.display(),
+            error
+        )
+    })?;
+    if parent_metadata.file_type().is_symlink() || !parent_metadata.is_dir() {
+        return Err(format!(
+            "{} lock parent '{}' must be a real directory",
+            purpose,
+            parent.display()
+        ));
+    }
+
+    let file_name = target_path
+        .file_name()
+        .ok_or_else(|| {
+            format!(
+                "{} lock target '{}' has no file name",
+                purpose,
+                target_path.display()
+            )
+        })?
+        .to_string_lossy();
+    let lock_path = parent.join(format!(".{}.mcpace.lock", file_name));
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    #[cfg(unix)]
+    options.mode(0o600);
+
+    let mut file = match options.open(&lock_path) {
+        Ok(value) => value,
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+            return Err(format!(
+                "{} target '{}' is locked by another MCPace process; retry after that operation finishes or remove stale lock '{}' only after verifying no MCPace process is active",
+                purpose,
+                target_path.display(),
+                lock_path.display()
+            ));
+        }
+        Err(error) => {
+            return Err(format!(
+                "failed to acquire {} lock '{}' for '{}': {}",
+                purpose,
+                lock_path.display(),
+                target_path.display(),
+                error
+            ));
+        }
+    };
+
+    let now_ms = unix_time_ms();
+    let _ = writeln!(
+        file,
+        "pid={} timeMs={} purpose={} target={}",
+        std::process::id(),
+        now_ms,
+        purpose,
+        target_path.display()
+    );
+    let _ = file.sync_all();
+
+    Ok(ExclusiveFileLockGuard {
+        path: lock_path,
+        _file: file,
+    })
+}
+
+pub fn acquire_exclusive_file_locks(
+    target_paths: &[PathBuf],
+    purpose: &str,
+) -> Result<Vec<ExclusiveFileLockGuard>, String> {
+    let mut paths = target_paths.to_vec();
+    paths.sort();
+    paths.dedup();
+    let mut locks = Vec::new();
+    for path in paths {
+        locks.push(acquire_exclusive_file_lock(&path, purpose)?);
+    }
+    Ok(locks)
+}
+
+fn atomic_temp_path(parent: &Path, path: &Path) -> PathBuf {
+    let file_name = path
+        .file_name()
+        .map(|value| value.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "mcpace-runtime-file".to_string());
+    parent.join(format!(
+        ".{}.tmp-{}-{}-{}",
+        file_name,
         std::process::id(),
         unix_time_ms(),
         ATOMIC_WRITE_COUNTER.fetch_add(1, Ordering::Relaxed)
-    ));
-    fs::write(&temp_path, contents)
-        .map_err(|error| format!("failed to write {}: {}", temp_path.display(), error))?;
-    replace_file_atomic(&temp_path, path).map_err(|error| {
-        let _ = fs::remove_file(&temp_path);
-        format!(
-            "failed to move {} to {}: {}",
-            temp_path.display(),
-            path.display(),
-            error
-        )
-    })
+    ))
 }
+
+#[cfg(unix)]
+fn existing_file_mode(path: &Path) -> Option<u32> {
+    fs::metadata(path)
+        .ok()
+        .map(|metadata| metadata.permissions().mode() & 0o777)
+        .filter(|mode| *mode != 0)
+}
+
+#[cfg(unix)]
+fn fsync_parent_dir_best_effort(parent: &Path) {
+    if let Ok(file) = fs::File::open(parent) {
+        let _ = file.sync_all();
+    }
+}
+
+#[cfg(not(unix))]
+fn fsync_parent_dir_best_effort(_parent: &Path) {}
 
 fn replace_file_atomic(temp_path: &Path, path: &Path) -> Result<(), std::io::Error> {
     #[cfg(windows)]
@@ -310,15 +525,81 @@ pub fn absolutize_or_root(root_path: &Path, candidate: Option<PathBuf>) -> PathB
     }
 }
 
+fn ensure_private_dir(path: &Path) -> Result<PathBuf, String> {
+    let parent = path.parent().unwrap_or_else(|| Path::new("."));
+    fs::create_dir_all(parent)
+        .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
+
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(format!(
+                    "runtime path is not a real directory: {}",
+                    path.display()
+                ));
+            }
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            create_private_dir(path)?;
+            let metadata = fs::symlink_metadata(path)
+                .map_err(|error| format!("failed to inspect {}: {}", path.display(), error))?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                return Err(format!(
+                    "runtime path is not a real directory: {}",
+                    path.display()
+                ));
+            }
+        }
+        Err(error) => {
+            return Err(format!("failed to inspect {}: {}", path.display(), error));
+        }
+    }
+
+    restrict_private_dir_permissions(path)?;
+    Ok(path.to_path_buf())
+}
+
+fn create_private_dir(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        let mut builder = fs::DirBuilder::new();
+        builder.mode(0o700);
+        builder
+            .create(path)
+            .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
+    }
+    #[cfg(not(unix))]
+    {
+        fs::create_dir(path)
+            .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
+    }
+    Ok(())
+}
+
+fn restrict_private_dir_permissions(path: &Path) -> Result<(), String> {
+    #[cfg(unix)]
+    {
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|error| {
+            format!(
+                "failed to restrict permissions on {}: {}",
+                path.display(),
+                error
+            )
+        })?;
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+    }
+    Ok(())
+}
+
 pub fn runtime_dir(state_root: &Path) -> PathBuf {
     state_root.join("data").join("runtime")
 }
 
 pub fn ensure_runtime_dir(state_root: &Path) -> Result<PathBuf, String> {
-    let path = runtime_dir(state_root);
-    std::fs::create_dir_all(&path)
-        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
-    Ok(path)
+    ensure_private_dir(&runtime_dir(state_root))
 }
 
 pub fn tool_list_cache_dir(state_root: &Path) -> PathBuf {
@@ -326,10 +607,7 @@ pub fn tool_list_cache_dir(state_root: &Path) -> PathBuf {
 }
 
 pub fn ensure_tool_list_cache_dir(state_root: &Path) -> Result<PathBuf, String> {
-    let path = tool_list_cache_dir(state_root);
-    std::fs::create_dir_all(&path)
-        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
-    Ok(path)
+    ensure_private_dir(&tool_list_cache_dir(state_root))
 }
 
 pub fn project_registry_path(state_root: &Path) -> PathBuf {
@@ -341,10 +619,7 @@ pub fn hub_dir(state_root: &Path) -> PathBuf {
 }
 
 pub fn ensure_hub_dir(state_root: &Path) -> Result<PathBuf, String> {
-    let path = hub_dir(state_root);
-    std::fs::create_dir_all(&path)
-        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
-    Ok(path)
+    ensure_private_dir(&hub_dir(state_root))
 }
 
 pub fn hub_state_path(state_root: &Path) -> PathBuf {
@@ -380,14 +655,19 @@ pub fn serve_dir(state_root: &Path) -> PathBuf {
 }
 
 pub fn ensure_serve_dir(state_root: &Path) -> Result<PathBuf, String> {
-    let path = serve_dir(state_root);
-    std::fs::create_dir_all(&path)
-        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
-    Ok(path)
+    ensure_private_dir(&serve_dir(state_root))
 }
 
 pub fn serve_state_path(state_root: &Path) -> PathBuf {
     serve_dir(state_root).join("state.json")
+}
+
+pub fn serve_start_lock_path(state_root: &Path) -> PathBuf {
+    serve_dir(state_root).join("start.lock")
+}
+
+pub fn serve_restart_guard_path(state_root: &Path) -> PathBuf {
+    serve_dir(state_root).join("restart-guard.log")
 }
 
 pub fn serve_stdout_log_path(state_root: &Path) -> PathBuf {
@@ -403,10 +683,7 @@ pub fn runtime_bin_dir(state_root: &Path) -> PathBuf {
 }
 
 pub fn ensure_runtime_bin_dir(state_root: &Path) -> Result<PathBuf, String> {
-    let path = runtime_bin_dir(state_root);
-    std::fs::create_dir_all(&path)
-        .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
-    Ok(path)
+    ensure_private_dir(&runtime_bin_dir(state_root))
 }
 
 pub fn serve_runner_path(state_root: &Path) -> PathBuf {

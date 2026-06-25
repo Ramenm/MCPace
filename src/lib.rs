@@ -26,6 +26,7 @@ pub mod release;
 pub mod repair;
 pub mod reporoot;
 pub(crate) mod resources;
+pub(crate) mod restart_guard;
 pub mod runtimepaths;
 pub mod serve;
 pub mod server;

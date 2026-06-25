@@ -4,6 +4,31 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 
 ## Unreleased
 
+## 0.7.5
+
+### Fixed
+
+- Ran the real Rust 1.95.0 rustfmt/clippy toolchain and applied required formatting plus Clippy cleanups for the hardened dashboard/service code paths.
+
+### Verification
+
+- Added final verification evidence for rustfmt, Clippy, Rust tests/build, Node checks, external tooling, load proof, and source-bundle packaging.
+
+## 0.7.4
+
+### Changed
+
+- Bumped the verified source bundle to `0.7.4` after the deep toolchain and logic recheck.
+- Made the load harness admission-aware for intentionally rate-limited dashboard refresh paths and preserved per-scenario server runtime snapshots for complete latency reports.
+- Hardened external tooling preflight for explicit workflow-file linting, local Gitleaks false-positive handling, and degraded OSV network behavior.
+
+### Fixed
+
+- Restored Rust dashboard tests after the hardened dashboard config gained latency, tracing, rate-limit, admission, and resource-governor fields.
+- Updated stale dashboard UI/HTTP contract assertions to match the split dashboard assets and current serve-mode error text.
+- Cleaned release/source reports so final bundle metadata matches the `0.7.4` artifact.
+
+
 ### Changed
 
 - Normalized the documentation set into a compact landing README, focused docs under `docs/`, and a condensed source-bundle summary.
@@ -18,6 +43,21 @@ All notable user-facing changes should be recorded here. Keep this file human-re
 - Extended repository hygiene coverage so every issue template is checked for undeclared labels.
 - Added hygiene coverage for security workflow trigger reachability and artifact upload/download action-major alignment.
 - Normalized final newlines in the large evaluation ledgers so text-file audits are clean.
+
+## 0.7.0
+
+### Changed
+
+- Finalized the dashboard foundation order around Backend, Client, Source, Tools, and Routing instead of cockpit-style status walls.
+- Kept import, discovery, client wiring, automation, protocol diagnostics, and access review in folded secondary layers.
+- Made `dashboardFoundation` the backend-owned source of truth for the first-screen setup state.
+- Aligned disabled imported sources with the safe flow: preview, save disabled, review, enable, then test before use.
+
+### Fixed
+
+- Prevented empty client identifiers from counting as wired clients.
+- Prevented saved-but-disabled sources from counting as routable sources.
+- Kept routing readiness conservative until an enabled source, tool evidence, runtime readiness, and policy health are present.
 
 ## 0.6.9
 

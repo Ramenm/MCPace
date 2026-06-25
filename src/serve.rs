@@ -4,7 +4,7 @@ use crate::json_helpers;
 use crate::resources;
 use crate::runtimepaths;
 use std::collections::BTreeMap;
-use std::fs::{self, File};
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::net::{Shutdown, TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
@@ -26,6 +26,7 @@ struct ParsedArgs {
     max_body_bytes: Option<usize>,
     overview_cache_ms: Option<u64>,
     passthrough: Vec<String>,
+    managed_service: bool,
     error: Option<String>,
 }
 
@@ -68,6 +69,7 @@ pub fn run(
         Some("stop") => run_stop(parsed, default_root, stdout, stderr),
         Some("status") => run_status(parsed, default_root, stdout, stderr),
         Some("restart") => run_restart(parsed, default_root, stdout, stderr),
+        _ if parsed.managed_service => run_managed_foreground(parsed, default_root, stdout, stderr),
         _ => dashboard::run_serve(&parsed.passthrough, default_root, stdout, stderr),
     }
 }
@@ -84,6 +86,10 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                     return parsed;
                 }
                 parsed.action = Some(args[index].to_string());
+                index += 1;
+            }
+            "--managed-service" => {
+                parsed.managed_service = true;
                 index += 1;
             }
             "--json" | "-json" => {
@@ -133,7 +139,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                         Some("serve requires a value after --max-connections".to_string());
                     return parsed;
                 };
-                match resources::parse_positive_usize(value, "serve --max-connections") {
+                match resources::parse_http_connection_limit(value, "serve --max-connections") {
                     Ok(limit) => parsed.max_connections = Some(limit),
                     Err(error) => {
                         parsed.error = Some(error);
@@ -149,7 +155,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                     parsed.error = Some("serve requires a value after --io-timeout-ms".to_string());
                     return parsed;
                 };
-                match resources::parse_positive_u64(value, "serve --io-timeout-ms") {
+                match resources::parse_http_io_timeout_ms(value, "serve --io-timeout-ms") {
                     Ok(timeout_ms) => parsed.io_timeout_ms = Some(timeout_ms),
                     Err(error) => {
                         parsed.error = Some(error);
@@ -166,7 +172,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                         Some("serve requires a value after --max-body-bytes".to_string());
                     return parsed;
                 };
-                match resources::parse_positive_usize(value, "serve --max-body-bytes") {
+                match resources::parse_http_body_limit(value, "serve --max-body-bytes") {
                     Ok(limit) => parsed.max_body_bytes = Some(limit),
                     Err(error) => {
                         parsed.error = Some(error);
@@ -211,7 +217,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace serve [start|restart|stop|status] [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
+        "Usage: mcpace serve [start|restart|stop|status] [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--managed-service]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Public serve surface:");
@@ -237,6 +243,10 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(
         stdout,
+        "Autostart managers use the hidden --managed-service foreground mode so restart/resource controls own the actual HTTP runtime instead of a detached child."
+    );
+    let _ = writeln!(
+        stdout,
         "Resource defaults: max connections={}, IO timeout={}ms, max body={} bytes, overview cache={}ms, health cache={}ms.",
         resources::default_http_connection_limit(),
         resources::default_http_io_timeout_ms(),
@@ -244,6 +254,100 @@ fn write_help(stdout: &mut dyn Write) {
         resources::default_dashboard_overview_cache_ms(),
         resources::default_dashboard_health_cache_ms()
     );
+}
+
+fn run_managed_foreground(
+    parsed: ParsedArgs,
+    default_root: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let root_path = parsed.root_override.clone().or(default_root);
+    let Some(root_path) = root_path else {
+        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        return 1;
+    };
+
+    let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
+    let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
+    let host = parsed.host.clone().unwrap_or_else(|| endpoint.host.clone());
+    let port = parsed.port.unwrap_or(endpoint.port);
+    let state_root = runtimepaths::resolve_state_root(&canonical_root);
+    if let Err(error) = runtimepaths::ensure_runtime_dir(&state_root) {
+        let _ = writeln!(stderr, "{}", error);
+        return 1;
+    }
+    if let Err(error) = runtimepaths::ensure_serve_dir(&state_root) {
+        let _ = writeln!(stderr, "{}", error);
+        return 1;
+    }
+
+    let state_path = runtimepaths::serve_state_path(&state_root);
+    let restart_guard_path = runtimepaths::serve_restart_guard_path(&state_root);
+    if let Ok(existing_state) = read_state(&state_path) {
+        let existing_healthy = health_check(
+            &existing_state.host,
+            existing_state.port,
+            &endpoint.health_path,
+        )
+        .unwrap_or(false);
+        if existing_healthy
+            && state_matches_start_request(
+                &existing_state,
+                &host,
+                port,
+                parsed.max_connections,
+                parsed.io_timeout_ms,
+                parsed.max_body_bytes,
+                parsed.overview_cache_ms,
+            )
+        {
+            let _ = writeln!(
+                stdout,
+                "MCPace managed service is already healthy at {}",
+                existing_state.url
+            );
+            return 0;
+        }
+        if !existing_healthy {
+            remove_managed_serve_runner_copy(&state_root, &existing_state);
+            let _ = fs::remove_file(&state_path);
+            crate::restart_guard::clear(&restart_guard_path);
+        }
+    }
+
+    if let Err(error) = crate::restart_guard::check_and_record(&restart_guard_path, "serve-managed")
+    {
+        let _ = writeln!(stderr, "{}", error);
+        return 1;
+    }
+
+    let runner_path = resolve_runner_source()
+        .unwrap_or_else(|_| std::env::current_exe().unwrap_or_else(|_| PathBuf::from("mcpace")));
+    let state = ServeState {
+        root_path: sanitize_display(&canonical_root),
+        state_root: sanitize_display(&state_root),
+        host: host.clone(),
+        port,
+        max_connections: parsed.max_connections,
+        io_timeout_ms: parsed.io_timeout_ms,
+        max_body_bytes: parsed.max_body_bytes,
+        overview_cache_ms: parsed.overview_cache_ms,
+        url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
+        pid: std::process::id(),
+        started_at_ms: now_ms(),
+        runner_path: sanitize_display(&runner_path),
+        stdout_log_path: "service-manager-stdout".to_string(),
+        stderr_log_path: "service-manager-stderr".to_string(),
+    };
+    if let Err(error) = write_state(&state_path, &state) {
+        let _ = writeln!(stderr, "{}", error);
+        return 1;
+    }
+
+    let exit_code = dashboard::run_serve(&parsed.passthrough, Some(canonical_root), stdout, stderr);
+    remove_state_if_current_pid(&state_path, std::process::id());
+    exit_code
 }
 
 fn run_start(
@@ -288,7 +392,16 @@ fn run_start(
         let _ = writeln!(stderr, "{}", error);
         return 1;
     }
+    let _start_lock = match acquire_serve_start_lock(&state_root) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = writeln!(stderr, "{}", error);
+            return 1;
+        }
+    };
+
     let state_path = runtimepaths::serve_state_path(&state_root);
+    let restart_guard_path = runtimepaths::serve_restart_guard_path(&state_root);
     if let Ok(existing_state) = read_state(&state_path) {
         let existing_healthy = health_check(
             &existing_state.host,
@@ -311,6 +424,7 @@ fn run_start(
         } else {
             remove_managed_serve_runner_copy(&state_root, &existing_state);
             let _ = fs::remove_file(&state_path);
+            crate::restart_guard::clear(&restart_guard_path);
         }
     }
 
@@ -318,6 +432,12 @@ fn run_start(
         if status.status == "running" {
             return write_status_response(&status, json_output, stdout);
         }
+    }
+
+    cleanup_stale_serve_runner_copies(&state_root, None);
+    if let Err(error) = crate::restart_guard::check_and_record(&restart_guard_path, "serve") {
+        let _ = writeln!(stderr, "{}", error);
+        return 1;
     }
 
     let current_exe = match resolve_runner_source() {
@@ -501,6 +621,8 @@ fn stop_existing_serve(canonical_root: &Path) {
         }
         remove_managed_serve_runner_copy(&state_root, state);
     }
+    cleanup_stale_serve_runner_copies(&state_root, existing.as_ref());
+    crate::restart_guard::clear(&runtimepaths::serve_restart_guard_path(&state_root));
     let _ = fs::remove_file(&state_path);
 }
 
@@ -515,6 +637,38 @@ fn remove_managed_serve_runner_copy(state_root: &Path, state: &ServeState) {
     if canonical_runner.starts_with(&canonical_runtime_bin) {
         let _ = fs::remove_file(runner_path);
     }
+}
+
+fn cleanup_stale_serve_runner_copies(state_root: &Path, active_state: Option<&ServeState>) {
+    let runtime_bin_dir = runtimepaths::runtime_bin_dir(state_root);
+    let Ok(entries) = fs::read_dir(&runtime_bin_dir) else {
+        return;
+    };
+    let active_runner = active_state
+        .map(|state| PathBuf::from(&state.runner_path))
+        .map(|path| runtimepaths::canonicalize_or_original(&path));
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        let Some(file_name) = path.file_name().and_then(|value| value.to_str()) else {
+            continue;
+        };
+        if !is_managed_serve_runner_name(file_name) {
+            continue;
+        }
+        let canonical = runtimepaths::canonicalize_or_original(&path);
+        if active_runner
+            .as_ref()
+            .is_some_and(|active| active == &canonical)
+        {
+            continue;
+        }
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn is_managed_serve_runner_name(file_name: &str) -> bool {
+    let stem = file_name.strip_suffix(".exe").unwrap_or(file_name);
+    stem.starts_with("mcpace-serve-")
 }
 
 fn run_status(
@@ -556,6 +710,7 @@ struct ServeStatus {
     started_at_ms: Option<u128>,
     stdout_log_path: String,
     stderr_log_path: String,
+    restart_guard_path: String,
     warnings: Vec<String>,
 }
 
@@ -568,20 +723,24 @@ fn collect_status(
     let state_root = runtimepaths::resolve_state_root(root_path);
     let state_path = runtimepaths::serve_state_path(&state_root);
     let state = read_state(&state_path).ok();
-    let should_probe = state.is_some() || host_override.is_some() || port_override.is_some();
     let host = host_override
         .or_else(|| state.as_ref().map(|value| value.host.clone()))
         .unwrap_or_else(|| endpoint.host.clone());
     let port = port_override
         .or_else(|| state.as_ref().map(|value| value.port))
         .unwrap_or(endpoint.port);
-    let running = should_probe && health_check(&host, port, &endpoint.health_path).unwrap_or(false);
+    let running = health_check(&host, port, &endpoint.health_path).unwrap_or(false);
     let mut warnings = Vec::new();
     let status = if running {
         if let Some(state) = &state {
             if let Some(warning) = stale_runner_warning(state) {
                 warnings.push(warning);
             }
+        } else {
+            warnings.push(
+                "serve endpoint is healthy, but no managed serve state file exists; it may be supervised directly by an autostart manager"
+                    .to_string(),
+            );
         }
         "running".to_string()
     } else if state.is_some() {
@@ -618,6 +777,7 @@ fn collect_status(
             .as_ref()
             .map(|value| value.stderr_log_path.clone())
             .unwrap_or_else(|| sanitize_display(&runtimepaths::serve_stderr_log_path(&state_root))),
+        restart_guard_path: sanitize_display(&runtimepaths::serve_restart_guard_path(&state_root)),
         warnings,
     })
 }
@@ -679,6 +839,10 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
             JsonValue::string(status.stderr_log_path.clone()),
         );
         map.insert(
+            "restartGuardPath".to_string(),
+            JsonValue::string(status.restart_guard_path.clone()),
+        );
+        map.insert(
             "warnings".to_string(),
             JsonValue::array(status.warnings.iter().cloned().map(JsonValue::string)),
         );
@@ -706,6 +870,7 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
     let _ = writeln!(stdout, "State root: {}", status.state_root);
     let _ = writeln!(stdout, "Stdout log: {}", status.stdout_log_path);
     let _ = writeln!(stdout, "Stderr log: {}", status.stderr_log_path);
+    let _ = writeln!(stdout, "Restart guard: {}", status.restart_guard_path);
     if let Some(pid) = status.pid {
         let _ = writeln!(stdout, "PID: {}", pid);
     }
@@ -716,6 +881,43 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
         let _ = writeln!(stdout, "Warnings: {}", status.warnings.join(" | "));
     }
     0
+}
+
+struct ServeStartLockGuard {
+    path: PathBuf,
+}
+
+impl Drop for ServeStartLockGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.path);
+    }
+}
+
+fn acquire_serve_start_lock(state_root: &Path) -> Result<ServeStartLockGuard, String> {
+    let lock_path = runtimepaths::serve_start_lock_path(state_root);
+    let payload = JsonValue::object([
+        ("pid", JsonValue::number(std::process::id())),
+        ("startedAtMs", JsonValue::number(now_ms())),
+    ])
+    .to_pretty_string();
+
+    match OpenOptions::new().create_new(true).write(true).open(&lock_path) {
+        Ok(mut file) => {
+            file.write_all(payload.as_bytes())
+                .map_err(|error| format!("failed to write serve start lock '{}': {}", lock_path.display(), error))?;
+            let _ = file.sync_all();
+            Ok(ServeStartLockGuard { path: lock_path })
+        }
+        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Err(format!(
+            "mcpace serve start is already in progress at {}; remove this lock manually only after verifying no start is active",
+            lock_path.display()
+        )),
+        Err(error) => Err(format!(
+            "failed to acquire serve start lock at {}: {}",
+            lock_path.display(),
+            error
+        )),
+    }
 }
 
 fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
@@ -755,6 +957,16 @@ fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
     ])
     .to_pretty_string();
     runtimepaths::write_text_atomic(path, &payload)
+}
+
+fn remove_state_if_current_pid(path: &Path, pid: u32) {
+    let should_remove = match read_state(path) {
+        Ok(state) => state.pid == pid,
+        Err(_) => false,
+    };
+    if should_remove {
+        let _ = fs::remove_file(path);
+    }
 }
 
 fn read_state(path: &Path) -> Result<ServeState, String> {
@@ -1180,25 +1392,6 @@ mod tests {
         path
     }
 
-    fn write_minimal_config(root: &Path) {
-        fs::write(
-            root.join("mcpace.config.json"),
-            r#"{
-  "version": "0.3.5",
-  "profiles": {
-    "runtime": {
-      "default": "safe",
-      "profiles": {
-        "safe": { "description": "Safe", "serverOverrides": {} }
-      }
-    }
-  },
-  "servers": {}
-}"#,
-        )
-        .unwrap();
-    }
-
     fn free_port() -> u16 {
         let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let port = listener.local_addr().unwrap().port();
@@ -1236,8 +1429,27 @@ mod tests {
             let _ = fs::remove_dir_all(root);
             return;
         }
-        write_minimal_config(&root);
         let port = free_port();
+        fs::write(
+            root.join("mcpace.config.json"),
+            format!(
+                r#"{{
+  "version": "0.3.5",
+  "serve": {{ "host": "127.0.0.1", "port": {} }},
+  "profiles": {{
+    "runtime": {{
+      "default": "safe",
+      "profiles": {{
+        "safe": {{ "description": "Safe", "serverOverrides": {{}} }}
+      }}
+    }}
+  }},
+  "servers": {{}}
+}}"#,
+                port
+            ),
+        )
+        .unwrap();
         let mut stdout = Vec::new();
         let mut stderr = Vec::new();
 
@@ -1346,6 +1558,216 @@ mod tests {
             stop_text
         );
 
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn status_reports_healthy_endpoint_without_managed_state() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let root = temp_root();
+        if resolve_runner_source().is_err() {
+            let _ = fs::remove_dir_all(root);
+            return;
+        }
+        let port = free_port();
+        fs::write(
+            root.join("mcpace.config.json"),
+            format!(
+                r#"{{
+  "version": "0.3.5",
+  "serve": {{ "host": "127.0.0.1", "port": {} }},
+  "profiles": {{
+    "runtime": {{
+      "default": "safe",
+      "profiles": {{
+        "safe": {{ "description": "Safe", "serverOverrides": {{}} }}
+      }}
+    }}
+  }},
+  "servers": {{}}
+}}"#,
+                port
+            ),
+        )
+        .unwrap();
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+
+        let start = run(
+            &[
+                "start".to_string(),
+                "--json".to_string(),
+                "--root".to_string(),
+                root.display().to_string(),
+                "--port".to_string(),
+                port.to_string(),
+            ],
+            None,
+            &mut stdout,
+            &mut stderr,
+        );
+        assert_eq!(start, 0, "stderr: {}", String::from_utf8_lossy(&stderr));
+
+        let state_root = runtimepaths::resolve_state_root(&root);
+        let state_path = runtimepaths::serve_state_path(&state_root);
+        let state = read_state(&state_path).unwrap();
+        fs::remove_file(&state_path).unwrap();
+
+        let mut status_stdout = Vec::new();
+        let mut status_stderr = Vec::new();
+        let status = run(
+            &[
+                "status".to_string(),
+                "--json".to_string(),
+                "--root".to_string(),
+                root.display().to_string(),
+            ],
+            None,
+            &mut status_stdout,
+            &mut status_stderr,
+        );
+        assert_eq!(
+            status,
+            0,
+            "stderr: {}",
+            String::from_utf8_lossy(&status_stderr)
+        );
+        let status_text = String::from_utf8(status_stdout).unwrap();
+        assert!(
+            status_text.contains(r#""status": "running""#),
+            "stdout: {}",
+            status_text
+        );
+        assert!(
+            status_text.contains("no managed serve state file exists"),
+            "stdout: {}",
+            status_text
+        );
+
+        let _ = kill_process(state.pid);
+        for _ in 0..40 {
+            if !health_check(
+                &state.host,
+                state.port,
+                runtimepaths::DEFAULT_LOCAL_HEALTH_PATH,
+            )
+            .unwrap_or(false)
+            {
+                break;
+            }
+            thread::sleep(Duration::from_millis(100));
+        }
+        remove_managed_serve_runner_copy(&state_root, &state);
+        cleanup_stale_serve_runner_copies(&state_root, None);
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn start_recovers_stale_state_even_with_restart_guard() {
+        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let root = temp_root();
+        if resolve_runner_source().is_err() {
+            let _ = fs::remove_dir_all(root);
+            return;
+        }
+        let port = free_port();
+        fs::write(
+            root.join("mcpace.config.json"),
+            format!(
+                r#"{{
+  "version": "0.3.5",
+  "serve": {{ "host": "127.0.0.1", "port": {} }},
+  "profiles": {{
+    "runtime": {{
+      "default": "safe",
+      "profiles": {{
+        "safe": {{ "description": "Safe", "serverOverrides": {{}} }}
+      }}
+    }}
+  }},
+  "servers": {{}}
+}}"#,
+                port
+            ),
+        )
+        .unwrap();
+        let state_root = runtimepaths::resolve_state_root(&root);
+        runtimepaths::ensure_runtime_dir(&state_root).unwrap();
+        runtimepaths::ensure_serve_dir(&state_root).unwrap();
+        let stale_state = ServeState {
+            root_path: sanitize_display(&root),
+            state_root: sanitize_display(&state_root),
+            host: "127.0.0.1".to_string(),
+            port,
+            max_connections: Some(32),
+            io_timeout_ms: None,
+            max_body_bytes: None,
+            overview_cache_ms: Some(250),
+            url: runtimepaths::http_url("127.0.0.1", port, runtimepaths::DEFAULT_LOCAL_MCP_PATH),
+            pid: 999_999,
+            started_at_ms: now_ms(),
+            runner_path: sanitize_display(&runtimepaths::runtime_bin_dir(&state_root).join(
+                if cfg!(windows) {
+                    "mcpace-serve-stale.exe"
+                } else {
+                    "mcpace-serve-stale"
+                },
+            )),
+            stdout_log_path: sanitize_display(&runtimepaths::serve_stdout_log_path(&state_root)),
+            stderr_log_path: sanitize_display(&runtimepaths::serve_stderr_log_path(&state_root)),
+        };
+        write_state(&runtimepaths::serve_state_path(&state_root), &stale_state).unwrap();
+        fs::write(
+            runtimepaths::serve_restart_guard_path(&state_root),
+            now_ms().to_string(),
+        )
+        .unwrap();
+
+        let mut stdout = Vec::new();
+        let mut stderr = Vec::new();
+        let start = run(
+            &[
+                "start".to_string(),
+                "--json".to_string(),
+                "--root".to_string(),
+                root.display().to_string(),
+                "--port".to_string(),
+                port.to_string(),
+                "--max-connections".to_string(),
+                "32".to_string(),
+                "--overview-cache-ms".to_string(),
+                "250".to_string(),
+            ],
+            None,
+            &mut stdout,
+            &mut stderr,
+        );
+        assert_eq!(start, 0, "stderr: {}", String::from_utf8_lossy(&stderr));
+        let start_text = String::from_utf8(stdout).unwrap();
+        assert!(
+            start_text.contains(r#""status": "running""#),
+            "stdout: {}",
+            start_text
+        );
+
+        let mut stop_stdout = Vec::new();
+        let mut stop_stderr = Vec::new();
+        let stop = run(
+            &[
+                "stop".to_string(),
+                "--json".to_string(),
+                "--root".to_string(),
+                root.display().to_string(),
+            ],
+            None,
+            &mut stop_stdout,
+            &mut stop_stderr,
+        );
+        assert_eq!(stop, 0, "stderr: {}", String::from_utf8_lossy(&stop_stderr));
         let _ = fs::remove_dir_all(root);
     }
 

@@ -1,57 +1,81 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
+import process from 'node:process';
 import { resolveBinary } from '../lib/resolve-binary.js';
 import { assertSupportedNodeVersion } from '../lib/runtime.js';
+import {
+  collectTerminalDiagnostics,
+  formatTerminalDiagnostics,
+  isTerminalDiagnosticsRequest,
+  terminalDiagnosticsWantsJson,
+} from '../lib/terminal-diagnostics.js';
 
-function isWindowsCommandScript(binary) {
-  return process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(binary);
+function isWindowsCommandScript(filePath) {
+  return process.platform === 'win32' && /\.(?:cmd|bat)$/i.test(String(filePath || ''));
 }
 
-function spawnResolvedBinary(binary, args) {
-  if (isWindowsCommandScript(binary)) {
-    const commandProcessor = process.env.ComSpec || process.env.COMSPEC || 'cmd.exe';
-    return spawn(commandProcessor, ['/d', '/s', '/c', binary, ...args], {
+function spawnResolvedBinary(binaryPath, args) {
+  if (isWindowsCommandScript(binaryPath)) {
+    return spawn('cmd.exe', ['/d', '/s', '/c', binaryPath, ...args], {
       stdio: 'inherit',
-      windowsHide: true,
+      windowsHide: false,
     });
   }
 
-  return spawn(binary, args, {
+  return spawn(binaryPath, args, {
     stdio: 'inherit',
-    windowsHide: true,
+    windowsHide: false,
   });
 }
 
-function signalExitCode(signal) {
-  const signalNumbers = { SIGHUP: 1, SIGINT: 2, SIGQUIT: 3, SIGTERM: 15 };
-  return 128 + (signalNumbers[signal] ?? 0);
+function startupMessage(error) {
+  const message = error?.message || String(error);
+  return message.startsWith('mcpace:') ? message : `mcpace: ${message}`;
 }
 
-try {
-  assertSupportedNodeVersion();
+function reportStartupError(error) {
+  process.stderr.write(`${startupMessage(error)}\n`);
+  process.exitCode = 1;
+}
 
-  const binary = resolveBinary();
-  const child = spawnResolvedBinary(binary, process.argv.slice(2));
-  let finished = false;
-  const finish = (code) => {
-    if (finished) return;
-    finished = true;
-    process.exit(code);
-  };
+function writeTerminalDiagnostics(args) {
+  const diagnostics = collectTerminalDiagnostics({ invokedAs: process.argv[1] });
+  if (terminalDiagnosticsWantsJson(args)) {
+    process.stdout.write(`${JSON.stringify(diagnostics, null, 2)}\n`);
+  } else {
+    process.stdout.write(formatTerminalDiagnostics(diagnostics));
+  }
+}
+
+function main() {
+  const cliArgs = process.argv.slice(2);
+  if (isTerminalDiagnosticsRequest(cliArgs)) {
+    writeTerminalDiagnostics(cliArgs);
+    return;
+  }
+
+  let child;
+  try {
+    assertSupportedNodeVersion();
+    const binaryPath = resolveBinary();
+    child = spawnResolvedBinary(binaryPath, cliArgs);
+  } catch (error) {
+    reportStartupError(error);
+    return;
+  }
 
   child.on('error', (error) => {
-    console.error(`mcpace: failed to launch native binary: ${error.message}`);
-    finish(1);
+    process.stderr.write(`mcpace: failed to launch native binary: ${error?.message || error}\n`);
+    process.exitCode = 1;
   });
 
   child.on('close', (code, signal) => {
     if (signal) {
-      finish(signalExitCode(signal));
+      process.kill(process.pid, signal);
       return;
     }
-    finish(code ?? 1);
+    process.exit(code ?? 1);
   });
-} catch (error) {
-  console.error(error?.message || String(error));
-  process.exit(1);
 }
+
+main();

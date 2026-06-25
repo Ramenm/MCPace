@@ -81,7 +81,7 @@ pub(super) fn load_servers(
     for entry in registry.servers.values() {
         let name = &entry.name;
         let raw = &entry.value;
-        let source_enabled = json_helpers::bool_at_path(raw, &["enabled"]).unwrap_or(true);
+        let source_enabled = source_enabled_from_mcp_settings(raw);
         let policy = server_policies.get(&entry.normalized_name);
         let disabled_reason = if !source_enabled {
             Some(format!(
@@ -230,6 +230,13 @@ fn load_upstream_server_policies(
     }
 
     Ok(policies)
+}
+
+fn source_enabled_from_mcp_settings(raw: &JsonValue) -> bool {
+    if json_helpers::bool_at_path(raw, &["disabled"]).unwrap_or(false) {
+        return false;
+    }
+    json_helpers::bool_at_path(raw, &["enabled"]).unwrap_or(true)
 }
 
 fn server_policy_is_disabled(raw_server: &JsonValue) -> bool {

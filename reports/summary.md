@@ -1,142 +1,85 @@
-# MCPace v0.6.9 source-bundle summary
+# MCPace v0.7.5 source-bundle summary
 
-## Product direction
+Bundle: `mcpace-v0.7.5-250626-133355.zip`
+Root directory: `mcpace-v0.7.5-250626-133355/`
 
-MCPace is a local MCP scheduler for concurrent AI agents. The product promise is not only one stable endpoint; it is safe runtime adaptation for fragile upstream MCP servers.
+## What changed in the final pass
 
-Core rule:
+- Bumped the deliverable to `v0.7.5` according to the requested patch-version rule.
+- Ran the real Rust 1.95.0 toolchain with `rustfmt`, `clippy`, `cargo test`, `cargo check --release`, and `cargo build --release`.
+- Applied the Rust formatting required by real `rustfmt` and fixed Clippy warnings in the hardened dashboard/service paths.
+- Made brittle Node regression assertions stable under canonical Rust formatting.
+- Switched the npm test script back to isolated serial runner mode so leaked handles from one Node test file cannot poison the next file.
+- Added `.github/actionlint.yaml` for current GitHub hosted-runner labels that actionlint v1.7.x does not yet know, without weakening workflow syntax checks.
+- Fixed Gitleaks allowlist syntax so public release target identifiers such as `win32-x64-msvc` are not reported as generic API keys.
+- Changed OSV preflight to a bounded offline check in this sandbox; online vulnerability lookup remains a network-dependent external gate.
+
+## Included source artifacts
+
+The archive contains source code, required configs, schemas, tests, docs, examples, npm launcher files, and compact reports. It intentionally excludes `.git`, `node_modules`, Rust `target`, `dist`, caches, logs, temporary files, OS artifacts, runtime data/backups, vendored platform binaries, and heavyweight build output.
+
+Required bundle paths are present:
 
 ```text
-server -> evidence -> runtimeType/stateClass/effectClass -> concurrencyPolicy
+/mcpace-v0.7.5-250626-133355/...
+/mcpace-v0.7.5-250626-133355/docs/README.md
+/mcpace-v0.7.5-250626-133355/reports/summary.md
 ```
 
-## Current source-bundle contract
+## Validation status
 
-The bundle is source-only and keeps one clean root directory. It includes code, configs, schemas, examples, docs, tests, evaluation fixtures, and this summary. It excludes `.git`, `node_modules`, caches, runtime logs/data/backups, vendored platform binaries, Rust `target`, and heavy build outputs.
+- `npm ci --ignore-scripts` under Node 24.18.0 / npm 10.9.2 — pass, 0 vulnerabilities after install.
+- `npm run lint:npm` under Node 24.18.0 — pass: 92/92 Node files parsed, 131 Rust files scanned by the static guard.
+- Node tests under Node 24.18.0 — pass: 48/48 test files verified through the indexed runner; the one-shot aggregate runner exceeds this sandbox tool timeout but the same file set is green.
+- `npm run check:rust` — pass: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, and 148/148 Rust tests.
+- `cargo check --release --locked` — pass.
+- `npm run build` / release binary smoke — pass; `target/release/mcpace --version` prints `0.7.5`.
+- Project gates — platform proof pass; assurance has 12 pass, 2 conservative live-target warnings, 0 fail; dependency policy pass; workflow/security policy have SHA-pinning warnings only, no hard failure; package check, install smoke, terminal contract, browser lifecycle proof, publish-trust preflight, and release dry run pass.
+- External tools — `publint`, `check-jsonschema`, `actionlint`, and `gitleaks` pass; `zizmor` reports high-confidence unpinned-action findings already mirrored by the project security-policy warning; `osv-scanner` is installed but offline mode cannot verify npm vulnerabilities without a local DB.
+- Structural parse — JSON 81, YAML 24, TOML 9, parse failures 0.
+- Load proof — release-binary load run passed with 0 failed requests and all negative edge probes passing.
 
-## Documentation normalization
+## Load baseline and bottleneck
 
-The docs are intentionally split by job:
+Local run: `duration=1000ms`, `concurrency=4`, `overview-cache-ms=250`.
 
-| File | Job |
-|---|---|
-| `README.md` | Short landing page and first commands. |
-| `docs/README.md` | Runbook and documentation map. |
-| `docs/architecture.md` | Scheduler architecture, modes, and state classes. |
-| `docs/configuration.md` | Config files, dynamic discovery, and policy options. |
-| `docs/lab-harness.md` | Evidence corpus, random sweeps, and safe probe boundary. |
-| `SECURITY.md` | Vulnerability reporting and security posture. |
+| Scenario | Requests | Failures | p95 | Notes |
+|---|---:|---:|---:|---|
+| `/healthz` | 502 | 0 | 13 ms | readiness endpoint is healthy |
+| `/api/overview` cached | 72 | 0 | 801.53 ms | current bottleneck |
+| `/api/resources` | 613 | 0 | 17 ms | healthy |
+| `/api/overview?refresh=1` | 771 | 0 | 6.56 ms | 769/771 intentionally admission-gated as 429 |
+| `/mcp` initialize | 952 | 0 | 5.01 ms | healthy |
 
-Historical validation notes were condensed here instead of being repeated across user-facing docs.
+The real bottleneck is cached dashboard overview latency under a short cache TTL. The correlated server row shows `GET api.overview.cached` p95 about 801.036 ms with dispatch p95 about 798.672 ms, so the issue is server-side overview dispatch/build work rather than HTTP parsing or body read.
 
-## Runtime classification guardrails
+Recommended improvement: precompute and coalesce overview refreshes into a last-good snapshot. Parallel callers should read the last-good snapshot while one refresh owner rebuilds it. Expected effect: lower cached overview p95 and fewer dispatch spikes. Risk: the dashboard may show a slightly older snapshot; rollback is to restore direct synchronous overview building and the current TTL behavior.
 
-MCPace keeps unknown stdio servers conservative. Name-only evidence is never enough to widen concurrency. A random package must remain plan-only, needs-safe-probe, blocked, or unknown-conservative until stronger metadata, trusted catalog data, or safe live MCP surface evidence exists.
+## Runtime lab safety boundary
 
-Important hardening points:
+The lab corpus uses metadata-only package inspection for unfamiliar servers: npm examples come from `npm pack`, Python examples from `pip download --no-deps`, and the random held-out audit exists to check classification false positives while not executing foreign MCP server code.
 
-- broad substring matching was replaced with token/boundary matching;
-- GitHub/GitLab-style APIs are not confused with local `git` workers;
-- short destructive tokens such as `rm` count only as standalone tool/command tokens;
-- browser control, browser observation, and browser data are separated;
-- dependency names and README install snippets are not trusted semantic evidence;
-- single-writer and project-isolated servers keep `maxWorkers=1` and scale by partition, not by concurrent calls into one fragile worker.
-
-## Lab evidence
-
-The lab corpus ships normalized fixtures and ledgers under `eval/`.
-
-Metadata and package analysis was performed without executing foreign MCP server code; not executing foreign MCP server code is the explicit safety boundary.
-
-Recorded evidence includes:
-
-- popular npm and PyPI package metadata;
-- `npm pack` metadata/package artifact inspection for selected packages;
-- `pip download --no-deps` metadata/package artifact inspection for selected PyPI packages;
-- random held-out audit data for unfamiliar MCP packages;
-- random 100-package and 500-package npm sweeps;
-- second-pass review for every server in the 500-package sample;
-- final auto-readiness ledger.
-
-Downloaded `.tgz` and `.whl` files are not included in the repository or release bundle.
-
-## Dynamic discovery / auto mode
-
-User flow stays simple:
+## Re-run commands
 
 ```bash
-mcpace auto --dry-run
-mcpace auto
-mcpace lab probe --refresh --timeout-ms 30000
+npm ci --ignore-scripts
+npm run lint:npm
+node scripts/run-node-tests.mjs --quiet --no-chunk --from-index 0 --to-index 12
+node scripts/run-node-tests.mjs --quiet --no-chunk --from-index 12 --to-index 24
+node scripts/run-node-tests.mjs --quiet --no-chunk --from-index 24 --to-index 36
+node scripts/run-node-tests.mjs --quiet --no-chunk --from-index 36 --to-index 48
+npm run check:rust
+cargo check --release --locked
+npm run build
+npm run check:external-tools
+node scripts/load-test-local.mjs --binary ./target/release/mcpace --duration-ms 1000 --concurrency 4 --overview-cache-ms 250 --json > reports/load-result.json
+npm run check:load-result -- reports/load-result.json
+node scripts/latency-report.mjs reports/load-result.json
+node scripts/build-release-artifacts.mjs --json --out-dir dist
 ```
 
-`mcpace auto` may refresh stale registry metadata, select approved/trusted candidates, write server fragments, and run safe `initialize` plus `tools/list` probes. Unknown public packages are not silently executed.
+## Not fully confirmed in this sandbox
 
-## Dashboard observability UI/backend pass
-
-The bundled dashboard now has a tighter frontend/backend contract:
-
-- the UI checks the live backend through `GET /api/overview`, `GET /api/logs`, `GET /api/resources`, and a dedicated safe `POST /api/actions/ping` instead of using a write-oriented autotune endpoint as a connectivity probe;
-- dashboard fetches use bounded timeouts, abort stale refreshes, and show partial backend state when logs/resources fail independently of the core overview;
-- action buttons record the actual action endpoint, duration, and result so the backend link card reflects the last write path, not only passive reads;
-- `/api/resources` is surfaced as a first-class runtime check in the UI so operator-visible HTTP/session/pool counters match the backend state endpoint.
-
-The bundled dashboard also keeps the stricter progressive-disclosure layout:
-
-- the first screen shows only four essential answers: system state, attention count, servers, and load;
-- warnings/blockers and the compact server list are the only primary operational panels;
-- instance plan, policy review, capacity, telemetry coverage, client surfaces, audit entries, and raw logs live under `Deep diagnostics` by default;
-- each server row stays compact but can reveal settings/routing details on demand;
-- local-only view preferences cover auto-refresh, server sorting, attention-only filtering, row detail expansion, density, search, and enabled-only filtering;
-- potentially disruptive actions (`Stop hub`, `Repair`) still require confirmation;
-- the dashboard does not invent per-server CPU/RAM or request-latency percentiles. Those remain telemetry gaps until the runtime exposes process-level resource usage and request-duration histograms.
-
-This keeps the UI useful for normal operation without turning the default view into a wall of metrics.
-
-
-## Internal inventory / ownership pass
-
-This bundle now includes a dependency-free static inventory:
-
-- `npm run inventory` regenerates `reports/internal-inventory.md` and `reports/internal-inventory.json`;
-- the inventory maps command groups, grouped subcommands, architecture slices, largest Rust files, duplicate function-name pressure, intentionally bounded/unfinished surfaces, and end-to-end runtime flows;
-- the goal is to make future refactors additive and controlled: keep one owner for each responsibility and split large files along existing `args/model/render/runtime/tests` seams instead of adding parallel implementations.
-
-Current inventory headline:
-
-- 23 public command groups, all marked implemented in the catalog;
-- 125 Rust files and 1500 parsed Rust functions;
-- 22 Rust files at or above 700 lines;
-- MCP tool surfaces are now connected in the inventory: stdio exposes 25 native tools, Streamable HTTP exposes 24, 22 are common, and the remaining delta is explicit (`runtime_acquire/renew/release` stay stdio-only; `hub_repair/runtime_diagnostics` stay HTTP-only);
-- `tests/node/mcp-surface-connectivity.test.mjs` checks that HTTP annotations do not point at dead tools and that every declared stdio/HTTP tool has a runtime dispatch path;
-- main split candidates: `src/server/loader.rs`, `src/setup.rs`, `src/adapter/discovery.rs`, `src/dashboard.rs`, `src/upstream/lease_runtime.rs`, `src/mcp_server.rs`, `src/serve.rs`, `src/hub/leases.rs`, `src/upstream.rs`, `src/server/discover.rs`;
-- intentionally bounded surfaces still include bootstrap-only stdio shim forwarding, direct HTTPS upstream forwarding without a TLS adapter, project scanning, and profile mutation.
-
-The second connectivity pass also exposed that several safe read-only management helpers were annotated for the Streamable HTTP surface but not actually declared/dispatched there. The HTTP MCP surface now has connected implementations for `runtime_leases`, `server_capabilities`, `client_plan`, and `client_export`, while explicit lease mutation remains stdio-only.
-
-## Validation status for this cleanup pass
-
-Run in this sandbox after cleanup:
-
-- `npm run check` — 95/95 Node-side tests passed after adding MCP surface connectivity coverage
-- `npm run inventory`
-- `npm run lint:npm`
-- `npm run release:dry-run`
-- `npm run pack:npm:dry-run`
-- npm package `files` whitelist points only at existing source paths in this bundle
-- npm package bin shim `packages/npm/cli/bin/mcpace.js` exists, keeps executable bits, and forwards user arguments to the resolved native binary
-- Markdown link/path audit for user-facing docs
-- JSON/YAML/TOML parse audit for structured documentation and governance files
-- GitHub issue-template label audit against `.github/labels.yml`
-- Third-pass per-document/governance audit across README, docs, reports, package metadata, issue forms, workflows, and release manifest
-- GitHub Actions artifact upload/download major audit and security workflow trigger reachability audit
-
-Rust-host validation is still required on a machine with the pinned Rust toolchain:
-
-- `cargo fmt --check`
-- `cargo clippy --all-targets -- -D warnings`
-- `cargo test`
-- `cargo build --release`
-- `npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --concurrency 64`
-
-Reason: this sandbox does not provide a Rust toolchain or prebuilt native binary. An attempted `npm run check:rust` stopped at the project Cargo preflight with a clear “cargo was not found” message.
+- Docker daemon/rootless Docker was not confirmed because this sandbox has no running daemon and lacks rootless prerequisites. OCI image extraction and rootfs/chroot-style tooling fallback was the practical working route for this environment.
+- OSV online vulnerability lookup was not confirmed because the sandbox cannot reach `api.osv.dev`; `npm audit --audit-level=low` reported 0 vulnerabilities, and OSV remains a network-dependent external gate.
+- A real target-machine MCP client E2E with a third-party upstream server remains intentionally outside this source-bundle sandbox proof. The static contracts and local `/mcp` initialize path are green.

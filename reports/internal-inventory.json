@@ -1,7 +1,8 @@
 {
   "schema": "mcpace.projectInventory.v1",
-  "generatedAt": "2026-06-05T11:05:54.760Z",
-  "root": "/mnt/data/mcpace_logic/mcpace-v0.6.9-050626-105256",
+  "generatedAt": "2026-06-25T11:35:21.522Z",
+  "root": ".",
+  "rootName": "mcpace-v0.7.5-250626-133355",
   "commands": [
     {
       "name": "help",
@@ -259,12 +260,12 @@
     ]
   },
   "counts": {
-    "rustFiles": 125,
-    "rustFunctions": 1645,
+    "rustFiles": 131,
+    "rustFunctions": 1847,
     "publicCommands": 23,
     "implementedPublicCommands": 23,
-    "duplicateFunctionNames": 71,
-    "longRustFiles": 23
+    "duplicateFunctionNames": 80,
+    "longRustFiles": 27
   },
   "npmLauncher": {
     "binPath": "packages/npm/cli/bin/mcpace.js",
@@ -354,20 +355,24 @@
   ],
   "longRustFiles": [
     {
-      "file": "src/server/loader.rs",
-      "lines": 2663
-    },
-    {
-      "file": "src/setup.rs",
-      "lines": 2144
-    },
-    {
       "file": "src/dashboard/overview.rs",
-      "lines": 2141
+      "lines": 3180
+    },
+    {
+      "file": "src/server/loader.rs",
+      "lines": 2666
+    },
+    {
+      "file": "src/dashboard.rs",
+      "lines": 2510
     },
     {
       "file": "src/dashboard/tests.rs",
-      "lines": 2117
+      "lines": 2190
+    },
+    {
+      "file": "src/setup.rs",
+      "lines": 2183
     },
     {
       "file": "src/upstream/tests.rs",
@@ -378,16 +383,16 @@
       "lines": 1779
     },
     {
-      "file": "src/dashboard.rs",
-      "lines": 1722
-    },
-    {
       "file": "src/upstream/lease_runtime.rs",
       "lines": 1597
     },
     {
       "file": "src/serve.rs",
-      "lines": 1378
+      "lines": 1592
+    },
+    {
+      "file": "src/server/discover.rs",
+      "lines": 1352
     },
     {
       "file": "src/mcp_server.rs",
@@ -402,8 +407,8 @@
       "lines": 1291
     },
     {
-      "file": "src/server/discover.rs",
-      "lines": 1181
+      "file": "src/service.rs",
+      "lines": 1189
     },
     {
       "file": "src/mcp_server/tool_surface.rs",
@@ -415,11 +420,11 @@
     },
     {
       "file": "src/mcp_autoinstall.rs",
-      "lines": 1033
+      "lines": 1098
     },
     {
       "file": "src/client/actions.rs",
-      "lines": 1031
+      "lines": 1039
     },
     {
       "file": "src/dashboard/http_tools.rs",
@@ -427,11 +432,7 @@
     },
     {
       "file": "src/client_catalog.rs",
-      "lines": 920
-    },
-    {
-      "file": "src/lab/render.rs",
-      "lines": 915
+      "lines": 923
     }
   ],
   "duplicateFunctionNames": [
@@ -582,12 +583,37 @@
       ]
     },
     {
+      "name": "drop",
+      "owners": [
+        "src/adapter/tests.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/dashboard/admission.rs (private)",
+        "src/dashboard/governor.rs (private)",
+        "src/dashboard/tests.rs (private)",
+        "src/hub/leases.rs (private)",
+        "src/hub/model.rs (private)",
+        "src/hub/runtime.rs (private)",
+        "src/resources.rs (private)",
+        "src/runtimepaths.rs (private)",
+        "src/serve.rs (private)",
+        "src/upstream/lease_runtime.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/tool_cache.rs (private)"
+      ]
+    },
+    {
       "name": "default",
       "owners": [
         "src/cleanup.rs (private)",
         "src/client_catalog.rs (private)",
         "src/dashboard.rs (private)",
+        "src/dashboard/admission.rs (private)",
+        "src/dashboard/governor.rs (private)",
         "src/dashboard/http_session.rs (private)",
+        "src/dashboard/latency.rs (private)",
+        "src/dashboard/rate_limit.rs (private)",
+        "src/dashboard/trace.rs (private)",
         "src/runtimepaths.rs (private)",
         "src/service.rs (private)",
         "src/tool_result.rs (private)",
@@ -595,16 +621,14 @@
       ]
     },
     {
-      "name": "drop",
+      "name": "new",
       "owners": [
         "src/dashboard.rs (private)",
-        "src/hub/leases.rs (private)",
-        "src/hub/model.rs (private)",
+        "src/dashboard/http_session.rs (private)",
+        "src/dashboard/http_session.rs (pub(super))",
+        "src/dashboard/rate_limit.rs (private)",
         "src/hub/runtime.rs (private)",
-        "src/resources.rs (private)",
-        "src/upstream/lease_runtime.rs (private)",
-        "src/upstream/stdio_runtime.rs (private)",
-        "src/upstream/tool_cache.rs (private)"
+        "src/upstream/session_pool.rs (private)"
       ]
     },
     {
@@ -615,6 +639,16 @@
         "src/mcp_protocol.rs (pub)",
         "src/setup.rs (private)",
         "src/upstream.rs (private)"
+      ]
+    },
+    {
+      "name": "snapshot_json",
+      "owners": [
+        "src/dashboard/admission.rs (pub(crate))",
+        "src/dashboard/governor.rs (pub(super))",
+        "src/dashboard/latency.rs (pub)",
+        "src/dashboard/rate_limit.rs (pub)",
+        "src/dashboard/trace.rs (pub)"
       ]
     },
     {
@@ -644,15 +678,6 @@
         "src/client_catalog.rs (private)",
         "src/client_catalog.rs (private)",
         "src/client_catalog.rs (private)"
-      ]
-    },
-    {
-      "name": "new",
-      "owners": [
-        "src/dashboard/http_session.rs (private)",
-        "src/dashboard/http_session.rs (pub(super))",
-        "src/hub/runtime.rs (private)",
-        "src/upstream/session_pool.rs (private)"
       ]
     },
     {
@@ -794,13 +819,6 @@
         "src/client/actions.rs (pub(super))",
         "src/client_catalog.rs (pub)"
       ]
-    },
-    {
-      "name": "collect_status",
-      "owners": [
-        "src/hub/status.rs (pub(super))",
-        "src/serve.rs (private)"
-      ]
     }
   ],
   "unsupportedMarkers": [
@@ -811,7 +829,7 @@
     },
     {
       "file": "src/client/actions.rs",
-      "line": 962,
+      "line": 970,
       "text": "\"This preview keeps one stable stdio launcher command, but bootstrap-only proof should not be treated as completed live forwarding yet.\".to_string(),"
     },
     {
@@ -841,8 +859,13 @@
     },
     {
       "file": "src/serve.rs",
-      "line": 1081,
+      "line": 1295,
       "text": "Err(\"background serve launch is not implemented for this platform\".to_string())"
+    },
+    {
+      "file": "src/service.rs",
+      "line": 793,
+      "text": "(\"reason\", JsonValue::string(\"launchctl applied-state probing is not implemented in this source-only build; use launchctl print gui/$UID/MCPace\")),"
     },
     {
       "file": "src/stdio_shim.rs",
@@ -866,7 +889,7 @@
     },
     {
       "file": "src/upstream/http_runtime.rs",
-      "line": 444,
+      "line": 457,
       "text": "\"direct HTTPS upstream forwarding is not available without a TLS adapter; use a stdio bridge such as mcp-remote or a local HTTP gateway\""
     }
   ],
@@ -1270,6 +1293,16 @@
       },
       {
         "method": "GET",
+        "path": "/dashboard.css",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/dashboard.js",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
         "path": "/favicon.ico",
         "dynamic": false
       },
@@ -1286,6 +1319,16 @@
       {
         "method": "GET",
         "path": "/status",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/client-install",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/client-restore",
         "dynamic": false
       },
       {
@@ -1320,7 +1363,17 @@
       },
       {
         "method": "POST",
+        "path": "/api/actions/server-discover",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
         "path": "/api/actions/server-enable",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/server-import-config",
         "dynamic": false
       },
       {
@@ -1344,26 +1397,12 @@
         "dynamic": true
       }
     ],
-    "frontendEndpoints": [
-      "/api/actions/hub-down",
-      "/api/actions/hub-up",
-      "/api/actions/ping",
-      "/api/actions/repair",
-      "/api/logs?tail=1",
-      "/api/logs?tail=40",
-      "/api/overview",
-      "/api/resources"
-    ],
+    "frontendEndpoints": [],
     "frontendServerActions": [
-      "server-autotune",
-      "server-disable",
-      "server-enable",
-      "server-install-command",
-      "server-policy",
-      "server-test"
+      "server-install-command"
     ],
     "missingFrontendRoutes": [],
-    "registeredElementCount": 77,
+    "registeredElementCount": 0,
     "missingElementIds": [],
     "payloadKeys": [
       "server",
@@ -1396,22 +1435,22 @@
       },
       {
         "key": "maxWorkers",
-        "frontendMentions": true,
+        "frontendMentions": false,
         "backendMentions": true
       },
       {
         "key": "maxInFlightPerWorker",
-        "frontendMentions": true,
+        "frontendMentions": false,
         "backendMentions": true
       },
       {
         "key": "timeoutMs",
-        "frontendMentions": true,
+        "frontendMentions": false,
         "backendMentions": true
       },
       {
         "key": "changes",
-        "frontendMentions": true,
+        "frontendMentions": false,
         "backendMentions": true
       },
       {
@@ -1431,7 +1470,7 @@
       },
       {
         "key": "dryRun",
-        "frontendMentions": true,
+        "frontendMentions": false,
         "backendMentions": true
       }
     ],
@@ -1439,16 +1478,16 @@
       "backendSchema": true,
       "overviewField": true,
       "uiPanel": true,
-      "uiRenderer": true,
-      "serverRunbook": true,
-      "commandPreflight": true,
-      "embeddedScriptParses": true
+      "uiRenderer": false,
+      "serverRunbook": false,
+      "commandPreflight": false,
+      "embeddedScriptParses": false
     },
     "userReadiness": {
       "backendSchema": true,
       "overviewField": true,
-      "uiPanel": true,
-      "uiRenderer": true,
+      "uiPanel": false,
+      "uiRenderer": false,
       "visibilityRules": true
     },
     "runtimeControl": {
@@ -1456,9 +1495,9 @@
       "overviewField": true,
       "resourceSchema": true,
       "resourceEndpointField": true,
-      "uiRenderer": true,
-      "uiLookup": true,
-      "resourceUi": true,
+      "uiRenderer": false,
+      "uiLookup": false,
+      "resourceUi": false,
       "processSnapshot": true,
       "sessionSnapshots": true
     },

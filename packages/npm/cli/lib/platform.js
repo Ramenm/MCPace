@@ -8,6 +8,11 @@ const PLATFORM_PROBE_TIMEOUT_MS = parseTimeoutEnv(
   DEFAULT_PLATFORM_PROBE_TIMEOUT_MS
 );
 const libcProbeCache = new Map();
+const TRUSTED_LDD_PATHS = ['/usr/bin/ldd', '/bin/ldd'];
+const PLATFORM_PROBE_ENV = Object.freeze({
+  PATH: '/usr/sbin:/usr/bin:/sbin:/bin',
+  LC_ALL: 'C',
+});
 
 function parseTimeoutEnv(name, fallback) {
   const parsed = Number.parseInt(process.env[name] || '', 10);
@@ -26,6 +31,40 @@ export function binaryNameForTarget(target) {
   return target?.binaryName ?? binaryNameForPlatform(target?.platform ?? process.platform);
 }
 
+function isTrustedProbeExecutable(filePath) {
+  try {
+    const stat = fs.lstatSync(filePath);
+    return stat.isFile() && (process.platform === 'win32' || (Number(stat.mode) & 0o111) !== 0);
+  } catch {
+    return false;
+  }
+}
+
+function detectLibcWithTrustedLdd() {
+  for (const candidate of TRUSTED_LDD_PATHS) {
+    if (!isTrustedProbeExecutable(candidate)) {
+      continue;
+    }
+    try {
+      const output = execFileSync(candidate, ['--version'], {
+        encoding: 'utf8',
+        env: PLATFORM_PROBE_ENV,
+        timeout: PLATFORM_PROBE_TIMEOUT_MS,
+        windowsHide: true
+      });
+      if (/musl/i.test(output)) {
+        return 'musl';
+      }
+      if (/glibc|gnu/i.test(output)) {
+        return 'gnu';
+      }
+    } catch {
+      // Try the next trusted absolute probe path, then fall through to filesystem heuristics.
+    }
+  }
+  return null;
+}
+
 export function detectLibc(platform = process.platform) {
   if (platform !== 'linux') {
     return null;
@@ -42,20 +81,7 @@ export function detectLibc(platform = process.platform) {
   } else if (Array.isArray(report?.sharedObjects) && report.sharedObjects.some((entry) => /musl/i.test(String(entry)))) {
     detected = 'musl';
   } else {
-    try {
-      const output = execFileSync('ldd', ['--version'], {
-        encoding: 'utf8',
-        timeout: PLATFORM_PROBE_TIMEOUT_MS,
-        windowsHide: true
-      });
-      if (/musl/i.test(output)) {
-        detected = 'musl';
-      } else if (/glibc|gnu/i.test(output)) {
-        detected = 'gnu';
-      }
-    } catch {
-      // fall through to the filesystem heuristic below
-    }
+    detected = detectLibcWithTrustedLdd();
   }
 
   if (!detected) {

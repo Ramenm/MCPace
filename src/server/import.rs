@@ -29,6 +29,7 @@ pub(super) fn run(
             settings_path: parsed.settings_path.clone(),
             dry_run: parsed.dry_run,
             force: parsed.force,
+            disabled: parsed.disabled,
         },
     ) {
         Ok(value) => value,

@@ -13,12 +13,16 @@ MCPace is a local home for MCP servers: one endpoint for clients, safe concurren
 
 ## Documentation map
 
+- [dashboard-base.md](dashboard-base.md) — dashboard information architecture and base setup rules.
+- [frontend.md](frontend.md) — dashboard frontend shell/assets, rendering ownership, and accessibility rules.
+
 | File | Keep here | Do not duplicate here |
 |---|---|---|
 | `README.md` | Short landing page and first commands. | Full runbook details. |
 | `docs/README.md` | Operator flow and doc navigation. | Deep classifier history. |
 | `docs/architecture.md` | Scheduler model, modes, state classes. | CLI option reference. |
 | `docs/configuration.md` | Files, config shapes, discovery settings, policy options. | Lab corpus details. |
+| `docs/frontend.md` | Dashboard frontend assets, ownership, and first-screen contract. | Full backend overview schema details. |
 | `docs/lab-harness.md` | Evidence corpus, random sweeps, safe probe boundary. | Basic install steps. |
 | `reports/summary.md` | Release/source-bundle summary and validation status. | User manual content. |
 
@@ -129,3 +133,11 @@ mcpace lab probe --id filesystem --refresh --json
 ```
 
 The probe performs `initialize`, `notifications/initialized`, and `tools/list` only. It never calls upstream tools.
+
+## Dashboard base model
+
+The first screen should answer five questions before exposing advanced controls: is the backend reachable, which client is wired, which source is saved, whether tools have been tested, and whether routing is still conservative. Import, discovery, and manual add forms should validate next to the affected field without clearing user input.
+
+## Final source bundle
+
+This bundle is named `mcpace-v0.7.5-250626-133355` and is source-only. Use the root `README.md` for the short start path, this runbook for operational details, `docs/frontend.md` for dashboard frontend rules, and `reports/summary.md` for the final packaging and validation summary.

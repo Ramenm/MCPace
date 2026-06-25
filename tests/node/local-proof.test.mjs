@@ -28,12 +28,23 @@ test('local proof script exposes a safe current-host command plan', () => {
   assert.ok(report.results.some((item) => item.id === 'release-dry-run'));
   assert.ok(report.results.some((item) => item.id === 'source-zip-build'));
   assert.ok(report.results.some((item) => item.id === 'rust-contracts'));
+  for (const item of report.results) {
+    if (item.command) {
+      assert.doesNotMatch(item.command, new RegExp(repoRoot.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&')));
+      assert.doesNotMatch(item.command, /node_modules[\\/]npm[\\/]bin[\\/]npm-cli\.js/);
+    }
+  }
 });
 
-test('local proof avoids directly spawning npm.cmd on Windows', () => {
+test('local proof avoids directly spawning npm.cmd and untrusted shell probes', () => {
   const source = read('scripts/local-proof.mjs');
-  assert.match(source, /process\.env\.npm_execpath/);
+  assert.match(source, /trustedNpmCliPath\('npm'\)/);
+  assert.doesNotMatch(source, /process\.env\.npm_execpath/);
   assert.doesNotMatch(source, /process\.platform === 'win32' \? 'npm\.cmd'/);
+  assert.doesNotMatch(source, /command'?, \['-v'/);
+  assert.doesNotMatch(source, /shell: true/);
+  assert.match(source, /sanitizeReportString/);
+  assert.match(source, /displayCommand/);
 });
 
 test('platform testing instructions and local proof ship in the source bundle', () => {

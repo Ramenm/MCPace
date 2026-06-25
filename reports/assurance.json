@@ -1,7 +1,8 @@
 {
   "schema": "mcpace.projectAssurance.v1",
-  "generatedAt": "2026-06-05T11:05:55.526Z",
-  "root": "/mnt/data/mcpace_logic/mcpace-v0.6.9-050626-105256",
+  "generatedAt": "2026-06-25T11:35:19.342Z",
+  "root": ".",
+  "rootName": "mcpace-v0.7.5-250626-133355",
   "overall": "needs-live-rust-proof",
   "summary": {
     "pass": 12,
@@ -51,15 +52,15 @@
     },
     {
       "id": "user-readiness",
-      "title": "Dashboard has a user-level readiness verdict, not only raw internals",
+      "title": "Dashboard starts with a backend-owned foundation verdict, not raw internals",
       "status": "pass",
-      "why": "The first screen should answer whether the product is usable, what is missing, and what the next action is.",
+      "why": "The first screen should answer the base setup path: backend, client, source, tools, and routing.",
       "evidence": [
-        "src/dashboard/overview.rs:userReadiness",
-        "src/dashboard/index.html:renderUserReadiness"
+        "src/dashboard/overview.rs:dashboardFoundation",
+        "src/dashboard/frontend/app.js:renderBaseSetup"
       ],
-      "failureMode": "Users see many facts but cannot decide whether to trust the setup.",
-      "nextCheck": "Open dashboard after mcpace up and confirm the top verdict changes when no servers, parked servers, unchecked servers, and ready servers are present."
+      "failureMode": "Users see many facts but cannot decide what basic setup step to complete next.",
+      "nextCheck": "Open dashboard after mcpace up and confirm the base foundation changes when no servers, parked servers, unchecked servers, and ready servers are present."
     },
     {
       "id": "operator-plan",
@@ -68,7 +69,7 @@
       "why": "Per-server UI should be driven by backend evidence: lane, blocker, next action, and commands to run.",
       "evidence": [
         "src/dashboard/overview.rs:operatorPlan",
-        "src/dashboard/index.html:renderServerRunbook"
+        "src/dashboard/frontend/app.js:renderServerRunbook"
       ],
       "failureMode": "Frontend invents readiness from partial fields and drifts away from backend runtime truth.",
       "nextCheck": "Compare each server row with mcpace server capabilities <name> --json and verify the same launch/evidence/policy direction."
@@ -81,7 +82,7 @@
       "evidence": [
         "src/dashboard/overview.rs:runtimeControlPlane",
         "src/dashboard/overview.rs:serverResourceMonitoring",
-        "src/dashboard/index.html:renderRuntimeControl"
+        "src/dashboard/frontend/app.js:renderRuntimeControl"
       ],
       "failureMode": "The UI claims readiness without connecting tool evidence, risk, concurrency, isolation, and observed resource use.",
       "nextCheck": "Run a harmless upstream_call and verify /api/resources reports a live per-server session row with pid/resource data."
@@ -93,7 +94,7 @@
       "why": "UI can be pretty but useless if buttons, routes, payload keys, or DOM ids drift independently.",
       "evidence": [
         "tests/node/dashboard-contract.test.mjs",
-        "src/dashboard.rs:16 static routes"
+        "src/dashboard.rs:22 static routes"
       ],
       "failureMode": "A user clicks Enable/Test/Add server and nothing real happens, or an action reaches backend with the wrong JSON.",
       "nextCheck": "Run npm run check before every release and add a new assertion for every new UI action."
@@ -117,7 +118,7 @@
       "why": "Paste-a-command UX is useful only if it is a source-record workflow, not a hidden arbitrary shell execution path.",
       "evidence": [
         "src/dashboard.rs:write_server_install_command_action",
-        "src/dashboard/index.html:commandLineLooksComposed"
+        "src/dashboard/frontend/app.js:commandLineLooksComposed"
       ],
       "failureMode": "A malicious or accidental command line can chain extra operations through ;, &&, pipes, redirects, backticks, or command substitution.",
       "nextCheck": "Try npx/uvx/url/local-path examples and then try blocked shell-composition strings; all blocked strings should be rejected before install."
@@ -143,7 +144,7 @@
       "why": "MCP tools expose external actions; the UI should make tool exposure and evidence visible instead of quietly trusting package names.",
       "evidence": [
         "src/dashboard/overview.rs:operator_plan_for_server",
-        "src/dashboard/index.html:server-test"
+        "src/dashboard/frontend/app.js:server-test"
       ],
       "failureMode": "The user thinks a server is ready just because it is configured, even though no live initialize/tools-list proof exists.",
       "nextCheck": "For a new server: add disabled, enable intentionally, run Test once, compare tool names/count with server capabilities JSON."
@@ -188,16 +189,16 @@
     },
     {
       "id": "rust-runtime-unverified-here",
-      "title": "Rust compile/clippy/test pass is still a required external gate",
+      "title": "Rust compile/clippy/test pass remains a required live gate",
       "status": "warn",
-      "why": "This environment does not provide cargo/rustc, so Node-side assurance cannot prove the Rust binary compiles or executes live MCP flows.",
+      "why": "Static assurance does not execute cargo itself; the release gate still requires rustfmt, clippy, tests, and a release build on a Rust 1.95.0 host.",
       "evidence": [
         "package.json:check:rust",
         "scripts/cargo-task.mjs",
         "rust-toolchain.toml"
       ],
       "failureMode": "Dashboard/static contracts are green but the shipped native binary fails to build or runtime paths fail under Cargo tests.",
-      "nextCheck": "On a Rust host run: rustup toolchain install 1.95.0 && npm run check:rust && cargo build --release."
+      "nextCheck": "Run on a Rust host: rustup toolchain install 1.95.0 && npm run check:rust && cargo build --release."
     },
     {
       "id": "live-e2e-unverified-here",

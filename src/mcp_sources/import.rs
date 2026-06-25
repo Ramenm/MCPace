@@ -1,9 +1,14 @@
 use super::paths::resolve_under_root;
-use super::{default_mcp_server_fragment_path, normalize_server_name};
+use super::{
+    acquire_mcp_settings_namespace_lock, default_mcp_server_fragment_path, normalize_server_name,
+    source_paths_for_normalized_server,
+};
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::runtimepaths;
 use std::collections::BTreeMap;
+use std::fs;
+use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
 #[derive(Clone, Debug, Default)]
@@ -12,6 +17,7 @@ pub struct McpServerImportOptions {
     pub settings_path: Option<PathBuf>,
     pub dry_run: bool,
     pub force: bool,
+    pub disabled: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -48,13 +54,7 @@ pub fn import_mcp_server_entries(
     options: McpServerImportOptions,
 ) -> Result<McpServerImportResult, String> {
     let source_path = resolve_under_root(root_path, &options.source_path);
-    if !source_path.is_file() {
-        return Err(format!(
-            "MCP settings import source '{}' does not exist",
-            source_path.display()
-        ));
-    }
-    let source_value = json_helpers::read_json_file(&source_path)?;
+    let source_value = read_import_source(&source_path)?;
     let Some(source_servers) = json_helpers::mcp_servers_object(&source_value) else {
         return Err(format!(
             "MCP settings import source '{}' must contain an mcpServers or servers object",
@@ -93,6 +93,7 @@ pub fn import_mcp_server_entries(
             name,
             server_value,
             &source_path,
+            options.disabled,
             &mut warnings,
         ) else {
             continue;
@@ -116,6 +117,21 @@ pub fn import_mcp_server_entries(
         ));
     }
 
+    let _namespace_lock = if options.dry_run {
+        None
+    } else {
+        Some(acquire_mcp_settings_namespace_lock(root_path)?)
+    };
+    let target_paths = plan_entries
+        .iter()
+        .map(|plan| plan.target_path.clone())
+        .collect::<Vec<_>>();
+    let _settings_locks = if options.dry_run {
+        Vec::new()
+    } else {
+        runtimepaths::acquire_exclusive_file_locks(&target_paths, "MCP settings import")?
+    };
+
     let mut target_values = BTreeMap::<PathBuf, JsonValue>::new();
     for plan in &plan_entries {
         if !target_values.contains_key(&plan.target_path) {
@@ -136,6 +152,22 @@ pub fn import_mcp_server_entries(
         if existed_before && !options.force {
             conflicts.push(format!("{} in {}", plan.name, plan.target_path.display()));
         }
+        let shadowing_sources =
+            source_paths_for_normalized_server(root_path, &plan.normalized_name)?
+                .into_iter()
+                .filter(|path| !same_settings_path(path, &plan.target_path))
+                .collect::<Vec<_>>();
+        if !shadowing_sources.is_empty() {
+            conflicts.push(format!(
+                "{} already exists in another source ({})",
+                plan.name,
+                shadowing_sources
+                    .iter()
+                    .map(|path| path.display().to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+        }
         let action = if existed_before { "replace" } else { "add" };
         result_entries.push(McpServerImportEntry {
             name: plan.name.clone(),
@@ -152,7 +184,7 @@ pub fn import_mcp_server_entries(
     }
     if !conflicts.is_empty() {
         return Err(format!(
-            "MCP settings import would replace existing server entries: {}; rerun with --force to replace them",
+            "MCP settings import would overwrite or shadow existing server entries: {}; rerun with --force only for same-file replacements, or pass --settings <existing path>/remove the old entry first",
             conflicts.join(", ")
         ));
     }
@@ -170,18 +202,9 @@ pub fn import_mcp_server_entries(
             )?;
         }
         for (target_path, target_value) in &target_values {
-            if let Some(parent) = target_path.parent() {
-                std::fs::create_dir_all(parent).map_err(|error| {
-                    format!(
-                        "failed to create MCP settings directory '{}': {}",
-                        parent.display(),
-                        error
-                    )
-                })?;
-            }
             let mut serialized = target_value.to_pretty_string();
             serialized.push('\n');
-            runtimepaths::write_text_atomic(target_path, &serialized).map_err(|error| {
+            runtimepaths::write_private_text_atomic(target_path, &serialized).map_err(|error| {
                 format!(
                     "failed to write MCP settings source '{}': {}",
                     target_path.display(),
@@ -210,11 +233,41 @@ pub fn import_mcp_server_entries(
     })
 }
 
+fn read_import_source(path: &Path) -> Result<JsonValue, String> {
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "MCP settings import source '{}' must be a regular file, not a symlink",
+                    path.display()
+                ));
+            }
+            if !metadata.is_file() {
+                return Err(format!(
+                    "MCP settings import source '{}' must be a regular file",
+                    path.display()
+                ));
+            }
+            json_helpers::read_json_file(path)
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Err(format!(
+            "MCP settings import source '{}' does not exist",
+            path.display()
+        )),
+        Err(error) => Err(format!(
+            "failed to inspect MCP settings import source '{}': {}",
+            path.display(),
+            error
+        )),
+    }
+}
+
 fn normalize_import_server_value(
     root_path: &Path,
     name: &str,
     server_value: &JsonValue,
     source_path: &Path,
+    force_disabled: bool,
     warnings: &mut Vec<String>,
 ) -> Option<JsonValue> {
     let JsonValue::Object(object) = server_value else {
@@ -252,7 +305,10 @@ fn normalize_import_server_value(
             normalized.insert("url".to_string(), JsonValue::string(url));
         }
     }
-    if !normalized.contains_key("enabled") {
+    if force_disabled {
+        normalized.insert("enabled".to_string(), JsonValue::bool(false));
+        normalized.insert("disabled".to_string(), JsonValue::bool(true));
+    } else if !normalized.contains_key("enabled") {
         let enabled = !normalized
             .get("disabled")
             .and_then(JsonValue::as_bool)
@@ -353,13 +409,36 @@ fn matches_endpoint_url(value: &str, endpoint: &str) -> bool {
 }
 
 fn read_or_new_settings(path: &Path) -> Result<JsonValue, String> {
-    if path.is_file() {
-        return json_helpers::read_json_file(path);
+    match fs::symlink_metadata(path) {
+        Ok(metadata) => {
+            if metadata.file_type().is_symlink() {
+                return Err(format!(
+                    "MCP settings target '{}' must be a regular file, not a symlink",
+                    path.display()
+                ));
+            }
+            if !metadata.is_file() {
+                return Err(format!(
+                    "MCP settings target '{}' must be a regular file",
+                    path.display()
+                ));
+            }
+            json_helpers::read_json_file(path)
+        }
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(JsonValue::object([(
+            "mcpServers",
+            JsonValue::Object(BTreeMap::new()),
+        )])),
+        Err(error) => Err(format!(
+            "failed to inspect MCP settings target '{}': {}",
+            path.display(),
+            error
+        )),
     }
-    Ok(JsonValue::object([(
-        "mcpServers",
-        JsonValue::Object(BTreeMap::new()),
-    )]))
+}
+
+fn same_settings_path(left: &Path, right: &Path) -> bool {
+    runtimepaths::canonicalize_or_original(left) == runtimepaths::canonicalize_or_original(right)
 }
 
 fn has_normalized_server(value: &JsonValue, normalized_name: &str) -> Result<bool, String> {
@@ -508,6 +587,7 @@ mod tests {
                 settings_path: Some(target.clone()),
                 dry_run: false,
                 force: false,
+                disabled: false,
             },
         )
         .expect("import servers shape");
@@ -553,12 +633,57 @@ mod tests {
                 settings_path: Some(root.join("imported.json")),
                 dry_run: false,
                 force: false,
+                disabled: false,
             },
         )
         .expect_err("self entry should leave no usable servers");
         assert!(
             error.contains("no usable servers"),
             "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn disabled_import_option_parks_enabled_source() {
+        let root = temp_root("disabled-import");
+        let source = root.join("source.json");
+        let target = root.join("imported.json");
+        fs::write(
+            &source,
+            r#"{
+  "mcpServers": {
+    "Enabled Source": {
+      "command": "node",
+      "args": ["server.js"],
+      "enabled": true
+    }
+  }
+}"#,
+        )
+        .expect("write source");
+
+        import_mcp_server_entries(
+            &root,
+            McpServerImportOptions {
+                source_path: source,
+                settings_path: Some(target.clone()),
+                dry_run: false,
+                force: false,
+                disabled: true,
+            },
+        )
+        .expect("import disabled");
+
+        let written = json_helpers::read_json_file(&target).expect("read import target");
+        let servers = json_helpers::object_at_path(&written, &["mcpServers"]).expect("mcpServers");
+        let imported = servers.get("Enabled Source").expect("Enabled Source");
+        assert_eq!(
+            imported.get("enabled").and_then(JsonValue::as_bool),
+            Some(false)
+        );
+        assert_eq!(
+            imported.get("disabled").and_then(JsonValue::as_bool),
+            Some(true)
         );
     }
 }

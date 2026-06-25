@@ -225,28 +225,21 @@ fn handle_mcp_http_request(
             return Ok(McpHttpResponse::Accepted);
         }
 
-        let session = match touch_mcp_session_for_request(request, config, id.clone()) {
+        let request_id_key = request_id.as_ref().and_then(mcp::request_id_key);
+        let require_initialized = method != "ping";
+        let session = match prepare_mcp_session_for_request(
+            request,
+            config,
+            id.clone(),
+            request_id_key.as_deref(),
+            require_initialized,
+        ) {
             Ok(value) => value,
             Err(response) => return Ok(response),
         };
         session_protocol = Some(session.protocol_version.clone());
         if request_id.is_none() {
             return Ok(McpHttpResponse::Accepted);
-        }
-        if let Some(id_key) = request_id.as_ref().and_then(mcp::request_id_key) {
-            if let Err(response) = track_mcp_request_id(config, &session.id, &id_key, id.clone()) {
-                return Ok(response);
-            }
-        }
-        if method != "ping" && !session.initialized {
-            return Ok(McpHttpResponse::JsonStatus(
-                "400 Bad Request",
-                mcp_error_response(
-                    id,
-                    mcp::ERROR_NOT_INITIALIZED,
-                    "MCP HTTP session is initialized but not ready; send notifications/initialized before normal operations",
-                ),
-            ));
         }
     } else if request_id.is_none() {
         return Ok(McpHttpResponse::Accepted);
@@ -605,6 +598,45 @@ fn touch_mcp_session_for_request(
     }
 }
 
+fn prepare_mcp_session_for_request(
+    request: &HttpRequest,
+    config: &DashboardConfig,
+    id: JsonValue,
+    request_id_key: Option<&str>,
+    require_initialized: bool,
+) -> Result<http_session::McpHttpSession, McpHttpResponse> {
+    let mut session_store = config
+        .http_session_store
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let mut session = session_store
+        .touch_from_request(request, now_ms())
+        .map_err(|error| session_error_response(error, id.clone()))?;
+
+    // Request-id replay protection and readiness checks must observe one session
+    // state. A rejected pre-initialized request is still a handled JSON-RPC
+    // request, so its id remains consumed intentionally; the important invariant
+    // is that touch, id tracking, and initialized-state classification cannot be
+    // interleaved with another HTTP request for the same session.
+    if let Some(key) = request_id_key {
+        let session_id = session.id.clone();
+        session = session_store
+            .track_request_id(&session_id, key)
+            .map_err(|error| session_error_response(error, id.clone()))?;
+    }
+    if require_initialized && !session.initialized {
+        return Err(McpHttpResponse::JsonStatus(
+            "400 Bad Request",
+            mcp_error_response(
+                id,
+                mcp::ERROR_NOT_INITIALIZED,
+                "MCP HTTP session is initialized but not ready; send notifications/initialized before normal operations",
+            ),
+        ));
+    }
+    Ok(session)
+}
+
 fn mark_mcp_session_initialized(
     request: &HttpRequest,
     config: &DashboardConfig,
@@ -615,23 +647,6 @@ fn mark_mcp_session_initialized(
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner())
         .mark_initialized_from_request(request, now_ms());
-    match result {
-        Ok(session) => Ok(session),
-        Err(error) => Err(session_error_response(error, id)),
-    }
-}
-
-fn track_mcp_request_id(
-    config: &DashboardConfig,
-    session_id: &str,
-    request_id_key: &str,
-    id: JsonValue,
-) -> Result<http_session::McpHttpSession, McpHttpResponse> {
-    let result = config
-        .http_session_store
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-        .track_request_id(session_id, request_id_key);
     match result {
         Ok(session) => Ok(session),
         Err(error) => Err(session_error_response(error, id)),

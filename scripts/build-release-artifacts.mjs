@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { copyRegularFileNoFollowSync, lstatStableDirectorySync, writeFileAtomicSync, withFileLockSync } from './lib/atomic-fs.mjs';
 import { deriveProjectName, deriveProjectVersion, readJson, repoRoot } from './lib/project-metadata.mjs';
 import { createZipFromDirectory, listZipEntries } from './lib/zip-writer.mjs';
 
@@ -19,6 +20,24 @@ const timestampOverride = argValue('--timestamp', process.env.MCPACE_RELEASE_TIM
 const forbiddenParts = new Set(['.git', 'node_modules', 'target', 'dist', '.cache', '.pytest_cache', '__pycache__']);
 const forbiddenFiles = new Set(['.DS_Store', 'Thumbs.db']);
 
+const DEFAULT_MAX_RELEASE_FILE_BYTES = 32 * 1024 * 1024;
+const DEFAULT_MAX_RELEASE_TOTAL_BYTES = 512 * 1024 * 1024;
+
+function positiveIntegerEnv(name, fallback) {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive safe integer`);
+  }
+  return value;
+}
+
+const releaseResourceLimits = Object.freeze({
+  maxFileBytes: positiveIntegerEnv('MCPACE_RELEASE_MAX_FILE_BYTES', DEFAULT_MAX_RELEASE_FILE_BYTES),
+  maxTotalBytes: positiveIntegerEnv('MCPACE_RELEASE_MAX_TOTAL_BYTES', DEFAULT_MAX_RELEASE_TOTAL_BYTES),
+});
+
 function timestamp(now = new Date()) {
   if (timestampOverride) {
     if (!/^\d{6}-\d{6}$/.test(timestampOverride)) {
@@ -30,12 +49,57 @@ function timestamp(now = new Date()) {
   return `${pad(now.getDate())}${pad(now.getMonth() + 1)}${String(now.getFullYear()).slice(-2)}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
 }
 
+function isWindowsAbsolutePath(value) {
+  return /^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value);
+}
+
+function normalizeManifestPath(value) {
+  if (typeof value !== 'string') {
+    throw new Error('manifest path must be a string');
+  }
+  if (value.length === 0) {
+    throw new Error('manifest path must not be empty');
+  }
+  if (path.isAbsolute(value) || isWindowsAbsolutePath(value)) {
+    throw new Error('manifest path must be repository-relative');
+  }
+  const parts = value.split(/[\\/]+/);
+  if (parts.some((part) => part.length === 0)) {
+    throw new Error('manifest path must not contain empty path segments');
+  }
+  if (parts.some((part) => part === '.' || part === '..')) {
+    throw new Error('manifest path must not contain . or .. path segments');
+  }
+  if (parts.some((part) => /^[A-Za-z]:$/.test(part))) {
+    throw new Error('manifest path must not contain Windows drive segments');
+  }
+  return parts.join('/');
+}
+
 function readManifest() {
   const manifest = readJson('release-manifest.json');
   if (!Array.isArray(manifest.includePaths)) {
     throw new Error('release-manifest.json must contain includePaths array');
   }
-  return manifest;
+
+  const includePaths = [];
+  const rejectedManifestPaths = [];
+  const seen = new Set();
+  for (const rawPath of manifest.includePaths) {
+    try {
+      const normalized = normalizeManifestPath(rawPath);
+      if (seen.has(normalized)) {
+        rejectedManifestPaths.push({ path: String(rawPath), reason: 'duplicate manifest path' });
+        continue;
+      }
+      seen.add(normalized);
+      includePaths.push(normalized);
+    } catch (error) {
+      rejectedManifestPaths.push({ path: String(rawPath), reason: error?.message ?? String(error) });
+    }
+  }
+
+  return { ...manifest, includePaths, rejectedManifestPaths };
 }
 
 function shouldSkip(relativePath) {
@@ -47,28 +111,118 @@ function normalizeRelativePath(relativePath) {
   return relativePath.split(path.sep).join('/');
 }
 
+const WINDOWS_RESERVED_SEGMENT = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/i;
+
+function portablePathKey(relativePath) {
+  return relativePath
+    .split('/')
+    .map((part) => part.normalize('NFC').toLocaleLowerCase('en-US'))
+    .join('/');
+}
+
+function portablePathIssue(relativePath) {
+  const parts = relativePath.split('/');
+  for (const part of parts) {
+    if (/[\u0000-\u001f]/.test(part)) {
+      return 'path segment contains a control character';
+    }
+    if (part.endsWith(' ') || part.endsWith('.')) {
+      return 'path segment has a trailing space or dot';
+    }
+    if (WINDOWS_RESERVED_SEGMENT.test(part)) {
+      return `path segment uses a Windows reserved device name: ${part}`;
+    }
+    if (Buffer.byteLength(part, 'utf8') > 255) {
+      return 'path segment exceeds 255 UTF-8 bytes';
+    }
+  }
+  return null;
+}
+
+function analyzePortableFileSet(files) {
+  const issues = [];
+  const collisions = [];
+  const seen = new Map();
+
+  for (const file of files) {
+    const issue = portablePathIssue(file);
+    if (issue) {
+      issues.push({ path: file, reason: issue });
+    }
+
+    const key = portablePathKey(file);
+    const previous = seen.get(key);
+    if (previous && previous !== file) {
+      collisions.push({ key, paths: [previous, file] });
+    } else {
+      seen.set(key, file);
+    }
+  }
+
+  return {
+    issues: issues.sort((left, right) => left.path.localeCompare(right.path)),
+    collisions: collisions.sort((left, right) => left.key.localeCompare(right.key)),
+  };
+}
+
 function copyPath(source, destination, relativePath) {
   const normalizedRelativePath = normalizeRelativePath(relativePath);
   if (shouldSkip(normalizedRelativePath)) {
-    return { skipped: [normalizedRelativePath], copied: [] };
+    return { skipped: [normalizedRelativePath], copied: [], copiedBytes: 0, missing: [], rejected: [] };
   }
-  const stat = fs.statSync(source);
+
+  let stat;
+  try {
+    stat = fs.lstatSync(source);
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      return { skipped: [], copied: [], copiedBytes: 0, missing: [normalizedRelativePath], rejected: [] };
+    }
+    return { skipped: [], copied: [], copiedBytes: 0, missing: [], rejected: [{ path: normalizedRelativePath, reason: error?.message ?? String(error) }] };
+  }
+
+  if (stat.isSymbolicLink()) {
+    return { skipped: [], copied: [], copiedBytes: 0, missing: [], rejected: [{ path: normalizedRelativePath, reason: 'source entry is a symbolic link' }] };
+  }
+
   if (stat.isDirectory()) {
     const copied = [];
+    let copiedBytes = 0;
     const skipped = [];
+    const missing = [];
+    const rejected = [];
     fs.mkdirSync(destination, { recursive: true });
-    for (const entry of fs.readdirSync(source, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+    let entries;
+    try {
+      ({ entries } = lstatStableDirectorySync(source));
+    } catch (error) {
+      return { skipped: [], copied: [], copiedBytes: 0, missing: [], rejected: [{ path: normalizedRelativePath, reason: error?.message ?? String(error) }] };
+    }
+    for (const entry of entries) {
       const childRelative = path.posix.join(normalizedRelativePath, entry.name);
       const child = copyPath(path.join(source, entry.name), path.join(destination, entry.name), childRelative);
       copied.push(...child.copied);
+      copiedBytes += child.copiedBytes ?? 0;
       skipped.push(...child.skipped);
+      missing.push(...child.missing);
+      rejected.push(...child.rejected);
     }
-    return { copied, skipped };
+    return { copied, copiedBytes, skipped, missing, rejected };
   }
-  fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.copyFileSync(source, destination);
-  fs.chmodSync(destination, stat.mode & 0o777);
-  return { copied: [normalizedRelativePath], skipped: [] };
+
+  if (!stat.isFile()) {
+    return { skipped: [], copied: [], copiedBytes: 0, missing: [], rejected: [{ path: normalizedRelativePath, reason: 'source entry is not a regular file' }] };
+  }
+
+  try {
+    const copiedFile = copyRegularFileNoFollowSync(source, destination, { maxBytes: releaseResourceLimits.maxFileBytes });
+    return { copied: [normalizedRelativePath], copiedBytes: copiedFile.size, skipped: [], missing: [], rejected: [] };
+  } catch (error) {
+    if (error?.code === 'ENOENT' || error?.code === 'ENOTDIR') {
+      return { skipped: [], copied: [], copiedBytes: 0, missing: [normalizedRelativePath], rejected: [] };
+    }
+    return { skipped: [], copied: [], copiedBytes: 0, missing: [], rejected: [{ path: normalizedRelativePath, reason: error?.message ?? String(error) }] };
+  }
 }
 
 function walkFiles(root) {
@@ -76,10 +230,26 @@ function walkFiles(root) {
   const stack = [root];
   while (stack.length > 0) {
     const current = stack.pop();
-    for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+    let entries;
+    try {
+      ({ entries } = lstatStableDirectorySync(current));
+    } catch (error) {
+      throw new Error(`failed to inspect staged release directory '${normalizeRelativePath(path.relative(root, current))}': ${error?.message ?? error}`);
+    }
+    for (const entry of entries) {
       const full = path.join(current, entry.name);
-      if (entry.isDirectory()) stack.push(full);
-      else if (entry.isFile()) files.push(normalizeRelativePath(path.relative(root, full)));
+      const stat = fs.lstatSync(full);
+      const relative = normalizeRelativePath(path.relative(root, full));
+      if (stat.isSymbolicLink()) {
+        throw new Error(`staged release entry is a symbolic link: ${relative}`);
+      }
+      if (stat.isDirectory()) {
+        stack.push(full);
+      } else if (stat.isFile()) {
+        files.push(relative);
+      } else {
+        throw new Error(`staged release entry is not a regular file: ${relative}`);
+      }
     }
   }
   return files.sort();
@@ -110,86 +280,116 @@ function build() {
   const manifestPath = path.join(outDir, `${rootName}.manifest.json`);
   const tempParent = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-release-'));
   const stagedRoot = path.join(tempParent, rootName);
-  const manifest = readManifest();
-  const copied = [];
-  const skipped = [];
-  const missing = [];
 
-  for (const relativePath of manifest.includePaths) {
-    const source = path.join(repoRoot, relativePath);
-    if (!fs.existsSync(source)) {
-      missing.push(relativePath);
-      continue;
+  try {
+    const manifest = readManifest();
+    const copied = [];
+    const skipped = [];
+    const missing = [];
+    const rejectedSourcePaths = [];
+    let copiedBytes = 0;
+
+    for (const relativePath of manifest.includePaths) {
+      const source = path.join(repoRoot, relativePath);
+      const result = copyPath(source, path.join(stagedRoot, relativePath), relativePath);
+      copied.push(...result.copied);
+      copiedBytes += result.copiedBytes ?? 0;
+      skipped.push(...result.skipped);
+      missing.push(...result.missing);
+      rejectedSourcePaths.push(...result.rejected);
     }
-    const result = copyPath(source, path.join(stagedRoot, relativePath), relativePath);
-    copied.push(...result.copied);
-    skipped.push(...result.skipped);
-  }
 
-  const required = ['README.md', 'docs/README.md', 'reports/summary.md', 'Cargo.toml', 'package.json'];
-  const stagedFiles = walkFiles(stagedRoot);
-  const missingRequired = required.filter((relativePath) => !stagedFiles.includes(relativePath));
-  const forbiddenIncluded = stagedFiles.filter(shouldSkip);
+    const required = ['README.md', 'docs/README.md', 'reports/summary.md', 'Cargo.toml', 'package.json'];
+    const stagedFiles = walkFiles(stagedRoot);
+    const missingRequired = required.filter((relativePath) => !stagedFiles.includes(relativePath));
+    const forbiddenIncluded = stagedFiles.filter(shouldSkip);
+    const portablePathAnalysis = analyzePortableFileSet(stagedFiles);
+    const resourceLimitIssues = copiedBytes > releaseResourceLimits.maxTotalBytes
+      ? [{ reason: `release source inputs exceed maximum total size of ${releaseResourceLimits.maxTotalBytes} bytes`, copiedBytes }]
+      : [];
 
-  let zipVerification = dryRun
-    ? { status: 'dry-run', entryCount: 0, outsideRoot: [], missing: [], extra: [] }
-    : null;
+    let zipVerification = dryRun
+      ? { status: 'dry-run', entryCount: 0, outsideRoot: [], missing: [], extra: [] }
+      : null;
 
-  const verificationReport = {
-    sourceProofStatus: missing.length === 0 && missingRequired.length === 0 && forbiddenIncluded.length === 0 ? 'pass' : 'failed',
-    copiedFileCount: stagedFiles.length,
-    skippedPaths: skipped.sort(),
-    missingManifestPaths: missing.sort(),
-    missingRequiredPaths: missingRequired.sort(),
-    forbiddenIncludedPaths: forbiddenIncluded.sort(),
-  };
+    const verificationReport = {
+      sourceProofStatus: (
+        manifest.rejectedManifestPaths.length === 0
+        && rejectedSourcePaths.length === 0
+        && missing.length === 0
+        && missingRequired.length === 0
+        && forbiddenIncluded.length === 0
+        && portablePathAnalysis.issues.length === 0
+        && portablePathAnalysis.collisions.length === 0
+        && resourceLimitIssues.length === 0
+      ) ? 'pass' : 'failed',
+      copiedFileCount: stagedFiles.length,
+      skippedPaths: skipped.sort(),
+      rejectedManifestPaths: manifest.rejectedManifestPaths.sort((left, right) => left.path.localeCompare(right.path)),
+      rejectedSourcePaths: rejectedSourcePaths.sort((left, right) => left.path.localeCompare(right.path)),
+      missingManifestPaths: missing.sort(),
+      missingRequiredPaths: missingRequired.sort(),
+      forbiddenIncludedPaths: forbiddenIncluded.sort(),
+      portablePathIssues: portablePathAnalysis.issues,
+      portablePathCollisions: portablePathAnalysis.collisions,
+      resourceLimits: releaseResourceLimits,
+      copiedBytes,
+      resourceLimitIssues,
+    };
 
-  if (verificationReport.sourceProofStatus !== 'pass') {
-    throw new Error(`source bundle verification failed: ${JSON.stringify(verificationReport, null, 2)}`);
-  }
-
-  fs.mkdirSync(outDir, { recursive: true });
-
-  if (!dryRun) {
-    fs.rmSync(archivePath, { force: true });
-    createZipFromDirectory(stagedRoot, archivePath, { rootName, date: new Date(0) });
-    zipVerification = validateZipContents(archivePath, rootName, stagedFiles);
-    if (zipVerification.status !== 'pass') {
-      throw new Error(`ZIP verification failed: ${JSON.stringify(zipVerification, null, 2)}`);
+    if (verificationReport.sourceProofStatus !== 'pass') {
+      throw new Error(`source bundle verification failed: ${JSON.stringify(verificationReport, null, 2)}`);
     }
+
+    fs.mkdirSync(outDir, { recursive: true });
+
+    if (!dryRun) {
+      createZipFromDirectory(stagedRoot, archivePath, {
+        rootName,
+        date: new Date(0),
+        maxFileBytes: releaseResourceLimits.maxFileBytes,
+        maxTotalUncompressedBytes: releaseResourceLimits.maxTotalBytes,
+      });
+      zipVerification = validateZipContents(archivePath, rootName, stagedFiles);
+      if (zipVerification.status !== 'pass') {
+        throw new Error(`ZIP verification failed: ${JSON.stringify(zipVerification, null, 2)}`);
+      }
+    }
+
+    writeFileAtomicSync(manifestPath, JSON.stringify({
+      schema: 'mcpace.releaseArtifactManifest.v1',
+      generatedAt: new Date().toISOString(),
+      rootName,
+      archiveName,
+      sourceRoot: '.',
+      sourceRootName: path.basename(repoRoot),
+      includePaths: manifest.includePaths,
+      files: stagedFiles,
+      verificationReport,
+      zipVerification,
+    }, null, 2) + '\n', { mode: 0o644 });
+
+    return {
+      schema: 'mcpace.releaseArtifactBuild.v1',
+      status: 'pass',
+      dryRun,
+      rootName,
+      archive: {
+        name: archiveName,
+        path: archivePath,
+      },
+      manifestPath,
+      releaseProofStatus: dryRun ? 'dry-run' : 'pass',
+      verificationReport,
+      zipVerification,
+    };
+  } finally {
+    fs.rmSync(tempParent, { recursive: true, force: true });
   }
-
-  fs.writeFileSync(manifestPath, JSON.stringify({
-    schema: 'mcpace.releaseArtifactManifest.v1',
-    generatedAt: new Date().toISOString(),
-    rootName,
-    archiveName,
-    sourceRoot: repoRoot,
-    includePaths: manifest.includePaths,
-    files: stagedFiles,
-    verificationReport,
-    zipVerification,
-  }, null, 2) + '\n');
-
-  fs.rmSync(tempParent, { recursive: true, force: true });
-  return {
-    schema: 'mcpace.releaseArtifactBuild.v1',
-    status: 'pass',
-    dryRun,
-    rootName,
-    archive: {
-      name: archiveName,
-      path: archivePath,
-    },
-    manifestPath,
-    releaseProofStatus: dryRun ? 'dry-run' : 'pass',
-    verificationReport,
-    zipVerification,
-  };
 }
 
 try {
-  const result = build();
+  const result = withFileLockSync(path.join(outDir, '.mcpace-release.lock'), build);
   if (jsonOutput) {
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } else {

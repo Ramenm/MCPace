@@ -156,7 +156,7 @@ test('server profiles and dashboard preserve disabled servers as zero-capacity/o
   const loader = read('src', 'server', 'loader.rs');
   const dashboard = read('src', 'dashboard.rs');
   const overview = read('src', 'dashboard', 'overview.rs');
-  const html = read('src', 'dashboard', 'index.html');
+  const html = read('src', 'dashboard', 'frontend', 'app.js');
 
   assert.match(loader, /fn runtime_policy_disabled\(/);
   assert.match(loader, /let base_effective_enabled = profile_enabled && source_enabled && platform_supported;/);
@@ -358,7 +358,7 @@ test('serve start replaces healthy stale endpoint instead of orphaning another r
   assert.match(start, /let existing_healthy =\s*health_check\(\s*&existing_state\.host,\s*existing_state\.port,\s*&endpoint\.health_path,\s*\)/s);
   assert.match(start, /if existing_healthy \{\s*if !state_matches_start_request\(/s);
   assert.match(start, /stop_existing_serve\(&canonical_root\);/);
-  assert.match(start, /\} else \{\s*remove_managed_serve_runner_copy\(&state_root, &existing_state\);\s*let _ = fs::remove_file\(&state_path\);\s*\}/s);
+  assert.match(start, /\} else \{\s*remove_managed_serve_runner_copy\(&state_root, &existing_state\);\s*let _ = fs::remove_file\(&state_path\);\s*crate::restart_guard::clear\(&restart_guard_path\);\s*\}/s);
   assert.match(matcher, /state\.host == host/);
   assert.match(matcher, /state\.port == port/);
   assert.match(matcher, /state\.max_connections == max_connections/);

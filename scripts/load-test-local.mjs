@@ -10,6 +10,10 @@ import { performance } from 'node:perf_hooks';
 import { repoRoot } from './lib/project-metadata.mjs';
 import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
+const MAX_LOAD_SERVER_CONNECTIONS = 256;
+const MAX_LOAD_SERVER_BODY_BYTES = 16 * 1024 * 1024;
+const DEFAULT_MAX_REQUESTS_PER_SCENARIO = 100;
+
 function parseArgs(argv) {
   const parsed = {
     binary: explicitBinaryFromEnv(),
@@ -17,8 +21,9 @@ function parseArgs(argv) {
     durationMs: 10_000,
     concurrency: 50,
     port: 0,
-    maxConnections: 256,
+    maxConnections: 0,
     maxBodyBytes: 65_536,
+    maxRequestsPerScenario: DEFAULT_MAX_REQUESTS_PER_SCENARIO,
     overviewCacheMs: 250,
     json: false,
   };
@@ -47,10 +52,13 @@ function parseArgs(argv) {
         parsed.concurrency = positiveInteger(readValue(), arg);
         break;
       case '--max-connections':
-        parsed.maxConnections = positiveInteger(readValue(), arg);
+        parsed.maxConnections = positiveBoundedInteger(readValue(), arg, MAX_LOAD_SERVER_CONNECTIONS);
         break;
       case '--max-body-bytes':
-        parsed.maxBodyBytes = positiveInteger(readValue(), arg);
+        parsed.maxBodyBytes = positiveBoundedInteger(readValue(), arg, MAX_LOAD_SERVER_BODY_BYTES);
+        break;
+      case '--max-requests-per-scenario':
+        parsed.maxRequestsPerScenario = nonnegativeInteger(readValue(), arg);
         break;
       case '--overview-cache-ms':
         parsed.overviewCacheMs = nonnegativeInteger(readValue(), arg);
@@ -68,6 +76,7 @@ function parseArgs(argv) {
     }
   }
   parsed.binary ||= defaultBinary();
+  if (!parsed.maxConnections) parsed.maxConnections = defaultLoadServerConnections(parsed.concurrency);
   return parsed;
 }
 
@@ -77,6 +86,18 @@ function positiveInteger(value, name) {
     throw new Error(`${name} must be a positive integer`);
   }
   return number;
+}
+
+function positiveBoundedInteger(value, name, max) {
+  const number = positiveInteger(value, name);
+  if (number > max) {
+    throw new Error(`${name} must be <= ${max}`);
+  }
+  return number;
+}
+
+function defaultLoadServerConnections(concurrency) {
+  return Math.min(MAX_LOAD_SERVER_CONNECTIONS, Math.max(16, concurrency * 2));
 }
 
 function nonnegativeInteger(value, name) {
@@ -143,7 +164,7 @@ function assertRunnableBinary(binaryPath) {
 
 function printHelp() {
   console.log(`Usage: node scripts/load-test-local.mjs [options]\n\nOptions:\n  --binary <path>           MCPace binary to run; env fallback: MCPACE_BINARY, MCPACE_BINARY_PATH, MCPACE_DEV_BINARY; default: target/release/mcpace, then target/debug/mcpace\n  --root <path>             Existing MCPace root. Omit to create an isolated temporary root\n  --port <n>                Server port. Default: auto-reserve a free loopback port
-  --duration-ms <n>         Duration per load scenario. Default: 10000\n  --concurrency <n>         Concurrent request loops per scenario. Default: 50\n  --max-connections <n>     Server-side connection cap. Default: 256\n  --max-body-bytes <n>      Server-side body cap, also used by edge-case probes. Default: 65536\n  --overview-cache-ms <n>   Server overview cache TTL. Default: 250\n  --json                   Emit JSON only`);
+  --duration-ms <n>         Duration per load scenario. Default: 10000\n  --concurrency <n>         Concurrent request loops per scenario. Default: 50\n  --max-connections <n>     Server-side connection cap. Default: min(256, max(16, concurrency * 2))\n  --max-body-bytes <n>      Server-side body cap, also used by edge-case probes. Default: 65536; max: 16777216\n  --max-requests-per-scenario <n>  Client-side request cap per scenario. Default: 100; use 0 for duration-only stress\n  --overview-cache-ms <n>   Server overview cache TTL. Default: 250\n  --json                   Emit JSON only`);
 }
 
 async function makeIsolatedRoot() {
@@ -153,7 +174,7 @@ async function makeIsolatedRoot() {
     path.join(root, 'mcpace.config.json'),
     `${JSON.stringify({
       name: 'mcpace-load-test',
-      version: '0.6.9',
+      version: '0.7.5',
       profiles: {
         runtime: {
           default: 'manual',
@@ -185,6 +206,23 @@ async function reserveLoopbackPort() {
 async function startServer(options) {
   assertRunnableBinary(options.binary);
   const root = options.root || (await makeIsolatedRoot());
+  let lastReadyError;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const server = await startServerOnce(options, root);
+    try {
+      await waitForReadyHttp(server.port);
+      return server;
+    } catch (error) {
+      lastReadyError = error;
+      await server.stop({ removeRoot: false });
+      if (options.port) break;
+    }
+  }
+  if (!options.root) await rm(root, { recursive: true, force: true });
+  throw new Error(`server did not pass loopback readiness check: ${lastReadyError?.message || lastReadyError || 'unknown error'}`);
+}
+
+async function startServerOnce(options, root) {
   const selectedPort = options.port || (await reserveLoopbackPort());
   const child = spawn(
     options.binary,
@@ -235,14 +273,30 @@ async function startServer(options) {
     root,
     port,
     child,
-    stop: async () => {
+    stop: async ({ removeRoot = true } = {}) => {
       if (child.exitCode === null && !child.killed) {
         child.kill('SIGTERM');
         await new Promise((resolve) => child.once('exit', resolve));
       }
-      if (!options.root) await rm(root, { recursive: true, force: true });
+      if (removeRoot && !options.root) await rm(root, { recursive: true, force: true });
     },
   };
+}
+
+async function waitForReadyHttp(port) {
+  const deadline = performance.now() + 5_000;
+  let lastError = 'not attempted';
+  while (performance.now() < deadline) {
+    const result = await requestJson({ port, target: '/healthz' });
+    if (result.ok) return;
+    lastError = result.error || `HTTP ${result.status}`;
+    await sleep(100);
+  }
+  throw new Error(`http readiness failed on 127.0.0.1:${port}: ${lastError}`);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function requestOnce({ port, method = 'GET', target, headers = {}, body = '' }) {
@@ -283,16 +337,59 @@ function requestOnce({ port, method = 'GET', target, headers = {}, body = '' }) 
   });
 }
 
-async function runScenario({ port, name, method, target, headers, body, durationMs, concurrency, expectedStatuses }) {
+function requestJson({ port, target }) {
+  return new Promise((resolve) => {
+    const request = http.request(
+      {
+        host: '127.0.0.1',
+        port,
+        method: 'GET',
+        path: target,
+        headers: { Accept: 'application/json' },
+        agent: false,
+      },
+      (response) => {
+        let data = '';
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          data += chunk;
+        });
+        response.on('end', () => {
+          try {
+            resolve({ ok: response.statusCode === 200, status: response.statusCode || 0, payload: JSON.parse(data) });
+          } catch (error) {
+            resolve({ ok: false, status: response.statusCode || 0, error: error?.message || String(error), raw: data.slice(0, 4096) });
+          }
+        });
+      },
+    );
+    request.setTimeout(5_000, () => request.destroy(new Error('request timeout')));
+    request.on('error', (error) => {
+      resolve({ ok: false, status: 0, error: error.message });
+    });
+    request.end();
+  });
+}
+
+async function runScenario({ port, name, method, target, headers, body, durationMs, concurrency, maxRequestsPerScenario, expectedStatuses }) {
   const deadline = performance.now() + durationMs;
   const latencies = [];
   const statusCounts = new Map();
   const errorCounts = new Map();
+  const requestLimit = maxRequestsPerScenario || 0;
+  let issued = 0;
   let total = 0;
   let failed = 0;
 
+  function takeRequestSlot() {
+    if (performance.now() >= deadline) return false;
+    if (requestLimit > 0 && issued >= requestLimit) return false;
+    issued += 1;
+    return true;
+  }
+
   async function worker() {
-    while (performance.now() < deadline) {
+    while (takeRequestSlot()) {
       const result = await requestOnce({ port, method, target, headers, body });
       total += 1;
       latencies.push(result.latencyMs);
@@ -315,6 +412,7 @@ async function runScenario({ port, name, method, target, headers, body, duration
     target,
     durationMs: Math.round(elapsedSeconds * 1000),
     concurrency,
+    maxRequestsPerScenario: requestLimit,
     requests: total,
     failed,
     rps: round(total / elapsedSeconds),
@@ -433,47 +531,93 @@ function printText(summary) {
   for (const probe of summary.edgeProbes) {
     console.log(`  ${probe.pass ? 'PASS' : 'FAIL'} ${probe.name}: status=${probe.status}, expected=${probe.expected.join('|')}`);
   }
+  const latency = summary.serverRuntime?.payload?.runtime?.http?.latency;
+  if (latency) {
+    console.log('\nServer-side latency snapshot:');
+    console.log(`  schema=${latency.schema} retained=${latency.retainedSamples}/${latency.sampleLimit} dropped=${latency.droppedSamples}`);
+    for (const route of latency.byRoute || []) {
+      console.log(`  ${route.route}: count=${route.count} failed=${route.failed} total.p95=${route.totalMs?.p95}ms dispatch.p95=${route.dispatchMs?.p95}ms`);
+    }
+  }
+  const operations = summary.serverRuntime?.payload?.runtime?.http?.operations;
+  if (operations) {
+    console.log('\nServer-side operation snapshot:');
+    console.log(`  schema=${operations.schema} retained=${operations.retainedSamples}/${operations.sampleLimit} dropped=${operations.droppedSamples}`);
+    for (const operation of operations.byName || []) {
+      console.log(`  ${operation.name}: count=${operation.count} failed=${operation.failed} p95=${operation.durationMs?.p95}ms p99=${operation.durationMs?.p99}ms`);
+    }
+  }
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
   const server = await startServer(options);
   try {
-    const common = { port: server.port, durationMs: options.durationMs, concurrency: options.concurrency };
+    const common = {
+      port: server.port,
+      durationMs: options.durationMs,
+      concurrency: options.concurrency,
+      maxRequestsPerScenario: options.maxRequestsPerScenario,
+    };
     const scenarios = [];
-    scenarios.push(
-      await runScenario({
-        ...common,
-        name: 'healthz readiness endpoint',
-        method: 'GET',
-        target: '/healthz',
-        expectedStatuses: [200],
-      }),
-    );
-    scenarios.push(
-      await runScenario({
-        ...common,
-        name: 'cached overview endpoint',
-        method: 'GET',
-        target: '/api/overview',
-        expectedStatuses: [200],
-      }),
-    );
-    scenarios.push(
-      await runScenario({
-        ...common,
-        name: 'MCP initialize POST',
-        method: 'POST',
-        target: '/mcp',
-        headers: {
-          Accept: 'application/json, text/event-stream',
-          'Content-Type': 'application/json',
-        },
-        body: initializeBody(),
-        expectedStatuses: [200],
-      }),
-    );
+    const serverRuntimeSnapshots = [];
+    async function runMeasuredScenario(config) {
+      const scenario = await runScenario(config);
+      scenarios.push(scenario);
+      const runtime = await requestJson({ port: server.port, target: '/api/resources' });
+      serverRuntimeSnapshots.push({ afterScenario: scenario.name, runtime });
+    }
+    await runMeasuredScenario({
+      ...common,
+      name: 'healthz readiness endpoint',
+      method: 'GET',
+      target: '/healthz',
+      expectedStatuses: [200],
+    });
+    const warmups = [
+      {
+        name: 'cached overview warmup',
+        result: await requestJson({ port: server.port, target: '/api/overview' }),
+      },
+    ];
+    await runMeasuredScenario({
+      ...common,
+      name: 'cached overview endpoint',
+      method: 'GET',
+      target: '/api/overview',
+      expectedStatuses: [200],
+    });
+    await runMeasuredScenario({
+      ...common,
+      name: 'runtime resources endpoint',
+      method: 'GET',
+      target: '/api/resources',
+      expectedStatuses: [200],
+    });
+    await runMeasuredScenario({
+      port: server.port,
+      durationMs: Math.min(5_000, options.durationMs),
+      concurrency: Math.min(8, options.concurrency),
+      maxRequestsPerScenario: options.maxRequestsPerScenario,
+      name: 'refresh overview endpoint',
+      method: 'GET',
+      target: '/api/overview?refresh=1',
+      expectedStatuses: [200, 429],
+    });
+    await runMeasuredScenario({
+      ...common,
+      name: 'MCP initialize POST',
+      method: 'POST',
+      target: '/mcp',
+      headers: {
+        Accept: 'application/json, text/event-stream',
+        'Content-Type': 'application/json',
+      },
+      body: initializeBody(),
+      expectedStatuses: [200],
+    });
     const edgeProbes = await runEdgeProbes(server.port, options.maxBodyBytes);
+    const serverRuntime = await requestJson({ port: server.port, target: '/api/resources' });
     const summary = {
       generatedAt: new Date().toISOString(),
       binary: options.binary,
@@ -485,11 +629,19 @@ async function main() {
         port: options.port || 'auto',
         maxConnections: options.maxConnections,
         maxBodyBytes: options.maxBodyBytes,
+        maxRequestsPerScenario: options.maxRequestsPerScenario,
         overviewCacheMs: options.overviewCacheMs,
       },
       scenarios,
       edgeProbes,
-      passed: scenarios.every((scenario) => scenario.failed === 0) && edgeProbes.every((probe) => probe.pass),
+      warmups,
+      serverRuntime,
+      serverRuntimeSnapshots,
+      passed: scenarios.every((scenario) => scenario.failed === 0)
+        && edgeProbes.every((probe) => probe.pass)
+        && warmups.every((warmup) => warmup.result?.ok)
+        && serverRuntime.ok
+        && serverRuntimeSnapshots.every((snapshot) => snapshot.runtime?.ok),
     };
     if (options.json) console.log(JSON.stringify(summary, null, 2));
     else printText(summary);

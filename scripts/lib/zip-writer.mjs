@@ -1,9 +1,24 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { deflateRawSync } from 'node:zlib';
+import { readRegularFileStableSync, writeFileAtomicSync } from './atomic-fs.mjs';
 
 const UTF8_FLAG = 0x0800;
 const DEFLATE_METHOD = 8;
+const MAX_UINT16 = 0xffff;
+const MAX_UINT32 = 0xffffffff;
+
+function assertUInt16(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_UINT16) {
+    throw new Error(`${label} exceeds the classic ZIP uint16 limit; ZIP64 is not implemented`);
+  }
+}
+
+function assertUInt32(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0 || value > MAX_UINT32) {
+    throw new Error(`${label} exceeds the classic ZIP uint32 limit; ZIP64 is not implemented`);
+  }
+}
 
 const crcTable = new Uint32Array(256);
 for (let n = 0; n < 256; n += 1) {
@@ -32,7 +47,23 @@ function dosDateTime(date = new Date()) {
 }
 
 function normalizeZipPath(value) {
-  return String(value).split(path.sep).join('/').replace(/^\/+/, '');
+  return String(value).split(/[\\/]+/).join('/').replace(/^\/+/, '');
+}
+
+function validateSafeZipPath(value, label = 'ZIP path') {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${label} must not be empty`);
+  }
+  if (/^[\\/]/.test(value) || path.isAbsolute(value) || /^[A-Za-z]:[\\/]/.test(value) || /^\\\\/.test(value)) {
+    throw new Error(`${label} must be relative`);
+  }
+  if (/[\u0000-\u001f]/.test(value)) {
+    throw new Error(`${label} must not contain control characters`);
+  }
+  const parts = value.split(/[\\/]+/);
+  if (parts.some((part) => part.length === 0 || part === '.' || part === '..')) {
+    throw new Error(`${label} must not contain empty, . or .. path segments`);
+  }
 }
 
 function walkFiles(root) {
@@ -43,14 +74,33 @@ function walkFiles(root) {
     const entries = fs.readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name));
     for (const entry of entries) {
       const full = path.join(current, entry.name);
-      if (entry.isDirectory()) stack.push(full);
-      else if (entry.isFile()) result.push(full);
+      const stat = fs.lstatSync(full);
+      const relative = normalizeZipPath(path.relative(root, full));
+      if (stat.isSymbolicLink()) {
+        throw new Error(`refusing to archive symbolic link entry: ${relative}`);
+      }
+      if (stat.isDirectory()) {
+        stack.push(full);
+      } else if (stat.isFile()) {
+        result.push(full);
+      } else {
+        throw new Error(`refusing to archive non-regular entry: ${relative}`);
+      }
     }
   }
   return result.sort((left, right) => normalizeZipPath(path.relative(root, left)).localeCompare(normalizeZipPath(path.relative(root, right))));
 }
 
+function assertClassicZipEntry(entry) {
+  assertUInt16(entry.name.length, `ZIP entry name length for ${entry.path}`);
+  assertUInt32(entry.crc, `ZIP entry CRC for ${entry.path}`);
+  assertUInt32(entry.compressedSize, `ZIP compressed size for ${entry.path}`);
+  assertUInt32(entry.size, `ZIP uncompressed size for ${entry.path}`);
+  assertUInt32(entry.offset, `ZIP local header offset for ${entry.path}`);
+}
+
 function localFileHeader(entry) {
+  assertClassicZipEntry(entry);
   const header = Buffer.alloc(30);
   header.writeUInt32LE(0x04034b50, 0);
   header.writeUInt16LE(20, 4);
@@ -67,6 +117,7 @@ function localFileHeader(entry) {
 }
 
 function centralDirectoryHeader(entry) {
+  assertClassicZipEntry(entry);
   const header = Buffer.alloc(46);
   header.writeUInt32LE(0x02014b50, 0);
   header.writeUInt16LE((3 << 8) | 20, 4);
@@ -89,13 +140,17 @@ function centralDirectoryHeader(entry) {
 }
 
 function unixModeForZip(stat, data) {
-  const fileType = stat.mode & 0o170000 || 0o100000;
-  const fileMode = stat.mode & 0o777 || 0o644;
+  const rawMode = typeof stat.mode === 'bigint' ? stat.mode : BigInt(stat.mode);
+  const fileType = Number(rawMode & 0o170000n) || 0o100000;
+  const fileMode = Number(rawMode & 0o777n) || 0o644;
   const permissions = data.subarray(0, 2).toString('utf8') === '#!' ? fileMode | 0o755 : fileMode;
   return fileType | permissions;
 }
 
 function endOfCentralDirectory(entryCount, centralSize, centralOffset) {
+  assertUInt16(entryCount, 'ZIP entry count');
+  assertUInt32(centralSize, 'ZIP central directory size');
+  assertUInt32(centralOffset, 'ZIP central directory offset');
   const header = Buffer.alloc(22);
   header.writeUInt32LE(0x06054b50, 0);
   header.writeUInt16LE(0, 4);
@@ -109,18 +164,39 @@ function endOfCentralDirectory(entryCount, centralSize, centralOffset) {
 }
 
 export function createZipFromDirectory(sourceRoot, archivePath, options = {}) {
-  const rootName = normalizeZipPath(options.rootName || path.basename(sourceRoot));
+  const rawRootName = String(options.rootName || path.basename(sourceRoot));
+  const maxFileBytes = options.maxFileBytes;
+  const maxTotalUncompressedBytes = options.maxTotalUncompressedBytes;
+  validateSafeZipPath(rawRootName, 'ZIP root name');
+  const rootName = normalizeZipPath(rawRootName);
   const fixedDate = options.date || new Date(0);
   const { time, date } = dosDateTime(fixedDate);
   const parts = [];
   const entries = [];
+  const seenPaths = new Set();
   let offset = 0;
+  let totalUncompressedBytes = 0;
 
   for (const absolutePath of walkFiles(sourceRoot)) {
-    const stat = fs.statSync(absolutePath);
-    const data = fs.readFileSync(absolutePath);
+    const rawRelative = path.relative(sourceRoot, absolutePath);
+    validateSafeZipPath(rawRelative, 'ZIP entry path');
+    const relative = normalizeZipPath(rawRelative);
+    const { data, stat } = readRegularFileStableSync(absolutePath, { maxBytes: maxFileBytes });
     const compressed = deflateRawSync(data, { level: 9 });
-    const name = Buffer.from(`${rootName}/${normalizeZipPath(path.relative(sourceRoot, absolutePath))}`, 'utf8');
+    assertUInt32(data.length, `ZIP uncompressed size for ${relative}`);
+    totalUncompressedBytes += data.length;
+    if (maxTotalUncompressedBytes !== undefined && totalUncompressedBytes > maxTotalUncompressedBytes) {
+      throw new Error(`ZIP input exceeds maximum total uncompressed size of ${maxTotalUncompressedBytes} bytes`);
+    }
+    assertUInt32(compressed.length, `ZIP compressed size for ${relative}`);
+    assertUInt32(offset, `ZIP local header offset for ${relative}`);
+    const zipPath = `${rootName}/${relative}`;
+    if (seenPaths.has(zipPath)) {
+      throw new Error(`duplicate ZIP entry path after normalization: ${zipPath}`);
+    }
+    seenPaths.add(zipPath);
+    const name = Buffer.from(zipPath, 'utf8');
+    assertUInt16(name.length, `ZIP entry name length for ${zipPath}`);
     const entry = {
       name,
       path: name.toString('utf8'),
@@ -139,12 +215,14 @@ export function createZipFromDirectory(sourceRoot, archivePath, options = {}) {
   }
 
   const centralOffset = offset;
+  assertUInt32(centralOffset, 'ZIP central directory offset');
+  assertUInt16(entries.length, 'ZIP entry count');
   const central = entries.map(centralDirectoryHeader);
   const centralSize = central.reduce((sum, part) => sum + part.length, 0);
+  assertUInt32(centralSize, 'ZIP central directory size');
   parts.push(...central, endOfCentralDirectory(entries.length, centralSize, centralOffset));
 
-  fs.mkdirSync(path.dirname(archivePath), { recursive: true });
-  fs.writeFileSync(archivePath, Buffer.concat(parts));
+  writeFileAtomicSync(archivePath, Buffer.concat(parts), { mode: 0o644 });
   return entries.map((entry) => entry.path);
 }
 
@@ -162,15 +240,22 @@ export function listZipEntryMetadata(archivePath) {
   const eocd = findEndOfCentralDirectory(buffer);
   const count = buffer.readUInt16LE(eocd + 10);
   const centralOffset = buffer.readUInt32LE(eocd + 16);
+  if (centralOffset > buffer.length) {
+    throw new Error('ZIP central directory offset points outside the archive');
+  }
   const entries = [];
   let offset = centralOffset;
   for (let index = 0; index < count; index += 1) {
+    if (offset + 46 > buffer.length) throw new Error(`truncated ZIP central directory header at offset ${offset}`);
     if (buffer.readUInt32LE(offset) !== 0x02014b50) throw new Error(`invalid ZIP central directory header at offset ${offset}`);
     const versionMadeBy = buffer.readUInt16LE(offset + 4);
     const nameLength = buffer.readUInt16LE(offset + 28);
     const extraLength = buffer.readUInt16LE(offset + 30);
     const commentLength = buffer.readUInt16LE(offset + 32);
     const externalAttributes = buffer.readUInt32LE(offset + 38);
+    if (offset + 46 + nameLength + extraLength + commentLength > buffer.length) {
+      throw new Error(`truncated ZIP central directory entry at offset ${offset}`);
+    }
     entries.push({
       name: buffer.subarray(offset + 46, offset + 46 + nameLength).toString('utf8'),
       hostSystem: versionMadeBy >>> 8,

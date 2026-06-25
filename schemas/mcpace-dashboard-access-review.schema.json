@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/mcpace-dashboard-access-review.schema.json",
+  "title": "MCPace Dashboard Access Review Model",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "status",
+    "title",
+    "body",
+    "counts",
+    "items"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "mcpace.dashboardAccessReview.v1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "good",
+        "warn",
+        "bad"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "primaryAction": {
+      "$ref": "#/$defs/action"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "servers": { "type": "integer", "minimum": 0 },
+        "enabled": { "type": "integer", "minimum": 0 },
+        "remoteHttp": { "type": "integer", "minimum": 0 },
+        "credentialSources": { "type": "integer", "minimum": 0 },
+        "hiddenSecretNames": { "type": "integer", "minimum": 0 },
+        "approvalRequired": { "type": "integer", "minimum": 0 },
+        "destructive": { "type": "integer", "minimum": 0 },
+        "mutatingOrOpenWorld": { "type": "integer", "minimum": 0 },
+        "readOnly": { "type": "integer", "minimum": 0 },
+        "enabledWithoutEvidence": { "type": "integer", "minimum": 0 },
+        "sensitiveWithoutEvidence": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "categoryCounts": {
+      "type": "object",
+      "additionalProperties": { "type": "integer", "minimum": 0 }
+    },
+    "items": {
+      "type": "array",
+      "minItems": 4,
+      "items": { "$ref": "#/$defs/item" }
+    },
+    "serverRows": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/serverRow" }
+    },
+    "displayRules": {
+      "type": "array",
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "action": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["label", "action"],
+      "properties": {
+        "label": { "type": "string" },
+        "action": { "type": "string", "pattern": "^[a-z][a-z-]*$" }
+      }
+    },
+    "item": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["label", "count", "status", "body"],
+      "properties": {
+        "label": { "type": "string" },
+        "count": { "type": "integer", "minimum": 0 },
+        "status": {
+          "type": "string",
+          "enum": ["good", "warn", "bad"]
+        },
+        "body": { "type": "string" }
+      }
+    },
+    "serverRow": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "name": { "type": "string" },
+        "enabled": { "type": "boolean" },
+        "evidenceState": { "type": "string" },
+        "risk": { "type": "string" },
+        "approvalRequired": { "type": "boolean" },
+        "remote": { "type": "boolean" },
+        "credentialHints": { "type": "boolean" },
+        "hiddenSecretNameCount": { "type": "integer", "minimum": 0 },
+        "categories": {
+          "type": "array",
+          "items": { "type": "string" }
+        }
+      }
+    }
+  }
+}

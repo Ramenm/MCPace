@@ -1,172 +1,148 @@
 #!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { commandExists, resultStatus, runCommand } from './lib/command-runner.mjs';
 import { repoRoot } from './lib/project-metadata.mjs';
-import { commandForPlatform, commandNeedsShell } from './lib/process.mjs';
-import { childEnvForCommand } from './lib/safe-child-env.mjs';
 
-const maxBuffer = 32 * 1024 * 1024;
 
-function localBin(name) {
-  const binaryName = process.platform === 'win32' ? `${name}.cmd` : name;
-  return path.join(repoRoot, 'node_modules', '.bin', binaryName);
+const cleanupDirs = [];
+const generatedParts = new Set(['.git', 'node_modules', 'target', 'dist', '.cache', '.pytest_cache', '__pycache__']);
+
+function shouldSkipScanPath(relativePath) {
+  return relativePath.split(/[\/]+/).some((part) => generatedParts.has(part));
 }
 
-function hasLocalBin(name) {
-  return fs.existsSync(localBin(name));
-}
-
-function spawnCommand(command, args, options) {
-  if (commandNeedsShell(command)) {
-    return spawnSync(process.env.COMSPEC || 'cmd.exe', ['/d', '/c', command, ...args], options);
+function copyForScan(source, destination, relativePath) {
+  if (shouldSkipScanPath(relativePath)) return;
+  const stat = fs.lstatSync(source);
+  if (stat.isSymbolicLink() || !stat.isDirectory() && !stat.isFile()) return;
+  if (stat.isDirectory()) {
+    fs.mkdirSync(destination, { recursive: true });
+    for (const entry of fs.readdirSync(source, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
+      const childRelative = path.posix.join(relativePath, entry.name);
+      copyForScan(path.join(source, entry.name), path.join(destination, entry.name), childRelative);
+    }
+    return;
   }
-  return spawnSync(command, args, options);
+  fs.mkdirSync(path.dirname(destination), { recursive: true });
+  fs.copyFileSync(source, destination);
+}
+
+function releaseManifestPaths() {
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'release-manifest.json'), 'utf8'));
+    return Array.isArray(manifest.includePaths) ? manifest.includePaths : [];
+  } catch {
+    return [];
+  }
+}
+
+function prepareGitleaksScanSource() {
+  const scanRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-gitleaks-scan-'));
+  cleanupDirs.push(scanRoot);
+  for (const relativePath of releaseManifestPaths()) {
+    if (typeof relativePath !== 'string' || relativePath.length === 0 || shouldSkipScanPath(relativePath)) continue;
+    const absoluteSource = path.resolve(repoRoot, relativePath);
+    if (!absoluteSource.startsWith(repoRoot + path.sep) && absoluteSource !== repoRoot) continue;
+    if (!fs.existsSync(absoluteSource)) continue;
+    copyForScan(absoluteSource, path.join(scanRoot, relativePath), relativePath);
+  }
+  return scanRoot;
 }
 
 function run(command, args, options = {}) {
-  const resolved = options.localBin && hasLocalBin(command)
-    ? localBin(command)
-    : commandForPlatform(command, process.platform);
-  const result = spawnCommand(resolved, args, {
+  return runCommand(command, args, {
     cwd: options.cwd || repoRoot,
-    encoding: 'utf8',
-    env: options.env || childEnvForCommand(command),
-    maxBuffer,
-    windowsHide: true,
+    env: options.env,
+    localBin: options.localBin,
+    timeoutMs: options.timeoutMs ?? 120_000,
   });
-  return {
-    command: [resolved, ...args].join(' '),
-    status: result.status,
-    signal: result.signal,
-    error: result.error?.message || null,
-    stdout: String(result.stdout || '').trim(),
-    stderr: String(result.stderr || '').trim(),
-  };
 }
 
-function commandExists(command) {
-  const probe = process.platform === 'win32'
-    ? run('where', [command])
-    : run('sh', ['-c', `command -v ${JSON.stringify(command)} >/dev/null 2>&1`]);
-  return probe.status === 0;
+function detail(result) {
+  return result.error || result.stderr.trim() || result.stdout.trim() || 'ok';
 }
 
-function resultStatus(result, { optional = false, warnOnOutputPattern = null } = {}) {
-  if (result.error && /ENOENT/i.test(result.error)) return optional ? 'skipped' : 'fail';
-  if (result.status !== 0) return optional ? 'warn' : 'fail';
-  if (warnOnOutputPattern && warnOnOutputPattern.test(`${result.stdout}\n${result.stderr}`)) return 'warn';
-  return 'pass';
+function checkFromResult(name, required, result, statusOptions = {}) {
+  return { name, required, status: resultStatus(result, statusOptions), detail: detail(result), command: result.command };
 }
 
-const checks = [];
+function skippedCheck(name, detailText) {
+  return { name, required: false, status: 'skipped', detail: detailText };
+}
 
-const publint = run('publint', ['packages/npm/cli'], { localBin: true });
-checks.push({
-  name: 'publint',
-  required: true,
-  status: resultStatus(publint),
-  detail: publint.error || publint.stderr || publint.stdout,
-  command: publint.command,
-});
+function optionalToolCheck({ name, args, missing, statusOptions, timeoutMs }) {
+  if (!commandExists(name, { includeLocalBin: true })) return skippedCheck(name, missing);
+  return checkFromResult(name, false, run(name, args, { timeoutMs }), statusOptions);
+}
 
-if (commandExists('check-jsonschema')) {
-  const jsonschema = run('check-jsonschema', [
-    '--schemafile', 'schemas/mcpace-hub.schema.json',
-    'examples/mcpace-hub.minimal.json',
-    'examples/mcpace-hub.workstation.json',
-  ]);
-  checks.push({
+function workflowFileArgs() {
+  const workflowDir = path.join(repoRoot, '.github', 'workflows');
+  if (!fs.existsSync(workflowDir)) return [];
+  return fs.readdirSync(workflowDir, { withFileTypes: true })
+    .filter((entry) => entry.isFile() && /\.ya?ml$/i.test(entry.name))
+    .map((entry) => path.join('.github', 'workflows', entry.name).split(path.sep).join('/'))
+    .sort();
+}
+
+
+function actionlintArgs() {
+  const args = [];
+  const config = path.join(repoRoot, '.github', 'actionlint.yaml');
+  if (fs.existsSync(config)) args.push('-config-file', config);
+  args.push(...workflowFileArgs());
+  return args;
+}
+
+function gitleaksArgs() {
+  const args = ['detect', '--no-git', '--source', prepareGitleaksScanSource(), '--redact'];
+  const config = path.join(repoRoot, '.gitleaks.toml');
+  if (fs.existsSync(config)) args.push('--config', config);
+  return args;
+}
+
+function zizmorArgs() {
+  const args = ['--offline', '--no-exit-codes', '--color', 'never', '--format', 'plain'];
+  const config = path.join(repoRoot, '.github', 'zizmor.yml');
+  if (fs.existsSync(config)) args.push('--config', config);
+  args.push('.github/workflows');
+  return args;
+}
+
+const checks = [
+  checkFromResult('publint', true, run('publint', ['packages/npm/cli'], { localBin: true })),
+  optionalToolCheck({
     name: 'check-jsonschema',
-    required: false,
-    status: resultStatus(jsonschema),
-    detail: jsonschema.error || jsonschema.stderr || jsonschema.stdout,
-    command: jsonschema.command,
-  });
-} else {
-  checks.push({
-    name: 'check-jsonschema',
-    required: false,
-    status: 'skipped',
-    detail: 'Install with: python -m pip install check-jsonschema',
-  });
-}
-
-if (commandExists('actionlint')) {
-  const actionlint = run('actionlint', ['.github/workflows']);
-  checks.push({
+    args: ['--schemafile', 'schemas/mcpace-hub.schema.json', 'examples/mcpace-hub.minimal.json', 'examples/mcpace-hub.workstation.json'],
+    missing: 'Install with: python -m pip install check-jsonschema',
+  }),
+  optionalToolCheck({
     name: 'actionlint',
-    required: false,
-    status: resultStatus(actionlint),
-    detail: actionlint.error || actionlint.stderr || actionlint.stdout || 'ok',
-    command: actionlint.command,
-  });
-} else {
-  checks.push({
-    name: 'actionlint',
-    required: false,
-    status: 'skipped',
-    detail: 'Install actionlint from rhysd/actionlint or an OS/package-manager binary.',
-  });
-}
-
-if (commandExists('zizmor')) {
-  const zizmorArgs = ['--offline', '--no-exit-codes', '--color', 'never', '--format', 'plain'];
-  const zizmorConfig = path.join(repoRoot, '.github', 'zizmor.yml');
-  if (fs.existsSync(zizmorConfig)) zizmorArgs.push('--config', zizmorConfig);
-  zizmorArgs.push('.github/workflows');
-  const zizmor = run('zizmor', zizmorArgs);
-  checks.push({
+    args: actionlintArgs(),
+    missing: 'Install actionlint from rhysd/actionlint or an OS/package-manager binary.',
+  }),
+  optionalToolCheck({
     name: 'zizmor',
-    required: false,
-    status: resultStatus(zizmor, { optional: true, warnOnOutputPattern: /\b(error|warning)\[/i }),
-    detail: zizmor.error || zizmor.stderr || zizmor.stdout || 'ok',
-    command: zizmor.command,
-  });
-} else {
-  checks.push({
-    name: 'zizmor',
-    required: false,
-    status: 'skipped',
-    detail: 'Install with: python -m pip install zizmor',
-  });
-}
-
-if (commandExists('gitleaks')) {
-  const gitleaks = run('gitleaks', ['detect', '--no-git', '--source', '.', '--redact']);
-  checks.push({
+    args: zizmorArgs(),
+    missing: 'Install with: python -m pip install zizmor',
+    statusOptions: { optional: true, warnOnOutputPattern: /\b(error|warning)\[/i },
+    timeoutMs: 120_000,
+  }),
+  optionalToolCheck({
     name: 'gitleaks',
-    required: false,
-    status: resultStatus(gitleaks),
-    detail: gitleaks.error || gitleaks.stderr || gitleaks.stdout || 'ok',
-    command: gitleaks.command,
-  });
-} else {
-  checks.push({
-    name: 'gitleaks',
-    required: false,
-    status: 'skipped',
-    detail: 'Install gitleaks from gitleaks/gitleaks to scan repository contents for secrets.',
-  });
-}
-
-if (commandExists('osv-scanner')) {
-  const osv = run('osv-scanner', ['scan', '--lockfile', 'package-lock.json']);
-  checks.push({
+    args: gitleaksArgs(),
+    missing: 'Install gitleaks from gitleaks/gitleaks to scan repository contents for secrets.',
+    timeoutMs: 120_000,
+  }),
+  optionalToolCheck({
     name: 'osv-scanner',
-    required: false,
-    status: resultStatus(osv),
-    detail: osv.error || osv.stderr || osv.stdout || 'ok',
-    command: osv.command,
-  });
-} else {
-  checks.push({
-    name: 'osv-scanner',
-    required: false,
-    status: 'skipped',
-    detail: 'Install osv-scanner from google/osv-scanner for lockfile vulnerability scans.',
-  });
-}
+    args: ['scan', '--experimental-offline', '--lockfile', 'package-lock.json'],
+    missing: 'Install osv-scanner from google/osv-scanner for lockfile vulnerability scans.',
+    statusOptions: { optional: true },
+    timeoutMs: 30_000,
+  }),
+];
 
 const hardFailures = checks.filter((check) => check.required && check.status !== 'pass');
 const installedFailures = checks.filter((check) => !check.required && check.status === 'fail');
@@ -183,5 +159,7 @@ const payload = {
   checks,
 };
 console.log(JSON.stringify(payload, null, 2));
+
+for (const dir of cleanupDirs) fs.rmSync(dir, { recursive: true, force: true });
 
 if (hardFailures.length > 0 || installedFailures.length > 0) process.exit(1);

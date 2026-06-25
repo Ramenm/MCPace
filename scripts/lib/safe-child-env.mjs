@@ -32,11 +32,9 @@ export const SAFE_CHILD_ENV_KEYS = Object.freeze([
   'SSL_CERT_FILE',
   'CARGO_HOME',
   'RUSTUP_HOME',
-  'RUSTFLAGS',
-  'CARGO_INCREMENTAL',
-  'CARGO_PROFILE_DEV_DEBUG',
-  'CARGO_PROFILE_TEST_DEBUG',
-  'CARGO_PROFILE_RELEASE_DEBUG',
+  // Release/proof child processes intentionally drop compiler and npm injection knobs
+  // such as RUSTFLAGS, RUSTC_WRAPPER, NODE_OPTIONS, npm_execpath and LD_PRELOAD.
+  // Pass deliberate overrides through cleanChildEnv({ ... }) at the call site.
   'DOCKER_HOST',
   'DOCKER_CONTEXT',
   'DOCKER_TLS_VERIFY',

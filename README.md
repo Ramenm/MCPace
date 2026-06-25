@@ -36,6 +36,7 @@ Modes are `shared`, `serialized`, `session-isolated`, `project-isolated`, `pool`
 |---|---|
 | [`docs/README.md`](docs/README.md) | Runbook and documentation map. |
 | [`docs/architecture.md`](docs/architecture.md) | Scheduler model, planes, modes, and state classes. |
+| [`docs/dashboard-base.md`](docs/dashboard-base.md) | Dashboard information architecture, display order, and action rules. |
 | [`docs/configuration.md`](docs/configuration.md) | Config files, install/import examples, dynamic discovery, and policy options. |
 | [`docs/lab-harness.md`](docs/lab-harness.md) | Evidence corpus for automatic runtime classification. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and security boundary. |
@@ -50,3 +51,7 @@ npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --conc
 ```
 
 This ZIP is source-only: no `.git`, `node_modules`, caches, runtime logs, vendored binaries, Rust `target`, or heavy build outputs.
+
+## Base dashboard rule
+
+The dashboard starts with the boring setup path: backend, client, source, tools evidence, and conservative routing. Import and discovery default to preview/disabled; a parked source is reviewed first, enabled deliberately, tested before normal use, and form errors stay next to the field that needs fixing.

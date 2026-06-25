@@ -1,0 +1,283 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/mcpace-dashboard-foundation.schema.json",
+  "title": "MCPace Dashboard Foundation Model",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema",
+    "stateKey",
+    "nextStepKey",
+    "status",
+    "complete",
+    "total",
+    "nextStep",
+    "steps",
+    "actions"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "const": "mcpace.dashboardFoundation.v1"
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "good",
+        "warn",
+        "bad"
+      ]
+    },
+    "title": {
+      "type": "string"
+    },
+    "body": {
+      "type": "string"
+    },
+    "complete": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 5
+    },
+    "total": {
+      "type": "integer",
+      "const": 5
+    },
+    "progressPct": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "endpoint": {
+      "type": "string"
+    },
+    "counts": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "backendReachable": {
+          "type": "boolean"
+        },
+        "runtimeReady": {
+          "type": "boolean"
+        },
+        "clientConfigured": {
+          "type": "boolean"
+        },
+        "servers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "enabledServers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "parkedServers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "cachedToolServers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "uncheckedServers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "policyChanges": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "routingReady": {
+          "type": "boolean"
+        }
+      }
+    },
+    "nextStep": {
+      "$ref": "#/$defs/step"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "items": {
+        "$ref": "#/$defs/action"
+      }
+    },
+    "displayRules": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "stateKey": {
+      "type": "string",
+      "enum": [
+        "backend",
+        "client",
+        "source",
+        "tools",
+        "routing",
+        "ready"
+      ]
+    },
+    "nextStepKey": {
+      "type": "string",
+      "enum": [
+        "backend",
+        "client",
+        "source",
+        "tools",
+        "routing",
+        "ready"
+      ]
+    },
+    "safety": {
+      "$ref": "#/$defs/safety"
+    }
+  },
+  "$defs": {
+    "step": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "key",
+        "label",
+        "status",
+        "title",
+        "body",
+        "action",
+        "actionLabel"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "enum": [
+            "backend",
+            "client",
+            "source",
+            "tools",
+            "routing",
+            "ready"
+          ]
+        },
+        "label": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "good",
+            "warn",
+            "bad"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z-]*$"
+        },
+        "actionLabel": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "action": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "label",
+        "action"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "action": {
+          "type": "string",
+          "pattern": "^[a-z][a-z-]*$"
+        }
+      }
+    },
+    "safety": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "schema",
+        "status",
+        "title",
+        "body",
+        "counts"
+      ],
+      "properties": {
+        "schema": {
+          "type": "string",
+          "const": "mcpace.dashboardSafety.v1"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "good",
+            "warn",
+            "bad"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "body": {
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/safetyCounts"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "safetyCounts": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "enabledWithoutEvidence": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "remoteSources": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "secretBearingSources": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "blockedServers": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "policyChanges": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    }
+  }
+}

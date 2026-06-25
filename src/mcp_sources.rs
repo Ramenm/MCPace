@@ -1,8 +1,9 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
+use crate::runtimepaths;
 use std::collections::BTreeMap;
-use std::path::Path;
-use std::time::UNIX_EPOCH;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
 
 mod import;
 mod paths;
@@ -61,12 +62,19 @@ pub fn load_mcp_server_registry(root_path: &Path) -> Result<McpServerRegistry, S
     };
 
     for source in sources {
-        if !source.path.is_file() {
-            registry.warnings.push(format!(
-                "MCP settings source '{}' does not exist; skipping",
-                source.path.display()
-            ));
-            continue;
+        match settings_source_is_regular_file(&source.path) {
+            Ok(true) => {}
+            Ok(false) => {
+                registry.warnings.push(format!(
+                    "MCP settings source '{}' does not exist; skipping",
+                    source.path.display()
+                ));
+                continue;
+            }
+            Err(error) => {
+                registry.warnings.push(error);
+                continue;
+            }
         }
         let value = match json_helpers::read_json_file(&source.path) {
             Ok(value) => value,
@@ -133,18 +141,31 @@ pub fn load_mcp_source_report(root_path: &Path) -> Result<McpSourceReport, Strin
     let mut source_statuses = Vec::new();
 
     for source in sources {
-        if !source.path.is_file() {
-            registry.warnings.push(format!(
-                "MCP settings source '{}' does not exist; skipping",
-                source.path.display()
-            ));
-            source_statuses.push(McpSourceStatus {
-                path: source.path.display().to_string(),
-                origin: source.origin,
-                exists: false,
-                server_count: 0,
-            });
-            continue;
+        match settings_source_is_regular_file(&source.path) {
+            Ok(true) => {}
+            Ok(false) => {
+                registry.warnings.push(format!(
+                    "MCP settings source '{}' does not exist; skipping",
+                    source.path.display()
+                ));
+                source_statuses.push(McpSourceStatus {
+                    path: source.path.display().to_string(),
+                    origin: source.origin,
+                    exists: false,
+                    server_count: 0,
+                });
+                continue;
+            }
+            Err(error) => {
+                registry.warnings.push(error);
+                source_statuses.push(McpSourceStatus {
+                    path: source.path.display().to_string(),
+                    origin: source.origin,
+                    exists: true,
+                    server_count: 0,
+                });
+                continue;
+            }
         }
         let value = match json_helpers::read_json_file(&source.path) {
             Ok(value) => value,
@@ -218,22 +239,105 @@ pub fn load_mcp_source_report(root_path: &Path) -> Result<McpSourceReport, Strin
     })
 }
 
+fn settings_source_is_regular_file(path: &Path) -> Result<bool, String> {
+    match std::fs::symlink_metadata(path) {
+        Ok(metadata) if metadata.file_type().is_symlink() => Err(format!(
+            "MCP settings source '{}' is a symlink; skipping",
+            path.display()
+        )),
+        Ok(metadata) if !metadata.is_file() => Err(format!(
+            "MCP settings source '{}' is not a regular file; skipping",
+            path.display()
+        )),
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!(
+            "failed to inspect MCP settings source '{}': {}; skipping",
+            path.display(),
+            error
+        )),
+    }
+}
+
+pub(crate) fn acquire_mcp_settings_namespace_lock(
+    root_path: &Path,
+) -> Result<runtimepaths::ExclusiveFileLockGuard, String> {
+    let runtime_dir = runtimepaths::ensure_runtime_dir(root_path)?;
+    runtimepaths::acquire_exclusive_file_lock(
+        &runtime_dir.join("mcp-settings.namespace"),
+        "MCP settings namespace update",
+    )
+}
+
+pub(crate) fn source_paths_for_normalized_server(
+    root_path: &Path,
+    normalized_name: &str,
+) -> Result<Vec<PathBuf>, String> {
+    let mut warnings = Vec::new();
+    let sources = collect_source_paths(root_path, &mut warnings);
+    let mut matches = Vec::new();
+    for source in sources {
+        if settings_source_is_regular_file(&source.path).ok() != Some(true) {
+            continue;
+        }
+        let value = match json_helpers::read_json_file(&source.path) {
+            Ok(value) => value,
+            Err(_) => continue,
+        };
+        let Some(servers) = json_helpers::mcp_servers_object(&value) else {
+            continue;
+        };
+        if servers
+            .keys()
+            .any(|name| normalize_server_name(name) == normalized_name)
+        {
+            matches.push(source.path.clone());
+        }
+    }
+    matches.sort();
+    matches.dedup();
+    Ok(matches)
+}
+
 pub fn mcp_settings_fingerprint(root_path: &Path) -> (u128, u64) {
     let mut warnings = Vec::new();
     let sources = collect_source_paths(root_path, &mut warnings);
-    let mut modified_ms = 0u128;
+    let mut fingerprint = 0x6c62_272e_07bb_0142_62b8_2175_6295_c58du128;
     let mut len = 0u64;
     for source in sources {
-        if let Ok(metadata) = std::fs::metadata(&source.path) {
-            len = len.wrapping_add(metadata.len());
-            if let Ok(modified) = metadata.modified() {
-                if let Ok(duration) = modified.duration_since(UNIX_EPOCH) {
-                    modified_ms = modified_ms.wrapping_add(duration.as_millis());
-                }
+        feed_settings_fingerprint(
+            &mut fingerprint,
+            source.path.display().to_string().as_bytes(),
+        );
+        if settings_source_is_regular_file(&source.path).ok() != Some(true) {
+            feed_settings_fingerprint(&mut fingerprint, b"<missing-or-unsafe>");
+            continue;
+        }
+        match std::fs::read(&source.path) {
+            Ok(bytes) => {
+                len = len.wrapping_add(bytes.len() as u64);
+                feed_settings_fingerprint(&mut fingerprint, &bytes);
+            }
+            Err(error) => {
+                feed_settings_fingerprint(&mut fingerprint, b"<missing-or-unreadable>");
+                feed_settings_fingerprint(&mut fingerprint, error.to_string().as_bytes());
             }
         }
     }
-    (modified_ms, len)
+    for warning in warnings {
+        feed_settings_fingerprint(&mut fingerprint, warning.as_bytes());
+    }
+    (fingerprint, len)
+}
+
+fn feed_settings_fingerprint(hash: &mut u128, bytes: &[u8]) {
+    const FNV_PRIME_128: u128 = 0x0000_0000_0100_0000_0000_0000_0000_013b;
+    for byte in bytes {
+        *hash ^= *byte as u128;
+        *hash = hash.wrapping_mul(FNV_PRIME_128);
+    }
+    *hash ^= bytes.len() as u128;
+    *hash = hash.wrapping_mul(FNV_PRIME_128);
 }
 
 pub fn normalize_server_name(value: &str) -> String {

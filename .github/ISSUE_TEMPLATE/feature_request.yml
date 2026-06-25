@@ -1,7 +1,7 @@
 name: Feature request
 description: Suggest a focused improvement.
 title: "feat: "
-labels: [type:enhancement]
+labels: ["type:enhancement"]
 body:
   - type: textarea
     id: problem

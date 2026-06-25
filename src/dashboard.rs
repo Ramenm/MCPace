@@ -5,19 +5,27 @@ use crate::runtimepaths;
 use crate::text_utils;
 use crate::upstream;
 
+mod admission;
 mod diagnostics;
+mod governor;
 mod http_boundary;
 mod http_headers;
 mod http_session;
 mod http_tools;
+mod latency;
 mod mcp_http;
 mod overview;
+mod rate_limit;
 mod response;
 mod tool_runtime;
+mod trace;
+use self::admission::{HttpAdmissionController, HttpAdmissionKind};
 use self::diagnostics::runtime_diagnostics;
+use self::governor::GlobalResourceGovernor;
 use self::http_tools::{
     http_tool_definitions, http_tool_definitions_for_protocol, http_tool_names,
 };
+use self::latency::{RequestLatencyObservation, RequestLatencyTracker};
 use self::mcp_http::{handle_mcp_http_route, write_json_error_response};
 use self::overview::{
     action_response, cached_health_json, cached_overview_json, query_bool_flag,
@@ -25,6 +33,7 @@ use self::overview::{
 };
 #[cfg(test)]
 use self::overview::{build_overview_json, runtime_status_json};
+use self::rate_limit::HttpRateLimiter;
 use self::response::{
     empty_object, now_ms, query_parameter, split_target, write_empty_response,
     write_empty_response_with_headers, write_json_response, write_json_response_with_owned_headers,
@@ -33,11 +42,12 @@ use self::response::{
 #[cfg(test)]
 use self::tool_runtime::http_upstream_lease_context;
 use self::tool_runtime::run_http_tool;
+use self::trace::{OperationTraceObservation, OperationTraceTracker};
 #[cfg(test)]
 use http_boundary::{is_allowed_local_host, is_allowed_local_origin};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::sync::{
@@ -226,11 +236,17 @@ struct DashboardConfig {
     health_cache_ttl: Duration,
     overview_cache: Mutex<Option<CachedOverview>>,
     health_cache: Mutex<Option<CachedHealth>>,
+    request_latencies: Mutex<RequestLatencyTracker>,
+    operation_traces: Mutex<OperationTraceTracker>,
+    rate_limiter: Mutex<HttpRateLimiter>,
+    admission: HttpAdmissionController,
+    resource_governor: GlobalResourceGovernor,
     http_session_store: Mutex<http_session::McpHttpSessionStore>,
     metrics: HttpRuntimeMetrics,
     surface: ServeSurface,
     upstream_session_pools: Vec<Mutex<upstream::UpstreamSessionPool>>,
     auth_token: Option<String>,
+    allow_nonlocal_host: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -382,11 +398,17 @@ fn run_internal(
             health_cache_ttl: resources::default_dashboard_health_cache_ttl(),
             overview_cache: Mutex::new(None),
             health_cache: Mutex::new(None),
+            request_latencies: Mutex::new(RequestLatencyTracker::default()),
+            operation_traces: Mutex::new(OperationTraceTracker::default()),
+            rate_limiter: Mutex::new(HttpRateLimiter::default()),
+            admission: HttpAdmissionController::default(),
+            resource_governor: GlobalResourceGovernor::default(),
             http_session_store: Mutex::new(http_session::McpHttpSessionStore::default()),
             metrics: HttpRuntimeMetrics::default(),
             surface,
             upstream_session_pools: new_upstream_session_pools(),
             auth_token,
+            allow_nonlocal_host: non_loopback_bind,
         },
         stderr,
     )
@@ -433,12 +455,12 @@ fn tool_list_cache_warmup_enabled() -> bool {
     std::env::var("MCPACE_TOOL_LIST_WARMUP")
         .ok()
         .map(|value| {
-            !matches!(
+            matches!(
                 value.trim().to_ascii_lowercase().as_str(),
-                "0" | "false" | "no" | "off" | "disabled"
+                "1" | "true" | "yes" | "on" | "enabled"
             )
         })
-        .unwrap_or(true)
+        .unwrap_or(false)
 }
 
 fn is_loopback_bind_host(host: &str) -> bool {
@@ -672,7 +694,12 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
     let max_requests = config.max_requests;
     let worker_count = config.max_connections.max(1);
     let config = Arc::new(config);
-    let (request_tx, request_rx) = mpsc::sync_channel::<TcpStream>(0);
+    // Keep the listener accepting short-lived local HTTP connections even when
+    // workers are briefly busy. A zero-capacity rendezvous channel makes the
+    // accept loop wait for an idle worker on every connection; on Windows this
+    // can overflow the TCP listen backlog during modest loopback load and show
+    // up to clients as connect timeouts even though handled requests succeed.
+    let (request_tx, request_rx) = mpsc::sync_channel::<TcpStream>(worker_count);
     let request_rx = Arc::new(Mutex::new(request_rx));
     let (log_tx, log_rx) = mpsc::channel::<String>();
     let mut handles = Vec::with_capacity(worker_count);
@@ -681,31 +708,42 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
         let worker_rx = Arc::clone(&request_rx);
         let request_config = Arc::clone(&config);
         let worker_log_tx = log_tx.clone();
-        handles.push(
-            thread::Builder::new()
-                .name(format!("mcpace-http-{worker_index}"))
-                .stack_size(HTTP_WORKER_STACK_BYTES)
-                .spawn(move || loop {
-                    let stream = {
-                        let rx_guard = worker_rx
-                            .lock()
-                            .unwrap_or_else(|poisoned| poisoned.into_inner());
-                        rx_guard.recv()
-                    };
-                    let Ok(stream) = stream else {
-                        break;
-                    };
-                    let mut metrics_guard = request_config.metrics.begin();
-                    if let Err(error) = handle_connection(stream, request_config.as_ref()) {
-                        metrics_guard.mark_failed();
-                        let _ = worker_log_tx.send(format!(
-                            "dashboard worker {} request failed: {}",
-                            worker_index, error
-                        ));
-                    }
-                })
-                .expect("failed to spawn MCPace HTTP worker"),
-        );
+        let worker = thread::Builder::new()
+            .name(format!("mcpace-http-{worker_index}"))
+            .stack_size(HTTP_WORKER_STACK_BYTES)
+            .spawn(move || loop {
+                let stream = {
+                    let rx_guard = worker_rx
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    rx_guard.recv()
+                };
+                let Ok(stream) = stream else {
+                    break;
+                };
+                let mut metrics_guard = request_config.metrics.begin();
+                if let Err(error) = handle_connection(stream, request_config.as_ref()) {
+                    metrics_guard.mark_failed();
+                    let _ = worker_log_tx.send(format!(
+                        "dashboard worker {} request failed: {}",
+                        worker_index, error
+                    ));
+                }
+            });
+        match worker {
+            Ok(handle) => handles.push(handle),
+            Err(error) => {
+                let _ = writeln!(
+                    stderr,
+                    "dashboard failed to spawn HTTP worker {}: {}",
+                    worker_index, error
+                );
+                drop(request_tx);
+                join_request_workers(handles, stderr);
+                drain_request_worker_logs(&log_rx, stderr);
+                return 1;
+            }
+        }
     }
     drop(log_tx);
 
@@ -811,13 +849,235 @@ fn read_limited_http_line(
     }
 }
 
+fn read_limited_http_body(
+    reader: &mut impl Read,
+    content_length: usize,
+) -> Result<Vec<u8>, String> {
+    const BODY_READ_CHUNK_BYTES: usize = 8 * 1024;
+    let mut body = Vec::with_capacity(content_length.min(BODY_READ_CHUNK_BYTES));
+    let mut buffer = [0u8; BODY_READ_CHUNK_BYTES];
+
+    while body.len() < content_length {
+        let remaining = content_length.saturating_sub(body.len());
+        let read_len = remaining.min(buffer.len());
+        reader
+            .read_exact(&mut buffer[..read_len])
+            .map_err(|error| format!("read request body: {}", error))?;
+        body.extend_from_slice(&buffer[..read_len]);
+    }
+
+    Ok(body)
+}
+
 fn is_supported_http_version(version: &str) -> bool {
     matches!(version, "HTTP/1.1" | "HTTP/1.0")
 }
 
+fn record_http_request_latency(config: &DashboardConfig, observation: RequestLatencyObservation) {
+    config
+        .request_latencies
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .record(observation);
+}
+
+struct HttpLatencyProbe<'a> {
+    config: &'a DashboardConfig,
+    started_at: Instant,
+    method: String,
+    route: String,
+    path: String,
+    request_body_bytes: usize,
+    request_header_bytes: usize,
+    parse_duration: Duration,
+    body_read_duration: Duration,
+    dispatch_duration: Duration,
+    failed: bool,
+    recorded: bool,
+}
+
+impl<'a> HttpLatencyProbe<'a> {
+    fn new(config: &'a DashboardConfig) -> Self {
+        Self {
+            config,
+            started_at: Instant::now(),
+            method: "UNKNOWN".to_string(),
+            route: "http.unparsed".to_string(),
+            path: String::new(),
+            request_body_bytes: 0,
+            request_header_bytes: 0,
+            parse_duration: Duration::from_millis(0),
+            body_read_duration: Duration::from_millis(0),
+            dispatch_duration: Duration::from_millis(0),
+            failed: true,
+            recorded: false,
+        }
+    }
+
+    fn mark_empty(&mut self) {
+        self.route = "http.empty".to_string();
+        self.failed = false;
+        self.note_parse_elapsed();
+    }
+
+    fn mark_route(&mut self, route: &str) {
+        self.route = route.to_string();
+        self.note_parse_elapsed();
+    }
+
+    fn note_parse_elapsed(&mut self) {
+        if self.parse_duration == Duration::from_millis(0) {
+            self.parse_duration = self.started_at.elapsed();
+        }
+    }
+
+    fn set_parsed_target(&mut self, method: &str, path: &str, query: &str) {
+        self.method = method.to_string();
+        self.path = path.to_string();
+        self.route = latency_route_label(path, query, self.config);
+    }
+
+    fn set_parse_complete(&mut self, parse_duration: Duration, request_header_bytes: usize) {
+        self.parse_duration = parse_duration;
+        self.request_header_bytes = request_header_bytes;
+    }
+
+    fn set_body(&mut self, request_body_bytes: usize, body_read_duration: Duration) {
+        self.request_body_bytes = request_body_bytes;
+        self.body_read_duration = body_read_duration;
+    }
+
+    fn set_dispatch(&mut self, dispatch_duration: Duration, failed: bool) {
+        self.dispatch_duration = dispatch_duration;
+        self.failed = failed;
+    }
+
+    fn mark_ok(&mut self) {
+        self.failed = false;
+    }
+
+    fn record_now(&mut self) {
+        if self.recorded {
+            return;
+        }
+        self.recorded = true;
+        record_http_request_latency(
+            self.config,
+            RequestLatencyObservation {
+                method: self.method.clone(),
+                route: self.route.clone(),
+                path: self.path.clone(),
+                request_body_bytes: self.request_body_bytes,
+                request_header_bytes: self.request_header_bytes,
+                parse_duration: self.parse_duration,
+                body_read_duration: self.body_read_duration,
+                dispatch_duration: self.dispatch_duration,
+                total_duration: self.started_at.elapsed(),
+                failed: self.failed,
+            },
+        );
+    }
+}
+
+impl Drop for HttpLatencyProbe<'_> {
+    fn drop(&mut self) {
+        self.record_now();
+    }
+}
+
+fn record_operation_trace(config: &DashboardConfig, observation: OperationTraceObservation) {
+    config
+        .operation_traces
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .record(observation);
+}
+
+fn check_http_rate_limit(
+    stream: &TcpStream,
+    config: &DashboardConfig,
+) -> Option<(String, Duration)> {
+    let client_key = stream
+        .peer_addr()
+        .map(|addr| addr.ip().to_string())
+        .unwrap_or_else(|_| "unknown-peer".to_string());
+    let decision = config
+        .rate_limiter
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .check(&client_key, Instant::now());
+    if decision.allowed {
+        None
+    } else {
+        Some((decision.client_key, decision.retry_after))
+    }
+}
+
+fn enter_http_heavy_action_or_write_busy<'a>(
+    stream: &mut TcpStream,
+    config: &'a DashboardConfig,
+    label: &str,
+) -> Result<Option<self::admission::HttpAdmissionPermit<'a>>, String> {
+    let Some(permit) = config.admission.try_enter(HttpAdmissionKind::HeavyAction) else {
+        record_operation_trace(
+            config,
+            OperationTraceObservation {
+                name: label.to_string(),
+                route: "http.admission_rejected".to_string(),
+                duration: Duration::from_millis(0),
+                failed: true,
+                attributes: vec![("kind".to_string(), "heavyAction".to_string())],
+            },
+        );
+        write_admission_rejected(stream, label)?;
+        return Ok(None);
+    };
+    Ok(Some(permit))
+}
+
 fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<(), String> {
+    let mut latency_probe = HttpLatencyProbe::new(config);
+    let request_started_at = latency_probe.started_at;
     let _ = stream.set_read_timeout(Some(config.io_timeout));
     let _ = stream.set_write_timeout(Some(config.io_timeout));
+    let _resource_permit = match config.resource_governor.try_enter_request() {
+        Ok(permit) => permit,
+        Err(rejection) => {
+            latency_probe.mark_route("http.resource_governor_rejected");
+            let retry_after_secs = (rejection.retry_after_ms / 1000).max(1).to_string();
+            record_operation_trace(
+                config,
+                OperationTraceObservation {
+                    name: "http.resource_governor_rejected".to_string(),
+                    route: "http.resource_governor_rejected".to_string(),
+                    duration: Duration::from_millis(0),
+                    failed: true,
+                    attributes: vec![("reason".to_string(), rejection.reason.to_string())],
+                },
+            );
+            write_empty_response_with_headers(
+                &mut stream,
+                "503 Service Unavailable",
+                &[
+                    ("Retry-After", retry_after_secs.as_str()),
+                    ("X-MCPace-Resource-Rejection", rejection.reason),
+                ],
+            )?;
+            latency_probe.mark_ok();
+            return Ok(());
+        }
+    };
+    if let Some((_client_key, retry_after)) = check_http_rate_limit(&stream, config) {
+        latency_probe.mark_route("http.rate_limited");
+        let retry_after_secs = retry_after.as_secs().max(1).to_string();
+        write_empty_response_with_headers(
+            &mut stream,
+            "429 Too Many Requests",
+            &[("Retry-After", retry_after_secs.as_str())],
+        )?;
+        latency_probe.mark_ok();
+        return Ok(());
+    }
     let mut reader = BufReader::new(
         stream
             .try_clone()
@@ -828,44 +1088,56 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
         resources::MAX_HTTP_REQUEST_LINE_BYTES,
         "request line",
     )? {
-        LimitedHttpLine::Empty => return Ok(()),
+        LimitedHttpLine::Empty => {
+            latency_probe.mark_empty();
+            return Ok(());
+        }
         LimitedHttpLine::Line(value) => value,
         LimitedHttpLine::TooLong => {
+            latency_probe.mark_route("http.request_line_too_large");
             write_text_response(
                 &mut stream,
                 "414 URI Too Long",
                 "text/plain; charset=utf-8",
                 "HTTP request line is too large",
             )?;
+            latency_probe.mark_ok();
             return Ok(());
         }
     };
 
     if request_line.trim().is_empty() {
+        latency_probe.mark_empty();
         return Ok(());
     }
 
     let parts: Vec<&str> = request_line.split_whitespace().collect();
     if parts.len() != 3 || !is_supported_http_version(parts[2]) {
+        latency_probe.mark_route("http.malformed_request");
         write_text_response(
             &mut stream,
             "400 Bad Request",
             "text/plain; charset=utf-8",
             "Malformed HTTP request",
         )?;
+        latency_probe.mark_ok();
         return Ok(());
     }
     if !parts[1].starts_with('/') {
+        latency_probe.mark_route("http.unsupported_target");
         write_text_response(
             &mut stream,
             "400 Bad Request",
             "text/plain; charset=utf-8",
             "Unsupported HTTP request target",
         )?;
+        latency_probe.mark_ok();
         return Ok(());
     }
     let method = parts[0].to_string();
     let target = parts[1].to_string();
+    let (early_path, early_query) = split_target(&target);
+    latency_probe.set_parsed_target(&method, early_path, early_query);
 
     let mut headers = Vec::new();
     let mut content_length: Option<usize> = None;
@@ -880,12 +1152,14 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             LimitedHttpLine::Empty => break,
             LimitedHttpLine::Line(value) => value,
             LimitedHttpLine::TooLong => {
+                latency_probe.mark_route("http.header_line_too_large");
                 write_text_response(
                     &mut stream,
                     "431 Request Header Fields Too Large",
                     "text/plain; charset=utf-8",
                     "HTTP request headers are too large",
                 )?;
+                latency_probe.mark_ok();
                 return Ok(());
             }
         };
@@ -894,83 +1168,115 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
         }
         header_count = header_count.saturating_add(1);
         if header_count > resources::MAX_HTTP_HEADER_COUNT {
+            latency_probe.mark_route("http.header_count_too_large");
             write_text_response(
                 &mut stream,
                 "431 Request Header Fields Too Large",
                 "text/plain; charset=utf-8",
                 "HTTP request headers are too large",
             )?;
+            latency_probe.mark_ok();
             return Ok(());
         }
         header_bytes = header_bytes.saturating_add(header.len());
         if header_bytes > resources::MAX_HTTP_HEADER_BYTES {
+            latency_probe.mark_route("http.headers_too_large");
             write_text_response(
                 &mut stream,
                 "431 Request Header Fields Too Large",
                 "text/plain; charset=utf-8",
                 "HTTP request headers are too large",
             )?;
+            latency_probe.mark_ok();
             return Ok(());
         }
         let Some((name, value)) = header.split_once(':') else {
+            latency_probe.mark_route("http.malformed_header");
             write_text_response(
                 &mut stream,
                 "400 Bad Request",
                 "text/plain; charset=utf-8",
                 "Malformed HTTP header",
             )?;
+            latency_probe.mark_ok();
             return Ok(());
         };
         let raw_name = name.trim();
         if !http_boundary::is_valid_http_header_name(raw_name) {
+            latency_probe.mark_route("http.invalid_header_name");
             write_text_response(
                 &mut stream,
                 "400 Bad Request",
                 "text/plain; charset=utf-8",
                 "Invalid HTTP header name",
             )?;
+            latency_probe.mark_ok();
             return Ok(());
         }
         let key = raw_name.to_ascii_lowercase();
         let trimmed = value.trim().to_string();
+        if !http_boundary::is_valid_http_header_value(&trimmed) {
+            latency_probe.mark_route("http.invalid_header_value");
+            write_text_response(
+                &mut stream,
+                "400 Bad Request",
+                "text/plain; charset=utf-8",
+                "Invalid HTTP header value",
+            )?;
+            latency_probe.mark_ok();
+            return Ok(());
+        }
         if key == "transfer-encoding" {
+            latency_probe.mark_route("http.transfer_encoding_rejected");
             write_text_response(
                 &mut stream,
                 "400 Bad Request",
                 "text/plain; charset=utf-8",
                 "Transfer-Encoding is not supported",
             )?;
+            latency_probe.mark_ok();
             return Ok(());
         }
         if key == "content-length" {
             let parsed_length = match trimmed.parse::<usize>() {
                 Ok(value) => value,
                 Err(_) => {
+                    latency_probe.mark_route("http.invalid_content_length");
                     write_text_response(
                         &mut stream,
                         "400 Bad Request",
                         "text/plain; charset=utf-8",
                         "Invalid Content-Length",
                     )?;
+                    latency_probe.mark_ok();
                     return Ok(());
                 }
             };
             if content_length.is_some() {
+                latency_probe.mark_route("http.duplicate_content_length");
                 write_text_response(
                     &mut stream,
                     "400 Bad Request",
                     "text/plain; charset=utf-8",
                     "Duplicate Content-Length is not allowed",
                 )?;
+                latency_probe.mark_ok();
                 return Ok(());
             }
             content_length = Some(parsed_length);
         }
         headers.push((key, trimmed));
     }
+    let parse_duration = request_started_at.elapsed();
+    latency_probe.set_parse_complete(parse_duration, header_bytes);
 
     let host_header_count = headers.iter().filter(|(key, _)| key == "host").count();
     if host_header_count != 1 {
+        latency_probe.mark_route(if host_header_count == 0 {
+            "http.missing_host"
+        } else {
+            "http.duplicate_host"
+        });
         let message = if host_header_count == 0 {
             "Missing Host header"
         } else {
@@ -982,38 +1288,50 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             "text/plain; charset=utf-8",
             message,
         )?;
+        latency_probe.mark_ok();
         return Ok(());
     }
 
     let content_length = content_length.unwrap_or(0);
+    let (path, query) = split_target(&target);
+    latency_probe.set_parsed_target(&method, path, query);
     if content_length > config.max_body_bytes {
+        let dispatch_started_at = Instant::now();
         write_text_response(
             &mut stream,
             "413 Payload Too Large",
             "text/plain; charset=utf-8",
             "HTTP request body is too large",
         )?;
+        latency_probe.set_body(content_length, Duration::from_millis(0));
+        latency_probe.set_dispatch(dispatch_started_at.elapsed(), true);
+        latency_probe.mark_ok();
         return Ok(());
     }
 
-    let mut body = vec![0u8; content_length];
-    if content_length > 0 {
-        use std::io::Read;
-        reader
-            .read_exact(&mut body)
-            .map_err(|error| format!("read request body: {}", error))?;
-    }
+    let body_read_started_at = Instant::now();
+    let body = read_limited_http_body(&mut reader, content_length)?;
+    let body_read_duration = body_read_started_at.elapsed();
+    latency_probe.set_body(content_length, body_read_duration);
 
-    let (path, query) = split_target(&target);
     let request = HttpRequest {
-        method,
+        method: method.clone(),
         path: path.to_string(),
         query: query.to_string(),
         headers,
         body,
     };
 
-    if let Err(error) = handle_http_request(&mut stream, &request, config) {
+    let dispatch_started_at = Instant::now();
+    let result = handle_http_request(&mut stream, &request, config);
+    let dispatch_duration = dispatch_started_at.elapsed();
+    let failed = result.is_err();
+    latency_probe.set_dispatch(dispatch_duration, failed);
+    if !failed {
+        latency_probe.mark_ok();
+    }
+
+    if let Err(error) = result {
         write_json_error_response(
             &mut stream,
             "500 Internal Server Error",
@@ -1048,7 +1366,7 @@ fn handle_http_request(
         )?;
         return Ok(());
     }
-    if reject_forbidden_origin(stream, request)? {
+    if reject_forbidden_origin(stream, request, config)? {
         return Ok(());
     }
 
@@ -1078,6 +1396,15 @@ fn handle_http_request(
         ("GET", "/") => {
             write_text_response(stream, "200 OK", "text/html; charset=utf-8", DASHBOARD_HTML)?
         }
+        ("GET", "/dashboard.css") => {
+            write_text_response(stream, "200 OK", "text/css; charset=utf-8", DASHBOARD_CSS)?
+        }
+        ("GET", "/dashboard.js") => write_text_response(
+            stream,
+            "200 OK",
+            "application/javascript; charset=utf-8",
+            DASHBOARD_JS,
+        )?,
         ("GET", "/favicon.ico") => write_text_response(
             stream,
             "200 OK",
@@ -1091,6 +1418,18 @@ fn handle_http_request(
         ("GET", "/api/overview") => {
             let refresh = query_bool_flag(&request.query, "refresh")
                 || query_bool_flag(&request.query, "noCache");
+            let _permit = if refresh {
+                let Some(permit) = config
+                    .admission
+                    .try_enter(HttpAdmissionKind::OverviewRefresh)
+                else {
+                    write_admission_rejected(stream, "overview-refresh")?;
+                    return Ok(());
+                };
+                Some(permit)
+            } else {
+                None
+            };
             let payload = cached_overview_json(config, refresh)?;
             write_json_response(stream, "200 OK", &payload)?;
         }
@@ -1113,6 +1452,10 @@ fn handle_http_request(
             write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/hub-up") => {
+            let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "hub-up")?
+            else {
+                return Ok(());
+            };
             let payload = action_response(
                 "hub-up",
                 run_json_command(&config.root_path, &["hub", "up", "--json"])?,
@@ -1120,6 +1463,10 @@ fn handle_http_request(
             write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/hub-down") => {
+            let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "hub-down")?
+            else {
+                return Ok(());
+            };
             let payload = action_response(
                 "hub-down",
                 run_json_command(&config.root_path, &["hub", "down", "--json"])?,
@@ -1127,6 +1474,10 @@ fn handle_http_request(
             write_json_response(stream, "200 OK", &payload)?;
         }
         ("POST", "/api/actions/repair") => {
+            let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "repair")?
+            else {
+                return Ok(());
+            };
             let payload = action_response(
                 "repair",
                 run_json_command(&config.root_path, &["repair", "--json"])?,
@@ -1164,8 +1515,20 @@ fn handle_http_request(
         ("POST", "/api/actions/server-test") => {
             write_server_test_action(stream, request, config)?;
         }
+        ("POST", "/api/actions/server-discover") => {
+            write_server_discover_action(stream, request, config)?;
+        }
+        ("POST", "/api/actions/server-import-config") => {
+            write_server_import_config_action(stream, request, config)?;
+        }
         ("POST", "/api/actions/server-install-command") => {
             write_server_install_command_action(stream, request, config)?;
+        }
+        ("POST", "/api/actions/client-install") => {
+            write_client_install_action(stream, request, config)?;
+        }
+        ("POST", "/api/actions/client-restore") => {
+            write_client_restore_action(stream, request, config)?;
         }
         _ => write_text_response(
             stream,
@@ -1175,6 +1538,127 @@ fn handle_http_request(
         )?,
     }
 
+    Ok(())
+}
+
+fn write_client_install_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let client_id = match action_client_target_id(&body) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let mut args = vec![
+        "client".to_string(),
+        "install".to_string(),
+        client_id,
+        "--json".to_string(),
+    ];
+    match action_bool(&body, "dryRun") {
+        Ok(true) => args.push("--dry-run".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+    match action_bool(&body, "diff") {
+        Ok(true) => args.push("--diff".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+
+    let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "client-install")?
+    else {
+        return Ok(());
+    };
+    let payload = action_response(
+        "client-install",
+        run_json_command_vec(&config.root_path, args)?,
+    );
+    write_json_response(stream, "200 OK", &payload)
+}
+
+fn write_client_restore_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let client_id = match action_client_target_id(&body) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let backup = match optional_action_string(&body, "backup") {
+        Ok(Some(value)) => value,
+        Ok(None) => "latest".to_string(),
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    if let Err(error) = validate_action_token_field("backup", &backup, true) {
+        return write_bad_action_request(stream, &error);
+    }
+    let args = vec![
+        "client".to_string(),
+        "restore".to_string(),
+        client_id,
+        "--backup".to_string(),
+        backup,
+        "--json".to_string(),
+    ];
+
+    let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "client-restore")?
+    else {
+        return Ok(());
+    };
+    let payload = action_response(
+        "client-restore",
+        run_json_command_vec(&config.root_path, args)?,
+    );
+    write_json_response(stream, "200 OK", &payload)
+}
+
+fn action_client_target_id(body: &JsonValue) -> Result<String, String> {
+    let client_id = action_string(body, "clientId")
+        .or_else(|_| action_string(body, "client"))
+        .map_err(|_| "client action requires a non-empty clientId field".to_string())?;
+    validate_action_token_field("clientId", &client_id, true)?;
+    Ok(client_id)
+}
+
+fn validate_action_token_field(label: &str, value: &str, allow_all: bool) -> Result<(), String> {
+    if value.is_empty() {
+        return Err(format!("{} cannot be empty", label));
+    }
+    if value.len() > 96 {
+        return Err(format!("{} is too long", label));
+    }
+    if allow_all && value == "all" {
+        return Ok(());
+    }
+    if value
+        .chars()
+        .any(|ch| ch == '\0' || ch == '\r' || ch == '\n' || ch.is_control())
+    {
+        return Err(format!(
+            "{} cannot contain control characters or newlines",
+            label
+        ));
+    }
+    if !value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || ch == '-' || ch == '_' || ch == '.')
+    {
+        return Err(format!(
+            "{} must contain only letters, numbers, dash, underscore, or dot",
+            label
+        ));
+    }
     Ok(())
 }
 
@@ -1199,6 +1683,9 @@ fn write_server_toggle_action(
         "server-disable"
     };
     let command = if enabled { "enable" } else { "disable" };
+    let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, action)? else {
+        return Ok(());
+    };
     let payload = action_response(
         action,
         run_json_command_vec(
@@ -1228,6 +1715,10 @@ fn write_server_policy_action(
         Err(error) => return write_bad_action_request(stream, &error),
     };
 
+    let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "server-policy")?
+    else {
+        return Ok(());
+    };
     let payload = action_response(
         "server-policy",
         run_json_command_vec(&config.root_path, args)?,
@@ -1256,6 +1747,11 @@ fn write_server_autotune_action(
             "server autotune accepts at most 100 changes per request",
         );
     }
+
+    let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "server-autotune")?
+    else {
+        return Ok(());
+    };
 
     let mut results = Vec::new();
     for change in changes {
@@ -1310,8 +1806,214 @@ fn write_server_test_action(
         args.push(timeout_ms.to_string());
     }
 
+    let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "server-test")?
+    else {
+        return Ok(());
+    };
     let payload = action_response(
         "server-test",
+        run_json_command_vec(&config.root_path, args)?,
+    );
+    write_json_response(stream, "200 OK", &payload)
+}
+
+fn write_server_import_config_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let source_path =
+        match action_string(&body, "sourcePath").or_else(|_| action_string(&body, "from")) {
+            Ok(value) => value,
+            Err(_) => {
+                return write_bad_action_request(
+                    stream,
+                    "server import requires a non-empty sourcePath field",
+                );
+            }
+        };
+    if let Err(error) = validate_action_path_field("sourcePath", &source_path) {
+        return write_bad_action_request(stream, &error);
+    }
+
+    let mut args = vec![
+        "server".to_string(),
+        "import".to_string(),
+        "--from".to_string(),
+        source_path,
+        "--json".to_string(),
+    ];
+    match optional_action_string(&body, "settingsPath") {
+        Ok(Some(settings_path)) => {
+            if let Err(error) = validate_action_path_field("settingsPath", &settings_path) {
+                return write_bad_action_request(stream, &error);
+            }
+            args.push("--settings".to_string());
+            args.push(settings_path);
+        }
+        Ok(None) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+    match action_bool(&body, "dryRun") {
+        Ok(true) => args.push("--dry-run".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+    match action_bool(&body, "force") {
+        Ok(true) => args.push("--force".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+    match action_bool(&body, "disabled") {
+        Ok(true) => args.push("--disabled".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+
+    let Some(_permit) =
+        enter_http_heavy_action_or_write_busy(stream, config, "server-import-config")?
+    else {
+        return Ok(());
+    };
+    let payload = action_response(
+        "server-import-config",
+        run_json_command_vec(&config.root_path, args)?,
+    );
+    write_json_response(stream, "200 OK", &payload)
+}
+
+fn validate_action_path_field(label: &str, value: &str) -> Result<(), String> {
+    if value.len() > 2048 {
+        return Err(format!("{} is too long", label));
+    }
+    if value
+        .chars()
+        .any(|ch| ch == '\0' || ch == '\r' || ch == '\n' || ch.is_control())
+    {
+        return Err(format!(
+            "{} cannot contain control characters or newlines",
+            label
+        ));
+    }
+    let trimmed = value.trim_start().to_ascii_lowercase();
+    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
+        return Err(format!(
+            "{} must be a local file path, not a remote URL",
+            label
+        ));
+    }
+    Ok(())
+}
+
+fn write_server_discover_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let query = match optional_action_string(&body, "query") {
+        Ok(value) => value.unwrap_or_default(),
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    if query.len() > 256 {
+        return write_bad_action_request(stream, "server discovery query is too long");
+    }
+    if query
+        .chars()
+        .any(|ch| ch == '\0' || ch == '\r' || ch == '\n' || ch.is_control())
+    {
+        return write_bad_action_request(
+            stream,
+            "server discovery query cannot contain control characters or newlines",
+        );
+    }
+    let mode = optional_action_string(&body, "mode")
+        .map(|value| value.unwrap_or_else(|| "preview".to_string()))
+        .unwrap_or_else(|_| "preview".to_string())
+        .trim()
+        .to_ascii_lowercase()
+        .replace('_', "-");
+    if !matches!(
+        mode.as_str(),
+        "preview" | "install" | "apply" | "auto-install" | "auto" | "auto-mode"
+    ) {
+        return write_bad_action_request(
+            stream,
+            "server discovery mode must be preview, install, apply, auto-install, auto, or auto-mode",
+        );
+    }
+    let mode_apply = matches!(mode.as_str(), "install" | "apply" | "auto-install");
+    let mode_auto = matches!(mode.as_str(), "auto" | "auto-mode");
+    let auto_install = match action_bool(&body, "autoInstall") {
+        Ok(value) => value || mode_apply,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let auto_mode = match action_bool(&body, "autoMode") {
+        Ok(value) => value || mode_auto,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    if query.trim().is_empty() && (auto_install || auto_mode) {
+        return write_bad_action_request(
+            stream,
+            "dashboard server discovery install mode requires a query to avoid broad automatic sweeps",
+        );
+    }
+
+    let mut args = vec!["server".to_string(), "discover".to_string()];
+    if !query.trim().is_empty() {
+        args.push(query);
+    }
+    args.push("--json".to_string());
+    if auto_mode {
+        args.push("--auto".to_string());
+    } else if auto_install {
+        args.push("--auto-install".to_string());
+    }
+    let allow_review = match action_bool(&body, "allowReview") {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let allow_review_install = match action_bool(&body, "allowReviewInstall") {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    if allow_review || allow_review_install {
+        args.push("--allow-review".to_string());
+    }
+    match action_bool(&body, "refresh") {
+        Ok(true) => args.push("--refresh".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+    match action_bool(&body, "force") {
+        Ok(true) => args.push("--force".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+    match action_bool(&body, "disabled") {
+        Ok(true) => args.push("--disabled".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+    match action_bool(&body, "dryRun") {
+        Ok(true) => args.push("--dry-run".to_string()),
+        Ok(false) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+
+    let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "server-discover")?
+    else {
+        return Ok(());
+    };
+    let payload = action_response(
+        "server-discover",
         run_json_command_vec(&config.root_path, args)?,
     );
     write_json_response(stream, "200 OK", &payload)
@@ -1372,6 +2074,7 @@ fn write_server_install_command_action(
         Err(error) => return write_bad_action_request(stream, &error),
     };
     if let Some(server) = server_name {
+        validate_action_name_field("server", &server, 256)?;
         args.push("--as".to_string());
         args.push(server);
     }
@@ -1397,6 +2100,11 @@ fn write_server_install_command_action(
         args.push("--dry-run".to_string());
     }
 
+    let Some(_permit) =
+        enter_http_heavy_action_or_write_busy(stream, config, "server-install-command")?
+    else {
+        return Ok(());
+    };
     let payload = action_response(
         "server-install-command",
         run_json_command_vec(&config.root_path, args)?,
@@ -1406,6 +2114,24 @@ fn write_server_install_command_action(
 
 fn command_line_uses_shell_composition(value: &str) -> bool {
     text_utils::uses_shell_composition(value)
+}
+
+fn write_admission_rejected(stream: &mut TcpStream, action: &str) -> Result<(), String> {
+    let payload = JsonValue::object([
+        ("ok", JsonValue::bool(false)),
+        (
+            "error",
+            JsonValue::string("server is busy; retry this operation shortly"),
+        ),
+        ("action", JsonValue::string(action)),
+        ("retryAfterMs", JsonValue::number(1000usize)),
+    ]);
+    write_json_response_with_owned_headers(
+        stream,
+        "429 Too Many Requests",
+        &payload,
+        &[("Retry-After".to_string(), "1".to_string())],
+    )
 }
 
 fn write_bad_action_request(stream: &mut TcpStream, error: &str) -> Result<(), String> {
@@ -1430,9 +2156,33 @@ fn parse_action_body(request: &HttpRequest) -> Result<JsonValue, String> {
 }
 
 fn action_server_name(body: &JsonValue) -> Result<String, String> {
-    action_string(body, "server")
+    let server = action_string(body, "server")
         .or_else(|_| action_string(body, "name"))
-        .map_err(|_| "server action requires a non-empty server name".to_string())
+        .map_err(|_| "server action requires a non-empty server name".to_string())?;
+    validate_action_name_field("server", &server, 256)?;
+    Ok(server)
+}
+
+fn validate_action_name_field(label: &str, value: &str, max_len: usize) -> Result<(), String> {
+    if value.is_empty() {
+        return Err(format!("{} cannot be empty", label));
+    }
+    if value.len() > max_len {
+        return Err(format!("{} is too long", label));
+    }
+    if value.starts_with('-') {
+        return Err(format!("{} cannot start with '-'", label));
+    }
+    if value
+        .chars()
+        .any(|ch| ch == '\0' || ch == '\r' || ch == '\n' || ch.is_control())
+    {
+        return Err(format!(
+            "{} cannot contain control characters or newlines",
+            label
+        ));
+    }
+    Ok(())
 }
 
 fn action_policy_mode(body: &JsonValue) -> Result<String, String> {
@@ -1480,7 +2230,7 @@ fn server_policy_command_args(body: &JsonValue) -> Result<Vec<String>, String> {
         )?;
     }
     push_positive_usize_arg(&mut args, body, "queueTimeoutMs", "--queue-timeout-ms")?;
-    push_string_arg(&mut args, body, "reusePolicy", "--reuse-policy")?;
+    push_reuse_policy_arg(&mut args, body)?;
     push_affinity_arg(&mut args, body)?;
     Ok(args)
 }
@@ -1498,27 +2248,23 @@ fn push_positive_usize_arg(
     Ok(())
 }
 
-fn push_string_arg(
-    args: &mut Vec<String>,
-    body: &JsonValue,
-    key: &str,
-    arg_name: &str,
-) -> Result<(), String> {
-    let Some(value) = body.get(key) else {
+fn push_reuse_policy_arg(args: &mut Vec<String>, body: &JsonValue) -> Result<(), String> {
+    let Some(value) = body.get("reusePolicy") else {
         return Ok(());
     };
-    match value
+    let raw = value
         .as_str()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-    {
-        Some(value) => {
-            args.push(arg_name.to_string());
-            args.push(value.to_string());
-            Ok(())
-        }
-        None => Err(format!("'{}' must be a non-empty string", key)),
-    }
+        .ok_or_else(|| "'reusePolicy' must be a non-empty string".to_string())?;
+    let normalized = raw.to_ascii_lowercase().replace('_', "-");
+    let canonical = match normalized.as_str() {
+        "sticky" | "ttl" | "never" => normalized,
+        _ => return Err("'reusePolicy' must be one of sticky, ttl, or never".to_string()),
+    };
+    args.push("--reuse-policy".to_string());
+    args.push(canonical);
+    Ok(())
 }
 
 fn push_affinity_arg(args: &mut Vec<String>, body: &JsonValue) -> Result<(), String> {
@@ -1548,6 +2294,12 @@ fn push_affinity_arg(args: &mut Vec<String>, body: &JsonValue) -> Result<(), Str
         }
         _ => return Err("'affinity' must be a string or array of strings".to_string()),
     };
+    if affinity.len() > 8 {
+        return Err("'affinity' accepts at most 8 entries".to_string());
+    }
+    for item in &affinity {
+        validate_action_token_field("affinity", item, false)?;
+    }
     if !affinity.is_empty() {
         args.push("--affinity".to_string());
         args.push(affinity.join(","));
@@ -1644,6 +2396,40 @@ fn constant_time_eq(left: &[u8], right: &[u8]) -> bool {
     diff == 0
 }
 
+fn latency_route_label(path: &str, query: &str, config: &DashboardConfig) -> String {
+    let (mcp_path, health_path) = configured_http_paths(config);
+    let refresh_requested = query_bool_flag(query, "refresh") || query_bool_flag(query, "noCache");
+    if matches_configured_path(path, &health_path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH) {
+        return if refresh_requested {
+            "health.refresh".to_string()
+        } else {
+            "health".to_string()
+        };
+    }
+    if matches_configured_path(path, &mcp_path, runtimepaths::DEFAULT_LOCAL_MCP_PATH) {
+        return "mcp".to_string();
+    }
+    match path {
+        "/" => "dashboard.index".to_string(),
+        "/dashboard.css" => "dashboard.css".to_string(),
+        "/dashboard.js" => "dashboard.js".to_string(),
+        "/favicon.ico" => "dashboard.favicon".to_string(),
+        "/status" => "status".to_string(),
+        "/api/overview" => {
+            if refresh_requested {
+                "api.overview.refresh".to_string()
+            } else {
+                "api.overview.cached".to_string()
+            }
+        }
+        "/api/resources" => "api.resources".to_string(),
+        "/api/logs" => "api.logs".to_string(),
+        _ if path.starts_with("/api/actions/") => "api.actions".to_string(),
+        _ if path.starts_with("/api/") => "api.other".to_string(),
+        _ => "other".to_string(),
+    }
+}
+
 fn configured_http_paths(config: &DashboardConfig) -> (String, String) {
     if matches!(config.surface, ServeSurface::UnifiedServe) {
         let endpoint = runtimepaths::resolve_serve_endpoint(Some(&config.root_path));
@@ -1668,8 +2454,13 @@ fn bounded_query_usize(query: &str, key: &str, default: usize, max: usize) -> us
         .unwrap_or(default)
 }
 
-fn reject_forbidden_origin(stream: &mut TcpStream, request: &HttpRequest) -> Result<bool, String> {
-    let Err(error) = http_boundary::validate_origin(request) else {
+fn reject_forbidden_origin(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<bool, String> {
+    let Err(error) = http_boundary::validate_origin_for_bind(request, config.allow_nonlocal_host)
+    else {
         return Ok(false);
     };
     let payload = JsonValue::object([
@@ -1715,6 +2506,8 @@ pub(super) fn run_json_command_vec(
 }
 
 const DASHBOARD_HTML: &str = include_str!("dashboard/index.html");
+const DASHBOARD_CSS: &str = include_str!("dashboard/frontend/styles.css");
+const DASHBOARD_JS: &str = include_str!("dashboard/frontend/app.js");
 const DASHBOARD_FAVICON_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#111827"/><path d="M16 42V22h9l7 10 7-10h9v20h-8V30l-8 11-8-11v12h-8Z" fill="#7dd3fc"/><circle cx="51" cy="13" r="5" fill="#34d399"/></svg>"##;
 
 #[cfg(test)]
