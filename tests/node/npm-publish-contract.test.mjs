@@ -46,6 +46,10 @@ function readTgzEntry(tarballPath, desiredPath) {
   throw new Error(`missing tar entry ${desiredPath}`);
 }
 
+function resolveReportPath(reportPath) {
+  return path.isAbsolute(reportPath) ? reportPath : path.join(repoRoot, reportPath);
+}
+
 test('npm publish contract detects missing native package artifacts before release publish', () => {
   const result = runPublishContract();
   assert.equal(result.status, 0, result.stderr || result.stdout);
@@ -104,7 +108,7 @@ test('native optional package tarballs do not claim the user-facing mcpace bin',
     });
     assert.equal(build.status, 0, build.stderr || build.stdout);
     const report = JSON.parse(build.stdout);
-    const packageJson = JSON.parse(readTgzEntry(path.join(repoRoot, report.tarballPath), 'package/package.json'));
+    const packageJson = JSON.parse(readTgzEntry(resolveReportPath(report.tarballPath), 'package/package.json'));
     assert.equal(packageJson.name, '@mcpace/cli-win32-x64-msvc');
     assert.equal(packageJson.bin, undefined, 'native packages must not create a competing mcpace bin shim');
     assert.equal(packageJson.mcpace?.mainPackage, '@mcpace/cli');
