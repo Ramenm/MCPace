@@ -174,7 +174,7 @@ async function makeIsolatedRoot() {
     path.join(root, 'mcpace.config.json'),
     `${JSON.stringify({
       name: 'mcpace-load-test',
-      version: '0.7.6',
+      version: '0.7.7',
       profiles: {
         runtime: {
           default: 'manual',

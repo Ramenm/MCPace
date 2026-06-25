@@ -4,7 +4,7 @@ import path from 'node:path';
 import test from 'node:test';
 import { extractTomlPackageName, extractTomlVersion, readCliPackageJson, readRootPackageJson, repoRoot } from '../../scripts/lib/project-metadata.mjs';
 
-const EXPECTED_VERSION = '0.7.6';
+const EXPECTED_VERSION = '0.7.7';
 const REQUIRED_DOCS = new Set([
   'README.md',
   'architecture.md',

@@ -91,9 +91,6 @@ function writePackageJson(packageDir, target, version) {
     },
     homepage: 'https://github.com/Ramenm/MCPace#readme',
     type: 'module',
-    bin: {
-      mcpace: `bin/${binaryName}`,
-    },
     files: [
       'bin',
       'README.md',

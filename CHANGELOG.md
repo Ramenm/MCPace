@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.7.7
+
+- Fixed npm install command creation by ensuring native optional packages no longer declare a competing `mcpace` bin entry; the launcher package is now the sole owner of the user-facing command.
+
 All notable user-facing changes should be recorded here. Keep this file human-readable: focus on behavior, install/release impact, compatibility, security, and migration notes rather than every internal refactor.
 
 ## Unreleased

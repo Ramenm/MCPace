@@ -197,7 +197,9 @@ function verifyNativePackageTarball(tarballPath, target, version) {
     if (packageJson.private === true) issues.push('native package tarball must not be private');
     if (packageJson.mcpace?.target !== target.key) issues.push(`mcpace.target mismatch: expected ${target.key}, got ${packageJson.mcpace?.target ?? null}`);
     if (packageJson.mcpace?.binaryName !== binaryName) issues.push(`mcpace.binaryName mismatch: expected ${binaryName}, got ${packageJson.mcpace?.binaryName ?? null}`);
-    if (packageJson.bin?.mcpace !== `bin/${binaryName}`) issues.push(`bin.mcpace must point to bin/${binaryName}`);
+    if (packageJson.bin?.mcpace) {
+      issues.push('native package must not define bin.mcpace; @mcpace/cli owns the user-facing command');
+    }
     if (!targetArrayMatches(packageJson.os, target.os)) issues.push(`os metadata mismatch for ${target.key}`);
     if (!targetArrayMatches(packageJson.cpu, target.cpu)) issues.push(`cpu metadata mismatch for ${target.key}`);
     if (!targetArrayMatches(packageJson.libc, target.libc)) issues.push(`libc metadata mismatch for ${target.key}`);
