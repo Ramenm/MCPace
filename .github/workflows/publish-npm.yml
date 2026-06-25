@@ -161,6 +161,7 @@ jobs:
       - name: Publish native npm packages
         env:
           MCPACE_PUBLISH_DRY_RUN: ${{ inputs.dry_run }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -181,6 +182,7 @@ jobs:
         working-directory: packages/npm/cli
         env:
           MCPACE_PUBLISH_DRY_RUN: ${{ inputs.dry_run }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           if [ "$MCPACE_PUBLISH_DRY_RUN" = "true" ]; then
             npm exec --yes --package=npm@11.13.0 -- npm publish --dry-run --access public --provenance

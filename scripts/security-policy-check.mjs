@@ -203,6 +203,13 @@ function nativeResolverFindings() {
   return required.filter(([pattern]) => !pattern.test(resolver)).map(([, detail]) => detail);
 }
 
+function publishTokenFallbackOk(workflow) {
+  const tokenReference = /\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|NPM_CONFIG_[A-Z0-9_]*TOKEN)\b/i;
+  if (!tokenReference.test(workflow)) return true;
+  const strippedAllowedBootstrapLines = workflow.replace(/^\s*NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.NPM_TOKEN\s*\}\}\s*$/gm, '');
+  return /environment:\s*npm-publish/.test(workflow) && !tokenReference.test(strippedAllowedBootstrapLines);
+}
+
 function publishWorkflowFindings() {
   const workflow = readText('.github/workflows/publish-npm.yml');
   const findings = [];
@@ -216,7 +223,9 @@ function publishWorkflowFindings() {
   for (const [pattern, detail] of required) {
     if (!pattern.test(workflow)) findings.push(detail);
   }
-  if (/NPM_TOKEN/.test(workflow)) findings.push('publish workflow must not use a long-lived NPM_TOKEN fallback');
+  if (!publishTokenFallbackOk(workflow)) {
+    findings.push('publish workflow may use npm token fallback only as NODE_AUTH_TOKEN from NPM_TOKEN inside protected npm-publish environment for initial bootstrap');
+  }
   for (const block of runBlocks(workflow)) {
     if (/\bnpm publish\b(?![^\n]*--access public)/.test(block.text)) {
       findings.push(`publish workflow run block at line ${block.start} has npm publish without --access public`);

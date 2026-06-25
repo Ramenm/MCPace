@@ -72,5 +72,13 @@
   },
   "devDependencies": {
     "publint": "^0.3.21"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Ramenm/MCPace.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Ramenm/MCPace/issues"
+  },
+  "homepage": "https://github.com/Ramenm/MCPace#readme"
 }

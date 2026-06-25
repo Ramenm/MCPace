@@ -82,6 +82,14 @@ function writePackageJson(packageDir, target, version) {
     version,
     description: `MCPace native binary for ${target.key}.`,
     license: 'Apache-2.0',
+    repository: {
+      type: 'git',
+      url: 'git+https://github.com/Ramenm/MCPace.git',
+    },
+    bugs: {
+      url: 'https://github.com/Ramenm/MCPace/issues',
+    },
+    homepage: 'https://github.com/Ramenm/MCPace#readme',
     type: 'module',
     bin: {
       mcpace: `bin/${binaryName}`,
