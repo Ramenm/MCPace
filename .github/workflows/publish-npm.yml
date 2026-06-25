@@ -142,18 +142,18 @@ jobs:
       - name: Verify exact npm version for trusted publishing
         run: npm exec --yes --package=npm@11.13.0 -- npm --version
 
+      - name: Validate source and launcher package
+        run: |
+          npm run check
+          npm run check:package
+          npm run pack:npm:dry-run
+
       - name: Download native package artifacts
         uses: actions/download-artifact@v8
         with:
           pattern: native-package-*
           path: dist/npm
           merge-multiple: true
-
-      - name: Validate source and publish contracts
-        run: |
-          npm run check
-          npm run check:package
-          npm run pack:npm:dry-run
 
       - name: Refuse incomplete native package publication
         run: node scripts/verify-npm-publish-contract.mjs --enforce
