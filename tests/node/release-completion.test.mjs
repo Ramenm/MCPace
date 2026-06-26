@@ -15,6 +15,10 @@ function escapeRegExp(value) {
   return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function reportPath(value) {
+  return path.isAbsolute(value) ? value : path.join(repoRoot, value);
+}
+
 test('native npm package builder exists as the missing final publish lane', () => {
   const script = read('scripts/build-native-npm-package.mjs');
   assert.match(script, /mcpace\.nativeNpmPackageBuild\.v1/);
@@ -118,7 +122,7 @@ test('native GitHub installer builder emits installable package shapes', () => {
     assert.equal(winReport.installerKind, 'windows-msi');
     assert.match(winReport.installerName, /^mcpace-v.+-win32-x64-msvc\.msi$/);
     assert.equal(winReport.externalBuildSkipped, true);
-    const wxs = fs.readFileSync(path.join(repoRoot, winReport.wixSourcePath), 'utf8');
+    const wxs = fs.readFileSync(reportPath(winReport.wixSourcePath), 'utf8');
     assert.match(wxs, /<Package Name="MCPace"/);
     assert.match(wxs, /<MajorUpgrade /);
     assert.match(wxs, /<Environment Id="MCPacePath" Name="PATH"/);
@@ -144,7 +148,7 @@ test('native GitHub installer builder emits installable package shapes', () => {
     assert.equal(linuxReport.installerKind, 'debian-package');
     assert.match(linuxReport.installerName, /^mcpace-v.+-linux-x64-gnu\.deb$/);
     assert.match(linuxReport.sha256, /^[a-f0-9]{64}$/);
-    const members = readArMembers(path.join(repoRoot, linuxReport.installerPath));
+    const members = readArMembers(reportPath(linuxReport.installerPath));
     assert.deepEqual(members.map((member) => member.name), ['debian-binary', 'control.tar.gz', 'data.tar.gz']);
     assert.equal(members[0].data.toString('utf8'), '2.0\n');
     const control = zlib.gunzipSync(members.find((member) => member.name === 'control.tar.gz').data).toString('utf8');
@@ -185,7 +189,7 @@ test('release index writes checksums and machine-readable update metadata for ev
     assert.equal(report.status, 'pass');
     assert.equal(report.missingNativeInstallerTargets.length, 0);
     assert.equal(report.assets.filter((asset) => asset.target).length, enabledTargets.length);
-    const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, report.manifestPath), 'utf8'));
+    const manifest = JSON.parse(fs.readFileSync(reportPath(report.manifestPath), 'utf8'));
     assert.equal(manifest.updatePolicy.mode, 'package-manager-managed');
     assert.equal(manifest.updatePolicy.directGitHubInstallers, 'manual-upgrade-only');
     assert.equal(manifest.updatePolicy.selfRewrite, false);
@@ -199,7 +203,7 @@ test('release index writes checksums and machine-readable update metadata for ev
     assert.ok(manifest.assets.some((asset) => asset.name.endsWith('.msi') && asset.target.installerKind === 'windows-msi'));
     assert.ok(manifest.assets.some((asset) => asset.name.endsWith('.deb') && asset.target.installCommand.includes('apt install')));
     assert.ok(manifest.assets.some((asset) => asset.name.endsWith('.deb') && asset.target.glibcBaselineImage === 'ubuntu:22.04'));
-    const checksums = fs.readFileSync(path.join(repoRoot, report.checksumsPath), 'utf8');
+    const checksums = fs.readFileSync(reportPath(report.checksumsPath), 'utf8');
     assert.match(checksums, /mcpace-v0\.0\.0-linux-x64-gnu\.deb/);
     assert.match(checksums, /mcpace-v0\.0\.0-win32-x64-msvc\.msi/);
   } finally {
