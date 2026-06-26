@@ -174,12 +174,22 @@ fn parse_args(args: &[String]) -> ParsedArgs {
             .is_some()
         {
             parsed.source = UpdateSource::Env;
-        } else if std::env::var("MCPACE_UPDATE_SOURCE")
-            .ok()
-            .map(|value| value.eq_ignore_ascii_case("npm"))
-            .unwrap_or(false)
-        {
-            parsed.source = UpdateSource::Npm;
+        } else {
+            match std::env::var("MCPACE_UPDATE_SOURCE").ok() {
+                Some(value) => match value.to_ascii_lowercase().as_str() {
+                    "none" => parsed.source = UpdateSource::None,
+                    "env" => parsed.source = UpdateSource::Env,
+                    "npm" => parsed.source = UpdateSource::Npm,
+                    other => {
+                        parsed.error = Some(format!(
+                            "unsupported MCPACE_UPDATE_SOURCE '{}'; expected none, env, or npm",
+                            other
+                        ));
+                        return parsed;
+                    }
+                },
+                None => parsed.source = UpdateSource::Npm,
+            }
         }
     }
 
@@ -193,7 +203,14 @@ fn write_help(stdout: &mut dyn Write) {
         stdout,
         "Checks whether the installed MCPace binary is behind the selected release source."
     );
-    let _ = writeln!(stdout, "This command never rewrites the running binary; it only reports recommended package-manager commands.");
+    let _ = writeln!(
+        stdout,
+        "Default source is npm. Use --source none for an offline/no-network check."
+    );
+    let _ = writeln!(
+        stdout,
+        "This command never rewrites the running binary; updates are package-manager managed."
+    );
 }
 
 fn check_update(parsed: &ParsedArgs) -> UpdateReport {
@@ -236,7 +253,7 @@ fn check_update(parsed: &ParsedArgs) -> UpdateReport {
         },
         None => {
             if reason.is_none() {
-                reason = Some("no latest version source configured; pass --latest-version, --source env, or --source npm".to_string());
+                reason = Some("latest version source disabled; pass --latest-version, --source env, or --source npm".to_string());
             }
             ("unknown".to_string(), false, false)
         }
@@ -365,6 +382,7 @@ fn parse_semver(value: &str) -> Option<(u64, u64, u64)> {
 
 fn recommended_commands(package_name: &str) -> Vec<String> {
     vec![
+        "mcpace update check --source npm".to_string(),
         format!("npm install -g {}@latest", package_name),
         format!("npx {}@latest help", package_name),
     ]
@@ -382,11 +400,14 @@ fn write_text_report(report: &UpdateReport, stdout: &mut dyn Write) {
     if let Some(reason) = report.reason.as_ref() {
         let _ = writeln!(stdout, "Reason: {}", reason);
     }
-    let _ = writeln!(stdout, "Self-update: disabled");
+    let _ = writeln!(
+        stdout,
+        "Self-update: package-manager managed (no in-place binary rewrite)"
+    );
     let _ = writeln!(
         stdout,
         "Recommended update: {}",
-        report.recommended_commands[0]
+        report.recommended_commands[1]
     );
 }
 
@@ -410,6 +431,10 @@ impl UpdateReport {
             ("source", JsonValue::string(self.source.label())),
             ("packageName", JsonValue::string(self.package_name.clone())),
             ("selfUpdateEnabled", JsonValue::bool(false)),
+            (
+                "autoUpdateMode",
+                JsonValue::string("package-manager-managed"),
+            ),
             (
                 "reason",
                 self.reason
@@ -456,5 +481,17 @@ mod tests {
         assert_eq!(report.status, "outdated");
         assert!(report.update_available);
         assert_eq!(report.latest_version.as_deref(), Some("99.0.0"));
+    }
+
+    #[test]
+    fn update_source_env_rejects_unknown_values() {
+        std::env::set_var("MCPACE_UPDATE_SOURCE", "surprise-network");
+        std::env::remove_var("MCPACE_LATEST_VERSION");
+        let parsed = parse_args(&[]);
+        std::env::remove_var("MCPACE_UPDATE_SOURCE");
+        assert_eq!(
+            parsed.error.as_deref(),
+            Some("unsupported MCPACE_UPDATE_SOURCE 'surprise-network'; expected none, env, or npm")
+        );
     }
 }

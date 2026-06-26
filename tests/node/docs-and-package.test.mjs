@@ -21,6 +21,7 @@ const REQUIRED_DOCS = new Set([
   'mcp-lifecycle-hardening.md',
   'platform-testing.md',
   'release-completion.md',
+  'signing-and-notarization.md',
   'supply-chain.md'
 ]);
 const REMOVED_ROOT_DOCS = [
@@ -162,4 +163,3 @@ test('bundled hub examples align with the hub schema empty-manual-profile contra
     }
   }
 });
-

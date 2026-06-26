@@ -95,6 +95,7 @@ function writePackageJson(packageDir, target, version) {
       'bin',
       'README.md',
       'LICENSE',
+      'NOTICE',
     ],
     os: target.os ?? [target.platform],
     cpu: target.cpu ?? [target.arch],
@@ -122,6 +123,7 @@ function writeReadme(packageDir, target) {
 
 function writeLicense(packageDir) {
   copyRegularFileNoFollowSync(path.join(repoRoot, 'LICENSE'), path.join(packageDir, 'LICENSE'), { maxBytes: 1024 * 1024 });
+  copyRegularFileNoFollowSync(path.join(repoRoot, 'NOTICE'), path.join(packageDir, 'NOTICE'), { maxBytes: 1024 * 1024 });
 }
 
 function buildPackage({ target, binaryPath, outDir, version }) {

@@ -20,7 +20,9 @@
       "os": ["linux"],
       "cpu": ["x64"],
       "libc": ["glibc"],
-      "publishEnabled": true
+      "publishEnabled": true,
+      "glibcBaselineImage": "ubuntu:22.04",
+      "glibcBaseline": "Ubuntu 22.04 glibc floor"
     },
     {
       "key": "linux-arm64-gnu",
@@ -36,7 +38,9 @@
       "os": ["linux"],
       "cpu": ["arm64"],
       "libc": ["glibc"],
-      "publishEnabled": true
+      "publishEnabled": true,
+      "glibcBaselineImage": "ubuntu:22.04",
+      "glibcBaseline": "Ubuntu 22.04 glibc floor"
     },
     {
       "key": "darwin-x64",

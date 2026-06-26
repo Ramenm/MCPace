@@ -30,26 +30,34 @@ jobs:
       matrix:
         include:
           - key: linux-x64-gnu
+            platform: linux
             runner: ubuntu-24.04
             rust_target: x86_64-unknown-linux-gnu
             binary_name: mcpace
+            glibc_baseline_image: ubuntu:22.04
           - key: linux-arm64-gnu
+            platform: linux
             runner: ubuntu-24.04-arm
             rust_target: aarch64-unknown-linux-gnu
             binary_name: mcpace
+            glibc_baseline_image: ubuntu:22.04
           - key: darwin-x64
+            platform: darwin
             runner: macos-15-intel
             rust_target: x86_64-apple-darwin
             binary_name: mcpace
           - key: darwin-arm64
+            platform: darwin
             runner: macos-15
             rust_target: aarch64-apple-darwin
             binary_name: mcpace
           - key: win32-x64-msvc
+            platform: win32
             runner: windows-2025
             rust_target: x86_64-pc-windows-msvc
             binary_name: mcpace.exe
           - key: win32-arm64-msvc
+            platform: win32
             runner: windows-11-arm
             rust_target: aarch64-pc-windows-msvc
             binary_name: mcpace.exe
@@ -71,28 +79,43 @@ jobs:
         run: npm ci --ignore-scripts --no-audit --no-fund
 
       - name: Install Rust target
+        if: matrix.platform != 'linux'
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
         run: rustup target add "$MCPACE_RUST_TARGET"
         shell: bash
 
       - name: Check Rust formatting
+        if: matrix.platform != 'linux'
         run: cargo fmt --check
         shell: bash
 
       - name: Check Rust target with clippy
+        if: matrix.platform != 'linux'
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
         run: cargo clippy --all-targets --target "$MCPACE_RUST_TARGET" -- -D warnings
         shell: bash
 
       - name: Test Rust target
+        if: matrix.platform != 'linux'
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
         run: cargo test --target "$MCPACE_RUST_TARGET" -- --test-threads=1
         shell: bash
 
+      - name: Build and test Linux native binary in glibc baseline container
+        if: matrix.platform == 'linux'
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+          MCPACE_BINARY_NAME: ${{ matrix.binary_name }}
+          MCPACE_GLIBC_BASELINE_IMAGE: ${{ matrix.glibc_baseline_image }}
+          MCPACE_GLIBC_BASELINE_CHECKS: full
+        run: bash scripts/build-linux-glibc-baseline.sh
+        shell: bash
+
       - name: Build native binary
+        if: matrix.platform != 'linux'
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
         run: cargo build --release --target "$MCPACE_RUST_TARGET"

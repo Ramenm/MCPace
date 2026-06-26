@@ -64,16 +64,228 @@ jobs:
           name: source-release
           path: dist/**
 
+  native-release-assets:
+    name: native GitHub installer / ${{ matrix.key }}
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - key: linux-x64-gnu
+            platform: linux
+            runner: ubuntu-24.04
+            rust_target: x86_64-unknown-linux-gnu
+            binary_name: mcpace
+            glibc_baseline_image: ubuntu:22.04
+          - key: linux-arm64-gnu
+            platform: linux
+            runner: ubuntu-24.04-arm
+            rust_target: aarch64-unknown-linux-gnu
+            binary_name: mcpace
+            glibc_baseline_image: ubuntu:22.04
+          - key: darwin-x64
+            platform: darwin
+            runner: macos-15-intel
+            rust_target: x86_64-apple-darwin
+            binary_name: mcpace
+          - key: darwin-arm64
+            platform: darwin
+            runner: macos-15
+            rust_target: aarch64-apple-darwin
+            binary_name: mcpace
+          - key: win32-x64-msvc
+            platform: win32
+            runner: windows-2025
+            rust_target: x86_64-pc-windows-msvc
+            binary_name: mcpace.exe
+          - key: win32-arm64-msvc
+            platform: win32
+            runner: windows-11-arm
+            rust_target: aarch64-pc-windows-msvc
+            binary_name: mcpace.exe
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@1.95.0
+
+      - name: Install locked Node tooling
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install Rust target
+        if: matrix.platform != 'linux'
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+        run: rustup target add "$MCPACE_RUST_TARGET"
+        shell: bash
+
+      - name: Build Linux native binary in glibc baseline container
+        if: matrix.platform == 'linux'
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+          MCPACE_BINARY_NAME: ${{ matrix.binary_name }}
+          MCPACE_GLIBC_BASELINE_IMAGE: ${{ matrix.glibc_baseline_image }}
+          MCPACE_GLIBC_BASELINE_CHECKS: build
+        run: bash scripts/build-linux-glibc-baseline.sh
+        shell: bash
+
+      - name: Build native binary
+        if: matrix.platform != 'linux'
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+        run: cargo build --release --target "$MCPACE_RUST_TARGET"
+        shell: bash
+
+      - name: Smoke native binary
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+          MCPACE_BINARY_NAME: ${{ matrix.binary_name }}
+        run: npm run platform:binary-smoke -- --binary "target/${MCPACE_RUST_TARGET}/release/${MCPACE_BINARY_NAME}"
+        shell: bash
+
+      - name: Install WiX Toolset for Windows MSI
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          dotnet tool install --global wix --version 7.0.0
+          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          & "$env:USERPROFILE\.dotnet\tools\wix.exe" --version
+
+      - name: Build GitHub native installer
+        env:
+          MCPACE_TARGET_KEY: ${{ matrix.key }}
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+          MCPACE_BINARY_NAME: ${{ matrix.binary_name }}
+        run: |
+          set -euo pipefail
+          binary="target/${MCPACE_RUST_TARGET}/release/${MCPACE_BINARY_NAME}"
+          node scripts/build-native-installer-asset.mjs --target "$MCPACE_TARGET_KEY" --binary "$binary" --out-dir dist/github --json
+        shell: bash
+
+      - name: Verify Ubuntu/Debian installer
+        if: matrix.platform == 'linux'
+        run: |
+          set -euo pipefail
+          installer="$(find dist/github -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          test -n "$installer"
+          sudo apt-get update
+          sudo apt-get install -y "./$installer"
+          command -v mcpace
+          mcpace help >/dev/null
+          dpkg -s mcpace >/dev/null
+          sudo apt-get remove -y mcpace
+        shell: bash
+
+      - name: Verify Windows MSI installer
+        if: matrix.platform == 'win32'
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -LiteralPath dist/github -Filter *.msi | Select-Object -First 1
+          if (-not $installer) { throw 'missing MSI installer' }
+          function Invoke-Msi([string[]] $Arguments) {
+            $process = Start-Process msiexec.exe -ArgumentList $Arguments -Wait -NoNewWindow -PassThru
+            if ($process.ExitCode -ne 0) { throw "msiexec failed with exit code $($process.ExitCode): $($Arguments -join ' ')" }
+          }
+          Invoke-Msi @('/i', $installer.FullName, '/qn', '/norestart')
+          $installed = Join-Path $env:ProgramFiles 'MCPace\mcpace.exe'
+          if (-not (Test-Path -LiteralPath $installed)) { throw "installed binary not found: $installed" }
+          & $installed help | Out-Null
+          Invoke-Msi @('/x', $installer.FullName, '/qn', '/norestart')
+
+      - name: Verify macOS PKG installer
+        if: matrix.platform == 'darwin'
+        run: |
+          set -euo pipefail
+          installer="$(find dist/github -maxdepth 1 -type f -name '*.pkg' -print -quit)"
+          test -n "$installer"
+          sudo installer -pkg "$installer" -target /
+          /usr/local/bin/mcpace help >/dev/null
+          sudo rm -f /usr/local/bin/mcpace
+          sudo rm -rf /usr/local/share/doc/mcpace
+          sudo pkgutil --forget io.github.ramenm.mcpace || true
+        shell: bash
+
+      - name: Generate native release asset attestation
+        uses: actions/attest@v4
+        with:
+          subject-path: dist/github/*
+
+      - name: Upload native GitHub installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: native-release-${{ matrix.key }}
+          path: dist/github/*
+          if-no-files-found: error
+
+  compose-release-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs:
+      - source-release
+      - native-release-assets
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: native-release-*
+          path: dist/downloaded-release-assets
+
+      - name: Flatten release assets
+        run: |
+          set -euo pipefail
+          mkdir -p dist/release-assets
+          find dist/downloaded-release-assets -type f -print0 | while IFS= read -r -d '' file; do
+            base="$(basename "$file")"
+            if [ -e "dist/release-assets/$base" ]; then
+              echo "duplicate release asset basename: $base" >&2
+              exit 1
+            fi
+            cp "$file" "dist/release-assets/$base"
+          done
+        shell: bash
+
+      - name: Generate checksums and release asset manifest
+        run: node scripts/build-release-index.mjs --json --asset-dir dist/release-assets --out-dir dist/release-assets
+
+      - name: Upload composed GitHub release asset set
+        uses: actions/upload-artifact@v7
+        with:
+          name: github-release-assets
+          path: dist/release-assets/*
+          if-no-files-found: error
+
   github-draft-release:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: source-release
+    needs: compose-release-assets
     if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.create_github_release == true)
     permissions:
       contents: write
     steps:
       - uses: actions/download-artifact@v8
         with:
+          name: github-release-assets
           path: dist/release-assets
 
       - name: Create or update draft GitHub release
@@ -86,7 +298,7 @@ jobs:
             echo "release_tag input is required for manual draft release creation outside a tag ref" >&2
             exit 1
           fi
-          assets=(dist/release-assets/**/*)
+          assets=(dist/release-assets/*)
           if [ ${#assets[@]} -eq 0 ]; then
             echo "no release assets found" >&2
             exit 1

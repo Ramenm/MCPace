@@ -12,7 +12,8 @@
     "lib",
     "release-targets.json",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "NOTICE"
   ],
   "exports": {
     ".": "./lib/resolve-binary.js",

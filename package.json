@@ -55,7 +55,9 @@
     "evidence:runtime": "node scripts/runtime-evidence.mjs",
     "lint:rust-static": "node scripts/rust-static-guard.mjs --json",
     "proof:browser-lifecycle": "node scripts/browser-lifecycle-proof.mjs",
-    "check:publish-trust": "node scripts/publish-trust-preflight.mjs"
+    "check:publish-trust": "node scripts/publish-trust-preflight.mjs",
+    "pack:github-installer": "node scripts/build-native-installer-asset.mjs",
+    "build:release-index": "node scripts/build-release-index.mjs --json --asset-dir dist/release-assets --out-dir dist/release-assets"
   },
   "packageManager": "npm@10.9.2",
   "devEngines": {

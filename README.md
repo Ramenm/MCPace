@@ -4,12 +4,14 @@ MCPace runs MCP servers at the right concurrency.
 
 MCPace is a local MCP process scheduler for concurrent AI agents. It gives every client one local endpoint, then decides whether each upstream MCP server should be shared, serialized, isolated per chat/project, pooled, or disabled.
 
-## Install from this source bundle
+## Install
 
 ```bash
-cargo install --path .
+npm install -g @mcpace/cli@latest
 mcpace up
 ```
+
+Node.js 22+ is required. GitHub Releases also provide native `.msi`, `.deb`, and `.pkg` installers; see [`docs/release-completion.md`](docs/release-completion.md). Source installs for local development still work with `cargo install --path .`.
 
 `mcpace up` creates or repairs `~/.mcpace`, imports safe existing MCP servers from detected local configs, starts `http://127.0.0.1:39022/mcp`, wires detected clients, and runs readiness checks. It does **not** add a filesystem server, memory server, or any other upstream server by default.
 
@@ -41,6 +43,10 @@ Modes are `shared`, `serialized`, `session-isolated`, `project-isolated`, `pool`
 | [`docs/lab-harness.md`](docs/lab-harness.md) | Evidence corpus for automatic runtime classification. |
 | [`SECURITY.md`](SECURITY.md) | Vulnerability reporting and security boundary. |
 
+## License
+
+MCPace is licensed under Apache-2.0. Copyright 2026 Ramenm.
+
 ## Verify
 
 ```bash
@@ -51,7 +57,3 @@ npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --conc
 ```
 
 This ZIP is source-only: no `.git`, `node_modules`, caches, runtime logs, vendored binaries, Rust `target`, or heavy build outputs.
-
-## Base dashboard rule
-
-The dashboard starts with the boring setup path: backend, client, source, tools evidence, and conservative routing. Import and discovery default to preview/disabled; a parked source is reviewed first, enabled deliberately, tested before normal use, and form errors stay next to the field that needs fixing.
