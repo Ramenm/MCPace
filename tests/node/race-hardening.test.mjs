@@ -104,11 +104,12 @@ test('npm CLI resolver ignores an injected npm_execpath outside the Node install
 
 test('publish workflow moves dispatch input through an intermediate env variable before shell use', () => {
   const workflow = read('.github/workflows/publish-npm.yml');
-  assert.match(workflow, /MCPACE_PUBLISH_DRY_RUN: \$\{\{ inputs\.dry_run \}\}/);
+  assert.match(workflow, /MCPACE_PUBLISH_DRY_RUN: \$\{\{[^\n]*inputs\.dry_run[^\n]*\}\}/);
+  assert.match(workflow, /MCPACE_VERSION_OVERRIDE: \$\{\{[^\n]*inputs\.version_override[^\n]*\}\}/);
   assert.match(workflow, /\[ "\$MCPACE_PUBLISH_DRY_RUN" = "true" \]/);
   const runBlocks = workflow.match(/run: \|[\s\S]*?(?=\n\s{6}- name:|\n\s{2}[A-Za-z_-]+:|\n?$)/g) || [];
   for (const block of runBlocks) {
-    assert.doesNotMatch(block, /\$\{\{\s*inputs\.dry_run\s*\}\}/, 'workflow input must not be interpolated directly inside a shell script');
+    assert.doesNotMatch(block, /\$\{\{[^\n]*(inputs\.dry_run|inputs\.version_override)[^\n]*\}\}/, 'workflow input must not be interpolated directly inside a shell script');
   }
 });
 

@@ -27,11 +27,17 @@ const checks = [
   },
   {
     name: 'publish commands request provenance statements',
-    pass: workflow.split(/\r?\n/).filter((line) => line.includes('npm publish') && !line.trim().startsWith('description:')).every((line) => line.includes('--provenance')),
+    pass: workflow
+      .split(/\r?\n/)
+      .filter((line) => /^\s*npm exec\b/.test(line) && /\bnpm publish\b/.test(line))
+      .every((line) => line.includes('--provenance')),
   },
   {
-    name: 'real publish is tag-protected while branch dispatch is dry-run only',
-    pass: /if:\s*startsWith\(github\.ref, 'refs\/tags\/'\)(?:\s*\|\|\s*\(github\.event_name == 'workflow_dispatch' && inputs\.dry_run == true\))?/.test(workflow) && /environment:\s*npm-publish/.test(workflow),
+    name: 'real publish uses planned branch channels and protected environment',
+    pass: /branches:\s*\n\s*-\s*main\s*\n\s*-\s*master\s*\n\s*-\s*dev/.test(workflow)
+      && /plan-npm-publish\.mjs --github-output/.test(workflow)
+      && /needs\.publish-plan\.outputs\.should_publish == 'true'/.test(workflow)
+      && /environment:\s*npm-publish/.test(workflow),
   },
 ];
 const failures = checks.filter((check) => !check.pass);

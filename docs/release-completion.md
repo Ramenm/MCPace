@@ -89,7 +89,7 @@ A tarball that merely has the right filename is not enough.
 
 ## Trusted publishing workflow
 
-The `publish-npm` workflow builds all native target tarballs first, downloads them into `dist/npm`, enforces the publish contract, publishes the native tarballs, and only then publishes the main launcher. The workflow uses `id-token: write` for npm trusted publishing and avoids `NPM_TOKEN` / `NODE_AUTH_TOKEN` long-lived-token fallbacks.
+The `publish-npm` workflow builds all native target tarballs first, downloads them into `dist/npm`, enforces the publish contract, publishes the native tarballs, and only then publishes the main launcher. `dev` branch pushes publish unique prerelease versions like `0.7.8-dev.<run_number>` to the `dev` dist-tag. `main`/`master` pushes publish the stable package version to `latest` only when that exact version is not already present on npm. The workflow uses `id-token: write` for npm trusted publishing and limits any `NODE_AUTH_TOKEN` fallback to the protected `npm-publish` environment.
 
 The `release-artifacts` workflow still builds and verifies the source bundle as an internal release proof, but only the native installer artifacts are composed into `github-release-assets` for upload. The workflow builds native GitHub installers with the same target matrix, smokes each built binary, verifies each installer by installing and running `mcpace help`, generates artifact attestations, writes checksums and the release manifest, and optionally creates a draft GitHub Release from that installer-focused asset set. Draft release creation stays manual so an operator can verify hashes and runner provenance before publishing.
 

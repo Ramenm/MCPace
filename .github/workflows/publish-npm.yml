@@ -8,6 +8,18 @@ on:
         required: false
         default: true
         type: boolean
+      version_override:
+        description: Stable x.y.z version to publish before source metadata is bumped.
+        required: false
+        default: ''
+        type: string
+  push:
+    branches:
+      - main
+      - master
+      - dev
+    tags:
+      - 'v*'
 
 permissions:
   contents: read
@@ -18,8 +30,60 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  publish-plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      package_name: ${{ steps.plan.outputs.package_name }}
+      source_version: ${{ steps.plan.outputs.source_version }}
+      base_version: ${{ steps.plan.outputs.base_version }}
+      version_override: ${{ steps.plan.outputs.version_override }}
+      effective_version: ${{ steps.plan.outputs.effective_version }}
+      channel: ${{ steps.plan.outputs.channel }}
+      dist_tag: ${{ steps.plan.outputs.dist_tag }}
+      dry_run: ${{ steps.plan.outputs.dry_run }}
+      already_published: ${{ steps.plan.outputs.already_published }}
+      should_publish: ${{ steps.plan.outputs.should_publish }}
+      reason: ${{ steps.plan.outputs.reason }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+
+      - name: Plan npm publish channel
+        id: plan
+        env:
+          MCPACE_PUBLISH_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
+          MCPACE_VERSION_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_override || '' }}
+        run: node scripts/plan-npm-publish.mjs --github-output
+
+      - name: Show npm publish plan
+        env:
+          MCPACE_PACKAGE_NAME: ${{ steps.plan.outputs.package_name }}
+          MCPACE_SOURCE_VERSION: ${{ steps.plan.outputs.source_version }}
+          MCPACE_BASE_VERSION: ${{ steps.plan.outputs.base_version }}
+          MCPACE_VERSION_OVERRIDE: ${{ steps.plan.outputs.version_override }}
+          MCPACE_EFFECTIVE_VERSION: ${{ steps.plan.outputs.effective_version }}
+          MCPACE_DIST_TAG: ${{ steps.plan.outputs.dist_tag }}
+          MCPACE_SHOULD_PUBLISH: ${{ steps.plan.outputs.should_publish }}
+          MCPACE_PLAN_REASON: ${{ steps.plan.outputs.reason }}
+        run: |
+          echo "package=$MCPACE_PACKAGE_NAME"
+          echo "source-version=$MCPACE_SOURCE_VERSION"
+          echo "base-version=$MCPACE_BASE_VERSION"
+          echo "version-override=$MCPACE_VERSION_OVERRIDE"
+          echo "version=$MCPACE_EFFECTIVE_VERSION"
+          echo "dist-tag=$MCPACE_DIST_TAG"
+          echo "should-publish=$MCPACE_SHOULD_PUBLISH"
+          echo "reason=$MCPACE_PLAN_REASON"
+
   native-packages:
-    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.dry_run == true)
+    if: needs.publish-plan.outputs.should_publish == 'true'
+    needs: publish-plan
     name: native package / ${{ matrix.key }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
@@ -77,6 +141,12 @@ jobs:
 
       - name: Install locked Node tooling
         run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Prepare effective npm release version
+        env:
+          MCPACE_RELEASE_VERSION: ${{ needs.publish-plan.outputs.effective_version }}
+        run: node scripts/prepare-npm-release-version.mjs --version "$MCPACE_RELEASE_VERSION"
+        shell: bash
 
       - name: Install Rust target
         if: matrix.platform != 'linux'
@@ -140,8 +210,10 @@ jobs:
           if-no-files-found: error
 
   publish:
-    if: startsWith(github.ref, 'refs/tags/') || (github.event_name == 'workflow_dispatch' && inputs.dry_run == true)
-    needs: native-packages
+    if: needs.publish-plan.outputs.should_publish == 'true'
+    needs:
+      - publish-plan
+      - native-packages
     runs-on: ubuntu-latest
     timeout-minutes: 30
     environment: npm-publish
@@ -161,6 +233,12 @@ jobs:
 
       - name: Install locked Node tooling
         run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Prepare effective npm release version
+        env:
+          MCPACE_RELEASE_VERSION: ${{ needs.publish-plan.outputs.effective_version }}
+        run: node scripts/prepare-npm-release-version.mjs --version "$MCPACE_RELEASE_VERSION"
+        shell: bash
 
       - name: Verify exact npm version for trusted publishing
         run: npm exec --yes --package=npm@11.13.0 -- npm --version
@@ -183,7 +261,8 @@ jobs:
 
       - name: Publish native npm packages
         env:
-          MCPACE_PUBLISH_DRY_RUN: ${{ inputs.dry_run }}
+          MCPACE_PUBLISH_DRY_RUN: ${{ needs.publish-plan.outputs.dry_run }}
+          MCPACE_NPM_DIST_TAG: ${{ needs.publish-plan.outputs.dist_tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
@@ -193,22 +272,24 @@ jobs:
             echo "expected 6 native npm tarballs, found ${#tarballs[@]}" >&2
             exit 1
           fi
+          dry_run_args=()
+          if [ "$MCPACE_PUBLISH_DRY_RUN" = "true" ]; then
+            dry_run_args=(--dry-run)
+          fi
           for tarball in "${tarballs[@]}"; do
-            if [ "$MCPACE_PUBLISH_DRY_RUN" = "true" ]; then
-              npm exec --yes --package=npm@11.13.0 -- npm publish "$tarball" --dry-run --access public --provenance
-            else
-              npm exec --yes --package=npm@11.13.0 -- npm publish "$tarball" --access public --provenance
-            fi
+            npm exec --yes --package=npm@11.13.0 -- npm publish "$tarball" "${dry_run_args[@]}" --access public --tag "$MCPACE_NPM_DIST_TAG" --provenance
           done
 
       - name: Publish main npm launcher
         working-directory: packages/npm/cli
         env:
-          MCPACE_PUBLISH_DRY_RUN: ${{ inputs.dry_run }}
+          MCPACE_PUBLISH_DRY_RUN: ${{ needs.publish-plan.outputs.dry_run }}
+          MCPACE_NPM_DIST_TAG: ${{ needs.publish-plan.outputs.dist_tag }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
+          set -euo pipefail
+          dry_run_args=()
           if [ "$MCPACE_PUBLISH_DRY_RUN" = "true" ]; then
-            npm exec --yes --package=npm@11.13.0 -- npm publish --dry-run --access public --provenance
-          else
-            npm exec --yes --package=npm@11.13.0 -- npm publish --access public --provenance
+            dry_run_args=(--dry-run)
           fi
+          npm exec --yes --package=npm@11.13.0 -- npm publish "${dry_run_args[@]}" --access public --tag "$MCPACE_NPM_DIST_TAG" --provenance

@@ -90,8 +90,8 @@ test('release lane still publishes native packages before the launcher package',
   const workflow = read('.github/workflows/publish-npm.yml');
   const contract = read('scripts/verify-npm-publish-contract.mjs');
   const builder = read('scripts/build-native-npm-package.mjs');
-  const nativeJob = indexOfOrThrow(workflow, 'native-packages:');
-  const publishJob = indexOfOrThrow(workflow, 'publish:');
+  const nativeJob = indexOfOrThrow(workflow, '\n  native-packages:\n');
+  const publishJob = indexOfOrThrow(workflow, '\n  publish:\n');
   const nativePublish = indexOfOrThrow(workflow, 'Publish native npm packages');
   const launcherPublish = indexOfOrThrow(workflow, 'Publish main npm launcher');
   assert.ok(nativeJob < publishJob, 'workflow must build native packages before publish job');

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.8
+
+- Fixed Windows npm-installed autostart so MCPace registers as a current-user `Run` entry named `MCPace` and removes the legacy Startup-folder `MCPace.cmd` launcher.
+- Added npm publish automation: `dev` publishes unique `-dev.<run_number>` prereleases to the `dev` dist-tag, while `main`/`master` publishes stable versions to `latest` only when the version is not already on npm.
+
 ## 0.7.7
 
 - Fixed npm install command creation by ensuring native optional packages no longer declare a competing `mcpace` bin entry; the launcher package is now the sole owner of the user-facing command.

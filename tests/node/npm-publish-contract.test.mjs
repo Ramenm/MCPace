@@ -73,8 +73,8 @@ test('npm publish workflow uses pinned npm for publish and enforces native packa
   assert.match(workflow, /build-native-npm-package\.mjs/);
   assert.match(workflow, /Download native package artifacts/);
   assert.match(workflow, /Publish native npm packages/);
-  assert.match(workflow, /npm exec --yes --package=npm@11\.13\.0 -- npm publish --dry-run --access public/);
-  assert.match(workflow, /npm exec --yes --package=npm@11\.13\.0 -- npm publish --access public/);
+  assert.match(workflow, /dry_run_args=\(--dry-run\)/);
+  assert.match(workflow, /npm exec --yes --package=npm@11\.13\.0 -- npm publish [^\n]+ --access public --tag "\$MCPACE_NPM_DIST_TAG" --provenance/);
   assert.doesNotMatch(workflow, /\n\s+npm publish(?:\s|$)/, 'workflow must not publish with an ambient npm binary');
 });
 

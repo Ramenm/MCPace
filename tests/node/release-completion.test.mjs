@@ -243,7 +243,7 @@ test('release index fails closed when any enabled installer is missing', () => {
 test('publish workflow builds native packages before publishing the main launcher', () => {
   const workflow = read('.github/workflows/publish-npm.yml');
   assert.match(workflow, /native-packages:/);
-  assert.match(workflow, /needs:\s*native-packages/);
+  assert.match(workflow, /needs:\s*\n\s*-\s*publish-plan\s*\n\s*-\s*native-packages/);
   assert.match(workflow, /cargo fmt --check/);
   assert.match(workflow, /cargo clippy --all-targets --target/);
   assert.match(workflow, /cargo test --target/);

@@ -4,7 +4,6 @@ import path from 'node:path';
 import test from 'node:test';
 import { extractTomlPackageName, extractTomlVersion, readCliPackageJson, readRootPackageJson, repoRoot } from '../../scripts/lib/project-metadata.mjs';
 
-const EXPECTED_VERSION = '0.7.7';
 const REQUIRED_DOCS = new Set([
   'README.md',
   'architecture.md',
@@ -77,15 +76,16 @@ test('package versions stay aligned across Rust and npm metadata', () => {
   const cliPackage = readCliPackageJson();
   const cargoLock = readText('Cargo.lock');
   const mcpaceConfig = JSON.parse(readText('mcpace.config.json'));
+  const expectedVersion = extractTomlVersion(cargoToml);
 
   assert.equal(extractTomlPackageName(cargoToml), 'mcpace');
-  assert.equal(extractTomlVersion(cargoToml), EXPECTED_VERSION);
-  assert.equal(rootPackage.version, EXPECTED_VERSION);
-  assert.equal(cliPackage.version, EXPECTED_VERSION);
-  assert.match(cargoLock, new RegExp(`name = "mcpace"\\nversion = "${EXPECTED_VERSION.replaceAll(".", "\\.")}"`));
-  assert.equal(mcpaceConfig.version, EXPECTED_VERSION);
+  assert.match(expectedVersion, /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/);
+  assert.equal(rootPackage.version, expectedVersion);
+  assert.equal(cliPackage.version, expectedVersion);
+  assert.match(cargoLock, new RegExp(`name = "mcpace"\\nversion = "${expectedVersion.replaceAll(".", "\\.")}"`));
+  assert.equal(mcpaceConfig.version, expectedVersion);
   for (const [name, version] of Object.entries(cliPackage.optionalDependencies ?? {})) {
-    assert.equal(version, EXPECTED_VERSION, `${name} optional dependency version drifted`);
+    assert.equal(version, expectedVersion, `${name} optional dependency version drifted`);
   }
 });
 

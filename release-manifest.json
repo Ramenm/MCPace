@@ -113,7 +113,9 @@
     "src/restart_guard.rs",
     "src/dashboard/admission.rs",
     "src/dashboard/governor.rs",
-    "src/dashboard/rate_limit.rs"
+    "src/dashboard/rate_limit.rs",
+    "scripts/plan-npm-publish.mjs",
+    "scripts/prepare-npm-release-version.mjs"
   ],
   "runtimeDirectories": [
     "backups",

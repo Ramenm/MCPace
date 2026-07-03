@@ -21,7 +21,7 @@ Project-local `.npmrc` sets `ignore-scripts=true` so third-party lifecycle scrip
 `npm run check:workflow-policy` verifies the local GitHub Actions policy:
 
 - workflows declare explicit permissions;
-- publish uses npm trusted publishing shape: OIDC permission, tag-only gate, protected environment, no long-lived npm token fallback, and enforced native package contract;
+- publish uses npm trusted publishing shape: OIDC permission, planned branch channels (`main`/`master` stable, `dev` prerelease), protected environment, no unprotected long-lived npm token fallback, and enforced native package contract;
 - release artifacts have GitHub artifact attestation permissions and an attestation step;
 - inline shell blocks do not interpolate untrusted GitHub expressions directly;
 - third-party actions are at least explicitly ref-pinned. Tag-pinned actions are warnings by default and become failures with `--enforce-sha`.
