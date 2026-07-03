@@ -263,7 +263,6 @@ jobs:
         env:
           MCPACE_PUBLISH_DRY_RUN: ${{ needs.publish-plan.outputs.dry_run }}
           MCPACE_NPM_DIST_TAG: ${{ needs.publish-plan.outputs.dist_tag }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -285,7 +284,6 @@ jobs:
         env:
           MCPACE_PUBLISH_DRY_RUN: ${{ needs.publish-plan.outputs.dry_run }}
           MCPACE_NPM_DIST_TAG: ${{ needs.publish-plan.outputs.dist_tag }}
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           dry_run_args=()

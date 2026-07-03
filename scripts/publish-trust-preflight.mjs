@@ -5,11 +5,9 @@ import { repoRoot } from './lib/project-metadata.mjs';
 
 const workflowPath = path.join(repoRoot, '.github/workflows/publish-npm.yml');
 const workflow = fs.readFileSync(workflowPath, 'utf8');
-function publishTokenFallbackOk(text) {
+function publishTokenFree(text) {
   const tokenReference = /\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|NPM_CONFIG_[A-Z0-9_]*TOKEN)\b/i;
-  if (!tokenReference.test(text)) return true;
-  const strippedAllowedBootstrapLines = text.replace(/^\s*NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.NPM_TOKEN\s*\}\}\s*$/gm, '');
-  return /environment:\s*npm-publish/.test(text) && !tokenReference.test(strippedAllowedBootstrapLines);
+  return !tokenReference.test(text);
 }
 
 const checks = [
@@ -18,8 +16,8 @@ const checks = [
     pass: /id-token:\s*write/.test(workflow),
   },
   {
-    name: 'workflow limits npm token fallback to protected initial bootstrap',
-    pass: publishTokenFallbackOk(workflow),
+    name: 'workflow relies on npm OIDC without long-lived token env fallback',
+    pass: publishTokenFree(workflow),
   },
   {
     name: 'publish lane validates native package contract before publish',

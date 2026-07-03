@@ -122,11 +122,9 @@ function checkWorkflowPermissions(repoRoot, filePath, text) {
   return [finding('workflow-explicit-permissions', 'pass', 'workflow declares explicit top-level permissions', { file })];
 }
 
-function publishTokenFallbackOk(text) {
+function publishTokenFree(text) {
   const tokenReference = /\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|NPM_CONFIG_[A-Z0-9_]*TOKEN)\b/i;
-  if (!tokenReference.test(text)) return true;
-  const strippedAllowedBootstrapLines = text.replace(/^\s*NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.NPM_TOKEN\s*\}\}\s*$/gm, '');
-  return /environment:\s*npm-publish/.test(text) && !tokenReference.test(strippedAllowedBootstrapLines);
+  return !tokenReference.test(text);
 }
 
 function checkPublishWorkflow(repoRoot) {
@@ -135,7 +133,7 @@ function checkPublishWorkflow(repoRoot) {
   if (!text) return [finding('publish-workflow-exists', 'fail', 'publish-npm.yml is missing', { file })];
   return [
     finding('publish-uses-oidc', /id-token:\s*write/.test(text) ? 'pass' : 'fail', 'publish workflow should request id-token: write for npm trusted publishing', { file }),
-    finding('publish-no-long-lived-npm-token', publishTokenFallbackOk(text) ? 'pass' : 'fail', 'publish workflow should not depend on long-lived npm tokens except a protected initial bootstrap fallback', { file }),
+    finding('publish-no-long-lived-npm-token', publishTokenFree(text) ? 'pass' : 'fail', 'publish workflow should authenticate through npm trusted publishing OIDC without token env fallback', { file }),
     finding('publish-branch-channels-planned', /branches:\s*\n\s*-\s*main\s*\n\s*-\s*master\s*\n\s*-\s*dev/.test(text) && /plan-npm-publish\.mjs --github-output/.test(text) && /needs\.publish-plan\.outputs\.should_publish == 'true'/.test(text) ? 'pass' : 'fail', 'publish workflow should route main/master to stable latest, dev to prerelease dev, and skip already-published versions through the publish plan', { file }),
     finding('publish-protected-environment', /environment:\s*npm-publish/.test(text) ? 'pass' : 'fail', 'publish job should use a protected npm-publish environment', { file }),
     finding('publish-native-contract-enforced', /verify-npm-publish-contract\.mjs --enforce/.test(text) ? 'pass' : 'fail', 'publish must enforce native package contract before npm publish', { file }),

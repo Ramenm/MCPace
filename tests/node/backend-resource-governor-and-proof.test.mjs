@@ -93,10 +93,7 @@ test('static Rust guard and trusted-publish preflight are wired into CI scripts 
   assert.match(publishWorkflow, /id-token:\s*write/);
   assert.match(publishWorkflow, /--provenance/);
   assert.match(publishWorkflow, /environment:\s*npm-publish/);
-  assert.doesNotMatch(
-    publishWorkflow.replace(/^\s*NODE_AUTH_TOKEN:\s*\$\{\{\s*secrets\.NPM_TOKEN\s*\}\}\s*$/gm, ''),
-    /NODE_AUTH_TOKEN|NPM_TOKEN|NPM_CONFIG_.*TOKEN/i,
-  );
+  assert.doesNotMatch(publishWorkflow, /NODE_AUTH_TOKEN|NPM_TOKEN|NPM_CONFIG_.*TOKEN/i);
   assert.match(trustPreflight, /mcpace\.publishTrustPreflight\.v1/);
   assert.match(rustGuard, /mcpace\.rustStaticGuard\.v1/);
 });
