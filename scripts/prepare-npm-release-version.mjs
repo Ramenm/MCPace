@@ -77,7 +77,7 @@ function updatePackageLock(version) {
       if (isLegacyHoistedNative || isWorkspaceNativeStub) delete packages[key];
     }
     for (const name of optionalDependencyNames) {
-      packages[`packages/npm/cli/node_modules/${name}`] = { optional: true };
+      packages[`packages/npm/cli/node_modules/${name}`] = { version, optional: true };
     }
   }
   writeJson('package-lock.json', lock);

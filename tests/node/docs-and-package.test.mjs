@@ -58,7 +58,9 @@ function walkDirs(root, relativeRoot = '.') {
     for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
       const fullPath = path.join(current, entry.name);
       if (entry.isDirectory()) {
-        found.push(path.relative(root, fullPath).split(path.sep).join('/'));
+        const relativeDir = path.relative(root, fullPath).split(path.sep).join('/');
+        if (hasForbiddenPart(relativeDir)) continue;
+        found.push(relativeDir);
         stack.push(fullPath);
       }
     }
