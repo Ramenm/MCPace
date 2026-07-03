@@ -17,7 +17,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "version",
-        description: "Print the MCPace version from mcpace.config.json.",
+        description: "Print the compiled MCPace binary version.",
         aliases: &["--version", "-v"],
         implemented: true,
     },

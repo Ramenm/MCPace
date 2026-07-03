@@ -6,7 +6,7 @@ use crate::{
     projects, release, repair, reporoot, serve, server, service, setup, stdio_shim, update, verify,
 };
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
     let root_path = reporoot::find_from_current_or_executable();
@@ -49,7 +49,7 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
             write_help(stdout);
             0
         }
-        "version" => run_version(root_path.as_deref(), stdout, stderr),
+        "version" => run_version(stdout),
         "doctor" => run_doctor(&args[1..], root_path, stdout, stderr),
         "setup" => setup::run(&args[1..], root_path, stdout, stderr),
         "service" => service::run(&args[1..], root_path, stdout, stderr),
@@ -79,11 +79,8 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
     }
 }
 
-fn run_version(root_path: Option<&Path>, stdout: &mut dyn Write, _stderr: &mut dyn Write) -> i32 {
-    let version = root_path
-        .and_then(doctor::read_config_version)
-        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_string());
-    let _ = writeln!(stdout, "{}", version);
+fn run_version(stdout: &mut dyn Write) -> i32 {
+    let _ = writeln!(stdout, "{}", env!("CARGO_PKG_VERSION"));
     0
 }
 
@@ -200,4 +197,64 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "`up` creates/repairs MCPace home, imports existing MCP servers, starts the endpoint, and wires detected clients. It does not add a default upstream server.");
     let _ = writeln!(stdout, "Server type is inferred from command/url/path/package input. Endpoint: {}. Supported client patchers: {}.", runtimepaths::default_local_mcp_url(), client_install_support_summary());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::ffi::OsString;
+    use std::fs;
+
+    struct EnvGuard {
+        key: &'static str,
+        previous: Option<OsString>,
+    }
+
+    impl EnvGuard {
+        fn set(key: &'static str, value: &std::path::Path) -> Self {
+            let previous = std::env::var_os(key);
+            std::env::set_var(key, value);
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            match &self.previous {
+                Some(value) => std::env::set_var(self.key, value),
+                None => std::env::remove_var(self.key),
+            }
+        }
+    }
+
+    #[test]
+    fn version_reports_binary_version_not_project_config_version() {
+        let mut root = std::env::temp_dir();
+        root.push(format!(
+            "mcpace-version-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        fs::create_dir_all(&root).unwrap();
+        fs::write(
+            root.join("mcpace.config.json"),
+            r#"{ "version": "999.999.999" }"#,
+        )
+        .unwrap();
+        let _root_env = EnvGuard::set("MCPACE_ROOT", &root);
+
+        let mut stdout = Vec::new();
+        let status = run(vec!["--version".to_string()], &mut stdout, &mut Vec::new());
+
+        assert_eq!(status, 0);
+        assert_eq!(
+            String::from_utf8(stdout).unwrap().trim(),
+            env!("CARGO_PKG_VERSION")
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
 }

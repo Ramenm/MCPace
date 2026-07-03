@@ -108,9 +108,14 @@ The `release-artifacts` workflow still builds and verifies the source bundle as 
 MCPace does not silently rewrite its running binary. The supported automatic-update path remains package-manager managed through npm until signed OS package repositories or a signed self-update feed exist:
 
 ```sh
+mcpace --version
 mcpace update check --source npm
 npm install -g @mcpace/cli@latest
 ```
+
+`mcpace --version` reports the compiled binary/package version. Project configuration
+versions remain visible in `mcpace doctor` as `Config version`, so an installed npm
+binary is not masked by a local `mcpace.config.json` or a Windows autostart root.
 
 GitHub installers support normal manual install/upgrade by downloading a newer MSI/DEB/PKG from the next release. They are not advertised as silent auto-updaters. The release asset manifest marks direct GitHub installers as `manual-upgrade-only` and names the future OS-native update channels that would be acceptable for automatic upgrades:
 
