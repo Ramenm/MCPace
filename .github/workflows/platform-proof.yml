@@ -34,7 +34,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
       - run: npm run check:platform
       - uses: actions/upload-artifact@v7
         if: always()
@@ -61,7 +61,7 @@ jobs:
         with:
           node-version: ${{ matrix.node }}
           cache: npm
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
       - run: npm run check
       - run: npm run check:package
       - run: npm run pack:npm:dry-run
@@ -86,7 +86,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.95.0
         with:
           components: rustfmt, clippy
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
       - run: npm run check:rust
       - run: cargo build --release
       - run: npm run platform:binary-smoke

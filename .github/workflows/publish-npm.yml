@@ -140,7 +140,7 @@ jobs:
           components: rustfmt, clippy
 
       - name: Install locked Node tooling
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
 
       - name: Prepare effective npm release version
         env:
@@ -232,7 +232,7 @@ jobs:
           cache: npm
 
       - name: Install locked Node tooling
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
 
       - name: Prepare effective npm release version
         env:

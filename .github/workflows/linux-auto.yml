@@ -35,7 +35,7 @@ jobs:
           cache: npm
 
       - name: Install locked Node tooling
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
 
       - name: Run Linux auto-check
         run: npm run check
@@ -63,7 +63,7 @@ jobs:
           cache: npm
 
       - name: Install locked Node tooling
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
 
       - name: Run full Linux auto-check
         run: npm run check:ci

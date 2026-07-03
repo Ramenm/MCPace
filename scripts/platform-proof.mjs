@@ -244,7 +244,7 @@ function buildReport() {
     correctPlatformFlow: [
       'Static proof on any host: npm run check:platform && npm run check.',
       'Manual GitHub proof: run .github/workflows/platform-proof.yml with full=true.',
-      'For each Linux/macOS/Windows host: npm ci, npm run check, install Rust 1.95.0, cargo fmt, clippy, test, build --release.',
+      'For each Linux/macOS/Windows host: npm ci --omit=optional, npm run check, install Rust 1.95.0, cargo fmt, clippy, test, build --release.',
       'Run npm run platform:binary-smoke -- --binary target/release/mcpace[.exe] on each host.',
       'Only after all three OS families pass, add a real Ratatui-based mcpace tui command or a Tauri desktop shell.',
     ],

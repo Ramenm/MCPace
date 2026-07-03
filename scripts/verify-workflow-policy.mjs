@@ -122,6 +122,31 @@ function checkWorkflowPermissions(repoRoot, filePath, text) {
   return [finding('workflow-explicit-permissions', 'pass', 'workflow declares explicit top-level permissions', { file })];
 }
 
+function checkNpmCiCommands(repoRoot, filePath, text) {
+  const file = rel(repoRoot, filePath);
+  const findings = [];
+  const lines = text.split(/\r?\n/);
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!/\bnpm\s+ci\b/.test(line)) continue;
+    const hasLockedSafeInstall =
+      /\bnpm\s+ci\b/.test(line)
+      && /--ignore-scripts\b/.test(line)
+      && /--no-audit\b/.test(line)
+      && /--no-fund\b/.test(line)
+      && /--omit=optional\b/.test(line);
+    findings.push(finding(
+      'workflow-npm-ci-locked-tooling',
+      hasLockedSafeInstall ? 'pass' : 'fail',
+      hasLockedSafeInstall
+        ? 'npm ci installs locked dev tooling without lifecycle scripts or unpublished native optionals'
+        : 'npm ci must use --ignore-scripts --no-audit --no-fund --omit=optional',
+      { file, line: index + 1 },
+    ));
+  }
+  return findings;
+}
+
 function publishTokenFree(text) {
   const tokenReference = /\b(?:NPM_TOKEN|NODE_AUTH_TOKEN|NPM_CONFIG_[A-Z0-9_]*TOKEN)\b/i;
   return !tokenReference.test(text);
@@ -161,6 +186,7 @@ function run() {
   for (const filePath of files) {
     const text = fs.readFileSync(filePath, 'utf8');
     findings.push(...checkWorkflowPermissions(args.repoRoot, filePath, text));
+    findings.push(...checkNpmCiCommands(args.repoRoot, filePath, text));
     for (const entry of extractUsesEntries(args.repoRoot, filePath, text)) findings.push(checkActionPin(entry, args.enforceSha));
     for (const block of extractRunBlocks(args.repoRoot, filePath, text)) findings.push(...checkInlineExpressions(block));
   }

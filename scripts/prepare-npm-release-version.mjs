@@ -35,8 +35,9 @@ function writeJson(relativePath, value) {
 function replaceTomlPackageVersion(relativePath, version) {
   const filePath = path.join(repoRoot, relativePath);
   const text = fs.readFileSync(filePath, 'utf8');
-  const updated = text.replace(/^version\s*=\s*"[^"]+"/m, `version = "${version}"`);
-  if (updated === text) throw new Error(`${relativePath} does not contain a top-level package version`);
+  const pattern = /^version\s*=\s*"[^"]+"/m;
+  if (!pattern.test(text)) throw new Error(`${relativePath} does not contain a top-level package version`);
+  const updated = text.replace(pattern, `version = "${version}"`);
   fs.writeFileSync(filePath, updated, 'utf8');
 }
 
@@ -44,8 +45,9 @@ function replaceCargoLockPackageVersion(version) {
   const relativePath = 'Cargo.lock';
   const filePath = path.join(repoRoot, relativePath);
   const text = fs.readFileSync(filePath, 'utf8');
-  const updated = text.replace(/(name = "mcpace"\r?\nversion = )"[^"]+"/, `$1"${version}"`);
-  if (updated === text) throw new Error(`${relativePath} does not contain the mcpace package version`);
+  const pattern = /(name = "mcpace"\r?\nversion = )"[^"]+"/;
+  if (!pattern.test(text)) throw new Error(`${relativePath} does not contain the mcpace package version`);
+  const updated = text.replace(pattern, `$1"${version}"`);
   fs.writeFileSync(filePath, updated, 'utf8');
 }
 
@@ -57,11 +59,26 @@ function updateOptionalDependencies(packageJson, version) {
 
 function updatePackageLock(version) {
   const lock = readJson('package-lock.json');
+  lock.version = version;
   if (lock.packages?.['']) lock.packages[''].version = version;
   const workspace = lock.packages?.['packages/npm/cli'];
   if (workspace) {
     workspace.version = version;
     updateOptionalDependencies(workspace, version);
+  }
+  const optionalDependencyNames = Object.keys(workspace?.optionalDependencies ?? {})
+    .filter((name) => name.startsWith('@mcpace/cli-'))
+    .sort((left, right) => left.localeCompare(right));
+  const packages = lock.packages && typeof lock.packages === 'object' ? lock.packages : null;
+  if (packages) {
+    for (const key of Object.keys(packages)) {
+      const isLegacyHoistedNative = /^node_modules\/@mcpace\/cli-/.test(key);
+      const isWorkspaceNativeStub = /^packages\/npm\/cli\/node_modules\/@mcpace\/cli-/.test(key);
+      if (isLegacyHoistedNative || isWorkspaceNativeStub) delete packages[key];
+    }
+    for (const name of optionalDependencyNames) {
+      packages[`packages/npm/cli/node_modules/${name}`] = { optional: true };
+    }
   }
   writeJson('package-lock.json', lock);
 }

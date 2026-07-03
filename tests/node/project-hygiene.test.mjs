@@ -564,7 +564,7 @@ test('GitHub Node jobs install locked dev tooling before package checks', () => 
     .map((file) => fs.readFileSync(file, 'utf8'))
     .join('\n');
   assert.match(workflowText, /cache:\s+npm/);
-  assert.match(workflowText, /npm ci --ignore-scripts --no-audit --no-fund/);
+  assert.match(workflowText, /npm ci --ignore-scripts --no-audit --no-fund --omit=optional/);
   assert.match(workflowText, /npm run check:package/);
   assert.equal(workflowText.includes('package-manager-cache: false'), false, 'setup-node cache should use the supported cache key with package-lock.json');
 });

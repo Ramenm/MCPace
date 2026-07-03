@@ -23,6 +23,15 @@ test('dependency policy passes for the repository lockfile and npm defaults', ()
   assert.equal(report.failures, 0);
 });
 
+test('package lock omits unreleased native optional packages from source installs', () => {
+  const cliPackage = JSON.parse(fs.readFileSync(path.join(repoRoot, 'packages/npm/cli/package.json'), 'utf8'));
+  const lock = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package-lock.json'), 'utf8'));
+  for (const name of Object.keys(cliPackage.optionalDependencies ?? {})) {
+    assert.equal(lock.packages?.[`node_modules/${name}`], undefined, `${name} should not be locked as a hoisted registry package before native publish`);
+    assert.deepEqual(lock.packages?.[`packages/npm/cli/node_modules/${name}`], { optional: true }, `${name} should be represented as an omitted optional workspace stub`);
+  }
+});
+
 test('workflow policy passes without SHA enforcement and keeps tag-pinning as warnings', () => {
   const result = nodeScript('scripts/verify-workflow-policy.mjs', ['--json']);
   assert.equal(result.status, 0, result.stderr || result.stdout);
