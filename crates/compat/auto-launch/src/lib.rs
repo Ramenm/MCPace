@@ -88,6 +88,7 @@ pub struct AutoLaunch {
     app_name: String,
     app_path: String,
     args: Vec<String>,
+    #[cfg_attr(windows, allow(dead_code))]
     agent_extra_config: String,
 }
 impl AutoLaunch {
@@ -95,28 +96,135 @@ impl AutoLaunch {
         cfg!(windows) || cfg!(target_os = "macos") || cfg!(target_os = "linux")
     }
     pub fn enable(&self) -> Result<()> {
-        let path = self.launch_file_path()?;
-        if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| Error::new(format!("failed to create {}: {e}", parent.display())))?;
+        #[cfg(windows)]
+        {
+            self.enable_windows_registry()?;
+            self.remove_legacy_windows_startup_file();
+            Ok(())
         }
-        fs::write(&path, self.launch_file_body())
-            .map_err(|e| Error::new(format!("failed to write {}: {e}", path.display())))
+
+        #[cfg(not(windows))]
+        {
+            let path = self.launch_file_path()?;
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).map_err(|e| {
+                    Error::new(format!("failed to create {}: {e}", parent.display()))
+                })?;
+            }
+            fs::write(&path, self.launch_file_body())
+                .map_err(|e| Error::new(format!("failed to write {}: {e}", path.display())))
+        }
     }
     pub fn disable(&self) -> Result<()> {
-        let path = self.launch_file_path()?;
-        match fs::remove_file(&path) {
-            Ok(()) => Ok(()),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
-            Err(e) => Err(Error::new(format!(
-                "failed to remove {}: {e}",
-                path.display()
-            ))),
+        #[cfg(windows)]
+        {
+            self.disable_windows_registry()?;
+            self.remove_legacy_windows_startup_file();
+            Ok(())
+        }
+
+        #[cfg(not(windows))]
+        {
+            let path = self.launch_file_path()?;
+            match fs::remove_file(&path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+                Err(e) => Err(Error::new(format!(
+                    "failed to remove {}: {e}",
+                    path.display()
+                ))),
+            }
         }
     }
     pub fn is_enabled(&self) -> Result<bool> {
-        Ok(self.launch_file_path()?.is_file())
+        #[cfg(windows)]
+        {
+            self.is_windows_registry_enabled()
+        }
+
+        #[cfg(not(windows))]
+        {
+            Ok(self.launch_file_path()?.is_file())
+        }
     }
+
+    #[cfg(windows)]
+    fn enable_windows_registry(&self) -> Result<()> {
+        let command = self.windows_registry_command();
+        let output = std::process::Command::new("reg")
+            .args([
+                "add",
+                WINDOWS_RUN_KEY,
+                "/v",
+                &self.app_name,
+                "/t",
+                "REG_SZ",
+                "/d",
+                &command,
+                "/f",
+            ])
+            .output()
+            .map_err(|e| Error::new(format!("failed to run reg.exe add: {e}")))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(Error::new(format!(
+                "failed to write Windows Run registry value '{}': {}{}",
+                self.app_name,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            )))
+        }
+    }
+
+    #[cfg(windows)]
+    fn disable_windows_registry(&self) -> Result<()> {
+        if !self.is_windows_registry_enabled()? {
+            return Ok(());
+        }
+        let output = std::process::Command::new("reg")
+            .args(["delete", WINDOWS_RUN_KEY, "/v", &self.app_name, "/f"])
+            .output()
+            .map_err(|e| Error::new(format!("failed to run reg.exe delete: {e}")))?;
+        if output.status.success() {
+            Ok(())
+        } else {
+            Err(Error::new(format!(
+                "failed to delete Windows Run registry value '{}': {}{}",
+                self.app_name,
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            )))
+        }
+    }
+
+    #[cfg(windows)]
+    fn is_windows_registry_enabled(&self) -> Result<bool> {
+        let output = std::process::Command::new("reg")
+            .args(["query", WINDOWS_RUN_KEY, "/v", &self.app_name])
+            .output()
+            .map_err(|e| Error::new(format!("failed to run reg.exe query: {e}")))?;
+        if !output.status.success() {
+            return Ok(false);
+        }
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        Ok(windows_registry_value_data(&stdout, &self.app_name)
+            .map(|value| value == self.windows_registry_command())
+            .unwrap_or(false))
+    }
+
+    #[cfg(windows)]
+    fn remove_legacy_windows_startup_file(&self) {
+        if let Ok(path) = self.launch_file_path() {
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    #[cfg(windows)]
+    fn windows_registry_command(&self) -> String {
+        windows_command(&self.app_path, &self.args)
+    }
+
     fn launch_file_path(&self) -> Result<PathBuf> {
         let name = safe_identifier(&self.app_name);
         #[cfg(target_os = "linux")]
@@ -158,6 +266,7 @@ impl AutoLaunch {
             Err(Error::new("auto-launch is not supported on this target OS"))
         }
     }
+    #[cfg(not(windows))]
     fn launch_file_body(&self) -> String {
         #[cfg(target_os = "linux")]
         {
@@ -172,21 +281,31 @@ impl AutoLaunch {
                 .join("\n");
             return format!("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<plist version=\"1.0\"><dict><key>Label</key><string>com.mcpace.{}</string><key>ProgramArguments</key><array>\n{}\n</array><key>RunAtLoad</key><true/>{}</dict></plist>\n", safe_identifier(&self.app_name).to_ascii_lowercase(), args, self.agent_extra_config);
         }
-        #[cfg(windows)]
-        {
-            let _ = &self.agent_extra_config;
-            return format!(
-                "@echo off\r\nstart \"{}\" {}\r\n",
-                self.app_name,
-                windows_command(&self.app_path, &self.args)
-            );
-        }
         #[cfg(not(any(target_os = "linux", target_os = "macos", windows)))]
         {
             let _ = &self.agent_extra_config;
             String::new()
         }
     }
+}
+
+#[cfg(windows)]
+const WINDOWS_RUN_KEY: &str = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Run";
+
+#[cfg(windows)]
+fn windows_registry_value_data(output: &str, app_name: &str) -> Option<String> {
+    for line in output.lines() {
+        let trimmed = line.trim_start();
+        let Some(rest) = trimmed.strip_prefix(app_name) else {
+            continue;
+        };
+        let rest = rest.trim_start();
+        let Some(data) = rest.strip_prefix("REG_SZ") else {
+            continue;
+        };
+        return Some(data.trim_start().to_string());
+    }
+    None
 }
 
 #[cfg(target_os = "linux")]
@@ -310,5 +429,45 @@ mod tests {
         assert!(body.contains("MemoryAccounting=yes"));
         assert!(body.contains("TasksMax=256"));
         assert!(body.contains("LimitNOFILE=4096"));
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_tests {
+    use super::*;
+
+    #[test]
+    fn windows_registry_value_parser_reads_reg_query_output() {
+        let output = r#"
+HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run
+    MCPace    REG_SZ    "C:\Windows\System32\wscript.exe" //B //Nologo "C:\MCPace\mcpace-autostart.vbs"
+"#;
+
+        assert_eq!(
+            windows_registry_value_data(output, "MCPace").as_deref(),
+            Some(
+                r#""C:\Windows\System32\wscript.exe" //B //Nologo "C:\MCPace\mcpace-autostart.vbs""#
+            )
+        );
+    }
+
+    #[test]
+    fn windows_registry_command_uses_direct_launcher_command_not_cmd_wrapper() {
+        let launcher = AutoLaunchBuilder::new()
+            .set_app_name("MCPace")
+            .set_app_path(r"C:\Windows\System32\wscript.exe")
+            .set_args(&[
+                "//B".to_string(),
+                "//Nologo".to_string(),
+                r"C:\MCPace\mcpace-autostart.vbs".to_string(),
+            ])
+            .build()
+            .unwrap();
+
+        assert_eq!(
+            launcher.windows_registry_command(),
+            r#""C:\Windows\System32\wscript.exe" //B //Nologo "C:\MCPace\mcpace-autostart.vbs""#
+        );
+        assert!(!launcher.windows_registry_command().contains("MCPace.cmd"));
     }
 }
