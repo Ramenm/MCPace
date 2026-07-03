@@ -30,7 +30,7 @@ docker run --rm   -e "CARGO_HOME=/work/.cargo-baseline"   -e "RUSTUP_HOME=/work/
     set -euo pipefail
     export DEBIAN_FRONTEND=noninteractive
     apt-get update
-    apt-get install -y --no-install-recommends ca-certificates curl build-essential pkg-config
+    apt-get install -y --no-install-recommends ca-certificates curl build-essential pkg-config nodejs
     curl --proto "=https" --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain "$MCPACE_RUST_TOOLCHAIN" --component rustfmt,clippy
     . "$CARGO_HOME/env"
     rustup target add "$MCPACE_RUST_TARGET"
