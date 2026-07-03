@@ -555,6 +555,7 @@ test('security workflow pull-request jobs are reachable only through declared tr
   const securityWorkflow = fs.readFileSync(path.join(repoRoot, '.github', 'workflows', 'security.yml'), 'utf8');
   assert.match(securityWorkflow, /^  pull_request:\s*$/m);
   assert.match(securityWorkflow, /github\.event_name == 'pull_request'/);
+  assert.match(securityWorkflow, /github\.ref_name == github\.event\.repository\.default_branch/);
   assert.match(securityWorkflow, /MCPACE_ENABLE_PRIVATE_DEPENDENCY_REVIEW/);
 });
 

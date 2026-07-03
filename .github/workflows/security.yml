@@ -82,7 +82,7 @@ jobs:
           category: /language:rust
 
   openssf-scorecard:
-    if: github.repository_visibility == 'public' || vars.MCPACE_ENABLE_PRIVATE_SCORECARD == 'true'
+    if: (github.repository_visibility == 'public' || vars.MCPACE_ENABLE_PRIVATE_SCORECARD == 'true') && (github.event_name == 'pull_request' || github.ref_name == github.event.repository.default_branch)
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
