@@ -25,3 +25,5 @@ Project-local `.npmrc` sets `ignore-scripts=true` so third-party lifecycle scrip
 - release artifacts have GitHub artifact attestation permissions and an attestation step;
 - inline shell blocks do not interpolate untrusted GitHub expressions directly;
 - third-party actions are at least explicitly ref-pinned. Tag-pinned actions are warnings by default and become failures with `--enforce-sha`.
+
+Package-side npm trusted publisher setup is automated with `npm run npm:trust:configure`. This command still requires an authenticated npm owner session with 2FA, but it avoids manual per-package clicks by running `npm trust github` for the main package and every enabled native package.

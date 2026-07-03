@@ -57,6 +57,7 @@
     "scripts/build-release-index.mjs",
     "scripts/cargo-task.mjs",
     "scripts/check-node-syntax.mjs",
+    "scripts/configure-npm-trusted-publishers.mjs",
     "scripts/lib/atomic-fs.mjs",
     "scripts/lib/command-runner.mjs",
     "scripts/lib/process.mjs",

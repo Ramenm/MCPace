@@ -78,6 +78,22 @@ test('npm publish workflow uses pinned npm for publish and enforces native packa
   assert.doesNotMatch(workflow, /\n\s+npm publish(?:\s|$)/, 'workflow must not publish with an ambient npm binary');
 });
 
+test('npm trusted publisher setup is bulk scripted for all publish packages', () => {
+  const script = fs.readFileSync(path.join(repoRoot, 'scripts', 'configure-npm-trusted-publishers.mjs'), 'utf8');
+  const packageJson = JSON.parse(fs.readFileSync(path.join(repoRoot, 'package.json'), 'utf8'));
+  const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'release-manifest.json'), 'utf8'));
+  assert.match(script, /npm'\s*,\s*'trust'\s*,\s*'github'/);
+  assert.match(script, /DEFAULT_REPOSITORY = 'Ramenm\/MCPace'/);
+  assert.match(script, /DEFAULT_WORKFLOW_FILE = 'publish-npm\.yml'/);
+  assert.match(script, /DEFAULT_ENVIRONMENT = 'npm-publish'/);
+  assert.match(script, /--allow-publish/);
+  assert.match(script, /optionalDependencies/);
+  assert.match(script, /npm login --auth-type=web/);
+  assert.equal(packageJson.scripts['npm:trust:plan'], 'node scripts/configure-npm-trusted-publishers.mjs');
+  assert.equal(packageJson.scripts['npm:trust:configure'], 'node scripts/configure-npm-trusted-publishers.mjs --execute');
+  assert.ok(manifest.includePaths.includes('scripts/configure-npm-trusted-publishers.mjs'));
+});
+
 test('npm publish enforce mode fails closed when native packages are not staged', () => {
   const result = runPublishContract(['--enforce']);
   assert.notEqual(result.status, 0, 'enforce mode must fail closed until native package artifacts exist');

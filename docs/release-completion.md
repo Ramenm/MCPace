@@ -91,6 +91,16 @@ A tarball that merely has the right filename is not enough.
 
 The `publish-npm` workflow builds all native target tarballs first, downloads them into `dist/npm`, enforces the publish contract, publishes the native tarballs, and only then publishes the main launcher. `dev` branch pushes publish unique prerelease versions like `0.7.8-dev.<run_number>` to the `dev` dist-tag. `main`/`master` pushes publish the stable package version to `latest` only when that exact version is not already present on npm. The workflow uses `id-token: write` for npm trusted publishing and intentionally does not set `NODE_AUTH_TOKEN`; an empty or stale token env var can prevent npm from using OIDC.
 
+If npm rejects trusted publishing with `E404` / "could not be found or you do not have permission", configure the package-side trusted publisher entries in bulk instead of clicking each package manually:
+
+```bash
+npm login --auth-type=web
+npm run npm:trust:plan
+npm run npm:trust:configure
+```
+
+The bulk helper uses `npm trust github` with npm 11.18, repository `Ramenm/MCPace`, workflow `publish-npm.yml`, environment `npm-publish`, and `--allow-publish` for `@mcpace/cli` plus each enabled native optional package. The first trust command may require 2FA; use npm's temporary "skip 2FA for the next 5 minutes" option so the remaining package entries can be created automatically.
+
 The `release-artifacts` workflow still builds and verifies the source bundle as an internal release proof, but only the native installer artifacts are composed into `github-release-assets` for upload. The workflow builds native GitHub installers with the same target matrix, smokes each built binary, verifies each installer by installing and running `mcpace help`, generates artifact attestations, writes checksums and the release manifest, and optionally creates a draft GitHub Release from that installer-focused asset set. Draft release creation stays manual so an operator can verify hashes and runner provenance before publishing.
 
 ## Update model
