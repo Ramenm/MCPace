@@ -63,11 +63,11 @@ function npmProbe(args) {
   if (npmExecPath && fs.existsSync(npmExecPath)) {
     candidates.push({ command: process.execPath, args: [npmExecPath, ...args], shell: false });
   }
-  candidates.push({
-    command: process.platform === 'win32' ? 'npm.cmd' : 'npm',
-    args,
-    shell: process.platform === 'win32'
-  });
+  if (process.platform === 'win32') {
+    candidates.push({ command: 'cmd.exe', args: ['/d', '/s', '/c', 'npm.cmd', ...args], shell: false });
+  } else {
+    candidates.push({ command: 'npm', args, shell: false });
+  }
 
   for (const candidate of candidates) {
     const result = spawnSync(candidate.command, candidate.args, {

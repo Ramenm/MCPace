@@ -33,6 +33,7 @@ function runNode(commandArgs, env = process.env) {
     windowsHide: true,
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.doesNotMatch(result.stderr, /DeprecationWarning/, 'terminal diagnostics should not emit Node deprecation warnings');
   return result;
 }
 
