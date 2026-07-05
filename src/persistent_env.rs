@@ -1,3 +1,4 @@
+#[cfg(windows)]
 use std::env;
 
 pub(crate) const LOGIN_ENV_KEYS: &[&str] = &[
@@ -15,6 +16,7 @@ pub(crate) fn hydrate_login_environment() -> LoginEnvHydration {
     hydrate_login_environment_impl()
 }
 
+#[cfg(windows)]
 pub(crate) fn persistent_env_value(key: &str) -> Option<String> {
     persistent_env_value_impl(key)
 }
@@ -87,11 +89,6 @@ fn persistent_env_value_impl(key: &str) -> Option<String> {
             return Some(expand_percent_env_vars(&value));
         }
     }
-    None
-}
-
-#[cfg(not(windows))]
-fn persistent_env_value_impl(_key: &str) -> Option<String> {
     None
 }
 
