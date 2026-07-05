@@ -1,23 +1,9 @@
 {
-  "schema": "mcpace.sourceBundle.v1",
-  "root": "mcpace-v0.7.5-250626-133355",
-  "version": "0.7.5",
-  "fileCount": 327,
-  "requiredPaths": [
-    "docs/README.md",
-    "reports/summary.md"
-  ],
-  "excluded": [
-    ".git",
-    "node_modules",
-    "target",
-    "dist",
-    "caches",
-    "temporary files",
-    "OS artifacts",
-    "logs",
-    "heavy build outputs"
-  ],
-  "bundle": "mcpace-v0.7.5-250626-133355.zip",
-  "updatedAt": "2026-06-25T11:33:55Z"
+  "schema": "mcpace.bundleManifest.v1",
+  "status": "source-review-ready",
+  "root": ".",
+  "notes": [
+    "Reviewable reports are included in the source bundle contract.",
+    "Machine-local runtime artifacts are excluded by source archive policy."
+  ]
 }

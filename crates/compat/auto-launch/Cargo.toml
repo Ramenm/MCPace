@@ -1,9 +1,0 @@
-[package]
-name = "auto-launch"
-version = "0.6.0"
-edition = "2021"
-license = "MIT"
-
-[lib]
-name = "auto_launch"
-path = "src/lib.rs"

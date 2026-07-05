@@ -64,15 +64,22 @@ test('dashboard browser lifecycle proof prevents tab wake-up refresh storms', ()
   assert.equal(packageScripts['proof:browser-lifecycle'], 'node scripts/browser-lifecycle-proof.mjs');
 });
 
-test('service verify records applied-state probes for user supervisors', () => {
+test('autostart verify records visible MCPace Agent state instead of raw service-manager probes', () => {
   const service = read('src/service.rs');
   assert.match(service, /"appliedState", service_applied_state_json\(config\)/);
-  assert.match(service, /mcpace\.serviceAppliedState\.v1/);
-  assert.match(service, /systemctl --user show/);
-  assert.match(service, /MemoryAccounting/);
-  assert.match(service, /TasksMax/);
-  assert.match(service, /MainPID/);
-  assert.match(service, /ExecStart/);
+  assert.match(service, /mcpace\.autostartAppliedState\.v1/);
+  assert.match(service, /visibleAs/);
+  assert.match(service, /MCPace Agent/);
+  assert.match(service, /target-executable-exists/);
+  assert.match(service, /root-path-valid/);
+  assert.match(service, /legacy-autostart-entry-removed/);
+  assert.match(service, /windows-persistent-env-aligned/);
+  assert.match(service, /mcpace\.autostartEnvironment\.v1/);
+  assert.match(service, /renderedCommand/);
+  assert.match(service, /XDG Autostart/);
+  assert.match(service, /Windows current-user Run registry/);
+  assert.match(service, /LaunchAgent/);
+  assert.match(service, /supervisedByMcpaceAgent/);
 });
 
 test('static Rust guard and trusted-publish preflight are wired into CI scripts and release manifest', () => {

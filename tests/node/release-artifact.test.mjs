@@ -15,6 +15,7 @@ function makeMiniReleaseRepo(includePaths) {
     'scripts/lib/atomic-fs.mjs',
     'scripts/lib/project-metadata.mjs',
     'scripts/lib/zip-writer.mjs',
+    'scripts/lib/source-archive-policy.mjs',
   ]) {
     fs.cpSync(path.join(repoRoot, relativePath), path.join(tmp, relativePath));
   }
@@ -144,6 +145,8 @@ test('release artifact builder rejects manifest path traversal before staging', 
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+
 
 test('release artifact builder rejects symlinked source entries instead of following them', (t) => {
   const tmp = makeMiniReleaseRepo([

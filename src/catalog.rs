@@ -35,9 +35,21 @@ pub const COMMANDS: &[CommandSpec] = &[
         implemented: true,
     },
     CommandSpec {
+        name: "autostart",
+        description: "Install or inspect the visible user-level MCPace Agent login item.",
+        aliases: &["startup"],
+        implemented: true,
+    },
+    CommandSpec {
         name: "service",
-        description: "Install or inspect user-level autostart for the MCPace endpoint.",
-        aliases: &["autostart", "startup"],
+        description: "Compatibility alias for user-level autostart; privileged system services are reserved for a future advanced mode.",
+        aliases: &[],
+        implemented: true,
+    },
+    CommandSpec {
+        name: "agent",
+        description: "Run or inspect the visible MCPace login agent used by autostart entries.",
+        aliases: &[],
         implemented: true,
     },
     CommandSpec {
@@ -109,9 +121,9 @@ pub const COMMANDS: &[CommandSpec] = &[
         implemented: true,
     },
     CommandSpec {
-        name: "stdio-shim",
-        description: "Internal bootstrap-only stdio shim proof surface.",
-        aliases: &["stdio_shim"],
+        name: "stdio",
+        description: "Preview MCP stdio launch surface. This is the public launcher command; `stdio-shim` remains a compatibility alias while live forwarding is completed.",
+        aliases: &["stdio-shim", "stdio_shim"],
         implemented: true,
     },
     CommandSpec {

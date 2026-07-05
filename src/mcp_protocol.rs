@@ -37,10 +37,10 @@ pub fn request_id(message: &JsonValue) -> Option<JsonValue> {
 }
 
 pub fn request_id_key(id: &JsonValue) -> Option<String> {
-    if is_request_id_value(id) {
-        Some(id.to_compact_string())
-    } else {
-        None
+    match id {
+        JsonValue::String(_) => Some(id.to_compact_string()),
+        JsonValue::Number(value) if is_integer_number_text(value) => Some(value.clone()),
+        _ => None,
     }
 }
 

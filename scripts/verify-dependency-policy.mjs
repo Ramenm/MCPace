@@ -2,15 +2,17 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
+import { cargoLockRefreshFindings, cargoLockRefreshMessage } from './lib/cargo-policy.mjs';
 
 function parseArgs(argv) {
-  const args = { json: false, repoRoot: process.cwd() };
+  const args = { json: false, repoRoot: process.cwd(), enforceCargoLock: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === '--json') args.json = true;
+    else if (arg === '--enforce-cargo-lock') args.enforceCargoLock = true;
     else if (arg === '--repo') args.repoRoot = path.resolve(argv[++index]);
     else if (arg === '--help' || arg === '-h') {
-      console.log('Usage: node scripts/verify-dependency-policy.mjs [--json] [--repo DIR]');
+      console.log('Usage: node scripts/verify-dependency-policy.mjs [--json] [--enforce-cargo-lock] [--repo DIR]');
       process.exit(0);
     } else {
       throw new Error(`unknown argument: ${arg}`);
@@ -151,6 +153,39 @@ function checkNpmrc(repoRoot) {
   ];
 }
 
+function checkCargoDependencyPolicy(repoRoot) {
+  const cargoToml = readTextIfExists(path.join(repoRoot, 'Cargo.toml'));
+  const localCompat = [...cargoToml.matchAll(/^\s*([A-Za-z0-9_-]+)\s*=\s*\{\s*path\s*=\s*"crates\/compat\/[^"]+"/gm)]
+    .map((match) => match[1]);
+  const compatTreeExists = fs.existsSync(path.join(repoRoot, 'crates', 'compat'));
+  return [
+    finding(
+      'cargo-uses-upstream-standard-crates',
+      localCompat.length === 0 ? 'pass' : 'fail',
+      localCompat.length === 0
+        ? 'Cargo.toml does not redirect standard crates to local compat shims'
+        : 'Cargo.toml still redirects standard crates to crates/compat shims',
+      { crates: localCompat },
+    ),
+    finding(
+      'cargo-compat-crate-tree-removed',
+      compatTreeExists ? 'fail' : 'pass',
+      compatTreeExists ? 'crates/compat still exists' : 'crates/compat is absent',
+    ),
+  ];
+}
+
+function checkCargoLockPolicy(repoRoot, { enforceCargoLock = false } = {}) {
+  const issues = cargoLockRefreshFindings(repoRoot);
+  const status = issues.length === 0 ? 'pass' : (enforceCargoLock ? 'fail' : 'warn');
+  return [finding(
+    'cargo-lock-standard-crates-synced',
+    status,
+    cargoLockRefreshMessage(issues),
+    { crates: issues },
+  )];
+}
+
 function run() {
   const args = parseArgs(process.argv.slice(2));
   const repoRoot = args.repoRoot;
@@ -159,18 +194,22 @@ function run() {
   const { lock, findings: lockFindings } = checkLockfile(repoRoot);
   findings.push(...lockFindings);
   findings.push(...checkWorkspacePackage(repoRoot, lock));
+  findings.push(...checkCargoDependencyPolicy(repoRoot));
+  findings.push(...checkCargoLockPolicy(repoRoot, { enforceCargoLock: args.enforceCargoLock }));
 
   const failures = findings.filter((item) => item.status === 'fail');
+  const warnings = findings.filter((item) => item.status === 'warn');
   const report = {
     status: failures.length === 0 ? 'pass' : 'fail',
     checkedAt: new Date().toISOString(),
     repoRoot: '.',
     failures: failures.length,
+    warnings: warnings.length,
     findings,
   };
   if (args.json) console.log(JSON.stringify(report, null, 2));
   else {
-    console.log(`${report.status}: ${findings.length} dependency policy checks, ${failures.length} failures`);
+    console.log(`${report.status}: ${findings.length} dependency policy checks, ${failures.length} failures, ${warnings.length} warnings`);
     for (const item of findings) console.log(`- ${item.status}: ${item.id} — ${item.detail}`);
   }
   process.exitCode = failures.length === 0 ? 0 : 1;

@@ -17,7 +17,6 @@
     "README.md",
     "SECURITY.md",
     "catalog",
-    "crates",
     "deny.toml",
     "docs/README.md",
     "docs/architecture.md",
@@ -54,6 +53,7 @@
     "rust-toolchain.toml",
     "schemas",
     "scripts/build-release-artifacts.mjs",
+    "scripts/verify-clean-archive.mjs",
     "scripts/build-release-index.mjs",
     "scripts/cargo-task.mjs",
     "scripts/check-node-syntax.mjs",
@@ -116,7 +116,12 @@
     "src/dashboard/governor.rs",
     "src/dashboard/rate_limit.rs",
     "scripts/plan-npm-publish.mjs",
-    "scripts/prepare-npm-release-version.mjs"
+    "scripts/prepare-npm-release-version.mjs",
+    "scripts/lib/source-archive-policy.mjs",
+    "scripts/modernization-inventory.mjs",
+    "scripts/lib/cargo-policy.mjs",
+    "scripts/legacy-subsystem-map.mjs",
+    "scripts/verify-modernization-budget.mjs"
   ],
   "runtimeDirectories": [
     "backups",

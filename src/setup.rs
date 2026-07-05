@@ -299,7 +299,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
                 parsed.no_default_server = true;
                 index += 1;
             }
-            "--install-service" | "--install-autostart" => {
+            "--install-service" | "--install-autostart" | "--autostart" => {
                 parsed.install_service = true;
                 index += 1;
             }
@@ -348,7 +348,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace up [server-spec] [--as <name>] [--path <path>...] [--client auto|all|<id>|none] [--json] [--root <path>] [--host <addr>] [--port <n>] [--install-service]"
+        "Usage: mcpace up [server-spec] [--as <name>] [--path <path>...] [--client auto|all|<id>|none] [--json] [--root <path>] [--host <addr>] [--port <n>] [--autostart]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -661,8 +661,8 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
 
     let service_install = if parsed.install_service {
         let mut args = vec![
-            "service".to_string(),
-            "install".to_string(),
+            "autostart".to_string(),
+            "enable".to_string(),
             "--json".to_string(),
             "--host".to_string(),
             host.clone(),
@@ -1480,7 +1480,12 @@ fn is_mcpace_self_entry(name: &str, value: &JsonValue, endpoint: &str) -> bool {
     }
     json_helpers::strings_from_array(object.get("args").and_then(JsonValue::as_array))
         .iter()
-        .any(|arg| matches!(arg.as_str(), "mcp-server" | "stdio-shim" | "serve"))
+        .any(|arg| {
+            matches!(
+                arg.as_str(),
+                "mcp-server" | "stdio" | "stdio-shim" | "serve"
+            )
+        })
 }
 
 fn normalized_endpoint_matches(url: &str, endpoint: &str) -> bool {

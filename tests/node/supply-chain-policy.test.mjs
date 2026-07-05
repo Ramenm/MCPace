@@ -21,6 +21,9 @@ test('dependency policy passes for the repository lockfile and npm defaults', ()
   const report = JSON.parse(result.stdout);
   assert.equal(report.status, 'pass');
   assert.equal(report.failures, 0);
+  const cargoLockFinding = report.findings.find((item) => item.id === 'cargo-lock-standard-crates-synced');
+  assert.ok(cargoLockFinding, 'Cargo.lock refresh status should be reported after upstream crate migration');
+  assert.ok(['pass', 'warn'].includes(cargoLockFinding.status));
 });
 
 test('package lock omits hoisted native optional packages from source installs', () => {
@@ -76,6 +79,28 @@ test('dependency policy rejects lockfiles without integrity on external packages
     const report = JSON.parse(result.stdout);
     assert.equal(report.status, 'fail');
     assert.ok(report.findings.some((item) => item.id === 'external-packages-have-integrity' && item.status === 'fail'));
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+
+test('dependency policy can enforce Cargo.lock refresh on release hosts with Rust installed', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mcpace-cargo-lock-policy-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'packages/npm/cli'), { recursive: true });
+    fs.writeFileSync(path.join(dir, '.npmrc'), 'ignore-scripts=true\n');
+    fs.writeFileSync(path.join(dir, 'package.json'), JSON.stringify({ name: 'root', version: '1.0.0' }));
+    fs.writeFileSync(path.join(dir, 'packages/npm/cli/package.json'), JSON.stringify({ name: '@mcpace/cli', version: '1.0.0', optionalDependencies: {} }));
+    fs.writeFileSync(path.join(dir, 'package-lock.json'), JSON.stringify({ lockfileVersion: 3, packages: { '': {}, 'packages/npm/cli': { name: '@mcpace/cli', version: '1.0.0', optionalDependencies: {} } } }));
+    fs.writeFileSync(path.join(dir, 'Cargo.toml'), '[package]\nname = "mcpace"\nversion = "1.0.0"\n\n[dependencies]\nserde_json = "1"\nclap = { version = "4", features = ["derive"] }\n');
+    fs.writeFileSync(path.join(dir, 'Cargo.lock'), '[[package]]\nname = "serde_json"\nversion = "0.9.0"\n');
+
+    const result = nodeScript('scripts/verify-dependency-policy.mjs', ['--json', '--enforce-cargo-lock', '--repo', dir]);
+    assert.notEqual(result.status, 0, result.stdout);
+    const report = JSON.parse(result.stdout);
+    assert.equal(report.status, 'fail');
+    assert.ok(report.findings.some((item) => item.id === 'cargo-lock-standard-crates-synced' && item.status === 'fail'));
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

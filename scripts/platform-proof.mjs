@@ -96,7 +96,7 @@ function buildSmokeCommands(commands) {
     { args: ['lab', 'report', '--json'], expects: 'json', reason: 'evidence corpus contract' },
     { args: ['cleanup', 'status', '--json'], expects: 'json', reason: 'non-destructive cleanup plan' },
     { args: ['release', '--help'], expects: 'text', reason: 'release command help path' },
-    { args: ['service', '--help'], expects: 'text', reason: 'platform autostart help path' },
+    { args: ['autostart', '--help'], expects: 'text', reason: 'platform autostart help path' },
     { args: ['serve', 'status', '--json'], expects: 'jsonOrNonzero', reason: 'serve state read path without starting daemon' },
   ];
   const catalogNames = new Set(commands.map((command) => command.name));

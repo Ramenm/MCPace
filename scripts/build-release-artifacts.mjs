@@ -5,6 +5,7 @@ import path from 'node:path';
 import { copyRegularFileNoFollowSync, lstatStableDirectorySync, writeFileAtomicSync, withFileLockSync } from './lib/atomic-fs.mjs';
 import { deriveProjectName, deriveProjectVersion, readJson, repoRoot } from './lib/project-metadata.mjs';
 import { createZipFromDirectory, listZipEntries } from './lib/zip-writer.mjs';
+import { sourceArchivePolicyIssue, assertSourceArchivePolicy } from './lib/source-archive-policy.mjs';
 
 const args = process.argv.slice(2);
 const jsonOutput = args.includes('--json');
@@ -19,6 +20,7 @@ const outDir = path.resolve(argValue('--out-dir', path.join(repoRoot, '.artifact
 const timestampOverride = argValue('--timestamp', process.env.MCPACE_RELEASE_TIMESTAMP || null);
 const forbiddenParts = new Set(['.git', 'node_modules', 'target', 'dist', '.cache', '.pytest_cache', '__pycache__']);
 const forbiddenFiles = new Set(['.DS_Store', 'Thumbs.db']);
+const defaultRuntimeDirectories = Object.freeze(['data/runtime', 'data/server-state', 'logs', 'backups']);
 
 const DEFAULT_MAX_RELEASE_FILE_BYTES = 32 * 1024 * 1024;
 const DEFAULT_MAX_RELEASE_TOTAL_BYTES = 512 * 1024 * 1024;
@@ -76,35 +78,55 @@ function normalizeManifestPath(value) {
   return parts.join('/');
 }
 
+function normalizeManifestPathList(values, label, rejectedManifestPaths) {
+  if (values === undefined) return [];
+  if (!Array.isArray(values)) {
+    rejectedManifestPaths.push({ path: label, reason: `${label} must be an array when present` });
+    return [];
+  }
+  const normalized = [];
+  const seen = new Set();
+  for (const rawPath of values) {
+    try {
+      const value = normalizeManifestPath(rawPath).replace(/\/+$/, '');
+      if (seen.has(value)) {
+        rejectedManifestPaths.push({ path: String(rawPath), reason: `duplicate ${label} path` });
+        continue;
+      }
+      seen.add(value);
+      normalized.push(value);
+    } catch (error) {
+      rejectedManifestPaths.push({ path: String(rawPath), reason: error?.message ?? String(error) });
+    }
+  }
+  return normalized;
+}
+
 function readManifest() {
   const manifest = readJson('release-manifest.json');
   if (!Array.isArray(manifest.includePaths)) {
     throw new Error('release-manifest.json must contain includePaths array');
   }
 
-  const includePaths = [];
   const rejectedManifestPaths = [];
-  const seen = new Set();
-  for (const rawPath of manifest.includePaths) {
-    try {
-      const normalized = normalizeManifestPath(rawPath);
-      if (seen.has(normalized)) {
-        rejectedManifestPaths.push({ path: String(rawPath), reason: 'duplicate manifest path' });
-        continue;
-      }
-      seen.add(normalized);
-      includePaths.push(normalized);
-    } catch (error) {
-      rejectedManifestPaths.push({ path: String(rawPath), reason: error?.message ?? String(error) });
-    }
-  }
+  const includePaths = normalizeManifestPathList(manifest.includePaths, 'includePaths', rejectedManifestPaths);
+  const runtimeDirectories = normalizeManifestPathList(manifest.runtimeDirectories, 'runtimeDirectories', rejectedManifestPaths);
 
-  return { ...manifest, includePaths, rejectedManifestPaths };
+  return { ...manifest, includePaths, runtimeDirectories, rejectedManifestPaths };
 }
 
-function shouldSkip(relativePath) {
-  const parts = relativePath.split(/[\\/]+/).filter(Boolean);
-  return parts.some((part) => forbiddenParts.has(part)) || forbiddenFiles.has(path.basename(relativePath));
+function hasRuntimeDirectoryPrefix(relativePath, runtimeDirectories = []) {
+  const normalized = normalizeRelativePath(relativePath).replace(/^\/+|\/+$/g, '');
+  return runtimeDirectories.some((runtimeDir) => normalized === runtimeDir || normalized.startsWith(`${runtimeDir}/`));
+}
+
+function shouldSkip(relativePath, runtimeDirectories = []) {
+  const normalized = normalizeRelativePath(relativePath);
+  const parts = normalized.split(/[\\/]+/).filter(Boolean);
+  return Boolean(sourceArchivePolicyIssue(normalized, { allowSingleRoot: false }))
+    || parts.some((part) => forbiddenParts.has(part))
+    || forbiddenFiles.has(path.basename(normalized))
+    || hasRuntimeDirectoryPrefix(normalized, runtimeDirectories);
 }
 
 function normalizeRelativePath(relativePath) {
@@ -165,9 +187,9 @@ function analyzePortableFileSet(files) {
   };
 }
 
-function copyPath(source, destination, relativePath) {
+function copyPath(source, destination, relativePath, runtimeDirectories = []) {
   const normalizedRelativePath = normalizeRelativePath(relativePath);
-  if (shouldSkip(normalizedRelativePath)) {
+  if (shouldSkip(normalizedRelativePath, runtimeDirectories)) {
     return { skipped: [normalizedRelativePath], copied: [], copiedBytes: 0, missing: [], rejected: [] };
   }
 
@@ -200,7 +222,7 @@ function copyPath(source, destination, relativePath) {
     }
     for (const entry of entries) {
       const childRelative = path.posix.join(normalizedRelativePath, entry.name);
-      const child = copyPath(path.join(source, entry.name), path.join(destination, entry.name), childRelative);
+      const child = copyPath(path.join(source, entry.name), path.join(destination, entry.name), childRelative, runtimeDirectories);
       copied.push(...child.copied);
       copiedBytes += child.copiedBytes ?? 0;
       skipped.push(...child.skipped);
@@ -291,7 +313,7 @@ function build() {
 
     for (const relativePath of manifest.includePaths) {
       const source = path.join(repoRoot, relativePath);
-      const result = copyPath(source, path.join(stagedRoot, relativePath), relativePath);
+      const result = copyPath(source, path.join(stagedRoot, relativePath), relativePath, manifest.runtimeDirectories);
       copied.push(...result.copied);
       copiedBytes += result.copiedBytes ?? 0;
       skipped.push(...result.skipped);
@@ -302,7 +324,7 @@ function build() {
     const required = ['README.md', 'docs/README.md', 'reports/summary.md', 'Cargo.toml', 'package.json'];
     const stagedFiles = walkFiles(stagedRoot);
     const missingRequired = required.filter((relativePath) => !stagedFiles.includes(relativePath));
-    const forbiddenIncluded = stagedFiles.filter(shouldSkip);
+    const forbiddenIncluded = stagedFiles.filter((file) => shouldSkip(file, manifest.runtimeDirectories));
     const portablePathAnalysis = analyzePortableFileSet(stagedFiles);
     const resourceLimitIssues = copiedBytes > releaseResourceLimits.maxTotalBytes
       ? [{ reason: `release source inputs exceed maximum total size of ${releaseResourceLimits.maxTotalBytes} bytes`, copiedBytes }]
@@ -354,6 +376,7 @@ function build() {
       if (zipVerification.status !== 'pass') {
         throw new Error(`ZIP verification failed: ${JSON.stringify(zipVerification, null, 2)}`);
       }
+      assertSourceArchivePolicy(listZipEntries(archivePath));
     }
 
     writeFileAtomicSync(manifestPath, JSON.stringify({
@@ -364,6 +387,7 @@ function build() {
       sourceRoot: '.',
       sourceRootName: path.basename(repoRoot),
       includePaths: manifest.includePaths,
+      runtimeDirectories: manifest.runtimeDirectories,
       files: stagedFiles,
       verificationReport,
       zipVerification,

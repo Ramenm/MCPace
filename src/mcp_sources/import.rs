@@ -393,7 +393,7 @@ fn looks_like_mcpace_self_entry(
     }
     json_helpers::strings_from_array(object.get("args").and_then(JsonValue::as_array))
         .into_iter()
-        .any(|arg| arg == "mcp-server" || arg == "stdio-shim")
+        .any(|arg| arg == "mcp-server" || arg == "stdio" || arg == "stdio-shim")
 }
 
 fn matches_endpoint_url(value: &str, endpoint: &str) -> bool {

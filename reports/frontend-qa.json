@@ -1,45 +1,8 @@
 {
-  "schema": "mcpace.frontendScreenshotQa.v1",
-  "project": "mcpace",
-  "version": "0.7.5",
-  "renderer": "Chromium headless via Playwright Python",
-  "mockedApis": [
-    "/api/overview",
-    "/api/logs",
-    "/api/resources",
-    "/api/actions/*"
-  ],
+  "schema": "mcpace.frontendQa.v1",
+  "status": "static-contract-only",
   "checks": [
-    "no horizontal overflow",
-    "no console/page errors",
-    "setup tools folded by default",
-    "no focusable controls below 24px in either dimension"
-  ],
-  "desktop": {
-    "title": "MCPace dashboard",
-    "clientWidth": 1440,
-    "scrollWidth": 1440,
-    "scrollHeight": 2892,
-    "overflowX": false,
-    "consoleErrors": [],
-    "smallFocusableCount": 0,
-    "smallFocusables": [],
-    "setupToolsFoldedByDefault": true,
-    "mobileDockDisplay": "none",
-    "desktopNavDisplay": "flex"
-  },
-  "mobile": {
-    "title": "MCPace dashboard",
-    "clientWidth": 390,
-    "scrollWidth": 390,
-    "scrollHeight": 6001,
-    "overflowX": false,
-    "consoleErrors": [],
-    "smallFocusableCount": 0,
-    "smallFocusables": [],
-    "setupToolsFoldedByDefault": true,
-    "mobileDockDisplay": "grid",
-    "desktopNavDisplay": "none"
-  },
-  "updatedForBundle": "mcpace-v0.7.5-250626-133355"
+    "dashboard DOM/backend route contracts are covered by Node tests",
+    "live browser lifecycle proof remains a separate check"
+  ]
 }

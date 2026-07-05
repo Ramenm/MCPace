@@ -32,7 +32,7 @@ pub fn run(
     if !parsed.json_output {
         let _ = writeln!(
             stderr,
-            "stdio-shim is currently a bootstrap-only proof surface. Run 'mcpace stdio-shim --json ...' to normalize metadata, derive a sticky session lease, and ensure the hub is up. Live MCP stdio forwarding is not implemented yet."
+            "mcpace stdio is currently a bootstrap-only proof surface. Run 'mcpace stdio --json ...' to normalize metadata, derive a sticky session lease, and ensure the hub is up. Live MCP stdio forwarding is not implemented yet."
         );
         return 2;
     }
@@ -194,7 +194,7 @@ fn parse_args(args: &[String]) -> ParsedArgs {
             }
             "--root" => {
                 let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("stdio-shim requires a path after --root".to_string());
+                    parsed.error = Some("stdio requires a path after --root".to_string());
                     return parsed;
                 };
                 parsed.root_override = Some(PathBuf::from(value));
@@ -217,12 +217,12 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace stdio-shim --json [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]"
+        "Usage: mcpace stdio --json [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "stdio-shim is currently a bootstrap-only proof surface."
+        "mcpace stdio is currently a bootstrap-only proof surface; stdio-shim remains a compatibility alias."
     );
     let _ = writeln!(
         stdout,

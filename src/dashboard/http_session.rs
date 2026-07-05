@@ -361,7 +361,7 @@ pub(super) fn normalize_mcp_http_session_id(value: &str) -> Option<String> {
 
 fn os_random_hex(byte_count: usize) -> Result<String, getrandom::Error> {
     let mut bytes = vec![0u8; byte_count];
-    getrandom::getrandom(&mut bytes)?;
+    getrandom::fill(&mut bytes)?;
     Ok(hex_bytes(&bytes))
 }
 

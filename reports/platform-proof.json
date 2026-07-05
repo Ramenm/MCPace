@@ -1,8 +1,8 @@
 {
   "schema": "mcpace.platformProof.v1",
-  "generatedAt": "2026-06-25T11:35:20.370Z",
+  "generatedAt": "2026-07-04T15:37:14.871Z",
   "root": ".",
-  "rootName": "mcpace-v0.7.5-250626-133355",
+  "rootName": "mcpace_work",
   "overall": "pass",
   "summary": {
     "pass": 8,
@@ -10,7 +10,7 @@
     "fail": 0,
     "publishedTargetCount": 6,
     "plannedTargetCount": 2,
-    "publicCommandCount": 23,
+    "publicCommandCount": 24,
     "smokeCommandCount": 17
   },
   "uiDecision": {
@@ -114,6 +114,21 @@
     ]
   },
   "commands": [
+    {
+      "name": "agent",
+      "aliases": [],
+      "implemented": true,
+      "description": "Run or inspect the visible MCPace login agent used by autostart entries."
+    },
+    {
+      "name": "autostart",
+      "aliases": [
+        "service",
+        "startup"
+      ],
+      "implemented": true,
+      "description": "Install or inspect the visible user-level MCPace Agent login item."
+    },
     {
       "name": "candidates",
       "aliases": [],
@@ -254,15 +269,6 @@
       "description": "Grouped server inspection and automatic MCP package/URL/command install command."
     },
     {
-      "name": "service",
-      "aliases": [
-        "autostart",
-        "startup"
-      ],
-      "implemented": true,
-      "description": "Install or inspect user-level autostart for the MCPace endpoint."
-    },
-    {
       "name": "setup",
       "aliases": [
         "up",
@@ -310,7 +316,7 @@
         "-v"
       ],
       "implemented": true,
-      "description": "Print the MCPace version from mcpace.config.json."
+      "description": "Print the compiled MCPace binary version."
     }
   ],
   "subcommands": {
@@ -525,12 +531,12 @@
     },
     {
       "args": [
-        "service",
+        "autostart",
         "--help"
       ],
       "expects": "text",
       "reason": "platform autostart help path",
-      "command": "service --help",
+      "command": "autostart --help",
       "coveredTopLevel": true
     },
     {
@@ -546,6 +552,7 @@
     }
   ],
   "topLevelCommandGaps": [
+    "agent",
     "candidates",
     "connect",
     "dashboard",
@@ -585,7 +592,7 @@
     {
       "id": "all-public-commands-inventoried",
       "status": "pass",
-      "detail": "23 public command groups parsed from src/catalog.rs"
+      "detail": "24 public command groups parsed from src/catalog.rs"
     },
     {
       "id": "safe-binary-smoke-covers-operational-groups",
@@ -601,7 +608,7 @@
   "correctPlatformFlow": [
     "Static proof on any host: npm run check:platform && npm run check.",
     "Manual GitHub proof: run .github/workflows/platform-proof.yml with full=true.",
-    "For each Linux/macOS/Windows host: npm ci, npm run check, install Rust 1.95.0, cargo fmt, clippy, test, build --release.",
+    "For each Linux/macOS/Windows host: npm ci --omit=optional, npm run check, install Rust 1.95.0, cargo fmt, clippy, test, build --release.",
     "Run npm run platform:binary-smoke -- --binary target/release/mcpace[.exe] on each host.",
     "Only after all three OS families pass, add a real Ratatui-based mcpace tui command or a Tauri desktop shell."
   ]

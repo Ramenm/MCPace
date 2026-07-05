@@ -1,9 +1,0 @@
-[package]
-name = "getrandom"
-version = "0.2.17"
-edition = "2021"
-license = "MIT OR Apache-2.0"
-
-[lib]
-name = "getrandom"
-path = "src/lib.rs"

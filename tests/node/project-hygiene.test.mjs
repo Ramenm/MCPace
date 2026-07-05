@@ -350,11 +350,14 @@ test('runtime source-type aliases do not treat legacy SSE as modern HTTP', () =>
   assert.match(sourceType, /"remote-sse"[\s\S]*"sse"[\s\S]*=>\s*\{\s*"sse-legacy"\.to_string\(\)\s*\}/);
 });
 
-test('Windows service launcher does not pre-quote the generated wscript argument', () => {
+test('user autostart launches MCPace Agent directly instead of a VBS or wscript wrapper', () => {
   const service = fs.readFileSync(path.join(repoRoot, 'src', 'service.rs'), 'utf8');
-  assert.equal(service.includes('format!(\n                "\\\"{}\\\"",'), false);
-  assert.match(service, /autostart_script_path\s*\.map\(command_path_string\)/);
-  assert.match(service, /windows_command_line_from_strs/);
+  assert.match(service, /pub\(crate\) const APP_NAME: &str = "MCPace Agent"/);
+  assert.match(service, /"agent"\.to_string\(\)/);
+  assert.match(service, /"--autostart"\.to_string\(\)/);
+  assert.doesNotMatch(service, /Command::new\(\s*"wscript(?:\.exe)?"/);
+  assert.doesNotMatch(service, /mcpace-autostart\.vbs"\)/);
+  assert.doesNotMatch(service, /windows_command_line_from_strs/);
 });
 
 test('release target manifest stays aligned with the npm launcher package', () => {
@@ -634,4 +637,22 @@ test('Node syntax auto jobs retry failed children serially before failing', () =
   assert.match(syntax, /runChecksParallel/);
   assert.match(syntax, /serial-failed-auto-jobs/);
   assert.match(syntax, /uv_cwd\/spawn ENOENT|uv_cwd/);
+});
+
+test('public MCP stdio command is exposed without making users type stdio-shim', () => {
+  const catalog = fs.readFileSync(path.join(repoRoot, 'src', 'catalog.rs'), 'utf8');
+  const app = fs.readFileSync(path.join(repoRoot, 'src', 'app.rs'), 'utf8');
+  const shim = fs.readFileSync(path.join(repoRoot, 'src', 'stdio_shim.rs'), 'utf8');
+  const importer = fs.readFileSync(path.join(repoRoot, 'src', 'mcp_sources', 'import.rs'), 'utf8');
+  const setup = fs.readFileSync(path.join(repoRoot, 'src', 'setup.rs'), 'utf8');
+
+  assert.match(catalog, /name:\s*"stdio"/);
+  assert.match(catalog, /aliases:\s*&\["stdio-shim",\s*"stdio_shim"\]/);
+  assert.match(catalog, /Preview MCP stdio launch surface/);
+  assert.match(app, /"stdio" \| "stdio-shim" => stdio_shim::run/);
+  assert.match(app, /mcpace stdio \[--json\] \[--root <path>\]/);
+  assert.match(shim, /Usage: mcpace stdio --json/);
+  assert.match(shim, /compatibility alias/);
+  assert.match(importer, /arg == "mcp-server" \|\| arg == "stdio" \|\| arg == "stdio-shim"/);
+  assert.match(setup, /"mcp-server" \| "stdio" \| "stdio-shim" \| "serve"/);
 });

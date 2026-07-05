@@ -14,7 +14,12 @@ Project-local `.npmrc` sets `ignore-scripts=true` so third-party lifecycle scrip
 - external locked packages have integrity metadata;
 - external locked packages resolve from the npm public registry only;
 - locked packages do not declare install lifecycle scripts;
-- the native optional binary packages are exact-version `@mcpace/cli-*` packages matching the launcher package version.
+- the native optional binary packages are exact-version `@mcpace/cli-*` packages matching the launcher package version;
+- Cargo standard-crate dependencies are not redirected to local `crates/compat` shims.
+
+### Cargo lock refresh warning
+
+When the Rust toolchain is unavailable, the dependency policy can only warn that `Cargo.lock` needs refresh after a `Cargo.toml` dependency change. Treat `cargo-lock-standard-crates-synced` warnings as a release blocker on a Rust-enabled machine: run `cargo update`, then `cargo check` and `cargo test` before publishing native artifacts.
 
 ## Workflow policy
 

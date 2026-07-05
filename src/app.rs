@@ -2,8 +2,9 @@ use crate::catalog::{find, normalize};
 use crate::client_catalog::client_install_support_summary;
 use crate::runtimepaths;
 use crate::{
-    candidates, cleanup, client, connect, dashboard, doctor, hub, init, lab, mcp_server, profile,
-    projects, release, repair, reporoot, serve, server, service, setup, stdio_shim, update, verify,
+    agent, autostart, candidates, cleanup, client, connect, dashboard, doctor, hub, init, lab,
+    mcp_server, profile, projects, release, repair, reporoot, serve, server, service, setup,
+    stdio_shim, update, verify,
 };
 use std::io::Write;
 use std::path::PathBuf;
@@ -53,11 +54,13 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         "doctor" => run_doctor(&args[1..], root_path, stdout, stderr),
         "setup" => setup::run(&args[1..], root_path, stdout, stderr),
         "service" => service::run(&args[1..], root_path, stdout, stderr),
+        "autostart" => autostart::run(&args[1..], root_path, stdout, stderr),
+        "agent" => agent::run(&args[1..], root_path, stdout, stderr),
         "dashboard" => dashboard::run(&args[1..], root_path, stdout, stderr),
         "serve" => serve::run(&args[1..], root_path, stdout, stderr),
         "init" => init::run(&args[1..], root_path, stdout, stderr),
         "hub" => hub::run(&args[1..], root_path, stdout, stderr),
-        "stdio-shim" => stdio_shim::run(&args[1..], root_path, stdout, stderr),
+        "stdio" | "stdio-shim" => stdio_shim::run(&args[1..], root_path, stdout, stderr),
         "mcp-server" => mcp_server::run(&args[1..], root_path, stdout, stderr),
         "client" => client::run(&args[1..], root_path, stdout, stderr),
         "cleanup" => cleanup::run(&args[1..], root_path, stdout, stderr),
@@ -180,6 +183,14 @@ fn write_help(stdout: &mut dyn Write) {
         "  mcpace auto [query] [--dry-run]        # one-command server discovery/setup/probe"
     );
     let _ = writeln!(stdout, "  mcpace serve [start|stop|status]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace stdio [--json] [--root <path>]      # MCP stdio launch surface"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace autostart <enable|disable|status>  # user-level launch at login"
+    );
     let _ = writeln!(
         stdout,
         "  mcpace server <auto|list|test|remove|enable|disable|sources>"

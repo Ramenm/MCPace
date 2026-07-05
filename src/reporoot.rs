@@ -60,24 +60,30 @@ fn find_from_windows_autostart() -> Option<PathBuf> {
 
 #[cfg(windows)]
 fn find_from_windows_autostart() -> Option<PathBuf> {
-    let command =
-        read_windows_autostart_command("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run")
-            .or_else(|| {
-            read_windows_autostart_command(
-                "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
-            )
-        })?;
-    root_from_launcher_text(&command).or_else(|| {
-        let script_path = windows_vbs_path_from_command(&command)?;
-        let script = std::fs::read_to_string(script_path).ok()?;
-        root_from_launcher_text(&script)
-    })
+    for key in [
+        "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+        "HKLM\\Software\\Microsoft\\Windows\\CurrentVersion\\Run",
+    ] {
+        for value_name in [crate::service::APP_NAME, crate::service::LEGACY_APP_NAME] {
+            let Some(command) = read_windows_autostart_command(key, value_name) else {
+                continue;
+            };
+            if let Some(root) = root_from_launcher_text(&command).or_else(|| {
+                let script_path = windows_vbs_path_from_command(&command)?;
+                let script = std::fs::read_to_string(script_path).ok()?;
+                root_from_launcher_text(&script)
+            }) {
+                return Some(root);
+            }
+        }
+    }
+    None
 }
 
 #[cfg(windows)]
-fn read_windows_autostart_command(key: &str) -> Option<String> {
+fn read_windows_autostart_command(key: &str, value_name: &str) -> Option<String> {
     let mut command = std::process::Command::new("reg");
-    command.args(["query", key, "/v", crate::service::APP_NAME]);
+    command.args(["query", key, "/v", value_name]);
     crate::windows_process::configure_no_window(&mut command);
     let output = command.output().ok()?;
     if !output.status.success() {
@@ -86,7 +92,7 @@ fn read_windows_autostart_command(key: &str) -> Option<String> {
     let stdout = String::from_utf8_lossy(&output.stdout);
     for line in stdout.lines() {
         let line = line.trim_start();
-        if !line.starts_with(crate::service::APP_NAME) {
+        if !line.starts_with(value_name) {
             continue;
         }
         for marker in ["REG_EXPAND_SZ", "REG_SZ"] {

@@ -12,7 +12,7 @@
   "scripts": {
     "lint:npm": "node scripts/check-node-syntax.mjs --json && npm run lint:rust-static",
     "test:npm": "node scripts/run-node-tests.mjs --quiet",
-    "check": "npm run lint:npm && npm run test:npm && npm run check:platform && npm run check:assurance",
+    "check": "npm run lint:npm && npm run test:npm && npm run check:platform && npm run check:assurance && npm run check:clean-archive && npm run check:modernization",
     "inventory": "node scripts/project-inventory.mjs --write",
     "check:package": "publint packages/npm/cli",
     "check:ci": "npm run check && npm run check:dependency-policy && npm run check:workflow-policy && npm run check:security-policy && npm run check:package && npm run check:install-smoke && npm run check:terminal && npm run proof:browser-lifecycle && npm run check:publish-trust && npm run release:dry-run",
@@ -59,7 +59,13 @@
     "npm:trust:plan": "node scripts/configure-npm-trusted-publishers.mjs",
     "npm:trust:configure": "node scripts/configure-npm-trusted-publishers.mjs --execute",
     "pack:github-installer": "node scripts/build-native-installer-asset.mjs",
-    "build:release-index": "node scripts/build-release-index.mjs --json --asset-dir dist/release-assets --out-dir dist/release-assets"
+    "build:release-index": "node scripts/build-release-index.mjs --json --asset-dir dist/release-assets --out-dir dist/release-assets",
+    "check:clean-archive": "node scripts/verify-clean-archive.mjs --json",
+    "check:source-archive": "node scripts/verify-clean-archive.mjs --json --source-tree",
+    "inventory:modernization": "node scripts/modernization-inventory.mjs --json",
+    "check:dependency-policy:strict": "node scripts/verify-dependency-policy.mjs --json --enforce-cargo-lock",
+    "inventory:legacy": "node scripts/legacy-subsystem-map.mjs --json",
+    "check:modernization": "node scripts/modernization-inventory.mjs --json && node scripts/legacy-subsystem-map.mjs --json && node scripts/verify-modernization-budget.mjs --json"
   },
   "packageManager": "npm@10.9.2",
   "devEngines": {

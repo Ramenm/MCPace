@@ -131,7 +131,7 @@ The generated installers are installable package formats, but production public 
 - macOS PKG: sign the CLI binary with Developer ID Application, sign the package with Developer ID Installer, notarize with Apple, and staple the notarization ticket before publishing.
 - Linux/Ubuntu DEB: direct `.deb` downloads are manual-install assets; automatic apt upgrades require a signed apt repository with signed repository metadata.
 - GitHub Actions: the workflow policy currently warns on tag-pinned third-party actions. For stricter supply-chain posture, pin third-party actions to full-length commit SHAs after recording the update process.
-- Third-party notices: the source tree has local compatibility crates with MIT / MIT-or-Apache license declarations. Before public binary distribution, confirm whether they contain upstream-derived code and include the required third-party notices if needed.
+- Third-party notices: MCPace no longer ships local compatibility crates that shadow standard crates. Keep the generated third-party notice review aligned with the upstream crates resolved by Cargo.lock before public binary distribution.
 
 The detailed signing setup, required GitHub variables/secrets, and go/no-go checks live in `docs/signing-and-notarization.md`. The important release invariant is that checksums, release manifests, and attestations must be generated from the final signed/stapled assets, not from pre-signing files.
 
@@ -155,6 +155,6 @@ Before a non-dry-run release, an operator still has to verify:
 - the Windows MSI is Authenticode-signed and timestamped when production signing secrets are available;
 - the macOS PKG is Developer ID signed, notarized, and stapled when Apple signing credentials are available;
 - Linux automatic updates are only advertised after a signed apt repository exists;
-- third-party license notices are complete for any upstream-derived compatibility code;
+- third-party license notices are complete for upstream crates and packaged native tooling;
 - `npm audit signatures` passes in CI with live registry access;
 - the Rust lane has completed on all supported operating systems.

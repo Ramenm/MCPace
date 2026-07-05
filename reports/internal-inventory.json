@@ -1,8 +1,8 @@
 {
   "schema": "mcpace.projectInventory.v1",
-  "generatedAt": "2026-06-25T11:35:21.522Z",
+  "generatedAt": "2026-07-04T15:47:38.263Z",
   "root": ".",
-  "rootName": "mcpace-v0.7.5-250626-133355",
+  "rootName": "mcpace_work",
   "commands": [
     {
       "name": "help",
@@ -20,7 +20,7 @@
         "-v"
       ],
       "implemented": true,
-      "description": "Print the MCPace version from mcpace.config.json."
+      "description": "Print the compiled MCPace binary version."
     },
     {
       "name": "doctor",
@@ -40,13 +40,24 @@
       "description": "Home-first onboarding: create/repair MCPace home, start the endpoint, wire supported local clients, and smoke-test without adding upstream servers."
     },
     {
-      "name": "service",
+      "name": "autostart",
       "aliases": [
-        "autostart",
         "startup"
       ],
       "implemented": true,
-      "description": "Install or inspect user-level autostart for the MCPace endpoint."
+      "description": "Install or inspect the visible user-level MCPace Agent login item."
+    },
+    {
+      "name": "service",
+      "aliases": [],
+      "implemented": true,
+      "description": "Compatibility alias for user-level autostart; privileged system services are reserved for a future advanced mode."
+    },
+    {
+      "name": "agent",
+      "aliases": [],
+      "implemented": true,
+      "description": "Run or inspect the visible MCPace login agent used by autostart entries."
     },
     {
       "name": "dashboard",
@@ -260,11 +271,11 @@
     ]
   },
   "counts": {
-    "rustFiles": 131,
-    "rustFunctions": 1847,
-    "publicCommands": 23,
-    "implementedPublicCommands": 23,
-    "duplicateFunctionNames": 80,
+    "rustFiles": 133,
+    "rustFunctions": 1855,
+    "publicCommands": 25,
+    "implementedPublicCommands": 25,
+    "duplicateFunctionNames": 77,
     "longRustFiles": 27
   },
   "npmLauncher": {
@@ -364,11 +375,11 @@
     },
     {
       "file": "src/dashboard.rs",
-      "lines": 2510
+      "lines": 2515
     },
     {
       "file": "src/dashboard/tests.rs",
-      "lines": 2190
+      "lines": 2256
     },
     {
       "file": "src/setup.rs",
@@ -379,16 +390,16 @@
       "lines": 1929
     },
     {
+      "file": "src/serve.rs",
+      "lines": 1803
+    },
+    {
       "file": "src/adapter/discovery.rs",
       "lines": 1779
     },
     {
       "file": "src/upstream/lease_runtime.rs",
       "lines": 1597
-    },
-    {
-      "file": "src/serve.rs",
-      "lines": 1592
     },
     {
       "file": "src/server/discover.rs",
@@ -405,10 +416,6 @@
     {
       "file": "src/upstream.rs",
       "lines": 1291
-    },
-    {
-      "file": "src/service.rs",
-      "lines": 1189
     },
     {
       "file": "src/mcp_server/tool_surface.rs",
@@ -433,6 +440,10 @@
     {
       "file": "src/client_catalog.rs",
       "lines": 923
+    },
+    {
+      "file": "src/lab/render.rs",
+      "lines": 915
     }
   ],
   "duplicateFunctionNames": [
@@ -497,7 +508,9 @@
     {
       "name": "run",
       "owners": [
+        "src/agent.rs (pub)",
         "src/app.rs (pub)",
+        "src/autostart.rs (pub)",
         "src/candidates.rs (pub)",
         "src/cleanup.rs (pub)",
         "src/client.rs (pub)",
@@ -536,7 +549,9 @@
     {
       "name": "write_help",
       "owners": [
+        "src/agent.rs (private)",
         "src/app.rs (private)",
+        "src/autostart.rs (private)",
         "src/candidates.rs (private)",
         "src/cleanup.rs (private)",
         "src/client/args.rs (pub(super))",
@@ -562,6 +577,7 @@
     {
       "name": "parse_args",
       "owners": [
+        "src/agent.rs (private)",
         "src/candidates.rs (private)",
         "src/cleanup.rs (private)",
         "src/client/args.rs (pub(super))",
@@ -586,6 +602,7 @@
       "name": "drop",
       "owners": [
         "src/adapter/tests.rs (private)",
+        "src/app.rs (private)",
         "src/dashboard.rs (private)",
         "src/dashboard.rs (private)",
         "src/dashboard/admission.rs (private)",
@@ -772,20 +789,6 @@
       ]
     },
     {
-      "name": "autostart_launcher_command",
-      "owners": [
-        "src/service.rs (private)",
-        "src/service.rs (private)"
-      ]
-    },
-    {
-      "name": "autostart_script_path",
-      "owners": [
-        "src/service.rs (private)",
-        "src/service.rs (private)"
-      ]
-    },
-    {
       "name": "blank_to_none",
       "owners": [
         "src/lab/render.rs (private)",
@@ -819,12 +822,26 @@
         "src/client/actions.rs (pub(super))",
         "src/client_catalog.rs (pub)"
       ]
+    },
+    {
+      "name": "collect_status",
+      "owners": [
+        "src/hub/status.rs (pub(super))",
+        "src/serve.rs (private)"
+      ]
+    },
+    {
+      "name": "command_json",
+      "owners": [
+        "src/dashboard/overview.rs (private)",
+        "src/service.rs (private)"
+      ]
     }
   ],
   "unsupportedMarkers": [
     {
       "file": "src/catalog.rs",
-      "line": 113,
+      "line": 125,
       "text": "description: \"Internal bootstrap-only stdio shim proof surface.\","
     },
     {
@@ -859,13 +876,8 @@
     },
     {
       "file": "src/serve.rs",
-      "line": 1295,
+      "line": 1296,
       "text": "Err(\"background serve launch is not implemented for this platform\".to_string())"
-    },
-    {
-      "file": "src/service.rs",
-      "line": 793,
-      "text": "(\"reason\", JsonValue::string(\"launchctl applied-state probing is not implemented in this source-only build; use launchctl print gui/$UID/MCPace\")),"
     },
     {
       "file": "src/stdio_shim.rs",

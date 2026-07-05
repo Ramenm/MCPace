@@ -14,13 +14,15 @@ test('npm package bin entry exists, is executable, and is included by npm pack',
   assert.equal(cliPackage.bin?.mcpace, 'bin/mcpace.js');
   assert.equal(fs.existsSync(cliBin), true, 'package.json bin target is missing');
   assert.match(fs.readFileSync(cliBin, 'utf8'), /^#!\/usr\/bin\/env node\n/);
-  const gitMode = runChecked('git', ['ls-files', '-s', '--', 'packages/npm/cli/bin/mcpace.js'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-  });
-  assert.match(gitMode.stdout, /^100755 /, 'bin/mcpace.js must keep executable mode in git for npm release tarballs');
+  if (fs.existsSync(path.join(repoRoot, '.git'))) {
+    const gitMode = runChecked('git', ['ls-files', '-s', '--', 'packages/npm/cli/bin/mcpace.js'], {
+      cwd: repoRoot,
+      encoding: 'utf8',
+    });
+    assert.match(gitMode.stdout, /^100755 /, 'bin/mcpace.js must keep executable mode in git for npm release tarballs');
+  }
   if (process.platform !== 'win32') {
-    assert.notEqual(fs.statSync(cliBin).mode & 0o111, 0, 'bin/mcpace.js must be executable on Unix');
+    assert.notEqual(fs.statSync(cliBin).mode & 0o111, 0, 'bin/mcpace.js must be executable on Unix/source-archive extracts');
   }
 
   const shimSource = fs.readFileSync(cliBin, 'utf8');
