@@ -19,6 +19,8 @@ struct AgentCli {
 enum AgentCommand {
     /// Run the foreground managed MCPace runtime from a login item.
     Run(AgentRuntimeArgs),
+    /// Start the managed MCPace runtime as a hidden/background serve process.
+    Start(AgentRuntimeArgs),
     /// Print the managed runtime status.
     Status(AgentRuntimeArgs),
 }
@@ -86,6 +88,7 @@ pub fn run(
         .unwrap_or_else(|| AgentCommand::Run(AgentRuntimeArgs::default()))
     {
         AgentCommand::Run(runtime) => run_managed_agent(runtime, default_root, stdout, stderr),
+        AgentCommand::Start(runtime) => start_managed_agent(runtime, default_root, stdout, stderr),
         AgentCommand::Status(runtime) => run_serve_status(runtime, default_root, stdout, stderr),
     }
 }
@@ -110,7 +113,7 @@ fn parse_cli(args: &[String]) -> Result<AgentCli, clap::Error> {
 fn should_default_to_run(args: &[String]) -> bool {
     match args.first().map(String::as_str) {
         None => true,
-        Some("run" | "status" | "help") => false,
+        Some("run" | "start" | "status" | "help") => false,
         Some("-h" | "--help" | "-?") => false,
         Some(value) if value.starts_with('-') => true,
         Some(_) => false,
@@ -127,6 +130,20 @@ fn run_managed_agent(
     let _ = hydration.hydrated_keys.len();
     let mut serve_args = Vec::with_capacity(runtime.forwarded_len_hint() + 1);
     serve_args.push("--managed-service".to_string());
+    runtime.append_forwarded_args(&mut serve_args);
+    serve::run(&serve_args, runtime.root.or(default_root), stdout, stderr)
+}
+
+fn start_managed_agent(
+    runtime: AgentRuntimeArgs,
+    default_root: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let hydration = crate::persistent_env::hydrate_login_environment();
+    let _ = hydration.hydrated_keys.len();
+    let mut serve_args = Vec::with_capacity(runtime.forwarded_len_hint() + 1);
+    serve_args.push("start".to_string());
     runtime.append_forwarded_args(&mut serve_args);
     serve::run(&serve_args, runtime.root.or(default_root), stdout, stderr)
 }
@@ -205,7 +222,33 @@ mod tests {
                 runtime.append_forwarded_args(&mut forwarded);
                 assert_eq!(forwarded, vec!["--port".to_string(), "39022".to_string()]);
             }
-            AgentCommand::Status(_) => panic!("expected run command"),
+            AgentCommand::Start(_) | AgentCommand::Status(_) => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn start_action_forwards_runtime_flags_to_background_serve_start() {
+        let args = vec![
+            "start".to_string(),
+            "--autostart".to_string(),
+            "--root".to_string(),
+            "/tmp/mcpace".to_string(),
+            "--host".to_string(),
+            "127.0.0.1".to_string(),
+        ];
+        let cli = parse_cli(&args).expect("parse start args");
+        match cli.command.expect("start command") {
+            AgentCommand::Start(runtime) => {
+                assert!(runtime.autostart);
+                assert_eq!(runtime.root, Some(PathBuf::from("/tmp/mcpace")));
+                let mut forwarded = Vec::new();
+                runtime.append_forwarded_args(&mut forwarded);
+                assert_eq!(
+                    forwarded,
+                    vec!["--host".to_string(), "127.0.0.1".to_string()]
+                );
+            }
+            AgentCommand::Run(_) | AgentCommand::Status(_) => panic!("expected start command"),
         }
     }
 
@@ -238,7 +281,7 @@ mod tests {
                     ]
                 );
             }
-            AgentCommand::Run(_) => panic!("expected status command"),
+            AgentCommand::Run(_) | AgentCommand::Start(_) => panic!("expected status command"),
         }
     }
 }

@@ -106,6 +106,7 @@ pub fn run(
         "install" | "enable" => {
             service_install(&launcher, &config, parsed.dry_run || parsed.no_enable)
         }
+        "repair" => service_install(&launcher, &config, parsed.dry_run || parsed.no_enable),
         "uninstall" | "disable" => service_uninstall(&launcher, &config, parsed.dry_run),
         "status" => service_status(&launcher, &config),
         "verify" | "doctor" => service_verify(&launcher, &config),
@@ -259,10 +260,11 @@ fn parse_args(args: &[String]) -> ParsedArgs {
 }
 
 fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace autostart <enable|status|verify|disable|print> [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]");
+    let _ = writeln!(stdout, "Usage: mcpace autostart <enable|repair|status|verify|disable|print> [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]");
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Installs a visible user-level login item named MCPace Agent through the upstream auto-launch crate.");
-    let _ = writeln!(stdout, "The login item launches `mcpace agent run --autostart`; the agent then runs the foreground managed MCPace runtime.");
+    let _ = writeln!(stdout, "On Windows the login item launches `mcpace agent start --autostart`, which starts a hidden background serve runtime and exits so no persistent console window remains.");
+    let _ = writeln!(stdout, "On launchd/XDG platforms the login item launches `mcpace agent run --autostart`; the agent then runs the foreground managed MCPace runtime.");
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
@@ -287,9 +289,10 @@ fn service_config(
         .map_err(|error| format!("failed to resolve current executable: {}", error))?
         .display()
         .to_string();
+    let agent_action = if cfg!(windows) { "start" } else { "run" };
     let mut target_args = vec![
         "agent".to_string(),
-        "run".to_string(),
+        agent_action.to_string(),
         "--autostart".to_string(),
         "--root".to_string(),
         command_path_string(root_path),
@@ -331,7 +334,7 @@ fn service_config(
     }
     if cfg!(windows) {
         warnings.push(
-            "Windows autostart uses the current-user Run login item with the visible name MCPace Agent.".to_string(),
+            "Windows autostart uses the current-user Run login item with the visible name MCPace Agent; the entry starts a hidden background serve runtime and exits instead of holding a console window open.".to_string(),
         );
     }
     if !AutoLaunch::is_support() {
@@ -347,7 +350,11 @@ fn service_config(
         args,
         target_app_path,
         target_args,
-        launch_mode: "direct-mcpace-agent".to_string(),
+        launch_mode: if cfg!(windows) {
+            "direct-mcpace-agent-background-start".to_string()
+        } else {
+            "direct-mcpace-agent-foreground-run".to_string()
+        },
         platform: platform.to_string(),
         backend: backend.to_string(),
         warnings,
@@ -466,31 +473,44 @@ fn service_install(launcher: &AutoLaunch, config: &ServiceConfig, dry_run: bool)
         let mut warnings = config.warnings.clone();
         warnings.push("Dry run / --no-enable: auto-launch enable was not called.".to_string());
         warnings.extend(cleanup_legacy_autostart(config, true).warnings);
-        return report("install", true, false, config, warnings, None);
+        let mut result = report("install", true, false, config, warnings, None);
+        attach_current_session_start(&mut result, CurrentSessionStart::skipped("dry-run"));
+        return result;
     }
     match launcher.enable() {
         Ok(()) => {
             let enabled = enabled_or_false(launcher);
             let cleanup = cleanup_legacy_autostart(config, false);
+            let current_start = start_current_session_runtime(config);
+            let current_start_ok = current_start.ok_or_not_attempted();
             let mut warnings = config.warnings.clone();
             warnings.extend(cleanup.warnings);
-            report(
+            warnings.extend(current_start.warnings.clone());
+            let ok = enabled && cleanup.ok && current_start_ok;
+            let mut result = report(
                 "install",
-                enabled && cleanup.ok,
+                ok,
                 enabled,
                 config,
                 warnings,
-                if enabled && cleanup.ok {
+                if ok {
                     None
                 } else if !cleanup.ok {
                     Some(
                         "auto-launch enable completed but legacy autostart cleanup failed"
                             .to_string(),
                     )
+                } else if !current_start_ok {
+                    Some(
+                        "auto-launch enable completed but current-session MCPace endpoint did not start"
+                            .to_string(),
+                    )
                 } else {
                     Some("auto-launch enable completed but is_enabled returned false".to_string())
                 },
-            )
+            );
+            attach_current_session_start(&mut result, current_start);
+            result
         }
         Err(error) => report(
             "install",
@@ -501,6 +521,143 @@ fn service_install(launcher: &AutoLaunch, config: &ServiceConfig, dry_run: bool)
             Some(error.to_string()),
         ),
     }
+}
+
+#[derive(Clone, Debug)]
+struct CurrentSessionStart {
+    attempted: bool,
+    ok: bool,
+    exit_code: Option<i32>,
+    stdout_tail: String,
+    stderr_tail: String,
+    reason: String,
+    warnings: Vec<String>,
+}
+
+impl CurrentSessionStart {
+    fn skipped(reason: &str) -> Self {
+        Self {
+            attempted: false,
+            ok: true,
+            exit_code: None,
+            stdout_tail: String::new(),
+            stderr_tail: String::new(),
+            reason: reason.to_string(),
+            warnings: Vec::new(),
+        }
+    }
+
+    fn ok_or_not_attempted(&self) -> bool {
+        !self.attempted || self.ok
+    }
+}
+
+fn start_current_session_runtime(config: &ServiceConfig) -> CurrentSessionStart {
+    if config
+        .target_args
+        .get(1)
+        .is_none_or(|value| value != "start")
+    {
+        return CurrentSessionStart::skipped(
+            "current-session start is only needed for background-start login entries",
+        );
+    }
+    let Some(agent_args) = config.target_args.get(1..) else {
+        return CurrentSessionStart {
+            attempted: true,
+            ok: false,
+            exit_code: None,
+            stdout_tail: String::new(),
+            stderr_tail: String::new(),
+            reason: "autostart target arguments did not include an agent command".to_string(),
+            warnings: vec!["Failed to start current-session MCPace runtime: malformed autostart target arguments".to_string()],
+        };
+    };
+    let mut args = agent_args.to_vec();
+    if !args.iter().any(|value| value == "--json" || value == "-j") {
+        args.push("--json".to_string());
+    }
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let exit_code = crate::agent::run(&args, None, &mut stdout, &mut stderr);
+    let stdout_tail = text_tail(&String::from_utf8_lossy(&stdout), 4096);
+    let stderr_tail = text_tail(&String::from_utf8_lossy(&stderr), 4096);
+    let ok = exit_code == 0 && current_session_endpoint_listening(config);
+    let mut warnings = Vec::new();
+    let reason = if ok {
+        "current-session MCPace endpoint is running".to_string()
+    } else {
+        let reason = format!(
+            "current-session MCPace endpoint did not become reachable after agent start (exit code {})",
+            exit_code
+        );
+        warnings.push(reason.clone());
+        reason
+    };
+    CurrentSessionStart {
+        attempted: true,
+        ok,
+        exit_code: Some(exit_code),
+        stdout_tail,
+        stderr_tail,
+        reason,
+        warnings,
+    }
+}
+
+fn attach_current_session_start(report: &mut JsonValue, start: CurrentSessionStart) {
+    if let Some(map) = report.as_object_mut() {
+        map.insert(
+            "currentSessionStart".to_string(),
+            JsonValue::object([
+                ("attempted", JsonValue::bool(start.attempted)),
+                ("ok", JsonValue::bool(start.ok)),
+                (
+                    "exitCode",
+                    start
+                        .exit_code
+                        .map(|code| JsonValue::number(code as i64))
+                        .unwrap_or(JsonValue::Null),
+                ),
+                ("reason", JsonValue::string(start.reason)),
+                ("stdoutTail", JsonValue::string(start.stdout_tail)),
+                ("stderrTail", JsonValue::string(start.stderr_tail)),
+            ]),
+        );
+    }
+}
+
+fn text_tail(value: &str, max_chars: usize) -> String {
+    let char_count = value.chars().count();
+    if char_count <= max_chars {
+        return value.to_string();
+    }
+    value.chars().skip(char_count - max_chars).collect()
+}
+
+fn current_session_endpoint_listening(config: &ServiceConfig) -> bool {
+    let Some(root) = target_arg_value(&config.target_args, "--root") else {
+        return false;
+    };
+    let host =
+        target_arg_value(&config.target_args, "--host").unwrap_or(runtimepaths::DEFAULT_LOCAL_HOST);
+    let port = target_arg_value(&config.target_args, "--port")
+        .and_then(|value| value.parse::<u16>().ok())
+        .unwrap_or(runtimepaths::DEFAULT_LOCAL_MCP_PORT);
+    let args = vec![
+        "status".to_string(),
+        "--json".to_string(),
+        "--root".to_string(),
+        root.to_string(),
+        "--host".to_string(),
+        host.to_string(),
+        "--port".to_string(),
+        port.to_string(),
+    ];
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    crate::serve::run(&args, None, &mut stdout, &mut stderr) == 0
+        && String::from_utf8_lossy(&stdout).contains(r#""status": "running""#)
 }
 
 fn service_uninstall(launcher: &AutoLaunch, config: &ServiceConfig, dry_run: bool) -> JsonValue {
@@ -677,6 +834,7 @@ fn service_verify(launcher: &AutoLaunch, config: &ServiceConfig) -> JsonValue {
 fn service_verification_checks(config: &ServiceConfig, enabled: bool) -> Vec<JsonValue> {
     let persistent_env_mismatches = crate::persistent_env::current_env_registry_mismatches();
     let (legacy_absent, legacy_detail) = legacy_autostart_absent_detail(config);
+    let current_endpoint_live = current_session_endpoint_listening(config);
     vec![
         verification_check(
             "autostart-enabled",
@@ -695,7 +853,7 @@ fn service_verification_checks(config: &ServiceConfig, enabled: bool) -> Vec<Jso
         verification_check(
             "launches-mcpace-agent",
             launches_mcpace_agent(config),
-            "autostart must launch `mcpace agent run --autostart`, not serve directly",
+            "autostart must launch `mcpace agent start/run --autostart`, not serve directly",
         ),
         verification_check(
             "direct-mcpace-entry",
@@ -721,6 +879,15 @@ fn service_verification_checks(config: &ServiceConfig, enabled: bool) -> Vec<Jso
             "resource-args-forwarded",
             resources_forwarded(config),
             "resource-control flags are forwarded to MCPace Agent when configured",
+        ),
+        verification_check(
+            "current-session-endpoint-listening",
+            current_endpoint_live,
+            if current_endpoint_live {
+                "current MCPace HTTP endpoint is listening for MCP clients"
+            } else {
+                "current MCPace HTTP endpoint is not listening; run `mcpace autostart repair --root <project>` or `mcpace serve start --root <project>`"
+            },
         ),
         verification_check(
             "windows-persistent-env-aligned",
@@ -812,7 +979,7 @@ fn launches_mcpace_agent(config: &ServiceConfig) -> bool {
         && config
             .target_args
             .get(1)
-            .is_some_and(|value| value == "run")
+            .is_some_and(|value| value == "run" || value == "start")
         && config
             .target_args
             .iter()
@@ -894,7 +1061,7 @@ fn service_applied_state_json(config: &ServiceConfig) -> JsonValue {
         ("visibleAs", JsonValue::string(APP_NAME)),
         ("visibleIn", JsonValue::string(visible_in)),
         ("supervisedByOs", JsonValue::bool(supervised_by_os)),
-        ("supervisedByMcpaceAgent", JsonValue::bool(true)),
+        ("supervisedByMcpaceAgent", JsonValue::bool(!cfg!(windows))),
         ("environment", service_environment_json()),
         ("command", command_json(config)),
     ])
@@ -1053,6 +1220,7 @@ fn reboot_model_json(config: &ServiceConfig) -> JsonValue {
             "Windows current-user Run registry via auto-launch",
             vec![
                 "the login item starts MCPace Agent after the current user logs in",
+                "MCPace Agent starts a hidden background serve runtime and exits",
                 "new installs do not use wscript.exe or generated VBS launchers",
                 "Windows current-user Run registry launches at login but does not restart the process after a later crash",
             ],
@@ -1082,7 +1250,11 @@ fn reboot_model_json(config: &ServiceConfig) -> JsonValue {
         ("restartGuard", JsonValue::bool(true)),
         (
             "supervisionMode",
-            JsonValue::string("mcpace-agent-managed-foreground"),
+            JsonValue::string(if cfg!(windows) {
+                "mcpace-agent-background-start"
+            } else {
+                "mcpace-agent-managed-foreground"
+            }),
         ),
         ("resourceControls", service_resource_controls_json()),
         (
@@ -1160,7 +1332,12 @@ mod tests {
         let root = PathBuf::from("/tmp/mcpace");
         let config = service_config(&root, "127.0.0.1", 39022, None, None, None, None).unwrap();
         assert_eq!(config.args[0], "agent");
-        assert_eq!(config.args[1], "run");
+        assert_eq!(config.args[1], if cfg!(windows) { "start" } else { "run" });
+        if cfg!(windows) {
+            assert_eq!(config.launch_mode, "direct-mcpace-agent-background-start");
+        } else {
+            assert_eq!(config.launch_mode, "direct-mcpace-agent-foreground-run");
+        }
         assert!(config.args.iter().any(|value| value == "--autostart"));
         assert!(!config.app_path.to_ascii_lowercase().contains("wscript"));
         assert!(launches_mcpace_agent(&config));
@@ -1244,6 +1421,11 @@ mod tests {
         );
         assert!(
             checks.contains("windows-persistent-env-aligned"),
+            "{}",
+            checks
+        );
+        assert!(
+            checks.contains("current-session-endpoint-listening"),
             "{}",
             checks
         );
