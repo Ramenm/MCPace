@@ -3,8 +3,46 @@ use super::{
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
+use std::fmt;
 use std::path::Path;
 use std::time::Instant;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UpstreamProjectionError {
+    Source { message: String },
+}
+
+impl fmt::Display for UpstreamProjectionError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UpstreamProjectionError::Source { message } => formatter.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for UpstreamProjectionError {}
+
+impl From<String> for UpstreamProjectionError {
+    fn from(message: String) -> Self {
+        UpstreamProjectionError::Source { message }
+    }
+}
+
+impl From<super::server_config::UpstreamServerConfigError> for UpstreamProjectionError {
+    fn from(error: super::server_config::UpstreamServerConfigError) -> Self {
+        UpstreamProjectionError::Source {
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<UpstreamProjectionError> for String {
+    fn from(error: UpstreamProjectionError) -> Self {
+        error.to_string()
+    }
+}
+
+type UpstreamProjectionResult<T> = Result<T, UpstreamProjectionError>;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UpstreamProjectionSafety {
@@ -43,7 +81,7 @@ pub fn projected_tool_catalog(
     refresh: bool,
     safety: UpstreamProjectionSafety,
     max_tools: Option<usize>,
-) -> Result<JsonValue, String> {
+) -> UpstreamProjectionResult<JsonValue> {
     let started = Instant::now();
     let servers = load_servers(root_path)?;
     let mut projected = Vec::new();

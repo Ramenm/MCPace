@@ -23,6 +23,8 @@ Desktop.ini
 # memory-bank/ is intentionally tracked because release-manifest.json requires it.
 /.omx/
 /.omc/
+/.pi-subagents/
+/.artifacts/
 /.claude/
 /.playwright-mcp/
 /.serena/
@@ -38,6 +40,10 @@ Desktop.ini
 /*.bak
 /*.orig
 /screenshot_test*.png
+/main-screen*.png
+/a11y-product-rg.txt
+/audit/
+/NUL
 /%SystemDrive%/
 /testResults.xml
 /junit.xml
@@ -46,6 +52,8 @@ Desktop.ini
 /.nyc_output/
 /playwright-report/
 /test-results/
+/reports/local-proof-*.json
+/reports/local-proof-*.md
 /target/
 /.tmp/
 /.tmp-*/
@@ -64,6 +72,9 @@ __pycache__/
 /.pytest_cache/
 /.ruff_cache/
 /.mypy_cache/
+
+# Registry snapshots are generated per user/query and can be very large.
+/catalog/registry-cache*.json
 
 # Local MCP settings fragments are machine-specific; keep README/examples tracked.
 /mcp_settings.d/*.json

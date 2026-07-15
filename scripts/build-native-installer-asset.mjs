@@ -14,6 +14,7 @@ const jsonOutput = args.includes('--json');
 const wixSourceOnly = args.includes('--wix-source-only') || args.includes('--no-external-build');
 const FIXED_MTIME_SECONDS = 0;
 const TAR_BLOCK_SIZE = 512;
+const WINDOWS_AGENT_LAUNCHER_NAME = 'mcpace-agent-launcher.exe';
 
 function argValue(name, fallback = null) {
   const index = args.indexOf(name);
@@ -63,6 +64,36 @@ function validateBinaryForTarget(binaryPath, target) {
   if (target.platform === 'win32' && !String(binaryPath).toLowerCase().endsWith('.exe')) {
     throw new Error(`native binary for Windows target '${target.key}' must use .exe extension`);
   }
+}
+
+function validateSidecarBinaryForTarget(binaryPath, target, name) {
+  let stat;
+  try {
+    stat = fs.lstatSync(binaryPath);
+  } catch (error) {
+    throw new Error(`required native sidecar '${name}' for target '${target.key}' is not readable at '${binaryPath}': ${error?.message ?? error}`);
+  }
+  if (stat.isSymbolicLink()) throw new Error(`required native sidecar '${binaryPath}' must not be a symbolic link`);
+  if (!stat.isFile()) throw new Error(`required native sidecar '${binaryPath}' must be a regular file`);
+  if (target.platform !== 'win32' && process.platform !== 'win32' && (Number(stat.mode) & 0o111) === 0) {
+    throw new Error(`required native sidecar '${binaryPath}' must have an executable bit for target '${target.key}'`);
+  }
+  if (target.platform === 'win32' && !String(binaryPath).toLowerCase().endsWith('.exe')) {
+    throw new Error(`required native sidecar for Windows target '${target.key}' must use .exe extension`);
+  }
+  return stat;
+}
+
+function sidecarBinariesForTarget(binaryPath, target) {
+  if (target.platform !== 'win32') return [];
+  const launcherPath = path.join(path.dirname(binaryPath), WINDOWS_AGENT_LAUNCHER_NAME);
+  const stat = validateSidecarBinaryForTarget(launcherPath, target, WINDOWS_AGENT_LAUNCHER_NAME);
+  return [{
+    name: WINDOWS_AGENT_LAUNCHER_NAME,
+    sourcePath: launcherPath,
+    size: stat.size,
+    purpose: 'hidden Windows autostart launcher that starts MCPace Agent without a terminal window',
+  }];
 }
 
 function installerExtension(target) {
@@ -257,9 +288,12 @@ function uuidFromName(name) {
   return `{${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}}`;
 }
 
-function writeWindowsWixSource(wxsPath, target, binaryPath, version) {
+function writeWindowsWixSource(wxsPath, target, binaryPath, version, sidecars) {
   const upgradeCode = uuidFromName('mcpace-upgrade-code');
   const exeComponentGuid = uuidFromName(`mcpace-${target.arch}-exe-component`);
+  const agentLauncherComponentGuid = uuidFromName(`mcpace-${target.arch}-agent-launcher-component`);
+  const windowsLauncher = sidecars.find((sidecar) => sidecar.name === WINDOWS_AGENT_LAUNCHER_NAME);
+  if (!windowsLauncher) throw new Error(`missing required ${WINDOWS_AGENT_LAUNCHER_NAME} sidecar for Windows MSI source`);
   const licenseComponentGuid = uuidFromName(`mcpace-${target.arch}-license-component`);
   const noticeComponentGuid = uuidFromName(`mcpace-${target.arch}-notice-component`);
   const readmeComponentGuid = uuidFromName(`mcpace-${target.arch}-readme-component`);
@@ -285,6 +319,9 @@ function writeWindowsWixSource(wxsPath, target, binaryPath, version) {
       <Component Id="MCPaceExe" Guid="${exeComponentGuid}">
         <File Id="MCPaceExeFile" Source="${xmlEscape(binaryPath)}" Name="mcpace.exe" KeyPath="yes" />
         <Environment Id="MCPacePath" Name="PATH" Value="[INSTALLFOLDER]" Permanent="no" Part="last" Action="set" System="yes" />
+      </Component>
+      <Component Id="MCPaceAgentLauncher" Guid="${agentLauncherComponentGuid}">
+        <File Id="MCPaceAgentLauncherFile" Source="${xmlEscape(windowsLauncher.sourcePath)}" Name="mcpace-agent-launcher.exe" KeyPath="yes" />
       </Component>
       <Component Id="MCPaceLicense" Guid="${licenseComponentGuid}">
         <File Id="MCPaceLicenseFile" Source="${xmlEscape(licensePath)}" Name="LICENSE" KeyPath="yes" />
@@ -317,15 +354,25 @@ function runCommand(command, commandArgs, options = {}) {
 }
 
 function createWindowsMsi(packagePath, target, binaryPath, version, workDir) {
+  const sidecars = sidecarBinariesForTarget(binaryPath, target);
   const wxsPath = wixSourceOnly
     ? packagePath.replace(/\.msi$/u, '.wxs')
     : path.join(workDir, `mcpace-${target.key}.wxs`);
-  writeWindowsWixSource(wxsPath, target, binaryPath, version);
+  writeWindowsWixSource(wxsPath, target, binaryPath, version, sidecars);
   if (wixSourceOnly) {
-    return { built: false, wixSourcePath: wxsPath };
+    return { built: false, wixSourcePath: wxsPath, sidecarBinaries: sidecars.map(sidecarReport) };
   }
   runCommand('wix', ['build', wxsPath, '-arch', wixArchitecture(target), '-o', packagePath]);
-  return { built: true, wixSourcePath: wxsPath };
+  return { built: true, wixSourcePath: wxsPath, sidecarBinaries: sidecars.map(sidecarReport) };
+}
+
+function sidecarReport(sidecar) {
+  return {
+    name: sidecar.name,
+    purpose: sidecar.purpose,
+    sourcePath: path.relative(repoRoot, sidecar.sourcePath).split(path.sep).join('/'),
+    bytes: sidecar.size,
+  };
 }
 
 function createMacPkg(packagePath, target, binaryPath, version, workDir) {
@@ -384,6 +431,7 @@ function buildInstaller(target, binaryPath, outDir, version) {
       libc: target.libc ?? null,
       binaryName: binaryNameForTarget(target),
       binarySourcePath: path.relative(repoRoot, binaryPath).split(path.sep).join('/'),
+      sidecarBinaries: extra.sidecarBinaries ?? [],
       installerKind: installerKind(target),
       installerName,
       installerPath: built ? path.relative(repoRoot, installerPath).split(path.sep).join('/') : null,

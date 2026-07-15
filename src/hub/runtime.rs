@@ -4,13 +4,51 @@ use crate::json_helpers;
 use crate::runtimepaths;
 use std::collections::BTreeMap;
 use std::env;
+use std::fmt;
 use std::fs::{self, OpenOptions};
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
 const DEFAULT_MAX_LOG_BYTES: u64 = 1_048_576;
 
-pub(super) fn ensure_runtime_layout(root_path: &Path) -> Result<(), String> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum HubRuntimeError {
+    RuntimePath(runtimepaths::RuntimePathError),
+    State(String),
+}
+
+pub(crate) type HubRuntimeResult<T> = Result<T, HubRuntimeError>;
+
+impl fmt::Display for HubRuntimeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RuntimePath(error) => write!(formatter, "{}", error),
+            Self::State(error) => write!(formatter, "{}", error),
+        }
+    }
+}
+
+impl std::error::Error for HubRuntimeError {}
+
+impl From<runtimepaths::RuntimePathError> for HubRuntimeError {
+    fn from(error: runtimepaths::RuntimePathError) -> Self {
+        Self::RuntimePath(error)
+    }
+}
+
+impl From<String> for HubRuntimeError {
+    fn from(error: String) -> Self {
+        Self::State(error)
+    }
+}
+
+impl From<HubRuntimeError> for String {
+    fn from(error: HubRuntimeError) -> Self {
+        error.to_string()
+    }
+}
+
+pub(super) fn ensure_runtime_layout(root_path: &Path) -> HubRuntimeResult<()> {
     let state_root = runtimepaths::resolve_state_root(root_path);
     runtimepaths::ensure_runtime_dir(&state_root)?;
     runtimepaths::ensure_hub_dir(&state_root)?;
@@ -25,7 +63,7 @@ pub(super) fn ensure_runtime_layout(root_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-pub(super) fn mark_stopped(root_path: &Path) -> Result<(), String> {
+pub(super) fn mark_stopped(root_path: &Path) -> HubRuntimeResult<()> {
     let state_root = runtimepaths::resolve_state_root(root_path);
     remove_if_present(&runtimepaths::hub_stop_path(&state_root))?;
     remove_if_present(&runtimepaths::hub_health_path(&state_root))?;
@@ -43,7 +81,7 @@ pub(super) fn mark_stopped(root_path: &Path) -> Result<(), String> {
     write_state_metadata(root_path, "stopped", None, None, Some(stop_ms))
 }
 
-pub(super) fn repair_runtime_files(root_path: &Path) -> Result<RepairReport, String> {
+pub(super) fn repair_runtime_files(root_path: &Path) -> HubRuntimeResult<RepairReport> {
     ensure_runtime_layout(root_path)?;
     let state_root = runtimepaths::resolve_state_root(root_path);
     let registry_path = runtimepaths::project_registry_path(&state_root);
@@ -162,7 +200,7 @@ pub(super) fn write_state_metadata(
     pid: Option<u32>,
     started_at_ms: Option<u128>,
     last_exit_at_ms: Option<u128>,
-) -> Result<(), String> {
+) -> HubRuntimeResult<()> {
     let state_root = runtimepaths::resolve_state_root(root_path);
     let mut map = BTreeMap::new();
     map.insert("status".to_string(), JsonValue::string(status.to_string()));
@@ -234,7 +272,7 @@ pub(super) fn write_health_metadata(
     pid: u32,
     started_at_ms: u128,
     last_heartbeat_at_ms: u128,
-) -> Result<(), String> {
+) -> HubRuntimeResult<()> {
     let state_root = runtimepaths::resolve_state_root(root_path);
     let value = JsonValue::object([
         ("status", JsonValue::string(status.to_string())),
@@ -253,7 +291,7 @@ pub(crate) fn append_log(
     level: &str,
     event: &str,
     fields: &[(&str, JsonValue)],
-) -> Result<(), String> {
+) -> HubRuntimeResult<()> {
     let state_root = runtimepaths::resolve_state_root(root_path);
     runtimepaths::ensure_hub_dir(&state_root)?;
     let log_path = runtimepaths::hub_log_path(&state_root);
@@ -294,15 +332,15 @@ pub(crate) fn append_log(
     Ok(())
 }
 
-pub(super) fn write_atomic(path: &Path, contents: String) -> Result<(), String> {
-    runtimepaths::write_text_atomic(path, &contents)
+pub(super) fn write_atomic(path: &Path, contents: String) -> HubRuntimeResult<()> {
+    Ok(runtimepaths::write_text_atomic(path, &contents)?)
 }
 
 pub(super) fn acquire_runtime_lock(
     root_path: &Path,
     pid: u32,
     started_at_ms: u128,
-) -> Result<RuntimeLockGuard, String> {
+) -> HubRuntimeResult<RuntimeLockGuard> {
     let state_root = runtimepaths::resolve_state_root(root_path);
     runtimepaths::ensure_hub_dir(&state_root)?;
     let lock_path = runtimepaths::hub_lock_path(&state_root);
@@ -340,7 +378,7 @@ pub(super) fn acquire_runtime_lock(
                 return Err(format!(
                     "hub runtime lock exists but is unreadable: {}. Run 'mcpace hub repair' to archive and reseed it",
                     reason
-                ));
+                ).into());
             }
             Err(match (owner_pid, owner_started_at_ms) {
                 (Some(owner_pid), Some(owner_started_at_ms)) => format!(
@@ -354,13 +392,14 @@ pub(super) fn acquire_runtime_lock(
                     "hub runtime lock already exists at {}; run 'mcpace hub down' or 'mcpace hub repair' to clean it up before starting again",
                     lock_path.display()
                 ),
-            })
+            }.into())
         }
         Err(error) => Err(format!(
             "failed to acquire hub runtime lock at {}: {}",
             lock_path.display(),
             error
-        )),
+        )
+        .into()),
     }
 }
 
@@ -368,7 +407,7 @@ pub(super) fn now_ms() -> u128 {
     runtimepaths::unix_time_ms()
 }
 
-fn seed_json_if_missing(path: &Path, value: JsonValue) -> Result<bool, String> {
+fn seed_json_if_missing(path: &Path, value: JsonValue) -> HubRuntimeResult<bool> {
     if path.is_file() {
         return Ok(false);
     }
@@ -396,7 +435,7 @@ fn default_lease_store() -> JsonValue {
     ])
 }
 
-fn archive_corrupted_file(path: &Path) -> Result<PathBuf, String> {
+fn archive_corrupted_file(path: &Path) -> HubRuntimeResult<PathBuf> {
     let file_name = path
         .file_name()
         .map(|value| value.to_string_lossy().to_string())
@@ -414,28 +453,24 @@ fn archive_corrupted_file(path: &Path) -> Result<PathBuf, String> {
     Ok(archive_path)
 }
 
-fn remove_if_present(path: &Path) -> Result<(), String> {
+fn remove_if_present(path: &Path) -> HubRuntimeResult<()> {
     match fs::remove_file(path) {
         Ok(()) => Ok(()),
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
-        Err(error) => Err(format!("failed to remove {}: {}", path.display(), error)),
+        Err(error) => Err(format!("failed to remove {}: {}", path.display(), error).into()),
     }
 }
 
-pub(super) fn rotate_logs_if_needed(log_path: &Path) -> Result<bool, String> {
+pub(super) fn rotate_logs_if_needed(log_path: &Path) -> HubRuntimeResult<bool> {
     rotate_logs_if_needed_with_max(log_path, max_log_bytes())
 }
 
-fn rotate_logs_if_needed_with_max(log_path: &Path, max_bytes: u64) -> Result<bool, String> {
+fn rotate_logs_if_needed_with_max(log_path: &Path, max_bytes: u64) -> HubRuntimeResult<bool> {
     let metadata = match fs::metadata(log_path) {
         Ok(value) => value,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(false),
         Err(error) => {
-            return Err(format!(
-                "failed to inspect {}: {}",
-                log_path.display(),
-                error
-            ))
+            return Err(format!("failed to inspect {}: {}", log_path.display(), error).into())
         }
     };
 
@@ -475,53 +510,4 @@ fn max_log_bytes() -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::rotate_logs_if_needed_with_max;
-    use std::env;
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    struct TempDir {
-        path: PathBuf,
-    }
-
-    impl TempDir {
-        fn new() -> Self {
-            let unique = format!(
-                "mcpace-runtime-test-{}-{}",
-                std::process::id(),
-                SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .expect("system time")
-                    .as_nanos()
-            );
-            let path = env::temp_dir().join(unique);
-            fs::create_dir_all(&path).expect("create temp dir");
-            TempDir { path }
-        }
-
-        fn path(&self) -> &Path {
-            &self.path
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = fs::remove_dir_all(&self.path);
-        }
-    }
-
-    #[test]
-    fn rotate_logs_archives_oversized_file_without_launching_runtime() {
-        let temp = TempDir::new();
-        let log_path = temp.path().join("events.log");
-        fs::write(&log_path, "x".repeat(256)).expect("write log");
-
-        let rotated = rotate_logs_if_needed_with_max(&log_path, 64).expect("rotate logs");
-
-        assert!(rotated);
-        assert!(temp.path().join("events.log.1").is_file());
-        assert!(!temp.path().join("events.log").exists());
-    }
-}
+mod tests;

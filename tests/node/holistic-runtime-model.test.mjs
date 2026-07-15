@@ -34,10 +34,12 @@ test('dashboard worker startup fails gracefully instead of panicking', () => {
 
 test('runtime private directories are created private on first creation', () => {
   const runtimePaths = read('src/runtimepaths.rs');
-  assert.match(runtimePaths, /fn create_private_dir\(path: &Path\) -> Result<\(\), String>/);
+  assert.match(runtimePaths, /fn create_private_dir\(path: &Path\) -> RuntimePathResult<\(\)>/);
   assert.match(runtimePaths, /builder\.mode\(0o700\)/);
   assert.match(runtimePaths, /create\(path\)/);
   assert.match(runtimePaths, /fs::symlink_metadata\(path\)/);
+  assert.match(runtimePaths, /pub enum RuntimePathError/);
+  assert.match(runtimePaths, /RuntimePathResult/);
   assert.match(runtimePaths, /runtime path is not a real directory/);
 });
 

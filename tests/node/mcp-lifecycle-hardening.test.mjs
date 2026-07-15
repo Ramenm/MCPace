@@ -40,14 +40,16 @@ test('MCP source loading avoids symlink/non-regular sources and uses content fin
   assert.match(sources, /pub\(crate\) fn acquire_mcp_settings_namespace_lock\(/);
   assert.match(sources, /mcp-settings\.namespace/);
   assert.match(sources, /pub\(crate\) fn source_paths_for_normalized_server\(/);
-  assert.match(sources, /std::fs::read\(&source\.path\)/);
-  assert.match(sources, /feed_settings_fingerprint\(&mut fingerprint, &bytes\)/);
+  assert.match(sources, /feed_settings_file_fingerprint\(&source\.path, &mut fingerprint\)/);
+  assert.match(sources, /\.take\(MAX_MCP_SETTINGS_FINGERPRINT_BYTES\.saturating_add\(1\)\)/);
+  assert.match(sources, /reader\.read\(&mut buffer\)/);
   assert.doesNotMatch(sources, /duration_since\(UNIX_EPOCH\)/);
 
   const sourcePaths = read('src/mcp_sources/paths.rs');
   assert.match(sourcePaths, /fs::symlink_metadata\(directory\)/);
   assert.match(sourcePaths, /file_type\(\)\s*\n\s*\.map\(\|file_type\| file_type\.is_file\(\) && !file_type\.is_symlink\(\)\)/);
   assert.doesNotMatch(sourcePaths, /directory\.exists\(\)/);
+  assert.match(sourcePaths, /MAX_MCP_SETTINGS_FILES_PER_DIRECTORY/);
 });
 
 test('MCP discovery and registry refresh harden endpoint normalization, cache writes, and duplicate selection', () => {
@@ -59,13 +61,14 @@ test('MCP discovery and registry refresh harden endpoint normalization, cache wr
   assert.match(discover, /write_private_text_atomic\(&cache_path/);
   assert.match(discover, /fn deduplicate_discovery_candidates\(/);
   assert.match(discover, /candidate_trust_rank\(/);
-  assert.match(discover, /Command::new\(&curl_path\)/);
-  assert.match(discover, /trusted_fetch_program_candidates\("curl"\)/);
-  assert.match(discover, /command\.env_clear\(\)/);
-  assert.match(discover, /"--", url/);
-  assert.match(discover, /param\(\[string\]\$Uri\)/);
-  assert.doesNotMatch(discover, /Command::new\("curl"\)/);
-  assert.doesNotMatch(discover, /url\.replace\('\''/);
+  assert.match(discover, /http_client::bounded_get_text\(/);
+  assert.match(discover, /MAX_REGISTRY_PAGES/);
+  assert.match(discover, /8 \* 1024 \* 1024/);
+  assert.doesNotMatch(discover, /Command::new\(/);
+  const httpClient = read('src/http_client.rs');
+  assert.match(httpClient, /RootCerts::PlatformVerifier/);
+  assert.match(httpClient, /max_redirects\(0\)/);
+  assert.match(httpClient, /timeout_global\(Some\(timeout\)\)/);
 });
 
 test('MCP auto-install planning rejects shell/path/URL package identifier classes', () => {
@@ -87,11 +90,14 @@ test('MCP server runtime loading honors disabled:true and limits plain HTTP to l
   assert.match(serverConfig, /bool_at_path\(raw, &\["enabled"\]\)\.unwrap_or\(true\)/);
 
   const httpRuntime = read('src/upstream/http_runtime.rs');
+  const httpRuntimeTests = read('src/upstream/http_runtime/tests.rs');
   assert.match(httpRuntime, /plain_http_upstream_host_is_loopback\(&host\)/);
   assert.match(httpRuntime, /direct plain-HTTP MCP upstreams are limited to loopback hosts/);
-  assert.match(httpRuntime, /normalized == "localhost"/);
-  assert.match(httpRuntime, /normalized\.starts_with\("127\."\)/);
-  assert.match(httpRuntime, /parse_http_url_rejects_non_loopback_plain_http_upstreams/);
+  assert.match(httpRuntime, /eq_ignore_ascii_case\("localhost"\)/);
+  assert.match(httpRuntime, /parse::<std::net::IpAddr>\(\)/);
+  assert.match(httpRuntime, /address\.is_loopback\(\)/);
+  assert.doesNotMatch(httpRuntime, /starts_with\("127\."\)/);
+  assert.match(httpRuntimeTests, /parse_http_url_rejects_non_loopback_plain_http_upstreams/);
 });
 
 test('release manifest ships MCP lifecycle hardening documentation', () => {

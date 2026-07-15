@@ -1,49 +1,9 @@
 import assert from 'node:assert/strict';
-import fs from 'node:fs';
-import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import path from 'node:path';
 import test from 'node:test';
 import { repoRoot } from '../../scripts/lib/project-metadata.mjs';
-
-function walkFiles(root, predicate = () => true) {
-  const files = [];
-  const stack = [root];
-  while (stack.length > 0) {
-    const current = stack.pop();
-    if (!fs.existsSync(current)) continue;
-    for (const entry of fs.readdirSync(current, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
-      const full = path.join(current, entry.name);
-      if (entry.isDirectory()) stack.push(full);
-      else if (entry.isFile() && predicate(full)) files.push(full);
-    }
-  }
-  return files.sort();
-}
-
-function normalize(relativePath) {
-  return relativePath.split(path.sep).join('/');
-}
-
-function gitSourceFiles(pattern) {
-  const result = spawnSync('git', ['-C', repoRoot, 'ls-files', '-co', '--exclude-standard', '-z', '--', pattern], {
-    encoding: 'buffer',
-    windowsHide: true,
-  });
-  if (result.status !== 0) return null;
-  return result.stdout
-    .toString('utf8')
-    .split('\0')
-    .filter(Boolean)
-    .filter((relative) => {
-      try {
-        return fs.statSync(path.join(repoRoot, relative)).isFile();
-      } catch {
-        return false;
-      }
-    })
-    .map(normalize)
-    .sort();
-}
+import { listWorkingTreeFiles } from '../../scripts/lib/repo-files.mjs';
 
 test('legacy subsystem map reports modernization seams by subsystem', () => {
   const result = spawnSync(process.execPath, ['scripts/legacy-subsystem-map.mjs', '--json'], {
@@ -65,8 +25,8 @@ test('legacy subsystem map reports modernization seams by subsystem', () => {
 });
 
 test('checked-in eval sweep partial streams are removed from the source tree', () => {
-  const offenders = gitSourceFiles('*.partial.jsonl') ?? walkFiles(repoRoot, (file) => file.endsWith('.partial.jsonl'))
-    .map((file) => normalize(path.relative(repoRoot, file)))
-    .filter((relative) => !relative.startsWith('node_modules/') && !relative.startsWith('.git/') && !relative.startsWith('.omx/'));
+  const offenders = listWorkingTreeFiles(repoRoot)
+    .map((file) => file.replace(`${repoRoot}${path.sep}`, '').split(path.sep).join('/'))
+    .filter((relative) => relative.endsWith('.partial.jsonl'));
   assert.deepEqual(offenders, []);
 });

@@ -1,8 +1,8 @@
 {
   "schema": "mcpace.projectInventory.v1",
-  "generatedAt": "2026-07-04T15:47:38.263Z",
+  "generatedAt": "2026-07-05T18:11:55.985Z",
   "root": ".",
-  "rootName": "mcpace_work",
+  "rootName": "wave11_work",
   "commands": [
     {
       "name": "help",
@@ -143,12 +143,13 @@
       "description": "Manage the local hub lifecycle, status, and logs."
     },
     {
-      "name": "stdio-shim",
+      "name": "stdio",
       "aliases": [
+        "stdio-shim",
         "stdio_shim"
       ],
       "implemented": true,
-      "description": "Internal bootstrap-only stdio shim proof surface."
+      "description": "Live MCP stdio launch surface. This is the public launcher command; `stdio-shim` remains a compatibility alias for older client configs."
     },
     {
       "name": "mcp-server",
@@ -217,42 +218,106 @@
   "groupedSubcommands": {
     "server": [
       "add",
+      "affinity",
+      "allow-review",
+      "apply",
+      "arg",
+      "as",
       "auto",
+      "auto-install",
+      "auto-mode",
       "candidates",
       "capabilities",
+      "chat",
+      "client",
+      "client-id",
+      "cmd",
+      "command",
       "disable",
+      "disabled",
       "discover",
+      "dry-run",
       "enable",
+      "env",
+      "file",
+      "force",
+      "from",
+      "header",
       "import",
+      "in-flight",
       "install",
       "instances",
       "leases",
       "list",
+      "max-in-flight-per-worker",
+      "max-workers",
+      "metadata-json",
+      "mode",
+      "path",
+      "project",
+      "project-root",
+      "queue-timeout",
+      "queue-timeout-ms",
+      "refresh",
+      "refresh-registry",
       "remove",
+      "reuse-policy",
+      "review-ok",
+      "session-id",
       "set-policy",
+      "settings",
+      "source",
       "sources",
-      "test"
+      "test",
+      "timeout",
+      "timeout-ms",
+      "transport",
+      "type",
+      "url",
+      "workers"
     ],
     "client": [
+      "backup",
+      "client-id",
+      "diff",
+      "dry-run",
       "export",
+      "ingress",
       "install",
       "latest",
       "list",
+      "metadata-json",
       "plan",
-      "restore"
+      "project-root",
+      "restore",
+      "session-id",
+      "transport"
     ],
     "hub": [
       "acquire",
+      "client-id",
       "down",
+      "foreground",
+      "ingress",
       "lease",
+      "lease-id",
       "leases",
       "list",
       "logs",
+      "metadata-json",
+      "project-root",
       "release",
       "renew",
       "repair",
+      "replace-existing",
       "run",
+      "server",
+      "session-id",
       "status",
+      "tail",
+      "takeover",
+      "transport",
+      "ttl-ms",
       "up"
     ],
     "verify": [
@@ -261,22 +326,26 @@
     ],
     "lab": [
       "coverage",
+      "filesystem",
       "gaps",
+      "id",
       "list",
       "matrix",
       "probe",
+      "refresh",
       "report",
       "run",
-      "show"
+      "show",
+      "timeout-ms"
     ]
   },
   "counts": {
-    "rustFiles": 133,
-    "rustFunctions": 1855,
+    "rustFiles": 136,
+    "rustFunctions": 2104,
     "publicCommands": 25,
     "implementedPublicCommands": 25,
-    "duplicateFunctionNames": 77,
-    "longRustFiles": 27
+    "duplicateFunctionNames": 86,
+    "longRustFiles": 28
   },
   "npmLauncher": {
     "binPath": "packages/npm/cli/bin/mcpace.js",
@@ -371,27 +440,27 @@
     },
     {
       "file": "src/server/loader.rs",
-      "lines": 2666
+      "lines": 2706
     },
     {
       "file": "src/dashboard.rs",
-      "lines": 2515
+      "lines": 2541
     },
     {
       "file": "src/dashboard/tests.rs",
-      "lines": 2256
-    },
-    {
-      "file": "src/setup.rs",
-      "lines": 2183
+      "lines": 2260
     },
     {
       "file": "src/upstream/tests.rs",
       "lines": 1929
     },
     {
+      "file": "src/setup.rs",
+      "lines": 1913
+    },
+    {
       "file": "src/serve.rs",
-      "lines": 1803
+      "lines": 1862
     },
     {
       "file": "src/adapter/discovery.rs",
@@ -399,23 +468,23 @@
     },
     {
       "file": "src/upstream/lease_runtime.rs",
-      "lines": 1597
+      "lines": 1599
     },
     {
       "file": "src/server/discover.rs",
-      "lines": 1352
+      "lines": 1353
     },
     {
       "file": "src/mcp_server.rs",
-      "lines": 1337
+      "lines": 1340
     },
     {
       "file": "src/hub/leases.rs",
-      "lines": 1322
+      "lines": 1323
     },
     {
       "file": "src/upstream.rs",
-      "lines": 1291
+      "lines": 1290
     },
     {
       "file": "src/mcp_server/tool_surface.rs",
@@ -427,11 +496,11 @@
     },
     {
       "file": "src/mcp_autoinstall.rs",
-      "lines": 1098
+      "lines": 1095
     },
     {
       "file": "src/client/actions.rs",
-      "lines": 1039
+      "lines": 1026
     },
     {
       "file": "src/dashboard/http_tools.rs",
@@ -439,14 +508,95 @@
     },
     {
       "file": "src/client_catalog.rs",
-      "lines": 923
+      "lines": 973
     },
     {
-      "file": "src/lab/render.rs",
-      "lines": 915
+      "file": "src/runtimepaths.rs",
+      "lines": 928
     }
   ],
   "duplicateFunctionNames": [
+    {
+      "name": "from",
+      "owners": [
+        "src/adapter/profile.rs (private)",
+        "src/adapter/profile.rs (private)",
+        "src/adapter/profile.rs (private)",
+        "src/adapter/proxy_uri.rs (private)",
+        "src/client.rs (private)",
+        "src/client.rs (private)",
+        "src/client/actions/backup.rs (private)",
+        "src/client/metadata.rs (private)",
+        "src/client_catalog.rs (private)",
+        "src/dashboard/diagnostics.rs (private)",
+        "src/dashboard/diagnostics.rs (private)",
+        "src/dashboard/http_boundary.rs (private)",
+        "src/dashboard/http_headers.rs (private)",
+        "src/dashboard/http_headers.rs (private)",
+        "src/dashboard/http_session.rs (private)",
+        "src/dashboard/response.rs (private)",
+        "src/dashboard/response.rs (private)",
+        "src/dashboard/response.rs (private)",
+        "src/http_probe.rs (private)",
+        "src/http_probe.rs (private)",
+        "src/hub/launcher.rs (private)",
+        "src/hub/runtime.rs (private)",
+        "src/hub/runtime.rs (private)",
+        "src/hub/runtime.rs (private)",
+        "src/hub/status.rs (private)",
+        "src/hub/status.rs (private)",
+        "src/init.rs (private)",
+        "src/init.rs (private)",
+        "src/init.rs (private)",
+        "src/json.rs (private)",
+        "src/json_helpers.rs (private)",
+        "src/lab/loader.rs (private)",
+        "src/lab/loader.rs (private)",
+        "src/mcp_protocol.rs (private)",
+        "src/mcp_sources.rs (private)",
+        "src/mcp_sources.rs (private)",
+        "src/mcp_sources.rs (private)",
+        "src/mcp_sources/write_helpers.rs (private)",
+        "src/profile.rs (private)",
+        "src/projects.rs (private)",
+        "src/projects.rs (private)",
+        "src/projects.rs (private)",
+        "src/projects.rs (private)",
+        "src/resources.rs (private)",
+        "src/restart_guard.rs (private)",
+        "src/runtimepaths.rs (private)",
+        "src/server/loader.rs (private)",
+        "src/server/policy.rs (private)",
+        "src/service.rs (private)",
+        "src/tool_result.rs (private)",
+        "src/update.rs (private)",
+        "src/update.rs (private)",
+        "src/upstream/http_runtime.rs (private)",
+        "src/upstream/http_runtime.rs (private)",
+        "src/upstream/http_runtime.rs (private)",
+        "src/upstream/inventory.rs (private)",
+        "src/upstream/inventory.rs (private)",
+        "src/upstream/inventory.rs (private)",
+        "src/upstream/process_config.rs (private)",
+        "src/upstream/projection.rs (private)",
+        "src/upstream/projection.rs (private)",
+        "src/upstream/server_config.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/tool_cache.rs (private)",
+        "src/upstream/tool_cache.rs (private)",
+        "src/upstream/tool_cache.rs (private)",
+        "src/verify/model.rs (private)",
+        "src/verify/model.rs (private)",
+        "src/verify/model.rs (private)",
+        "src/windows_process.rs (private)"
+      ]
+    },
     {
       "name": "to_json_value",
       "owners": [
@@ -506,6 +656,58 @@
       ]
     },
     {
+      "name": "fmt",
+      "owners": [
+        "src/adapter/profile.rs (private)",
+        "src/adapter/proxy_uri.rs (private)",
+        "src/candidates.rs (private)",
+        "src/client.rs (private)",
+        "src/client/actions/backup.rs (private)",
+        "src/client/metadata.rs (private)",
+        "src/client_catalog.rs (private)",
+        "src/config_edit.rs (private)",
+        "src/connect/model.rs (private)",
+        "src/dashboard/diagnostics.rs (private)",
+        "src/dashboard/http_boundary.rs (private)",
+        "src/dashboard/http_headers.rs (private)",
+        "src/dashboard/http_session.rs (private)",
+        "src/dashboard/response.rs (private)",
+        "src/http_probe.rs (private)",
+        "src/hub/launcher.rs (private)",
+        "src/hub/runtime.rs (private)",
+        "src/hub/status.rs (private)",
+        "src/init.rs (private)",
+        "src/json.rs (private)",
+        "src/json_helpers.rs (private)",
+        "src/lab/args.rs (private)",
+        "src/lab/loader.rs (private)",
+        "src/mcp_protocol.rs (private)",
+        "src/mcp_sources.rs (private)",
+        "src/mcp_sources/write_helpers.rs (private)",
+        "src/profile.rs (private)",
+        "src/projects.rs (private)",
+        "src/resources.rs (private)",
+        "src/restart_guard.rs (private)",
+        "src/runtimepaths.rs (private)",
+        "src/server/loader.rs (private)",
+        "src/server/policy.rs (private)",
+        "src/service.rs (private)",
+        "src/tool_result.rs (private)",
+        "src/update.rs (private)",
+        "src/update.rs (private)",
+        "src/upstream/http_runtime.rs (private)",
+        "src/upstream/inventory.rs (private)",
+        "src/upstream/process_config.rs (private)",
+        "src/upstream/projection.rs (private)",
+        "src/upstream/server_config.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/tool_cache.rs (private)",
+        "src/verify/model.rs (private)",
+        "src/windows_process.rs (private)"
+      ]
+    },
+    {
       "name": "run",
       "owners": [
         "src/agent.rs (pub)",
@@ -549,7 +751,6 @@
     {
       "name": "write_help",
       "owners": [
-        "src/agent.rs (private)",
         "src/app.rs (private)",
         "src/autostart.rs (private)",
         "src/candidates.rs (private)",
@@ -575,7 +776,7 @@
       ]
     },
     {
-      "name": "parse_args",
+      "name": "parse_cli",
       "owners": [
         "src/agent.rs (private)",
         "src/candidates.rs (private)",
@@ -589,11 +790,11 @@
         "src/mcp_server/args.rs (pub(super))",
         "src/profile.rs (private)",
         "src/projects.rs (private)",
+        "src/release.rs (private)",
         "src/serve.rs (private)",
         "src/server/args.rs (pub(super))",
         "src/service.rs (private)",
         "src/setup.rs (private)",
-        "src/stdio_shim.rs (private)",
         "src/update.rs (private)",
         "src/verify/args.rs (pub(super))"
       ]
@@ -620,6 +821,25 @@
       ]
     },
     {
+      "name": "argv",
+      "owners": [
+        "src/client/args.rs (private)",
+        "src/connect/args.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/hub/args.rs (private)",
+        "src/init.rs (private)",
+        "src/lab/args.rs (private)",
+        "src/mcp_server/args.rs (private)",
+        "src/projects.rs (private)",
+        "src/release.rs (private)",
+        "src/serve.rs (private)",
+        "src/server/args.rs (private)",
+        "src/service.rs (private)",
+        "src/setup.rs (private)",
+        "src/verify/args.rs (private)"
+      ]
+    },
+    {
       "name": "default",
       "owners": [
         "src/cleanup.rs (private)",
@@ -640,12 +860,64 @@
     {
       "name": "new",
       "owners": [
+        "src/adapter/profile.rs (private)",
         "src/dashboard.rs (private)",
         "src/dashboard/http_session.rs (private)",
         "src/dashboard/http_session.rs (pub(super))",
         "src/dashboard/rate_limit.rs (private)",
+        "src/dashboard/response.rs (private)",
+        "src/http_probe.rs (private)",
         "src/hub/runtime.rs (private)",
-        "src/upstream/session_pool.rs (private)"
+        "src/json.rs (pub)",
+        "src/upstream/http_runtime.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/verify/model.rs (private)",
+        "src/windows_process.rs (private)"
+      ]
+    },
+    {
+      "name": "contains",
+      "owners": [
+        "src/adapter/proxy_uri.rs (pub(super))",
+        "src/client_catalog.rs (pub)",
+        "src/dashboard/http_boundary.rs (pub(super))",
+        "src/dashboard/http_headers.rs (pub(super))",
+        "src/json.rs (pub)",
+        "src/json_helpers.rs (pub)",
+        "src/mcp_protocol.rs (pub)",
+        "src/mcp_sources/write_helpers.rs (pub(super))",
+        "src/resources.rs (pub)",
+        "src/restart_guard.rs (pub)",
+        "src/tool_result.rs (pub)",
+        "src/windows_process.rs (pub(crate))"
+      ]
+    },
+    {
+      "name": "normalize_compat_arg",
+      "owners": [
+        "src/client/args.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/hub/args.rs (private)",
+        "src/init.rs (private)",
+        "src/projects.rs (private)",
+        "src/release.rs (private)",
+        "src/serve.rs (private)",
+        "src/server/args.rs (private)",
+        "src/service.rs (private)",
+        "src/setup.rs (private)"
+      ]
+    },
+    {
+      "name": "parsed_from_cli",
+      "owners": [
+        "src/client/args.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/hub/args.rs (private)",
+        "src/projects.rs (private)",
+        "src/serve.rs (private)",
+        "src/server/args.rs (private)",
+        "src/service.rs (private)",
+        "src/setup.rs (private)"
       ]
     },
     {
@@ -707,6 +979,15 @@
       ]
     },
     {
+      "name": "normalize_compat_flag",
+      "owners": [
+        "src/connect/args.rs (private)",
+        "src/lab/args.rs (private)",
+        "src/mcp_server/args.rs (private)",
+        "src/verify/args.rs (private)"
+      ]
+    },
+    {
       "name": "now_ms",
       "owners": [
         "src/client/actions/backup.rs (pub(super))",
@@ -757,11 +1038,27 @@
       ]
     },
     {
+      "name": "io",
+      "owners": [
+        "src/hub/runtime.rs (private)",
+        "src/init.rs (private)",
+        "src/runtimepaths.rs (private)"
+      ]
+    },
+    {
       "name": "list_tools",
       "owners": [
         "src/upstream/lease_runtime.rs (pub)",
         "src/upstream/session_pool.rs (pub(super))",
         "src/upstream/session_pool.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "message",
+      "owners": [
+        "src/http_probe.rs (pub(crate))",
+        "src/json.rs (pub)",
+        "src/upstream/inventory.rs (private)"
       ]
     },
     {
@@ -771,84 +1068,9 @@
         "src/client_catalog.rs (pub)",
         "src/client_catalog.rs (pub)"
       ]
-    },
-    {
-      "name": "preferred_install_scope",
-      "owners": [
-        "src/client/actions.rs (private)",
-        "src/client_catalog.rs (pub)",
-        "src/client_catalog.rs (pub)"
-      ]
-    },
-    {
-      "name": "run_json_command",
-      "owners": [
-        "src/dashboard.rs (pub(super))",
-        "src/mcp_server.rs (private)",
-        "src/setup.rs (private)"
-      ]
-    },
-    {
-      "name": "blank_to_none",
-      "owners": [
-        "src/lab/render.rs (private)",
-        "src/server/render.rs (private)"
-      ]
-    },
-    {
-      "name": "build_next_steps",
-      "owners": [
-        "src/connect/model.rs (private)",
-        "src/lab/analysis.rs (pub(super))"
-      ]
-    },
-    {
-      "name": "build_report",
-      "owners": [
-        "src/connect/model.rs (pub(super))",
-        "src/profile.rs (private)"
-      ]
-    },
-    {
-      "name": "callable_server_names",
-      "owners": [
-        "src/adapter/discovery.rs (private)",
-        "src/upstream/lease_runtime.rs (pub)"
-      ]
-    },
-    {
-      "name": "client_install_support_summary",
-      "owners": [
-        "src/client/actions.rs (pub(super))",
-        "src/client_catalog.rs (pub)"
-      ]
-    },
-    {
-      "name": "collect_status",
-      "owners": [
-        "src/hub/status.rs (pub(super))",
-        "src/serve.rs (private)"
-      ]
-    },
-    {
-      "name": "command_json",
-      "owners": [
-        "src/dashboard/overview.rs (private)",
-        "src/service.rs (private)"
-      ]
     }
   ],
   "unsupportedMarkers": [
-    {
-      "file": "src/catalog.rs",
-      "line": 125,
-      "text": "description: \"Internal bootstrap-only stdio shim proof surface.\","
-    },
-    {
-      "file": "src/client/actions.rs",
-      "line": 970,
-      "text": "\"This preview keeps one stable stdio launcher command, but bootstrap-only proof should not be treated as completed live forwarding yet.\".to_string(),"
-    },
     {
       "file": "src/client_catalog/builtin.rs",
       "line": 348,
@@ -856,53 +1078,23 @@
     },
     {
       "file": "src/dashboard/diagnostics.rs",
-      "line": 179,
+      "line": 207,
       "text": "\"external/remote HTTP server policy is configured, but direct HTTPS/custom HTTP fan-out is not implemented in this HTTP adapter\","
     },
     {
       "file": "src/hub/launcher.rs",
-      "line": 18,
-      "text": "Err(\"background hub launch is not implemented for this platform\".to_string())"
-    },
-    {
-      "file": "src/profile.rs",
-      "line": 143,
-      "text": "\"Profile mutation is not implemented yet in the Rust-only repo.\""
-    },
-    {
-      "file": "src/profile.rs",
-      "line": 175,
-      "text": "\"profile mutation is not implemented yet in the Rust-only repo\".to_string(),"
+      "line": 17,
+      "text": "formatter.write_str(\"background hub launch is not implemented for this platform\")"
     },
     {
       "file": "src/serve.rs",
-      "line": 1296,
+      "line": 1355,
       "text": "Err(\"background serve launch is not implemented for this platform\".to_string())"
     },
     {
-      "file": "src/stdio_shim.rs",
-      "line": 35,
-      "text": "\"stdio-shim is currently a bootstrap-only proof surface. Run 'mcpace stdio-shim --json ...' to normalize metadata, derive a sticky session lease, and ensure the hub is up. Live MCP stdio forwarding is not implemented yet"
-    },
-    {
-      "file": "src/stdio_shim.rs",
-      "line": 148,
-      "text": "\"Live MCP stdio message forwarding is not implemented yet; this shim only normalizes routing context, derives a sticky lease, and ensures the persistent hub is up.\".to_string(),"
-    },
-    {
-      "file": "src/stdio_shim.rs",
-      "line": 155,
-      "text": "(\"mode\", JsonValue::string(\"bootstrap-only\")),"
-    },
-    {
-      "file": "src/stdio_shim.rs",
-      "line": 225,
-      "text": "\"stdio-shim is currently a bootstrap-only proof surface.\""
-    },
-    {
       "file": "src/upstream/http_runtime.rs",
-      "line": 457,
-      "text": "\"direct HTTPS upstream forwarding is not available without a TLS adapter; use a stdio bridge such as mcp-remote or a local HTTP gateway\""
+      "line": 262,
+      "text": "return Err(HttpUpstreamError::new(\"direct HTTPS upstream forwarding is not available without a TLS adapter; use a stdio bridge such as mcp-remote or a local HTTP gateway\"));"
     }
   ],
   "commandAliasDuplicates": [],
@@ -1305,12 +1497,32 @@
       },
       {
         "method": "GET",
+        "path": "/dashboard.actions.js",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/dashboard.boot.js",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
         "path": "/dashboard.css",
         "dynamic": false
       },
       {
         "method": "GET",
         "path": "/dashboard.js",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/dashboard.model.js",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/dashboard.render.js",
         "dynamic": false
       },
       {

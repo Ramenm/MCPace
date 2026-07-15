@@ -12,6 +12,9 @@ const NPM_CLI_NAMES = Object.freeze({
 export function commandForPlatform(command, platform = process.platform) {
   if (platform !== 'win32') return command;
   if (command === 'npm' || command === 'npx') return `${command}.cmd`;
+  if (!/\.(?:cmd|bat|exe)$/i.test(command) && isRegularFile(`${command}.cmd`)) {
+    return `${command}.cmd`;
+  }
   return command;
 }
 

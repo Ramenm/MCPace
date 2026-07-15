@@ -84,8 +84,14 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
     ClientTarget {
         id: "vscode-workspace",
         family_id: "vscode",
-        display_name: "Visual Studio Code workspace",
-        aliases: &["vscode", "vs-code", "code", "visual-studio-code"],
+        display_name: "Visual Studio Code user configuration",
+        aliases: &[
+            "vscode",
+            "vscode-user",
+            "vs-code",
+            "code",
+            "visual-studio-code",
+        ],
         maturity: "documented",
         surface_class: "local",
         surface_kind: "local-editor",
@@ -99,7 +105,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
         documented_constraints: &["workspace-trust", "servers-root-key"],
         notes: &[
             "VS Code uses a top-level servers object in mcp.json instead of the mcpServers key used by several other clients.",
-            "Workspace-scoped .vscode/mcp.json keeps MCPace tied to the repository being developed and avoids surprising global editor changes.",
+            "Automatic install uses the platform-specific user mcp.json so one local MCPace endpoint is shared across workspaces; .vscode/mcp.json remains available for manual workspace-only configuration.",
         ],
         install_support: Some(ClientInstallSupport {
             kind: ClientInstallKind::JsonMcpServers(JsonMcpServerShape {
@@ -109,7 +115,7 @@ pub const CLIENT_TARGETS: &[ClientTarget] = &[
                 include_tools_star: false,
                 include_disabled_false: false,
             }),
-            preferred_scope: "workspace",
+            preferred_scope: "user",
             preferred_config_path: "~/.config/Code/User/mcp.json",
         }),
     },

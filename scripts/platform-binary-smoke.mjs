@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
+const WINDOWS_AGENT_LAUNCHER_NAME = 'mcpace-agent-launcher.exe';
 
 function usage() {
   return 'Usage: node scripts/platform-binary-smoke.mjs --binary <path-to-mcpace[.exe]> [--json]';
@@ -65,6 +66,32 @@ function parseJson(output) {
   }
 }
 
+function windowsSidecarChecks(binary) {
+  if (path.basename(binary).toLowerCase() !== 'mcpace.exe') return [];
+  const launcher = path.join(path.dirname(binary), WINDOWS_AGENT_LAUNCHER_NAME);
+  try {
+    const stat = fs.lstatSync(launcher);
+    const ok = stat.isFile() && !stat.isSymbolicLink();
+    return [{
+      id: 'windows-hidden-autostart-launcher',
+      ok,
+      path: launcher,
+      reason: ok
+        ? `${WINDOWS_AGENT_LAUNCHER_NAME} is present next to mcpace.exe`
+        : `${WINDOWS_AGENT_LAUNCHER_NAME} must be a regular file and not a symlink`,
+      sizeBytes: stat.size,
+    }];
+  } catch (error) {
+    return [{
+      id: 'windows-hidden-autostart-launcher',
+      ok: false,
+      path: launcher,
+      reason: `missing required Windows autostart sidecar: ${error?.message ?? error}`,
+      sizeBytes: 0,
+    }];
+  }
+}
+
 function run(binary, item) {
   const result = spawnSync(binary, item.args, {
     cwd: repoRoot,
@@ -118,6 +145,7 @@ if (!fs.existsSync(binary)) {
 }
 
 const results = commandMatrix().map((item) => run(binary, item));
+const sidecarChecks = windowsSidecarChecks(binary);
 const report = {
   schema: 'mcpace.platformBinarySmoke.v1',
   generatedAt: new Date().toISOString(),
@@ -128,8 +156,12 @@ const report = {
     total: results.length,
     pass: results.filter((item) => item.ok).length,
     fail: results.filter((item) => !item.ok).length,
+    sidecarTotal: sidecarChecks.length,
+    sidecarPass: sidecarChecks.filter((item) => item.ok).length,
+    sidecarFail: sidecarChecks.filter((item) => !item.ok).length,
   },
   results,
+  sidecarChecks,
 };
 
 if (parsed.json) {
@@ -139,8 +171,11 @@ if (parsed.json) {
   for (const item of results) {
     process.stdout.write(`${item.ok ? 'PASS' : 'FAIL'} ${item.command} - ${item.reason}\n`);
   }
+  for (const item of sidecarChecks) {
+    process.stdout.write(`${item.ok ? 'PASS' : 'FAIL'} ${item.id} - ${item.reason}\n`);
+  }
 }
 
-if (report.summary.fail > 0) {
+if (report.summary.fail > 0 || report.summary.sidecarFail > 0) {
   process.exit(1);
 }

@@ -1,17 +1,21 @@
 use crate::dashboard;
+use crate::diagnostics;
+use crate::http_probe;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::resources;
 use crate::runtimepaths;
+use clap::{error::ErrorKind, Parser};
 use std::collections::BTreeMap;
+use std::ffi::OsString;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::Duration;
 
 const HEALTH_PROBE_IO_TIMEOUT: Duration = Duration::from_secs(5);
+const HEALTH_PROBE_MAX_RESPONSE_BYTES: usize = 256 * 1024;
 
 #[derive(Debug, Default)]
 struct ParsedArgs {
@@ -54,9 +58,9 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help {
@@ -74,144 +78,272 @@ pub fn run(
     }
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace serve",
+    disable_version_flag = true,
+    about = "Run the public MCPace local HTTP surface"
+)]
+struct ServeCli {
+    #[arg(value_name = "start|restart|stop|status")]
+    action: Option<String>,
 
-    while index < args.len() {
-        match args[index].as_str() {
-            "start" | "stop" | "status" | "restart" => {
-                if parsed.action.is_some() {
-                    parsed.error = Some("serve accepts only one action".to_string());
-                    return parsed;
-                }
-                parsed.action = Some(args[index].to_string());
-                index += 1;
+    #[arg(
+        value_name = "EXTRA",
+        trailing_var_arg = true,
+        allow_hyphen_values = true
+    )]
+    extra: Vec<String>,
+
+    #[arg(long = "managed-service", hide = true)]
+    managed_service: bool,
+
+    #[arg(long = "json")]
+    json_output: bool,
+
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+
+    #[arg(long = "host", value_name = "ADDR")]
+    host: Option<String>,
+
+    #[arg(long = "port", value_name = "N")]
+    port: Option<String>,
+
+    #[arg(long = "max-requests", value_name = "N")]
+    max_requests: Option<String>,
+
+    #[arg(long = "max-connections", value_name = "N")]
+    max_connections: Option<String>,
+
+    #[arg(long = "io-timeout-ms", value_name = "MS")]
+    io_timeout_ms: Option<String>,
+
+    #[arg(long = "max-body-bytes", value_name = "N")]
+    max_body_bytes: Option<String>,
+
+    #[arg(long = "overview-cache-ms", value_name = "MS")]
+    overview_cache_ms: Option<String>,
+
+    #[arg(long = "allow-nonlocal-bind", hide = true)]
+    allow_nonlocal_bind: bool,
+
+    #[arg(long = "insecure-nonlocal-bind", hide = true)]
+    insecure_nonlocal_bind: bool,
+
+    #[arg(long = "auth-token-env", value_name = "NAME")]
+    auth_token_env: Option<String>,
+}
+
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match ServeCli::try_parse_from(argv(args)) {
+        Ok(cli) => parsed_from_cli(cli),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
             }
-            "--managed-service" => {
-                parsed.managed_service = true;
-                index += 1;
-            }
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                parsed.passthrough.push(args[index].clone());
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("serve requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                parsed.passthrough.push(args[index].clone());
-                parsed.passthrough.push(value.clone());
-                index += 2;
-            }
-            "--host" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("serve requires a value after --host".to_string());
-                    return parsed;
-                };
-                parsed.host = Some(value.to_string());
-                parsed.passthrough.push(args[index].clone());
-                parsed.passthrough.push(value.clone());
-                index += 2;
-            }
-            "--port" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("serve requires a value after --port".to_string());
-                    return parsed;
-                };
-                match value.parse::<u16>() {
-                    Ok(port) => parsed.port = Some(port),
-                    Err(_) => {
-                        parsed.error = Some("serve --port must be a valid u16".to_string());
-                        return parsed;
-                    }
-                }
-                parsed.passthrough.push(args[index].clone());
-                parsed.passthrough.push(value.clone());
-                index += 2;
-            }
-            "--max-connections" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("serve requires a value after --max-connections".to_string());
-                    return parsed;
-                };
-                match resources::parse_http_connection_limit(value, "serve --max-connections") {
-                    Ok(limit) => parsed.max_connections = Some(limit),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                parsed.passthrough.push(args[index].clone());
-                parsed.passthrough.push(value.clone());
-                index += 2;
-            }
-            "--io-timeout-ms" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("serve requires a value after --io-timeout-ms".to_string());
-                    return parsed;
-                };
-                match resources::parse_http_io_timeout_ms(value, "serve --io-timeout-ms") {
-                    Ok(timeout_ms) => parsed.io_timeout_ms = Some(timeout_ms),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                parsed.passthrough.push(args[index].clone());
-                parsed.passthrough.push(value.clone());
-                index += 2;
-            }
-            "--max-body-bytes" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("serve requires a value after --max-body-bytes".to_string());
-                    return parsed;
-                };
-                match resources::parse_http_body_limit(value, "serve --max-body-bytes") {
-                    Ok(limit) => parsed.max_body_bytes = Some(limit),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                parsed.passthrough.push(args[index].clone());
-                parsed.passthrough.push(value.clone());
-                index += 2;
-            }
-            "--overview-cache-ms" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("serve requires a value after --overview-cache-ms".to_string());
-                    return parsed;
-                };
-                match resources::parse_nonnegative_u64(value, "serve --overview-cache-ms") {
-                    Ok(ttl_ms) => parsed.overview_cache_ms = Some(ttl_ms),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                parsed.passthrough.push(args[index].clone());
-                parsed.passthrough.push(value.clone());
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
+        }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn parsed_from_cli(cli: ServeCli) -> ParsedArgs {
+    let mut passthrough = serve_passthrough_args(&cli);
+    let raw_action = cli
+        .action
+        .as_ref()
+        .map(|value| value.trim().to_ascii_lowercase());
+    let action = match raw_action.as_deref() {
+        Some("start" | "stop" | "status" | "restart") => raw_action.clone(),
+        Some(other) if !other.is_empty() => {
+            passthrough.insert(0, cli.action.clone().unwrap_or_default());
+            None
+        }
+        _ => None,
+    };
+
+    let mut parsed = ParsedArgs {
+        action,
+        help: false,
+        json_output: cli.json_output,
+        root_override: cli.root_override,
+        host: cli.host,
+        port: None,
+        max_connections: None,
+        io_timeout_ms: None,
+        max_body_bytes: None,
+        overview_cache_ms: None,
+        passthrough,
+        managed_service: cli.managed_service,
+        error: None,
+    };
+
+    if cli.allow_nonlocal_bind || cli.insecure_nonlocal_bind {
+        parsed.error = Some(
+            "direct non-loopback HTTP flags are no longer supported; use a trusted HTTPS reverse proxy or tunnel"
+                .to_string(),
+        );
+        return parsed;
+    }
+
+    if parsed.action.is_some()
+        && cli
+            .extra
+            .iter()
+            .any(|value| matches!(value.as_str(), "start" | "stop" | "status" | "restart"))
+    {
+        parsed.error = Some("serve accepts only one action".to_string());
+        return parsed;
+    }
+
+    if let Some(value) = cli.port.as_deref() {
+        match value.parse::<u16>() {
+            Ok(port) => parsed.port = Some(port),
+            Err(_) => {
+                parsed.error = Some("serve --port must be a valid u16".to_string());
                 return parsed;
             }
-            other => {
-                parsed.passthrough.push(other.to_string());
-                index += 1;
+        }
+    }
+    if let Some(value) = cli.max_connections.as_deref() {
+        match resources::parse_http_connection_limit(value, "serve --max-connections") {
+            Ok(limit) => parsed.max_connections = Some(limit),
+            Err(error) => {
+                parsed.error = Some(error.to_string());
+                return parsed;
+            }
+        }
+    }
+    if let Some(value) = cli.io_timeout_ms.as_deref() {
+        match resources::parse_http_io_timeout_ms(value, "serve --io-timeout-ms") {
+            Ok(timeout_ms) => parsed.io_timeout_ms = Some(timeout_ms),
+            Err(error) => {
+                parsed.error = Some(error.to_string());
+                return parsed;
+            }
+        }
+    }
+    if let Some(value) = cli.max_body_bytes.as_deref() {
+        match resources::parse_http_body_limit(value, "serve --max-body-bytes") {
+            Ok(limit) => parsed.max_body_bytes = Some(limit),
+            Err(error) => {
+                parsed.error = Some(error.to_string());
+                return parsed;
+            }
+        }
+    }
+    if let Some(value) = cli.overview_cache_ms.as_deref() {
+        match resources::parse_nonnegative_u64(value, "serve --overview-cache-ms") {
+            Ok(ttl_ms) => parsed.overview_cache_ms = Some(ttl_ms),
+            Err(error) => {
+                parsed.error = Some(error.to_string());
+                return parsed;
             }
         }
     }
 
     parsed
+}
+
+fn serve_passthrough_args(cli: &ServeCli) -> Vec<String> {
+    let mut passthrough = Vec::new();
+    if cli.json_output {
+        passthrough.push("--json".to_string());
+    }
+    push_path_arg(&mut passthrough, "--root", cli.root_override.as_ref());
+    push_string_arg(&mut passthrough, "--host", cli.host.as_deref());
+    push_string_arg(&mut passthrough, "--port", cli.port.as_deref());
+    push_string_arg(
+        &mut passthrough,
+        "--max-requests",
+        cli.max_requests.as_deref(),
+    );
+    push_string_arg(
+        &mut passthrough,
+        "--max-connections",
+        cli.max_connections.as_deref(),
+    );
+    push_string_arg(
+        &mut passthrough,
+        "--io-timeout-ms",
+        cli.io_timeout_ms.as_deref(),
+    );
+    push_string_arg(
+        &mut passthrough,
+        "--max-body-bytes",
+        cli.max_body_bytes.as_deref(),
+    );
+    push_string_arg(
+        &mut passthrough,
+        "--overview-cache-ms",
+        cli.overview_cache_ms.as_deref(),
+    );
+    if cli.allow_nonlocal_bind {
+        passthrough.push("--allow-nonlocal-bind".to_string());
+    }
+    if cli.insecure_nonlocal_bind {
+        passthrough.push("--insecure-nonlocal-bind".to_string());
+    }
+    push_string_arg(
+        &mut passthrough,
+        "--auth-token-env",
+        cli.auth_token_env.as_deref(),
+    );
+    passthrough.extend(cli.extra.iter().cloned());
+    passthrough
+}
+
+fn push_string_arg(args: &mut Vec<String>, flag: &str, value: Option<&str>) {
+    if let Some(value) = value {
+        args.push(flag.to_string());
+        args.push(value.to_string());
+    }
+}
+
+fn push_path_arg(args: &mut Vec<String>, flag: &str, value: Option<&PathBuf>) {
+    if let Some(value) = value {
+        args.push(flag.to_string());
+        args.push(value.display().to_string());
+    }
+}
+
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace serve"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_arg(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_arg(arg: &str) -> String {
+    match arg {
+        "-json" => "--json".to_string(),
+        "-root" => "--root".to_string(),
+        "-host" => "--host".to_string(),
+        "-port" => "--port".to_string(),
+        "-max-requests" => "--max-requests".to_string(),
+        "-max-connections" => "--max-connections".to_string(),
+        "-io-timeout-ms" => "--io-timeout-ms".to_string(),
+        "-max-body-bytes" => "--max-body-bytes".to_string(),
+        "-overview-cache-ms" => "--overview-cache-ms".to_string(),
+        "-allow-nonlocal-bind" => "--allow-nonlocal-bind".to_string(),
+        "-insecure-nonlocal-bind" => "--insecure-nonlocal-bind".to_string(),
+        "-auth-token-env" => "--auth-token-env".to_string(),
+        "-managed-service" => "--managed-service".to_string(),
+        "-?" => "--help".to_string(),
+        _ => arg.to_string(),
+    }
 }
 
 fn write_help(stdout: &mut dyn Write) {
@@ -264,7 +396,10 @@ fn run_managed_foreground(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
@@ -274,11 +409,11 @@ fn run_managed_foreground(
     let port = parsed.port.unwrap_or(endpoint.port);
     let state_root = runtimepaths::resolve_state_root(&canonical_root);
     if let Err(error) = runtimepaths::ensure_runtime_dir(&state_root) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
     if let Err(error) = runtimepaths::ensure_serve_dir(&state_root) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
@@ -318,7 +453,7 @@ fn run_managed_foreground(
 
     if let Err(error) = crate::restart_guard::check_and_record(&restart_guard_path, "serve-managed")
     {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
@@ -341,7 +476,7 @@ fn run_managed_foreground(
         stderr_log_path: "service-manager-stderr".to_string(),
     };
     if let Err(error) = write_state(&state_path, &state) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
@@ -371,7 +506,10 @@ fn run_start(
     let overview_cache_ms = parsed.overview_cache_ms;
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
@@ -381,21 +519,21 @@ fn run_start(
     let port = parsed.port.unwrap_or(endpoint.port);
     let state_root = runtimepaths::resolve_state_root(&canonical_root);
     if let Err(error) = runtimepaths::ensure_runtime_dir(&state_root) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
     if let Err(error) = runtimepaths::ensure_serve_dir(&state_root) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
     if let Err(error) = runtimepaths::ensure_runtime_bin_dir(&state_root) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
     let _start_lock = match acquire_serve_start_lock(&state_root) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -436,24 +574,29 @@ fn run_start(
 
     cleanup_stale_serve_runner_copies(&state_root, None);
     if let Err(error) = crate::restart_guard::check_and_record(&restart_guard_path, "serve") {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
     let current_exe = match resolve_runner_source() {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "failed to resolve mcpace binary path: {}", error);
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("failed to resolve mcpace binary path: {}", error),
+            );
             return 1;
         }
     };
     let runner_path = runtimepaths::serve_runner_path_for_start(&state_root);
     if let Err(error) = fs::copy(&current_exe, &runner_path) {
-        let _ = writeln!(
+        diagnostics::stderr_line(
             stderr,
-            "failed to copy mcpace serve runner to '{}': {}",
-            runner_path.display(),
-            error
+            format_args!(
+                "failed to copy mcpace serve runner to '{}': {}",
+                runner_path.display(),
+                error
+            ),
         );
         return 1;
     }
@@ -463,11 +606,13 @@ fn run_start(
     let stdout_file = match File::create(&stdout_log_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "failed to open serve stdout log '{}': {}",
-                stdout_log_path.display(),
-                error
+                format_args!(
+                    "failed to open serve stdout log '{}': {}",
+                    stdout_log_path.display(),
+                    error
+                ),
             );
             return 1;
         }
@@ -475,11 +620,13 @@ fn run_start(
     let stderr_file = match File::create(&stderr_log_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "failed to open serve stderr log '{}': {}",
-                stderr_log_path.display(),
-                error
+                format_args!(
+                    "failed to open serve stderr log '{}': {}",
+                    stderr_log_path.display(),
+                    error
+                ),
             );
             return 1;
         }
@@ -497,7 +644,7 @@ fn run_start(
         Ok(value) => value,
         Err(error) => {
             let _ = fs::remove_file(&runner_path);
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -520,7 +667,7 @@ fn run_start(
     };
     if let Err(error) = write_state(&state_path, &state) {
         let _ = fs::remove_file(&runner_path);
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
@@ -534,14 +681,14 @@ fn run_start(
         let _ = kill_process(state.pid);
         let _ = fs::remove_file(&state_path);
         remove_managed_serve_runner_copy(&state_root, &state);
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
     let status = match collect_status(&canonical_root, Some(host), Some(port)) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -557,7 +704,10 @@ fn run_stop(
     let json_output = parsed.json_output;
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
     let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
@@ -566,7 +716,7 @@ fn run_stop(
     let status = match collect_status(&canonical_root, None, None) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -581,7 +731,10 @@ fn run_restart(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root.clone());
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
     let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
@@ -680,14 +833,17 @@ fn run_status(
     let json_output = parsed.json_output;
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
     let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
     let status = match collect_status(&canonical_root, parsed.host, parsed.port) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -956,7 +1112,7 @@ fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
         ),
     ])
     .to_pretty_string();
-    runtimepaths::write_text_atomic(path, &payload)
+    Ok(runtimepaths::write_text_atomic(path, &payload)?)
 }
 
 fn remove_state_if_current_pid(path: &Path, pid: u32) {
@@ -1057,54 +1213,42 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
 }
 
 fn health_check(host: &str, port: u16, path: &str) -> Result<bool, String> {
-    let probe_host = probe_host(host);
-    let addrs = (probe_host.as_str(), port)
-        .to_socket_addrs()
-        .map_err(|error| {
-            format!(
-                "failed to resolve serve address {}:{}: {}",
-                probe_host, port, error
-            )
-        })?
-        .collect::<Vec<_>>();
-    if addrs.is_empty() {
+    let probe_host = http_probe::probe_host(host);
+    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
+    let request = format!(
+        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
+        path, probe_host
+    );
+    let response = match http_probe::raw_response(
+        &probe_host,
+        port,
+        &request,
+        HEALTH_PROBE_IO_TIMEOUT,
+        HEALTH_PROBE_MAX_RESPONSE_BYTES,
+    ) {
+        Ok(response) => response,
+        Err(error) if error.message().starts_with("resolve ") => return Err(error.to_string()),
+        Err(_) => return Ok(false),
+    };
+    let parsed = match http_probe::parse_response(&response) {
+        Ok(parsed) => parsed,
+        Err(_) => return Ok(false),
+    };
+    if parsed.status != 200 {
         return Ok(false);
     }
-    let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
-    for addr in addrs {
-        let mut stream = match TcpStream::connect_timeout(&addr, Duration::from_millis(300)) {
-            Ok(stream) => stream,
-            Err(_) => continue,
-        };
-        let timeout = Some(HEALTH_PROBE_IO_TIMEOUT);
-        let _ = stream.set_read_timeout(timeout);
-        let _ = stream.set_write_timeout(timeout);
-        let request = format!(
-            "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-            path, probe_host
-        );
-        if stream.write_all(request.as_bytes()).is_err() {
-            continue;
-        }
-        let _ = stream.shutdown(Shutdown::Write);
-        let mut response = String::new();
-        if stream.read_to_string(&mut response).is_err() {
-            continue;
-        }
-        let Some((headers, body)) = response.split_once("\r\n\r\n") else {
-            continue;
-        };
-        if !headers.lines().next().unwrap_or_default().contains(" 200 ") {
-            continue;
-        }
-        let Ok(payload) = parse_str(body.trim()) else {
-            continue;
-        };
-        if matches!(payload.get("readiness"), Some(JsonValue::Object(_))) {
-            return Ok(true);
-        }
-    }
-    Ok(false)
+    let body_bytes = parsed.body_bytes().map_err(|error| error.to_string())?;
+    let payload = match String::from_utf8(body_bytes)
+        .ok()
+        .and_then(|body| parse_str(body.trim()).ok())
+    {
+        Some(payload) => payload,
+        None => return Ok(false),
+    };
+    Ok(matches!(
+        payload.get("readiness"),
+        Some(JsonValue::Object(_))
+    ))
 }
 
 fn wait_for_health(
@@ -1143,14 +1287,6 @@ fn host_for_url(host: &str) -> String {
         return format!("[{}]", connectable);
     }
     connectable.to_string()
-}
-
-fn probe_host(host: &str) -> String {
-    let trimmed = host.trim().trim_start_matches('[').trim_end_matches(']');
-    match trimmed {
-        "" | "0.0.0.0" | "::" => runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
-        other => other.to_string(),
-    }
 }
 
 fn stale_runner_warning(state: &ServeState) -> Option<String> {
@@ -1373,430 +1509,4 @@ fn kill_process(pid: u32) -> Result<(), String> {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::net::TcpListener;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    fn temp_root() -> PathBuf {
-        let unique = format!(
-            "mcpace-serve-test-{}-{}-{}",
-            std::process::id(),
-            now_ms(),
-            TEMP_COUNTER.fetch_add(1, Ordering::Relaxed)
-        );
-        let path = std::env::temp_dir().join(unique);
-        fs::create_dir_all(&path).unwrap();
-        path
-    }
-
-    fn free_port() -> u16 {
-        let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-        let port = listener.local_addr().unwrap().port();
-        drop(listener);
-        port
-    }
-
-    #[test]
-    fn serve_url_and_probe_hosts_handle_ipv6_and_wildcards() {
-        assert_eq!(
-            http_url("127.0.0.1", 39022, "/mcp"),
-            "http://127.0.0.1:39022/mcp"
-        );
-        assert_eq!(http_url("::1", 39022, "/mcp"), "http://[::1]:39022/mcp");
-        assert_eq!(
-            http_url("[::1]", 39022, "/healthz"),
-            "http://[::1]:39022/healthz"
-        );
-        assert_eq!(
-            http_url("0.0.0.0", 39022, "/mcp"),
-            "http://127.0.0.1:39022/mcp"
-        );
-        assert_eq!(http_url("::", 39022, "/mcp"), "http://127.0.0.1:39022/mcp");
-        assert_eq!(probe_host("0.0.0.0"), runtimepaths::DEFAULT_LOCAL_HOST);
-        assert_eq!(probe_host("::"), runtimepaths::DEFAULT_LOCAL_HOST);
-    }
-
-    #[test]
-    fn serve_start_status_stop_round_trip() {
-        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let root = temp_root();
-        if resolve_runner_source().is_err() {
-            let _ = fs::remove_dir_all(root);
-            return;
-        }
-        let port = free_port();
-        fs::write(
-            root.join("mcpace.config.json"),
-            format!(
-                r#"{{
-  "version": "0.3.5",
-  "serve": {{ "host": "127.0.0.1", "port": {} }},
-  "profiles": {{
-    "runtime": {{
-      "default": "safe",
-      "profiles": {{
-        "safe": {{ "description": "Safe", "serverOverrides": {{}} }}
-      }}
-    }}
-  }},
-  "servers": {{}}
-}}"#,
-                port
-            ),
-        )
-        .unwrap();
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-
-        let start = run(
-            &[
-                "start".to_string(),
-                "--json".to_string(),
-                "--root".to_string(),
-                root.display().to_string(),
-                "--port".to_string(),
-                port.to_string(),
-            ],
-            None,
-            &mut stdout,
-            &mut stderr,
-        );
-        assert_eq!(start, 0, "stderr: {}", String::from_utf8_lossy(&stderr));
-        let start_text = String::from_utf8(stdout.clone()).unwrap();
-        assert!(
-            start_text.contains(r#""status": "running""#),
-            "stdout: {}",
-            start_text
-        );
-        assert!(
-            health_check("127.0.0.1", port, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH)
-                .unwrap_or(false)
-        );
-
-        let mut status_stdout = Vec::new();
-        let mut status_stderr = Vec::new();
-        let status = run(
-            &[
-                "status".to_string(),
-                "--json".to_string(),
-                "--root".to_string(),
-                root.display().to_string(),
-            ],
-            None,
-            &mut status_stdout,
-            &mut status_stderr,
-        );
-        assert_eq!(
-            status,
-            0,
-            "stderr: {}",
-            String::from_utf8_lossy(&status_stderr)
-        );
-        let status_text = String::from_utf8(status_stdout).unwrap();
-        assert!(
-            status_text.contains(r#""status": "running""#),
-            "stdout: {}",
-            status_text
-        );
-        assert!(
-            status_text.contains(&format!(r#""port": {}"#, port)),
-            "stdout: {}",
-            status_text
-        );
-
-        let mut restart_stdout = Vec::new();
-        let mut restart_stderr = Vec::new();
-        let restart = run(
-            &[
-                "restart".to_string(),
-                "--json".to_string(),
-                "--root".to_string(),
-                root.display().to_string(),
-                "--port".to_string(),
-                port.to_string(),
-            ],
-            None,
-            &mut restart_stdout,
-            &mut restart_stderr,
-        );
-        assert_eq!(
-            restart,
-            0,
-            "stderr: {}",
-            String::from_utf8_lossy(&restart_stderr)
-        );
-        let restart_text = String::from_utf8(restart_stdout).unwrap();
-        assert!(
-            restart_text.contains(r#""status": "running""#),
-            "stdout: {}",
-            restart_text
-        );
-
-        let mut stop_stdout = Vec::new();
-        let mut stop_stderr = Vec::new();
-        let stop = run(
-            &[
-                "stop".to_string(),
-                "--json".to_string(),
-                "--root".to_string(),
-                root.display().to_string(),
-            ],
-            None,
-            &mut stop_stdout,
-            &mut stop_stderr,
-        );
-        assert_eq!(stop, 0, "stderr: {}", String::from_utf8_lossy(&stop_stderr));
-        let stop_text = String::from_utf8(stop_stdout).unwrap();
-        assert!(
-            stop_text.contains(r#""status": "stopped""#),
-            "stdout: {}",
-            stop_text
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn status_reports_healthy_endpoint_without_managed_state() {
-        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let root = temp_root();
-        if resolve_runner_source().is_err() {
-            let _ = fs::remove_dir_all(root);
-            return;
-        }
-        let port = free_port();
-        fs::write(
-            root.join("mcpace.config.json"),
-            format!(
-                r#"{{
-  "version": "0.3.5",
-  "serve": {{ "host": "127.0.0.1", "port": {} }},
-  "profiles": {{
-    "runtime": {{
-      "default": "safe",
-      "profiles": {{
-        "safe": {{ "description": "Safe", "serverOverrides": {{}} }}
-      }}
-    }}
-  }},
-  "servers": {{}}
-}}"#,
-                port
-            ),
-        )
-        .unwrap();
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-
-        let start = run(
-            &[
-                "start".to_string(),
-                "--json".to_string(),
-                "--root".to_string(),
-                root.display().to_string(),
-                "--port".to_string(),
-                port.to_string(),
-            ],
-            None,
-            &mut stdout,
-            &mut stderr,
-        );
-        assert_eq!(start, 0, "stderr: {}", String::from_utf8_lossy(&stderr));
-
-        let state_root = runtimepaths::resolve_state_root(&root);
-        let state_path = runtimepaths::serve_state_path(&state_root);
-        let state = read_state(&state_path).unwrap();
-        fs::remove_file(&state_path).unwrap();
-
-        let mut status_stdout = Vec::new();
-        let mut status_stderr = Vec::new();
-        let status = run(
-            &[
-                "status".to_string(),
-                "--json".to_string(),
-                "--root".to_string(),
-                root.display().to_string(),
-            ],
-            None,
-            &mut status_stdout,
-            &mut status_stderr,
-        );
-        assert_eq!(
-            status,
-            0,
-            "stderr: {}",
-            String::from_utf8_lossy(&status_stderr)
-        );
-        let status_text = String::from_utf8(status_stdout).unwrap();
-        assert!(
-            status_text.contains(r#""status": "running""#),
-            "stdout: {}",
-            status_text
-        );
-        assert!(
-            status_text.contains("no managed serve state file exists"),
-            "stdout: {}",
-            status_text
-        );
-
-        let _ = kill_process(state.pid);
-        for _ in 0..40 {
-            if !health_check(
-                &state.host,
-                state.port,
-                runtimepaths::DEFAULT_LOCAL_HEALTH_PATH,
-            )
-            .unwrap_or(false)
-            {
-                break;
-            }
-            thread::sleep(Duration::from_millis(100));
-        }
-        remove_managed_serve_runner_copy(&state_root, &state);
-        cleanup_stale_serve_runner_copies(&state_root, None);
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn start_recovers_stale_state_even_with_restart_guard() {
-        let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let root = temp_root();
-        if resolve_runner_source().is_err() {
-            let _ = fs::remove_dir_all(root);
-            return;
-        }
-        let port = free_port();
-        fs::write(
-            root.join("mcpace.config.json"),
-            format!(
-                r#"{{
-  "version": "0.3.5",
-  "serve": {{ "host": "127.0.0.1", "port": {} }},
-  "profiles": {{
-    "runtime": {{
-      "default": "safe",
-      "profiles": {{
-        "safe": {{ "description": "Safe", "serverOverrides": {{}} }}
-      }}
-    }}
-  }},
-  "servers": {{}}
-}}"#,
-                port
-            ),
-        )
-        .unwrap();
-        let state_root = runtimepaths::resolve_state_root(&root);
-        runtimepaths::ensure_runtime_dir(&state_root).unwrap();
-        runtimepaths::ensure_serve_dir(&state_root).unwrap();
-        let stale_state = ServeState {
-            root_path: sanitize_display(&root),
-            state_root: sanitize_display(&state_root),
-            host: "127.0.0.1".to_string(),
-            port,
-            max_connections: Some(32),
-            io_timeout_ms: None,
-            max_body_bytes: None,
-            overview_cache_ms: Some(250),
-            url: runtimepaths::http_url("127.0.0.1", port, runtimepaths::DEFAULT_LOCAL_MCP_PATH),
-            pid: 999_999,
-            started_at_ms: now_ms(),
-            runner_path: sanitize_display(&runtimepaths::runtime_bin_dir(&state_root).join(
-                if cfg!(windows) {
-                    "mcpace-serve-stale.exe"
-                } else {
-                    "mcpace-serve-stale"
-                },
-            )),
-            stdout_log_path: sanitize_display(&runtimepaths::serve_stdout_log_path(&state_root)),
-            stderr_log_path: sanitize_display(&runtimepaths::serve_stderr_log_path(&state_root)),
-        };
-        write_state(&runtimepaths::serve_state_path(&state_root), &stale_state).unwrap();
-        fs::write(
-            runtimepaths::serve_restart_guard_path(&state_root),
-            now_ms().to_string(),
-        )
-        .unwrap();
-
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-        let start = run(
-            &[
-                "start".to_string(),
-                "--json".to_string(),
-                "--root".to_string(),
-                root.display().to_string(),
-                "--port".to_string(),
-                port.to_string(),
-                "--max-connections".to_string(),
-                "32".to_string(),
-                "--overview-cache-ms".to_string(),
-                "250".to_string(),
-            ],
-            None,
-            &mut stdout,
-            &mut stderr,
-        );
-        assert_eq!(start, 0, "stderr: {}", String::from_utf8_lossy(&stderr));
-        let start_text = String::from_utf8(stdout).unwrap();
-        assert!(
-            start_text.contains(r#""status": "running""#),
-            "stdout: {}",
-            start_text
-        );
-
-        let mut stop_stdout = Vec::new();
-        let mut stop_stderr = Vec::new();
-        let stop = run(
-            &[
-                "stop".to_string(),
-                "--json".to_string(),
-                "--root".to_string(),
-                root.display().to_string(),
-            ],
-            None,
-            &mut stop_stdout,
-            &mut stop_stderr,
-        );
-        assert_eq!(stop, 0, "stderr: {}", String::from_utf8_lossy(&stop_stderr));
-        let _ = fs::remove_dir_all(root);
-    }
-
-    #[test]
-    fn stale_runner_warning_detects_outdated_runner_copy() {
-        let root = temp_root();
-        let current = root.join(if cfg!(windows) {
-            "mcpace-current.exe"
-        } else {
-            "mcpace-current"
-        });
-        let runner = root.join(if cfg!(windows) {
-            "mcpace-serve.exe"
-        } else {
-            "mcpace-serve"
-        });
-
-        fs::write(&current, b"current binary").unwrap();
-        fs::write(&runner, b"old").unwrap();
-        let warning = stale_runner_warning_for_paths(&runner, &current).unwrap();
-        assert!(
-            warning.contains("mcpace serve restart"),
-            "warning: {}",
-            warning
-        );
-
-        fs::write(&runner, b"current binary").unwrap();
-        assert!(stale_runner_warning_for_paths(&runner, &current).is_none());
-
-        let _ = fs::remove_dir_all(root);
-    }
-}
+mod tests;

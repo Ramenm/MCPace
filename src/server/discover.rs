@@ -1,4 +1,5 @@
 use super::args::ParsedArgs;
+use crate::diagnostics;
 use crate::json::{self, JsonValue};
 use crate::json_helpers;
 use crate::mcp_autoinstall::{self, McpAutoInstallOptions};
@@ -6,16 +7,18 @@ use crate::mcp_sources;
 use crate::runtimepaths;
 use crate::upstream;
 use std::collections::{BTreeMap, BTreeSet};
-use std::env;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 use std::time::{Duration, SystemTime};
 
 const DEFAULT_APPROVED_CATALOG: &str = "catalog/approved-servers.json";
 const DEFAULT_REGISTRY_CACHE: &str = "catalog/registry-cache.json";
 const OFFICIAL_REGISTRY_HINT: &str = "https://registry.modelcontextprotocol.io";
+const MAX_REGISTRY_PAGES: usize = 100;
+const MAX_REGISTRY_SERVERS: usize = 10_000;
+const MAX_REGISTRY_RESPONSE_BYTES_TOTAL: usize = 32 * 1024 * 1024;
+const MAX_REGISTRY_QUERY_CACHE_FILES: usize = 128;
 
 #[derive(Clone, Debug, Default)]
 struct DiscoveryCandidate {
@@ -30,12 +33,17 @@ struct DiscoveryCandidate {
     command: Option<String>,
     url: Option<String>,
     paths: Vec<String>,
+    launcher_args: Vec<String>,
     extra_args: Vec<String>,
     registry_type: String,
     package: String,
     transport: String,
     recommended_mode: String,
     affinity: Vec<String>,
+    required_headers: Vec<String>,
+    required_env: Vec<String>,
+    required_args: Vec<String>,
+    required_variables: Vec<String>,
     installed: bool,
     score: usize,
 }
@@ -48,7 +56,10 @@ pub(super) fn run(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
@@ -56,18 +67,23 @@ pub(super) fn run(
     let result = match discover_servers(&root_path, query, parsed) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
 
+    let exit_code = if json_helpers::bool_at_path(&result, &["ok"]).unwrap_or(false) {
+        0
+    } else {
+        1
+    };
     if parsed.json_output {
         let _ = writeln!(stdout, "{}", result.to_pretty_string());
-        return 0;
+        return exit_code;
     }
 
     render_discovery(&result, stdout);
-    0
+    exit_code
 }
 
 fn discover_servers(
@@ -75,7 +91,7 @@ fn discover_servers(
     query: &str,
     parsed: &ParsedArgs,
 ) -> Result<JsonValue, String> {
-    let config = read_optional_json(&root_path.join("mcpace.config.json"));
+    let config = read_optional_json(&root_path.join("mcpace.config.json"))?;
     let auto_mode = parsed.auto_mode || parsed.action.as_deref() == Some("auto");
     let auto_requested = auto_mode || parsed.auto_install;
     let trust_default = config
@@ -98,7 +114,8 @@ fn discover_servers(
             .unwrap_or(false);
     let mut warnings = Vec::new();
     let registry_endpoints = registry_endpoints(config.as_ref(), &mut warnings);
-    let registry_cache_path = registry_cache_path(root_path, config.as_ref());
+    let registry_cache_path =
+        registry_query_cache_path(&registry_cache_path(root_path, config.as_ref()), query);
     let cache_ttl_hours = registry_cache_ttl_hours(config.as_ref());
     let registry_cache_needs_refresh =
         registry_cache_needs_refresh(&registry_cache_path, cache_ttl_hours);
@@ -117,9 +134,9 @@ fn discover_servers(
     let mut registry_refresh = JsonValue::Null;
     let effective_refresh = parsed.refresh
         || refresh_on_discover
-        || (auto_mode && auto_refresh_registry && registry_cache_needs_refresh);
+        || (auto_refresh_registry && registry_cache_needs_refresh && !query.trim().is_empty());
     if effective_refresh {
-        match refresh_registry_cache(root_path, &registry_endpoints, &registry_cache_path) {
+        match refresh_registry_cache(root_path, &registry_endpoints, &registry_cache_path, query) {
             Ok(value) => registry_refresh = value,
             Err(error) => warnings.push(format!("registry refresh failed: {}", error)),
         }
@@ -129,16 +146,48 @@ fn discover_servers(
     let terms = search_terms(query);
     let mut candidates = Vec::new();
 
+    match json::parse_str(include_str!("../../catalog/approved-servers.json")) {
+        Ok(value) => collect_candidates_from_catalog(
+            &value,
+            "builtin:approved-servers",
+            trust_default,
+            &installed,
+            &terms,
+            &mut candidates,
+        ),
+        Err(error) => warnings.push(format!("built-in approved catalog is invalid: {}", error)),
+    }
+
     for path in &catalog_paths {
         match json_helpers::read_json_file(path) {
-            Ok(value) => collect_candidates_from_catalog(
-                &value,
-                &path.display().to_string(),
-                trust_default,
-                &installed,
-                &terms,
-                &mut candidates,
-            ),
+            Ok(value) => {
+                let registry_source = path == &registry_cache_path;
+                if registry_source
+                    && json_helpers::string_at_path(&value, &["metadata", "searchQuery"])
+                        .map(str::trim)
+                        != Some(query.trim())
+                {
+                    warnings.push(format!(
+                        "ignored Registry cache '{}' because its searchQuery metadata does not match '{}'",
+                        path.display(),
+                        query.trim()
+                    ));
+                    continue;
+                }
+                let source = if registry_source {
+                    format!("registry:{}", path.display())
+                } else {
+                    path.display().to_string()
+                };
+                collect_candidates_from_catalog(
+                    &value,
+                    &source,
+                    trust_default,
+                    &installed,
+                    &terms,
+                    &mut candidates,
+                )
+            }
             Err(error) => warnings.push(format!(
                 "failed to read discovery catalog '{}': {}",
                 path.display(),
@@ -199,32 +248,41 @@ fn discover_servers(
                             "server '{}' is already configured; pass --force to overwrite",
                             candidate.name
                         );
+                    } else if let Some(reason) = missing_candidate_configuration(candidate, parsed)
+                    {
+                        install_decision = "missing-required-configuration".to_string();
+                        install_block_reason = reason;
                     } else if install_allowed(
                         candidate,
                         auto_install_policy,
                         parsed.allow_review_install,
                     ) {
                         let options = install_options_from_candidate(candidate, parsed);
-                        match mcp_autoinstall::install_auto(root_path, options) {
-                            Ok(result) => {
-                                let normalized_name = result.write.normalized_name.clone();
-                                install_decision = if parsed.dry_run {
-                                    "dry-run-install-plan".to_string()
-                                } else {
-                                    "installed".to_string()
-                                };
-                                install_result = result.to_json_value();
-                                if should_probe_after_install(probe_after_install, parsed) {
-                                    post_install_probe_results.push(probe_installed_server(
-                                        root_path,
-                                        &normalized_name,
-                                        parsed.timeout_ms,
-                                    ));
+                        if let Some(error) = install_launcher_error(&options) {
+                            install_decision = "launcher-unavailable".to_string();
+                            install_block_reason = error;
+                        } else {
+                            match mcp_autoinstall::install_auto(root_path, options) {
+                                Ok(result) => {
+                                    let normalized_name = result.write.normalized_name.clone();
+                                    install_decision = if parsed.dry_run {
+                                        "dry-run-install-plan".to_string()
+                                    } else {
+                                        "installed".to_string()
+                                    };
+                                    install_result = result.to_json_value();
+                                    if should_probe_after_install(probe_after_install, parsed) {
+                                        post_install_probe_results.push(probe_installed_server(
+                                            root_path,
+                                            &normalized_name,
+                                            parsed.timeout_ms,
+                                        ));
+                                    }
                                 }
-                            }
-                            Err(error) => {
-                                install_decision = "install-failed".to_string();
-                                install_block_reason = error;
+                                Err(error) => {
+                                    install_decision = "install-failed".to_string();
+                                    install_block_reason = error;
+                                }
                             }
                         }
                     } else {
@@ -250,12 +308,21 @@ fn discover_servers(
         }
     }
 
+    let install_failed = install_decision == "install-failed"
+        || automatic_install_results.iter().any(|item| {
+            json_helpers::string_at_path(item, &["decision"]) == Some("install-failed")
+        });
+    let probe_failed = post_install_probe_results
+        .iter()
+        .any(|item| !json_helpers::bool_at_path(item, &["ok"]).unwrap_or(false));
+    let operation_ok = !install_failed && !probe_failed;
+
     Ok(JsonValue::object([
-        ("ok", JsonValue::bool(true)),
+        ("ok", JsonValue::bool(operation_ok)),
         ("mode", JsonValue::string("dynamic-server-discovery")),
         (
             "summary",
-            JsonValue::string("One auto mode can refresh registry metadata when cache is missing or stale, search approved/catalog snapshots, install only trusted or explicitly allowed review candidates, and immediately probe live MCP tools/list evidence."),
+            JsonValue::string("Auto mode searches the embedded and local approved catalogs immediately; named queries refresh a bounded query-specific official Registry cache when missing or stale. Only trusted or explicitly allowed review candidates are installed, then optionally probed with live MCP tools/list evidence."),
         ),
         ("query", JsonValue::string(query.trim())),
         ("candidateCount", JsonValue::number(candidates.len())),
@@ -313,7 +380,7 @@ fn discover_servers(
                 ),
                 (
                     "automaticSweep",
-                    JsonValue::string("mcpace server auto performs the user-facing automatic path: refresh cache when needed, install up to maxAutoInstallsPerRun trusted/approved candidates, probe live tools/list, and leave unknown/review-only registry entries as plan-only"),
+                    JsonValue::string("mcpace server auto performs the user-facing automatic path: use embedded/local approved candidates without a registry-wide download, refresh query-specific registry metadata for named searches, install up to maxAutoInstallsPerRun trusted/approved candidates, probe live tools/list, and leave unknown/review-only registry entries as plan-only"),
                 ),
                 (
                     "nextDynamicStep",
@@ -324,8 +391,19 @@ fn discover_servers(
     ]))
 }
 
-fn read_optional_json(path: &Path) -> Option<JsonValue> {
-    json_helpers::read_json_file(path).ok()
+fn read_optional_json(path: &Path) -> Result<Option<JsonValue>, String> {
+    if !path.is_file() {
+        return Ok(None);
+    }
+    json_helpers::read_json_file(path)
+        .map(Some)
+        .map_err(|error| {
+            format!(
+                "failed to read discovery config '{}': {}",
+                path.display(),
+                error
+            )
+        })
 }
 
 fn max_auto_installs_per_run(config: Option<&JsonValue>) -> usize {
@@ -347,7 +425,7 @@ fn registry_endpoints(config: Option<&JsonValue>, warnings: &mut Vec<String>) ->
         match normalize_registry_endpoint(&endpoint) {
             Some(normalized) => endpoints.push(normalized),
             None => warnings.push(format!(
-                "ignored unsafe MCP registry endpoint '{}'; registry refresh endpoints must be https:// URLs without credentials, fragments, whitespace, or control characters",
+                "ignored unsafe MCP registry endpoint '{}'; registry refresh endpoints must be https:// base URLs without credentials, query strings, fragments, backslashes, whitespace, or control characters",
                 endpoint
             )),
         }
@@ -355,14 +433,18 @@ fn registry_endpoints(config: Option<&JsonValue>, warnings: &mut Vec<String>) ->
     if endpoints.is_empty() {
         endpoints.push(OFFICIAL_REGISTRY_HINT.to_string());
     }
-    endpoints.sort();
-    endpoints.dedup();
+    let mut seen = BTreeSet::new();
+    endpoints.retain(|endpoint| seen.insert(endpoint.clone()));
     endpoints
 }
 
 fn normalize_registry_endpoint(value: &str) -> Option<String> {
     let trimmed = value.trim().trim_end_matches('/');
-    if trimmed.is_empty() || trimmed.contains('#') {
+    if trimmed.is_empty()
+        || trimmed.contains('#')
+        || trimmed.contains('?')
+        || trimmed.contains('\\')
+    {
         return None;
     }
     if trimmed
@@ -392,6 +474,27 @@ fn registry_cache_path(root_path: &Path, config: Option<&JsonValue>) -> PathBuf 
     resolve_under_root(root_path, configured)
 }
 
+fn registry_query_cache_path(base_path: &Path, query: &str) -> PathBuf {
+    let query = query.trim();
+    if query.is_empty() {
+        return base_path.to_path_buf();
+    }
+    let mut hash = 0xcbf2_9ce4_8422_2325u64;
+    for byte in query.to_ascii_lowercase().bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    let stem = base_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .unwrap_or("registry-cache");
+    let file_name = format!("{}-search-{:016x}.json", stem, hash);
+    base_path
+        .parent()
+        .map(|parent| parent.join(&file_name))
+        .unwrap_or_else(|| PathBuf::from(file_name))
+}
+
 fn registry_cache_ttl_hours(config: Option<&JsonValue>) -> u64 {
     config
         .and_then(|value| {
@@ -414,7 +517,7 @@ fn registry_cache_needs_refresh(path: &Path, ttl_hours: u64) -> bool {
         return true;
     };
     let Ok(age) = SystemTime::now().duration_since(modified) else {
-        return false;
+        return true;
     };
     age > Duration::from_secs(ttl_hours.saturating_mul(60 * 60))
 }
@@ -425,7 +528,10 @@ fn catalog_paths(
     registry_cache: &Path,
 ) -> Vec<PathBuf> {
     let mut paths = Vec::new();
-    paths.push(root_path.join(DEFAULT_APPROVED_CATALOG));
+    let default_catalog = root_path.join(DEFAULT_APPROVED_CATALOG);
+    if registry_cache_is_regular_file(&default_catalog) {
+        paths.push(default_catalog);
+    }
     if registry_cache_is_regular_file(registry_cache) {
         paths.push(registry_cache.to_path_buf());
     }
@@ -465,11 +571,27 @@ fn refresh_registry_cache(
     root_path: &Path,
     endpoints: &[String],
     cache_path: &Path,
+    query: &str,
 ) -> Result<JsonValue, String> {
-    let endpoint = endpoints
-        .first()
-        .map(String::as_str)
-        .unwrap_or(OFFICIAL_REGISTRY_HINT);
+    let mut failures = Vec::new();
+    for endpoint in endpoints {
+        match refresh_registry_cache_from_endpoint(root_path, endpoint, cache_path, query) {
+            Ok(value) => return Ok(value),
+            Err(error) => failures.push(format!("{}: {}", endpoint, error)),
+        }
+    }
+    Err(format!(
+        "all configured MCP Registry endpoints failed: {}",
+        failures.join(" | ")
+    ))
+}
+
+fn refresh_registry_cache_from_endpoint(
+    root_path: &Path,
+    endpoint: &str,
+    cache_path: &Path,
+    query: &str,
+) -> Result<JsonValue, String> {
     let cache_path = if cache_path.is_absolute() {
         cache_path.to_path_buf()
     } else {
@@ -479,35 +601,67 @@ fn refresh_registry_cache(
         runtimepaths::acquire_exclusive_file_lock(&cache_path, "MCP registry cache refresh")?;
     let mut servers = Vec::new();
     let mut next_cursor: Option<String> = None;
+    let mut seen_cursors = BTreeSet::new();
     let mut pages = 0usize;
     let mut last_url = String::new();
+    let mut response_bytes_total = 0usize;
 
-    for _ in 0..5 {
-        let url = registry_list_url_with_cursor(endpoint, next_cursor.as_deref());
+    for _ in 0..MAX_REGISTRY_PAGES {
+        let url = registry_list_url_with_cursor(endpoint, next_cursor.as_deref(), query);
         last_url = url.clone();
         let body = fetch_url(&url)?;
+        response_bytes_total = response_bytes_total.saturating_add(body.len());
+        if response_bytes_total > MAX_REGISTRY_RESPONSE_BYTES_TOTAL {
+            return Err(format!(
+                "{} exceeded the {}-byte cumulative Registry response limit; refusing a partial cache update",
+                url, MAX_REGISTRY_RESPONSE_BYTES_TOTAL
+            ));
+        }
         let value = json::parse_str(&body)
             .map_err(|error| format!("invalid registry JSON from {}: {}", url, error))?;
         let Some(page_servers) = json_helpers::array_at_path(&value, &["servers"]) else {
             return Err(format!("{} did not return a servers array", url));
         };
-        for server in page_servers {
-            servers.push(server.clone());
+        if servers.len().saturating_add(page_servers.len()) > MAX_REGISTRY_SERVERS {
+            return Err(format!(
+                "{} exceeded the {}-server Registry result limit; refusing a partial cache update",
+                url, MAX_REGISTRY_SERVERS
+            ));
         }
+        servers.extend(page_servers.iter().cloned());
         pages += 1;
         next_cursor = json_helpers::string_at_path(&value, &["metadata", "nextCursor"])
             .map(str::trim)
             .filter(|value| !value.is_empty())
             .map(str::to_string);
-        if next_cursor.is_none() {
+        if next_cursor
+            .as_ref()
+            .is_some_and(|cursor| cursor.len() > 4_096)
+        {
+            return Err(format!(
+                "{} returned an oversized pagination cursor; refusing a partial cache update",
+                url
+            ));
+        }
+        let Some(cursor) = next_cursor.as_ref() else {
             break;
+        };
+        if !seen_cursors.insert(cursor.clone()) {
+            return Err(format!(
+                "{} returned a repeated pagination cursor; refusing a partial cache update",
+                url
+            ));
         }
     }
 
-    let server_count = servers.len();
-    if server_count == 0 {
-        return Err(format!("{} returned no registry servers", last_url));
+    if next_cursor.is_some() {
+        return Err(format!(
+            "{} exceeded the {}-page Registry pagination limit; refusing a partial cache update",
+            last_url, MAX_REGISTRY_PAGES
+        ));
     }
+    let truncated = false;
+    let server_count = servers.len();
     let cache_value = JsonValue::object([
         ("servers", JsonValue::array(servers)),
         (
@@ -516,6 +670,8 @@ fn refresh_registry_cache(
                 ("count", JsonValue::number(server_count)),
                 ("pages", JsonValue::number(pages)),
                 ("sourceEndpoint", JsonValue::string(endpoint.to_string())),
+                ("searchQuery", JsonValue::string(query.trim())),
+                ("truncated", JsonValue::bool(truncated)),
                 (
                     "nextCursor",
                     next_cursor
@@ -535,6 +691,7 @@ fn refresh_registry_cache(
             error
         )
     })?;
+    prune_registry_query_caches(&cache_path);
     Ok(JsonValue::object([
         ("ok", JsonValue::bool(true)),
         ("url", JsonValue::string(last_url)),
@@ -544,6 +701,8 @@ fn refresh_registry_cache(
         ),
         ("serverCount", JsonValue::number(server_count)),
         ("pageCount", JsonValue::number(pages)),
+        ("searchQuery", JsonValue::string(query.trim())),
+        ("truncated", JsonValue::bool(truncated)),
         (
             "nextCursor",
             next_cursor
@@ -553,17 +712,58 @@ fn refresh_registry_cache(
     ]))
 }
 
-fn registry_list_url_with_cursor(endpoint: &str, cursor: Option<&str>) -> String {
+fn prune_registry_query_caches(cache_path: &Path) {
+    let Some(stem) = cache_path.file_stem().and_then(|value| value.to_str()) else {
+        return;
+    };
+    let Some((base_stem, _hash)) = stem.rsplit_once("-search-") else {
+        return;
+    };
+    let Some(directory) = cache_path.parent() else {
+        return;
+    };
+    let prefix = format!("{}-search-", base_stem);
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    let mut files = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let file_type = entry.file_type().ok()?;
+            let path = entry.path();
+            let file_name = path.file_name()?.to_str()?;
+            if !file_type.is_file()
+                || file_type.is_symlink()
+                || !file_name.starts_with(&prefix)
+                || !file_name.to_ascii_lowercase().ends_with(".json")
+            {
+                return None;
+            }
+            Some((entry.metadata().ok()?.modified().ok()?, path))
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    for (_modified, path) in files.into_iter().skip(MAX_REGISTRY_QUERY_CACHE_FILES) {
+        let _ = fs::remove_file(path);
+    }
+}
+
+fn registry_list_url_with_cursor(endpoint: &str, cursor: Option<&str>, query: &str) -> String {
     let trimmed = endpoint.trim().trim_end_matches('/');
     let mut url = if trimmed.contains("/v0.1/servers") {
         if trimmed.contains('?') {
             trimmed.to_string()
         } else {
-            format!("{}?limit=100", trimmed)
+            format!("{}?limit=100&version=latest", trimmed)
         }
     } else {
-        format!("{}/v0.1/servers?limit=100", trimmed)
+        format!("{}/v0.1/servers?limit=100&version=latest", trimmed)
     };
+    if let Some(query) = (!query.trim().is_empty()).then(|| query.trim()) {
+        url.push(if url.contains('?') { '&' } else { '?' });
+        url.push_str("search=");
+        url.push_str(&url_query_escape(query));
+    }
     if let Some(cursor) = cursor.map(str::trim).filter(|value| !value.is_empty()) {
         url.push(if url.contains('?') { '&' } else { '?' });
         url.push_str("cursor=");
@@ -585,122 +785,8 @@ fn url_query_escape(value: &str) -> String {
 }
 
 fn fetch_url(url: &str) -> Result<String, String> {
-    let mut errors = Vec::new();
-    for curl_path in trusted_fetch_program_candidates("curl") {
-        let mut command = Command::new(&curl_path);
-        command.args(["-fsSL", "--max-time", "15", "--", url]);
-        configure_fetch_env(&mut command);
-        match command.output() {
-            Ok(output) if output.status.success() => {
-                return String::from_utf8(output.stdout).map_err(|error| {
-                    format!("{} output was not UTF-8: {}", curl_path.display(), error)
-                });
-            }
-            Ok(output) => errors.push(format!(
-                "{} exited with {}: {}",
-                curl_path.display(),
-                output.status,
-                String::from_utf8_lossy(&output.stderr).trim()
-            )),
-            Err(error) => errors.push(format!("{} unavailable: {}", curl_path.display(), error)),
-        }
-    }
-
-    for powershell_path in trusted_fetch_program_candidates("powershell") {
-        let script = "param([string]$Uri); (Invoke-WebRequest -UseBasicParsing -TimeoutSec 15 -Uri $Uri).Content";
-        let mut command = Command::new(&powershell_path);
-        command.args(["-NoProfile", "-NonInteractive", "-Command", script, url]);
-        configure_fetch_env(&mut command);
-        match command.output() {
-            Ok(output) if output.status.success() => {
-                return String::from_utf8(output.stdout).map_err(|error| {
-                    format!(
-                        "{} output was not UTF-8: {}",
-                        powershell_path.display(),
-                        error
-                    )
-                });
-            }
-            Ok(output) => errors.push(format!(
-                "{} exited with {}: {}",
-                powershell_path.display(),
-                output.status,
-                String::from_utf8_lossy(&output.stderr).trim()
-            )),
-            Err(error) => errors.push(format!(
-                "{} unavailable: {}",
-                powershell_path.display(),
-                error
-            )),
-        }
-    }
-
-    Err(format!("failed to fetch {} ({})", url, errors.join("; ")))
-}
-
-fn trusted_fetch_program_candidates(kind: &str) -> Vec<PathBuf> {
-    let raw_candidates: &[&str] = match kind {
-        "curl" => {
-            #[cfg(windows)]
-            {
-                &[r"C:\Windows\System32\curl.exe"]
-            }
-            #[cfg(not(windows))]
-            {
-                &["/usr/bin/curl", "/bin/curl", "/usr/local/bin/curl"]
-            }
-        }
-        "powershell" => {
-            #[cfg(windows)]
-            {
-                &[
-                    r"C:\Program Files\PowerShell\7\pwsh.exe",
-                    r"C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe",
-                ]
-            }
-            #[cfg(not(windows))]
-            {
-                &["/usr/bin/pwsh", "/usr/local/bin/pwsh"]
-            }
-        }
-        _ => &[],
-    };
-    raw_candidates
-        .iter()
-        .map(PathBuf::from)
-        .filter(|path| trusted_fetch_program_path(path))
-        .collect()
-}
-
-fn trusted_fetch_program_path(path: &Path) -> bool {
-    path.is_absolute()
-        && fs::symlink_metadata(path)
-            .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
-            .unwrap_or(false)
-}
-
-fn configure_fetch_env(command: &mut Command) {
-    command.env_clear();
-    for key in [
-        "SystemRoot",
-        "WINDIR",
-        "HOME",
-        "HTTPS_PROXY",
-        "https_proxy",
-        "NO_PROXY",
-        "no_proxy",
-        "SSL_CERT_FILE",
-        "SSL_CERT_DIR",
-    ] {
-        if let Ok(value) = env::var(key) {
-            if !value
-                .chars()
-                .any(|ch| ch == '\0' || ch == '\r' || ch == '\n')
-            {
-                command.env(key, value);
-            }
-        }
-    }
+    crate::http_client::bounded_get_text(url, Duration::from_secs(15), 8 * 1024 * 1024)
+        .map_err(|error| format!("failed to fetch {}: {}", url, error))
 }
 
 fn installed_server_names(root_path: &Path) -> BTreeSet<String> {
@@ -745,6 +831,23 @@ fn candidate_from_record(
     source: &str,
     trust_default: &str,
 ) -> Option<DiscoveryCandidate> {
+    let registry_status = json_helpers::string_at_path(
+        raw,
+        &[
+            "_meta",
+            "io.modelcontextprotocol.registry/official",
+            "status",
+        ],
+    )
+    .unwrap_or("")
+    .trim()
+    .to_ascii_lowercase();
+    if registry_status == "deleted" {
+        return None;
+    }
+    // Official Registry responses wrap the actual server record in {server, _meta}.
+    // Approved/local catalogs use the unwrapped shape, so accept both.
+    let raw = json_helpers::value_at_path(raw, &["server"]).unwrap_or(raw);
     let name = json_helpers::string_at_path(raw, &["name"])
         .or(name_hint)
         .unwrap_or("")
@@ -757,10 +860,18 @@ fn candidate_from_record(
         .or_else(|| json_helpers::string_at_path(raw, &["notes"]))
         .unwrap_or("")
         .trim();
-    let trust_level = json_helpers::string_at_path(raw, &["trustLevel"])
-        .unwrap_or(trust_default)
-        .trim()
-        .to_ascii_lowercase();
+    let trust_level = if candidate_source_is_registry(source) && registry_status == "deprecated" {
+        "deprecated".to_string()
+    } else if candidate_source_is_registry(source) {
+        // Registry publication proves discoverability, not MCPace trust. Never
+        // accept a publisher-controlled trustLevel or a local catalog default.
+        "review".to_string()
+    } else {
+        json_helpers::string_at_path(raw, &["trustLevel"])
+            .unwrap_or(trust_default)
+            .trim()
+            .to_ascii_lowercase()
+    };
 
     let mut candidate = DiscoveryCandidate {
         name: if name.is_empty() {
@@ -788,6 +899,7 @@ fn candidate_from_record(
             .map(|value| value.trim().to_string()),
         url: json_helpers::string_at_path(raw, &["url"]).map(|value| value.trim().to_string()),
         paths: json_helpers::strings_from_array(json_helpers::array_at_path(raw, &["paths"])),
+        launcher_args: Vec::new(),
         extra_args: json_helpers::strings_from_array(json_helpers::array_at_path(raw, &["args"])),
         registry_type: String::new(),
         package: json_helpers::string_at_path(raw, &["package"])
@@ -800,6 +912,10 @@ fn candidate_from_record(
             .trim()
             .to_string(),
         affinity: json_helpers::strings_from_array(json_helpers::array_at_path(raw, &["affinity"])),
+        required_headers: Vec::new(),
+        required_env: Vec::new(),
+        required_args: Vec::new(),
+        required_variables: Vec::new(),
         installed: false,
         score: 0,
     };
@@ -828,12 +944,43 @@ fn candidate_from_record(
             // accidentally treated as generic npm stdio packages.
             candidate.server_type = Some(candidate.transport.clone());
         }
-        if candidate.install_spec.is_empty() {
+        candidate.required_env = required_registry_field_names(package, "environmentVariables");
+        candidate.required_args = required_registry_field_names(package, "packageArguments");
+        candidate.launcher_args = registry_static_arguments(package, "runtimeArguments");
+        candidate
+            .extra_args
+            .extend(registry_static_arguments(package, "packageArguments"));
+        if candidate.install_spec.is_empty()
+            && registry_package_base_is_supported(package, &candidate.registry_type)
+        {
             candidate.install_spec = install_spec_for_registry_package(
                 &candidate.registry_type,
                 &candidate.package,
+                json_helpers::string_at_path(package, &["version"]).unwrap_or(""),
                 &candidate.transport,
             );
+        }
+    }
+
+    if candidate.install_spec.is_empty() {
+        if let Some(remote) = first_registry_remote(raw) {
+            let remote_type = json_helpers::string_at_path(remote, &["type"])
+                .unwrap_or("streamable-http")
+                .trim()
+                .to_ascii_lowercase();
+            let remote_url = json_helpers::string_at_path(remote, &["url"])
+                .unwrap_or("")
+                .trim();
+            if !remote_url.is_empty() && matches!(remote_type.as_str(), "streamable-http" | "http")
+            {
+                candidate.registry_type = "remote".to_string();
+                candidate.transport = remote_type;
+                candidate.required_headers = registry_remote_header_names(remote);
+                candidate.required_variables = registry_remote_variable_names(remote);
+                candidate.server_type = Some("streamable-http".to_string());
+                candidate.url = Some(remote_url.to_string());
+                candidate.install_spec = remote_url.to_string();
+            }
         }
     }
 
@@ -854,36 +1001,182 @@ fn candidate_from_record(
     Some(candidate)
 }
 
+fn required_registry_field_names(record: &JsonValue, field: &str) -> Vec<String> {
+    let mut names = json_helpers::array_at_path(record, &[field])
+        .unwrap_or(&[])
+        .iter()
+        .filter(|item| json_helpers::bool_at_path(item, &["isRequired"]).unwrap_or(false))
+        .filter(|item| {
+            json_helpers::string_at_path(item, &["value"])
+                .or_else(|| json_helpers::string_at_path(item, &["default"]))
+                .map(str::trim)
+                .map(|value| value.is_empty())
+                .unwrap_or(true)
+        })
+        .filter_map(|item| json_helpers::string_at_path(item, &["name"]))
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn registry_static_arguments(record: &JsonValue, field: &str) -> Vec<String> {
+    let mut arguments = Vec::new();
+    for item in json_helpers::array_at_path(record, &[field]).unwrap_or(&[]) {
+        let Some(value) = json_helpers::string_at_path(item, &["value"])
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        else {
+            continue;
+        };
+        let argument_type = json_helpers::string_at_path(item, &["type"])
+            .unwrap_or("positional")
+            .trim();
+        if argument_type.eq_ignore_ascii_case("named") {
+            let Some(name) = json_helpers::string_at_path(item, &["name"])
+                .map(str::trim)
+                .filter(|name| !name.is_empty())
+            else {
+                continue;
+            };
+            let name = if name.starts_with('-') {
+                name.to_string()
+            } else {
+                format!("--{}", name)
+            };
+            arguments.push(name);
+        }
+        arguments.push(value.to_string());
+    }
+    arguments
+}
+
+fn registry_remote_header_names(remote: &JsonValue) -> Vec<String> {
+    let mut names = json_helpers::array_at_path(remote, &["headers"])
+        .unwrap_or(&[])
+        .iter()
+        .filter_map(|header| json_helpers::string_at_path(header, &["name"]))
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_string)
+        .collect::<Vec<_>>();
+    names.sort_by_key(|name| name.to_ascii_lowercase());
+    names.dedup_by(|left, right| left.eq_ignore_ascii_case(right));
+    names
+}
+
+fn registry_remote_variable_names(remote: &JsonValue) -> Vec<String> {
+    let mut names = json_helpers::object_at_path(remote, &["variables"])
+        .map(|variables| variables.keys().cloned().collect::<Vec<_>>())
+        .unwrap_or_default();
+    if let Some(url) = json_helpers::string_at_path(remote, &["url"]) {
+        let mut rest = url;
+        while let Some(start) = rest.find('{') {
+            let after_start = &rest[start + 1..];
+            let Some(end) = after_start.find('}') else {
+                break;
+            };
+            let name = after_start[..end].trim();
+            if !name.is_empty() && name.len() <= 128 {
+                names.push(name.to_string());
+            }
+            rest = &after_start[end + 1..];
+        }
+    }
+    names.sort();
+    names.dedup();
+    names
+}
+
+fn first_registry_remote(raw: &JsonValue) -> Option<&JsonValue> {
+    json_helpers::array_at_path(raw, &["remotes"])?
+        .iter()
+        .find(|remote| {
+            matches!(
+                json_helpers::string_at_path(remote, &["type"])
+                    .unwrap_or("")
+                    .trim()
+                    .to_ascii_lowercase()
+                    .as_str(),
+                "streamable-http" | "http"
+            ) && json_helpers::string_at_path(remote, &["url"])
+                .map(str::trim)
+                .map(|url| !url.is_empty())
+                .unwrap_or(false)
+        })
+}
+
 fn first_registry_package(raw: &JsonValue) -> Option<&JsonValue> {
-    let packages = json_helpers::array_at_path(raw, &["packages"])?;
-    packages
+    json_helpers::array_at_path(raw, &["packages"])?
         .iter()
         .find(|package| {
-            let transport = json_helpers::string_at_path(package, &["transport", "type"])
+            json_helpers::string_at_path(package, &["transport", "type"])
                 .unwrap_or("")
-                .to_ascii_lowercase();
-            transport == "stdio" || transport == "streamable-http" || transport == "http"
+                .trim()
+                .eq_ignore_ascii_case("stdio")
         })
-        .or_else(|| packages.first())
+}
+
+fn registry_package_base_is_supported(package: &JsonValue, registry_type: &str) -> bool {
+    let base = json_helpers::string_at_path(package, &["registryBaseUrl"])
+        .unwrap_or("")
+        .trim()
+        .trim_end_matches('/')
+        .to_ascii_lowercase();
+    if base.is_empty() {
+        return true;
+    }
+    match registry_type {
+        "npm" => base == "https://registry.npmjs.org",
+        "pypi" | "python" => matches!(
+            base.as_str(),
+            "https://pypi.org" | "https://pypi.org/simple"
+        ),
+        "nuget" => base == "https://api.nuget.org/v3/index.json",
+        "oci" | "docker" | "container" | "mcpb" => true,
+        _ => false,
+    }
 }
 
 fn install_spec_for_registry_package(
     registry_type: &str,
     identifier: &str,
+    version: &str,
     transport: &str,
 ) -> String {
     let identifier = identifier.trim();
     if identifier.is_empty() {
         return String::new();
     }
+    let version = version.trim();
+    let pinned = !version.is_empty() && !version.eq_ignore_ascii_case("latest");
     match registry_type {
-        "npm" => format!("npm:{}", identifier),
-        "pypi" | "python" => format!("pypi:{}", identifier),
+        "npm" => {
+            let has_version = identifier
+                .rfind('@')
+                .map(|index| index > identifier.rfind('/').unwrap_or(0))
+                .unwrap_or(false);
+            if pinned && !has_version {
+                format!("npm:{}@{}", identifier, version)
+            } else {
+                format!("npm:{}", identifier)
+            }
+        }
+        "pypi" | "python" => {
+            if pinned && !identifier.contains("==") {
+                format!("pypi:{}=={}", identifier, version)
+            } else {
+                format!("pypi:{}", identifier)
+            }
+        }
         "oci" | "docker" | "container" => format!("oci:{}", identifier),
         "nuget" => format!("nuget:{}", identifier),
         "mcpb" => format!("mcpb:{}", identifier),
         _ if transport == "streamable-http" || transport == "http" => identifier.to_string(),
-        _ => identifier.to_string(),
+        _ => String::new(),
     }
 }
 
@@ -942,8 +1235,8 @@ fn deduplicate_discovery_candidates(candidates: &mut Vec<DiscoveryCandidate>) ->
 fn candidate_precedence(candidate: &DiscoveryCandidate) -> (usize, usize, usize, usize) {
     (
         usize::from(candidate.installed),
-        candidate_trust_rank(&candidate.trust_level),
         candidate_source_rank(&candidate.source),
+        candidate_trust_rank(&candidate.trust_level),
         candidate.score,
     )
 }
@@ -958,14 +1251,23 @@ fn candidate_trust_rank(value: &str) -> usize {
     }
 }
 
+fn candidate_source_is_registry(source: &str) -> bool {
+    source
+        .trim_start()
+        .to_ascii_lowercase()
+        .starts_with("registry:")
+}
+
 fn candidate_source_rank(source: &str) -> usize {
     let normalized = source.replace('\\', "/").to_ascii_lowercase();
-    if normalized.ends_with(DEFAULT_APPROVED_CATALOG) {
-        5
-    } else if normalized.contains("registry-cache") {
-        2
-    } else {
+    if candidate_source_is_registry(&normalized) {
+        1
+    } else if normalized == "builtin:approved-servers" {
         3
+    } else {
+        // Every non-registry source here is an operator-configured local catalog.
+        // It must be able to block or replace a built-in/registry candidate.
+        5
     }
 }
 
@@ -1047,6 +1349,15 @@ fn automatic_install_sweep(
             ]));
             continue;
         }
+        if let Some(reason) = missing_candidate_configuration(candidate, parsed) {
+            skipped_count += 1;
+            sweep.install_results.push(JsonValue::object([
+                ("name", JsonValue::string(candidate.name.clone())),
+                ("decision", JsonValue::string("skip-missing-configuration")),
+                ("reason", JsonValue::string(reason)),
+            ]));
+            continue;
+        }
         if !install_allowed(candidate, auto_install_policy, parsed.allow_review_install) {
             skipped_count += 1;
             sweep.install_results.push(JsonValue::object([
@@ -1058,10 +1369,17 @@ fn automatic_install_sweep(
             continue;
         }
 
-        match mcp_autoinstall::install_auto(
-            root_path,
-            install_options_from_candidate(candidate, parsed),
-        ) {
+        let options = install_options_from_candidate(candidate, parsed);
+        if let Some(error) = install_launcher_error(&options) {
+            skipped_count += 1;
+            sweep.install_results.push(JsonValue::object([
+                ("name", JsonValue::string(candidate.name.clone())),
+                ("decision", JsonValue::string("skip-launcher-unavailable")),
+                ("reason", JsonValue::string(error)),
+            ]));
+            continue;
+        }
+        match mcp_autoinstall::install_auto(root_path, options) {
             Ok(result) => {
                 let normalized_name = result.write.normalized_name.clone();
                 installed_count += 1;
@@ -1126,17 +1444,79 @@ fn should_probe_after_install(probe_after_install: bool, parsed: &ParsedArgs) ->
 
 fn probe_installed_server(root_path: &Path, name: &str, timeout_ms: Option<u64>) -> JsonValue {
     match upstream::probe_servers(root_path, Some(name), timeout_ms, true) {
-        Ok(value) => JsonValue::object([
-            ("name", JsonValue::string(name.to_string())),
-            ("ok", JsonValue::bool(true)),
-            ("result", value),
-        ]),
+        Ok(value) => {
+            let ok = json_helpers::bool_at_path(&value, &["ok"]).unwrap_or(false);
+            JsonValue::object([
+                ("name", JsonValue::string(name.to_string())),
+                ("ok", JsonValue::bool(ok)),
+                ("result", value),
+            ])
+        }
         Err(error) => JsonValue::object([
             ("name", JsonValue::string(name.to_string())),
             ("ok", JsonValue::bool(false)),
             ("error", JsonValue::string(error)),
         ]),
     }
+}
+
+fn missing_candidate_configuration(
+    candidate: &DiscoveryCandidate,
+    parsed: &ParsedArgs,
+) -> Option<String> {
+    if !candidate.required_variables.is_empty() {
+        return Some(format!(
+            "candidate '{}' requires Registry URL variable(s): {}. Resolve them and use 'mcpace server install <resolved-url> --as <name>' explicitly",
+            candidate.name,
+            candidate.required_variables.join(", ")
+        ));
+    }
+    let missing_env = missing_key_value_names(&candidate.required_env, &parsed.env);
+    if !missing_env.is_empty() {
+        return Some(format!(
+            "candidate '{}' requires environment value(s): {}. Supply each value with --env NAME=VALUE; Registry placeholders are never stored as credentials",
+            candidate.name,
+            missing_env.join(", ")
+        ));
+    }
+    let missing_args = candidate
+        .required_args
+        .iter()
+        .skip(parsed.args.len())
+        .cloned()
+        .collect::<Vec<_>>();
+    if !missing_args.is_empty() {
+        return Some(format!(
+            "candidate '{}' requires package argument(s): {}. Supply each launcher argument explicitly with --arg=<value> (for named options, for example --arg=--NAME=VALUE)",
+            candidate.name,
+            missing_args.join(", ")
+        ));
+    }
+    let missing_headers = missing_key_value_names(&candidate.required_headers, &parsed.headers);
+    if !missing_headers.is_empty() {
+        return Some(format!(
+            "candidate '{}' requires HTTP header(s): {}. Supply each value with --header NAME=VALUE; Registry placeholders are never stored as credentials",
+            candidate.name,
+            missing_headers.join(", ")
+        ));
+    }
+    None
+}
+
+fn missing_key_value_names(required: &[String], supplied: &[String]) -> Vec<String> {
+    let supplied_names = supplied
+        .iter()
+        .filter_map(|value| value.split_once('=').map(|(name, _value)| name.trim()))
+        .collect::<Vec<_>>();
+    required
+        .iter()
+        .filter(|required| {
+            !supplied_names
+                .iter()
+                .any(|supplied| supplied.eq_ignore_ascii_case(required))
+        })
+        .cloned()
+        .collect()
 }
 
 fn install_allowed(candidate: &DiscoveryCandidate, policy: &str, allow_review: bool) -> bool {
@@ -1153,6 +1533,21 @@ fn install_allowed(candidate: &DiscoveryCandidate, policy: &str, allow_review: b
     false
 }
 
+fn install_launcher_error(options: &McpAutoInstallOptions) -> Option<String> {
+    let plan = match mcp_autoinstall::plan_auto_install(options) {
+        Ok(plan) => plan,
+        Err(error) => return Some(error),
+    };
+    let command = plan.command.as_deref()?.trim();
+    if command.is_empty() || which::which(command).is_ok() {
+        return None;
+    }
+    Some(format!(
+        "required launcher '{}' is not available on PATH; install it first or choose another candidate",
+        command
+    ))
+}
+
 fn install_options_from_candidate(
     candidate: &DiscoveryCandidate,
     parsed: &ParsedArgs,
@@ -1164,7 +1559,13 @@ fn install_options_from_candidate(
         command: candidate.command.clone(),
         url: candidate.url.clone(),
         paths: candidate.paths.clone(),
-        extra_args: candidate.extra_args.clone(),
+        launcher_args: candidate.launcher_args.clone(),
+        extra_args: candidate
+            .extra_args
+            .iter()
+            .chain(parsed.args.iter())
+            .cloned()
+            .collect(),
         env: parsed.env.clone(),
         headers: parsed.headers.clone(),
         settings_path: parsed.settings_path.clone(),
@@ -1264,6 +1665,55 @@ fn candidate_json(candidate: &DiscoveryCandidate) -> JsonValue {
             JsonValue::array(candidate.affinity.iter().cloned().map(JsonValue::string)),
         ),
         (
+            "requiredHeaders",
+            JsonValue::array(
+                candidate
+                    .required_headers
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
+        ),
+        (
+            "requiredEnvironment",
+            JsonValue::array(
+                candidate
+                    .required_env
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
+        ),
+        (
+            "requiredArguments",
+            JsonValue::array(
+                candidate
+                    .required_args
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
+        ),
+        (
+            "requiredVariables",
+            JsonValue::array(
+                candidate
+                    .required_variables
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
+        ),
+        (
+            "requiresConfiguration",
+            JsonValue::bool(
+                !candidate.required_headers.is_empty()
+                    || !candidate.required_env.is_empty()
+                    || !candidate.required_args.is_empty()
+                    || !candidate.required_variables.is_empty(),
+            ),
+        ),
+        (
             "type",
             candidate
                 .server_type
@@ -1290,6 +1740,16 @@ fn candidate_json(candidate: &DiscoveryCandidate) -> JsonValue {
         (
             "paths",
             JsonValue::array(candidate.paths.iter().cloned().map(JsonValue::string)),
+        ),
+        (
+            "launcherArgs",
+            JsonValue::array(
+                candidate
+                    .launcher_args
+                    .iter()
+                    .cloned()
+                    .map(JsonValue::string),
+            ),
         ),
         (
             "args",
@@ -1349,3 +1809,7 @@ fn render_discovery(result: &JsonValue, stdout: &mut dyn Write) {
         "Next: use `mcpace server auto` or top-level `mcpace auto` for one-command setup/probe; advanced flags remain for debugging."
     );
 }
+
+#[cfg(test)]
+#[path = "discover/tests.rs"]
+mod tests;

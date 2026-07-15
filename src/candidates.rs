@@ -1,6 +1,9 @@
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::json_helpers;
-use crate::text_utils::normalize_flag;
+use clap::{error::ErrorKind, Parser};
+use std::ffi::OsString;
+use std::fmt;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -27,15 +30,49 @@ pub struct CandidateSummary {
     pub evaluation_notes: String,
 }
 
+#[derive(Debug)]
+pub enum CandidateCatalogError {
+    MissingCatalog { path: PathBuf },
+    ReadCatalog { path: PathBuf, source: String },
+    InvalidShape { path: PathBuf },
+}
+
+impl fmt::Display for CandidateCatalogError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CandidateCatalogError::MissingCatalog { path } => {
+                write!(formatter, "missing candidate catalog: {}", path.display())
+            }
+            CandidateCatalogError::ReadCatalog { path, source } => {
+                write!(
+                    formatter,
+                    "failed to read candidate catalog {}: {}",
+                    path.display(),
+                    source
+                )
+            }
+            CandidateCatalogError::InvalidShape { path } => {
+                write!(
+                    formatter,
+                    "candidate catalog must be a JSON array: {}",
+                    path.display()
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for CandidateCatalogError {}
+
 pub fn run(
     args: &[String],
     default_root: Option<PathBuf>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
 
@@ -46,9 +83,9 @@ pub fn run(
 
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(
+        diagnostics::stderr_line(
             stderr,
-            "mcpace root not found; expected server-candidates.json"
+            format_args!("mcpace root not found; expected server-candidates.json"),
         );
         return 1;
     };
@@ -57,7 +94,7 @@ pub fn run(
     let candidates = match read_candidates(&catalog_path) {
         Ok(items) => items,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -90,17 +127,23 @@ pub fn run(
     }
 }
 
-pub fn read_candidates(path: &Path) -> Result<Vec<CandidateSummary>, String> {
+pub fn read_candidates(path: &Path) -> Result<Vec<CandidateSummary>, CandidateCatalogError> {
     if !path.is_file() {
-        return Err(format!("missing candidate catalog: {}", path.display()));
+        return Err(CandidateCatalogError::MissingCatalog {
+            path: path.to_path_buf(),
+        });
     }
 
-    let json = json_helpers::read_json_file(path)?;
+    let json = json_helpers::read_json_file(path).map_err(|source| {
+        CandidateCatalogError::ReadCatalog {
+            path: path.to_path_buf(),
+            source: source.to_string(),
+        }
+    })?;
     let Some(items) = json.as_array() else {
-        return Err(format!(
-            "candidate catalog must be a JSON array: {}",
-            path.display()
-        ));
+        return Err(CandidateCatalogError::InvalidShape {
+            path: path.to_path_buf(),
+        });
     };
 
     let mut candidates = items
@@ -126,40 +169,65 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Usage: mcpace candidates [--json] [--root <path>]");
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace candidates",
+    disable_version_flag = true,
+    about = "Inspect candidate MCP servers"
+)]
+struct CandidatesCli {
+    /// Emit machine-readable JSON.
+    #[arg(long = "json", short = 'j')]
+    json_output: bool,
 
-    while index < args.len() {
-        let token = normalize_flag(&args[index]);
-        match token.as_str() {
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("candidates requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            _ => {
-                parsed.error = Some(format!(
-                    "unsupported candidates arguments in the Rust-only repo: {}",
-                    args[index]
-                ));
-                return parsed;
+    /// MCPace project/root directory.
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+}
+
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match CandidatesCli::try_parse_from(candidates_argv(args)) {
+        Ok(cli) => ParsedArgs {
+            json_output: cli.json_output,
+            help: false,
+            root_override: cli.root_override,
+            error: None,
+        },
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
             }
         }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
     }
+}
 
-    parsed
+fn candidates_argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace candidates"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_candidates_flag(arg))),
+    );
+    argv
+}
+
+fn normalize_candidates_flag(arg: &str) -> &str {
+    match arg {
+        "-json" => "--json",
+        "-root" => "--root",
+        "-?" => "--help",
+        other => other,
+    }
 }
 
 fn normalize_candidate(value: &JsonValue) -> Option<CandidateSummary> {

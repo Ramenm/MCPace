@@ -1,16 +1,20 @@
+use super::overview::{
+    join_json_command_handles, overview_build_invocations, reset_overview_build_invocations,
+};
 use super::{
     build_overview_json, cached_health_json, cached_overview_json, is_allowed_local_host,
     is_allowed_local_origin, query_bool_flag, run_http_tool, run_json_command, runtime_status_json,
-    serve_listener,
+    serve_listener, OverviewCacheState,
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
 use std::ffi::OsString;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::path::PathBuf;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -251,7 +255,13 @@ fn dashboard_ui_assets() -> String {
     [
         super::DASHBOARD_HTML,
         super::DASHBOARD_JS,
+        super::DASHBOARD_MODEL_JS,
+        super::DASHBOARD_RENDER_JS,
+        super::DASHBOARD_ACTIONS_JS,
+        super::DASHBOARD_BOOT_JS,
+        super::DASHBOARD_PRODUCT_JS,
         super::DASHBOARD_CSS,
+        super::DASHBOARD_PRODUCT_CSS,
     ]
     .join("\n")
 }
@@ -267,39 +277,25 @@ fn assert_dashboard_assets_lack(parts: &[&str]) {
 }
 
 #[test]
-fn dashboard_ui_exposes_production_cockpit_without_probe_loop_copy() {
+fn dashboard_ui_keeps_the_routine_path_compact_and_evidence_first() {
     let assets = dashboard_ui_assets();
-    assert!(assets.contains("Make the simple path work first"));
-    assert!(assets.contains("server-fleet-board"));
+    assert!(assets.contains("Getting your sources ready"));
+    assert!(assets.contains("Open servers"));
     assert!(assets.contains("function serverVerdict"));
     assert!(assets.contains("function serverDecision"));
     assert!(assets.contains("function serverViewModel"));
-    assert!(assets.contains("function serverBucket"));
-    assert!(assets.contains("function serverSensitivity"));
-    assert!(assets.contains("reset group filter"));
-    assert!(assets.contains("Run test"));
-    assert!(assets.contains("server-guide"));
     assert!(assets.contains("function serverToolEvidence"));
     assert!(assets.contains("function normalizeProbeEvidence"));
     assert!(assets.contains("function serverEvidenceSummary"));
-    assert_dashboard_assets_lack(&["SERVER", "_USE", "_GUIDANCE"]);
-    assert_dashboard_assets_lack(&["function server", "Use", "Guidance"]);
-    assert_dashboard_assets_lack(&["Browser", " QA"]);
-    assert_dashboard_assets_lack(&["Sentry", " issues"]);
-    assert_dashboard_assets_lack(&["Example MCP", " sandbox"]);
-    assert!(assets.contains("function serverSettingProfile"));
-    assert!(assets.contains("function serverHumanSummary"));
-    assert!(assets.contains("server-human-card"));
-    assert!(assets.contains("Live evidence"));
-    assert!(assets.contains("Current state"));
-    assert!(assets.contains("Tools not checked"));
-    assert!(assets.contains("No live tools evidence"));
+    assert!(assets.contains("server-row-summary"));
+    assert!(assets.contains("Test enabled sources"));
+    assert!(assets.contains("Not tested"));
     assert!(assets.contains("Tool evidence"));
-    assert!(assets.contains("Best setting"));
-    assert!(assets.contains("Routing and workers"));
+    assert!(assets.contains("Review setting"));
+    assert!(assets.contains("function serverNextActionProfile"));
     assert!(assets.contains("Enable to apply"));
-    assert!(assets.contains("Manual override: routing and workers"));
-    assert!(assets.contains("Recommended next step"));
+    assert!(assets.contains("Manual worker changes stay in the Routing task"));
+    assert!(assets.contains("A recommended setting is available."));
     assert!(assets.contains("allowHidden"));
     assert!(assets.contains("refreshDashboard({ allowHidden: true, reason: \"initial\" })"));
     assert!(assets.contains("const MAX_SERVER_ROWS = 64"));
@@ -307,7 +303,15 @@ fn dashboard_ui_exposes_production_cockpit_without_probe_loop_copy() {
     assert!(assets.contains("/api/actions/ping"));
     assert!(assets.contains("/api/resources"));
     assert!(assets.contains("REQUEST_TIMEOUT_MS"));
+    assert!(!assets.contains("function serverHumanSummary"));
+    assert!(!assets.contains("server-human-card"));
+    assert!(!assets.contains("server-status-rail"));
+    assert!(!assets.contains("server-action-note"));
     assert!(!assets.contains("Auto</strong> ${tuned ? \"OK\""));
+    assert_dashboard_assets_lack(&["SERVER", "_USE", "_GUIDANCE"]);
+    assert_dashboard_assets_lack(&["Browser", " QA"]);
+    assert_dashboard_assets_lack(&["Sentry", " issues"]);
+    assert_dashboard_assets_lack(&["Example MCP", " sandbox"]);
     assert_dashboard_assets_lack(&["mcpace lab", " probe"]);
     assert_dashboard_assets_lack(&["cannot safely", " prove"]);
     assert_dashboard_assets_lack(&["before increasing", " workers"]);
@@ -372,7 +376,7 @@ fn test_config(
         max_body_bytes: crate::resources::DEFAULT_MAX_HTTP_BODY_BYTES,
         overview_cache_ttl: crate::resources::default_dashboard_overview_cache_ttl(),
         health_cache_ttl: crate::resources::default_dashboard_health_cache_ttl(),
-        overview_cache: Mutex::new(None),
+        overview_cache: Mutex::new(OverviewCacheState::default()),
         health_cache: Mutex::new(None),
         request_latencies: Mutex::new(super::RequestLatencyTracker::default()),
         operation_traces: Mutex::new(super::OperationTraceTracker::default()),
@@ -382,10 +386,67 @@ fn test_config(
         http_session_store: Mutex::new(super::http_session::McpHttpSessionStore::default()),
         metrics: super::HttpRuntimeMetrics::default(),
         surface,
-        upstream_session_pools: super::new_upstream_session_pools(),
+        upstream_session_pool: super::new_upstream_session_pool(),
         auth_token: None,
-        allow_nonlocal_host: false,
     }
+}
+
+#[test]
+fn http_request_line_uses_one_absolute_deadline_against_trickle_input() {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let addr = listener.local_addr().unwrap();
+    let writer = thread::spawn(move || {
+        let mut stream = TcpStream::connect(addr).unwrap();
+        for byte in b"GET /healthz HTTP/1.1\r\n" {
+            if stream.write_all(&[*byte]).is_err() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(35));
+        }
+    });
+    let (stream, _) = listener.accept().unwrap();
+    let mut reader = BufReader::new(stream);
+    let started = Instant::now();
+    let result = super::read_limited_http_line(
+        &mut reader,
+        crate::resources::MAX_HTTP_REQUEST_LINE_BYTES,
+        "request line",
+        started + Duration::from_millis(140),
+    );
+    assert!(result.is_err(), "trickle input must hit the total deadline");
+    assert!(started.elapsed() < Duration::from_millis(500));
+    writer.join().unwrap();
+}
+
+#[test]
+fn unauthorized_request_is_rejected_before_declared_body_is_read() {
+    let root = temp_root();
+    write_minimal_config(&root);
+    let listener = bind_loopback_test_listener();
+    let addr = listener.local_addr().unwrap();
+    let mut config = test_config(root.clone(), Some(1), super::ServeSurface::UnifiedServe);
+    config.auth_token = Some("expected-secret".to_string());
+    config.io_timeout = Duration::from_secs(2);
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(listener, config, &mut stderr)
+    });
+
+    let started = Instant::now();
+    let mut stream = connect_to_test_listener(addr);
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: 100000\r\nConnection: close\r\n\r\n",
+        addr
+    )
+    .unwrap();
+    let mut response = String::new();
+    stream.read_to_string(&mut response).unwrap();
+    assert!(response.starts_with("HTTP/1.1 401 Unauthorized"));
+    assert!(started.elapsed() < Duration::from_secs(1));
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
 }
 
 #[test]
@@ -400,6 +461,33 @@ fn overview_json_contains_expected_sections() {
     assert!(object.contains_key("servers"));
     assert!(object.contains_key("clients"));
     let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn overview_parallel_error_drains_all_started_workers() {
+    let slow_completed = Arc::new(AtomicBool::new(false));
+    let slow_flag = Arc::clone(&slow_completed);
+    let handles = vec![
+        (
+            "fast-failure",
+            thread::spawn(|| Err::<JsonValue, String>("boom".to_string())),
+        ),
+        (
+            "slow-failure",
+            thread::spawn(move || {
+                thread::sleep(Duration::from_millis(75));
+                slow_flag.store(true, Ordering::Release);
+                Err::<JsonValue, String>("slow boom".to_string())
+            }),
+        ),
+    ];
+
+    let error = join_json_command_handles(handles).expect_err("workers must fail");
+    assert!(error.to_string().contains("fast-failure"));
+    assert!(
+        slow_completed.load(Ordering::Acquire),
+        "the slow worker must be joined before the failed generation returns"
+    );
 }
 
 #[test]
@@ -454,6 +542,89 @@ fn overview_runtime_control_uses_cached_tools_list_evidence_for_risk() {
 }
 
 #[test]
+fn overview_cache_cold_start_is_single_flight_for_concurrent_callers() {
+    let root = temp_root();
+    write_minimal_config(&root);
+    let config = Arc::new(test_config(
+        root.clone(),
+        None,
+        super::ServeSurface::Dashboard,
+    ));
+    let barrier = Arc::new(Barrier::new(8));
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let config = Arc::clone(&config);
+        let barrier = Arc::clone(&barrier);
+        handles.push(thread::spawn(move || {
+            barrier.wait();
+            cached_overview_json(&config, false).expect("concurrent overview")
+        }));
+    }
+    let responses = handles
+        .into_iter()
+        .map(|handle| handle.join().expect("overview thread"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        responses
+            .iter()
+            .filter(|response| {
+                json_helpers::bool_at_path(response, &["cache", "hit"]) == Some(false)
+            })
+            .count(),
+        1,
+        "exactly one cold caller should build the overview"
+    );
+    assert_eq!(
+        responses
+            .iter()
+            .filter(|response| {
+                json_helpers::bool_at_path(response, &["cache", "hit"]) == Some(true)
+            })
+            .count(),
+        7,
+        "all other cold callers should reuse the first immutable snapshot"
+    );
+    drop(config);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn overview_cache_cold_failure_is_shared_by_concurrent_callers() {
+    let root = temp_root();
+    write_minimal_config(&root);
+    fs::write(root.join("mcpace.config.json"), "{").expect("write invalid config");
+    fs::write(root.join(".count-overview-builds"), "1").expect("write count marker");
+    let config = Arc::new(test_config(
+        root.clone(),
+        None,
+        super::ServeSurface::Dashboard,
+    ));
+    reset_overview_build_invocations();
+    let barrier = Arc::new(Barrier::new(8));
+    let mut handles = Vec::new();
+    for _ in 0..8 {
+        let config = Arc::clone(&config);
+        let barrier = Arc::clone(&barrier);
+        handles.push(thread::spawn(move || {
+            barrier.wait();
+            cached_overview_json(&config, false).expect_err("invalid overview must fail")
+        }));
+    }
+    let errors = handles
+        .into_iter()
+        .map(|handle| handle.join().expect("overview failure thread"))
+        .collect::<Vec<_>>();
+    assert!(errors.windows(2).all(|pair| pair[0] == pair[1]));
+    assert_eq!(
+        overview_build_invocations(),
+        1,
+        "one failing cold generation must be shared by all waiting callers"
+    );
+    drop(config);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn overview_cache_reuses_recent_payload_and_allows_refresh_bypass() {
     let root = temp_root();
     write_minimal_config(&root);
@@ -478,6 +649,33 @@ fn overview_cache_reuses_recent_payload_and_allows_refresh_bypass() {
         json_helpers::value_at_path(&second, &["cache", "ttlMs"]).and_then(JsonValue::as_i64),
         Some(crate::resources::DEFAULT_DASHBOARD_OVERVIEW_CACHE_MS as i64)
     );
+
+    {
+        let mut cache = config
+            .overview_cache
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        cache
+            .entry
+            .as_mut()
+            .expect("cached overview entry")
+            .stored_at = Instant::now() - config.overview_cache_ttl - Duration::from_millis(1);
+        cache.refreshing = true;
+    }
+    let stale = cached_overview_json(&config, false).expect("stale overview during refresh");
+    assert_eq!(
+        json_helpers::bool_at_path(&stale, &["cache", "hit"]),
+        Some(true)
+    );
+    assert_eq!(
+        json_helpers::bool_at_path(&stale, &["cache", "stale"]),
+        Some(true)
+    );
+    config
+        .overview_cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .refreshing = false;
 
     let refresh = cached_overview_json(&config, true).expect("refresh overview");
     assert_eq!(
@@ -609,7 +807,7 @@ fn runtime_status_reports_live_connection_metrics() {
 }
 
 #[test]
-fn runtime_resources_response_reports_live_limits_and_pool_shards() {
+fn runtime_resources_response_reports_live_limits_and_session_manager() {
     let root = temp_root();
     write_minimal_config(&root);
     let config = test_config(root.clone(), None, super::ServeSurface::Dashboard);
@@ -622,9 +820,12 @@ fn runtime_resources_response_reports_live_limits_and_pool_shards() {
         Some(crate::resources::default_http_connection_limit() as i64)
     );
     assert!(
-        json_helpers::value_at_path(&response, &["runtime", "upstreamSessionPool", "shardCount"],)
-            .and_then(JsonValue::as_i64)
-            .unwrap_or(0)
+        json_helpers::value_at_path(
+            &response,
+            &["runtime", "upstreamSessionPool", "managerCount"]
+        )
+        .and_then(JsonValue::as_i64)
+        .unwrap_or(0)
             >= 1
     );
     assert!(
@@ -917,6 +1118,65 @@ fn http_upstream_lease_context_derives_affinity_from_metadata_and_headers() {
 }
 
 #[test]
+fn dashboard_cli_rejects_resource_limits_above_hard_caps() {
+    let cases = [
+        (
+            "--max-connections",
+            crate::resources::HTTP_CONNECTION_LIMIT_MAX
+                .saturating_add(1)
+                .to_string(),
+        ),
+        (
+            "--io-timeout-ms",
+            crate::resources::HTTP_IO_TIMEOUT_MS_MAX
+                .saturating_add(1)
+                .to_string(),
+        ),
+        (
+            "--max-body-bytes",
+            crate::resources::HTTP_BODY_BYTES_MAX
+                .saturating_add(1)
+                .to_string(),
+        ),
+    ];
+    for (flag, value) in cases {
+        let parsed = super::parse_cli(&[flag.to_string(), value]);
+        assert!(parsed.error.is_some(), "{flag} should enforce its hard cap");
+    }
+}
+
+#[test]
+fn dashboard_action_paths_reject_network_device_and_traversal_forms() {
+    for value in [
+        "mcp_settings.json",
+        "/home/user/.config/mcp.json",
+        r"C:\Users\user\mcp.json",
+    ] {
+        assert!(
+            super::validate_action_path_field("sourcePath", value).is_ok(),
+            "local path should be accepted: {value}"
+        );
+    }
+    for value in [
+        "../secret.json",
+        "config/../secret.json",
+        r"\\server\share\config.json",
+        "//server/share/config.json",
+        r"\\?\C:\secret.json",
+        r"C:relative.json",
+        r"C:\temp\payload:stream",
+        r"C:\temp\CON.txt",
+        "https://example.test/config.json",
+        "file://localhost/config.json",
+    ] {
+        assert!(
+            super::validate_action_path_field("sourcePath", value).is_err(),
+            "unsafe path should be rejected: {value}"
+        );
+    }
+}
+
+#[test]
 fn origin_validation_allows_only_exact_loopback_hosts() {
     for origin in [
         "http://127.0.0.1",
@@ -1006,17 +1266,22 @@ fn origin_policy_request(host: &str, origin: Option<&str>) -> super::HttpRequest
 }
 
 #[test]
-fn nonlocal_origin_policy_matches_explicit_bind_mode() {
-    let request = origin_policy_request("192.168.1.10:39022", Some("http://192.168.1.10:39022"));
-    assert!(super::http_boundary::validate_origin_for_bind(&request, true).is_ok());
-    assert!(super::http_boundary::validate_origin_for_bind(&request, false).is_err());
+fn origin_policy_requires_same_loopback_authority() {
+    let local = origin_policy_request("127.0.0.1:39022", Some("http://127.0.0.1:39022"));
+    assert!(super::http_boundary::validate_origin_for_bind(&local).is_ok());
+
+    let other_loopback = origin_policy_request("127.0.0.1:39022", Some("http://localhost:39022"));
+    assert!(super::http_boundary::validate_origin_for_bind(&other_loopback).is_err());
+
+    let nonlocal = origin_policy_request("192.168.1.10:39022", Some("http://192.168.1.10:39022"));
+    assert!(super::http_boundary::validate_origin_for_bind(&nonlocal).is_err());
 
     let cross_origin =
-        origin_policy_request("192.168.1.10:39022", Some("http://attacker.example:39022"));
-    assert!(super::http_boundary::validate_origin_for_bind(&cross_origin, true).is_err());
+        origin_policy_request("127.0.0.1:39022", Some("http://attacker.example:39022"));
+    assert!(super::http_boundary::validate_origin_for_bind(&cross_origin).is_err());
 
     let spoofed_loopback = origin_policy_request("localhost.evil.example", None);
-    assert!(super::http_boundary::validate_origin_for_bind(&spoofed_loopback, false).is_err());
+    assert!(super::http_boundary::validate_origin_for_bind(&spoofed_loopback).is_err());
 }
 
 #[test]
@@ -1050,6 +1315,29 @@ fn serve_refuses_nonlocal_bind_without_explicit_opt_in() {
         "stderr: {}",
         stderr_text
     );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn serve_refuses_deprecated_nonlocal_opt_in_flags() {
+    let root = temp_root();
+    write_minimal_config(&root);
+    let mut stdout = Vec::new();
+    let mut stderr = Vec::new();
+    let exit_code = super::run_serve(
+        &[
+            "--host".to_string(),
+            "0.0.0.0".to_string(),
+            "--allow-nonlocal-bind".to_string(),
+        ],
+        Some(root.clone()),
+        &mut stdout,
+        &mut stderr,
+    );
+    assert_eq!(exit_code, 2);
+    assert!(stdout.is_empty());
+    assert!(String::from_utf8_lossy(&stderr)
+        .contains("direct non-loopback HTTP flags are no longer supported"));
     let _ = fs::remove_dir_all(root);
 }
 
@@ -1225,7 +1513,7 @@ fn unified_serve_exposes_health_and_mcp_routes() {
         let mut stderr = Vec::new();
         serve_listener(
             listener,
-            test_config(server_root, Some(8), super::ServeSurface::UnifiedServe),
+            test_config(server_root, Some(11), super::ServeSurface::UnifiedServe),
             &mut stderr,
         )
     });
@@ -1298,10 +1586,28 @@ fn unified_serve_exposes_health_and_mcp_routes() {
         sse_get_response
     );
     assert!(
-        sse_get_response.contains("Allow: POST"),
-        "sse GET response should advertise POST as the supported MCP method: {}",
+        sse_get_response.contains("Allow: POST, DELETE"),
+        "sse GET response should advertise the supported MCP methods: {}",
         sse_get_response
     );
+
+    for accept_header in ["", "Accept: application/json\r\n"] {
+        let mut get_response = String::new();
+        let mut stream = connect_to_test_listener(addr);
+        write!(
+            stream,
+            "GET /mcp HTTP/1.1\r\nHost: {}\r\n{}Connection: close\r\n\r\n",
+            addr, accept_header
+        )
+        .unwrap();
+        stream.read_to_string(&mut get_response).unwrap();
+        assert!(
+            get_response.starts_with("HTTP/1.1 405 Method Not Allowed"),
+            "all MCP GET variants must reject until SSE listening is implemented: {}",
+            get_response
+        );
+        assert!(get_response.contains("Allow: POST, DELETE"));
+    }
 
     let tools_list = r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#;
     let mut tools_response = String::new();
@@ -1410,6 +1716,25 @@ fn unified_serve_exposes_health_and_mcp_routes() {
         "malformed response: {}",
         malformed_response
     );
+
+    let missing_method = r#"{"jsonrpc":"2.0","id":9}"#;
+    let mut invalid_request_response = String::new();
+    let mut stream = connect_to_test_listener(addr);
+    write!(
+        stream,
+        "POST /mcp HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        missing_method.len(),
+        missing_method
+    )
+    .unwrap();
+    stream
+        .read_to_string(&mut invalid_request_response)
+        .unwrap();
+    assert!(invalid_request_response.starts_with("HTTP/1.1 400 Bad Request"));
+    assert!(invalid_request_response.contains("\"code\": -32600"));
+    assert!(invalid_request_response.contains("missing JSON-RPC method"));
+    assert!(!invalid_request_response.contains("\"code\": -32700"));
 
     assert_eq!(handle.join().unwrap(), 0);
     let _ = fs::remove_dir_all(root);
@@ -2088,6 +2413,82 @@ fn dashboard_server_toggle_action_updates_source_enabled_flag() {
     assert_eq!(
         json_helpers::bool_at_path(&settings, &["mcpServers", "fake", "enabled"]),
         Some(false)
+    );
+
+    assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn dashboard_server_remove_action_previews_then_removes_exact_source() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_fake_upstream_config(&root);
+
+    let listener = bind_loopback_test_listener();
+    let addr = listener.local_addr().unwrap();
+    let server_root = root.clone();
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(
+            listener,
+            test_config(server_root, Some(2), super::ServeSurface::Dashboard),
+            &mut stderr,
+        )
+    });
+
+    let preview_body = r#"{"server":"fake","settingsPath":"mcp_settings.json","dryRun":true}"#;
+    let mut preview_response = String::new();
+    let mut preview_stream = connect_to_test_listener(addr);
+    write!(
+        preview_stream,
+        "POST /api/actions/server-remove HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        preview_body.len(),
+        preview_body
+    )
+    .unwrap();
+    preview_stream
+        .read_to_string(&mut preview_response)
+        .unwrap();
+    assert!(
+        preview_response.starts_with("HTTP/1.1 200 OK"),
+        "remove preview response: {}",
+        preview_response
+    );
+    assert!(preview_response.contains("\"action\": \"server-remove\""));
+    assert!(preview_response.contains("\"dryRun\": true"));
+    let preview_settings = json_helpers::read_json_file(&root.join("mcp_settings.json")).unwrap();
+    assert!(
+        json_helpers::value_at_path(&preview_settings, &["mcpServers", "fake"]).is_some(),
+        "dry-run must not remove the source"
+    );
+
+    let remove_body = r#"{"server":"fake","settingsPath":"mcp_settings.json","dryRun":false}"#;
+    let mut remove_response = String::new();
+    let mut remove_stream = connect_to_test_listener(addr);
+    write!(
+        remove_stream,
+        "POST /api/actions/server-remove HTTP/1.1\r\nHost: {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        addr,
+        remove_body.len(),
+        remove_body
+    )
+    .unwrap();
+    remove_stream.read_to_string(&mut remove_response).unwrap();
+    assert!(
+        remove_response.starts_with("HTTP/1.1 200 OK"),
+        "remove response: {}",
+        remove_response
+    );
+    assert!(remove_response.contains("\"action\": \"server-remove\""));
+    assert!(remove_response.contains("\"dryRun\": false"));
+    let removed_settings = json_helpers::read_json_file(&root.join("mcp_settings.json")).unwrap();
+    assert!(
+        json_helpers::value_at_path(&removed_settings, &["mcpServers", "fake"]).is_none(),
+        "confirmed removal must delete the selected source entry"
     );
 
     assert_eq!(handle.join().unwrap(), 0);

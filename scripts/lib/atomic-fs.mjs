@@ -192,6 +192,55 @@ function readLockPayload(lockPath) {
   }
 }
 
+
+function processExists(pid) {
+  const parsed = Number(pid);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) return null;
+  try {
+    process.kill(parsed, 0);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ESRCH') return false;
+    if (error?.code === 'EPERM') return true;
+    return null;
+  }
+}
+
+function recoverableLockReason(payload, staleMs) {
+  const createdAtMs = Number(payload?.createdAtMs || 0);
+  const ageMs = createdAtMs ? Date.now() - createdAtMs : null;
+  const sameHost = payload?.host && payload.host === os.hostname();
+  if (!sameHost) return null;
+
+  const pidState = processExists(payload?.pid);
+  if (pidState === false) {
+    return `owner pid ${payload.pid} is not running on ${payload.host}`;
+  }
+  if (ageMs !== null && ageMs > staleMs && pidState !== true) {
+    return `same-host lock exceeded stale threshold after ${Math.round(ageMs / 1000)}s`;
+  }
+  return null;
+}
+
+function tryRemoveRecoverableLockSync(lockPath, staleMs) {
+  let before;
+  try {
+    before = fs.lstatSync(lockPath, { bigint: true });
+  } catch {
+    return null;
+  }
+  if (!isRegularFile(before)) return null;
+
+  const payload = readLockPayload(lockPath);
+  const reason = recoverableLockReason(payload, staleMs);
+  if (!reason) return null;
+
+  const after = fs.lstatSync(lockPath, { bigint: true });
+  if (!sameIdentity(before, after)) return null;
+  fs.rmSync(lockPath, { force: true });
+  return reason;
+}
+
 function lockHeldMessage(lockPath, staleMs) {
   const payload = readLockPayload(lockPath);
   const createdAtMs = Number(payload?.createdAtMs || 0);
@@ -208,13 +257,23 @@ export function withFileLockSync(lockPath, callback, options = {}) {
   const staleMs = options.staleMs ?? DEFAULT_LOCK_STALE_MS;
   let fd;
   try {
-    try {
-      fd = fs.openSync(target, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
-    } catch (error) {
-      if (error?.code === 'EEXIST') {
-        throw new Error(lockHeldMessage(target, staleMs));
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        fd = fs.openSync(target, constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL, 0o600);
+        break;
+      } catch (error) {
+        if (error?.code === 'EEXIST' && attempt === 0) {
+          const recovered = tryRemoveRecoverableLockSync(target, staleMs);
+          if (recovered) continue;
+        }
+        if (error?.code === 'EEXIST') {
+          throw new Error(lockHeldMessage(target, staleMs));
+        }
+        throw error;
       }
-      throw error;
+    }
+    if (fd === undefined) {
+      throw new Error(lockHeldMessage(target, staleMs));
     }
     const payload = `${JSON.stringify({ pid: process.pid, host: os.hostname(), createdAtMs: Date.now() })}\n`;
     fs.writeFileSync(fd, payload);

@@ -77,6 +77,32 @@ function optionalToolCheck({ name, args, missing, statusOptions, timeoutMs }) {
   return checkFromResult(name, false, run(name, args, { timeoutMs }), statusOptions);
 }
 
+function readPinnedRustToolchain() {
+  try {
+    const text = fs.readFileSync(path.join(repoRoot, 'rust-toolchain.toml'), 'utf8');
+    return text.match(/^channel\s*=\s*"([^"]+)"/m)?.[1] || 'pinned';
+  } catch {
+    return 'pinned';
+  }
+}
+
+function optionalRustToolCheck({ name, args, expectedText, missing, timeoutMs }) {
+  if (!commandExists(name, { includeLocalBin: true })) return skippedCheck(name, missing);
+  const result = run(name, args, { timeoutMs });
+  const status = resultStatus(result, { optional: true });
+  const output = `${result.stdout}\n${result.stderr}`.trim();
+  if (status === 'pass' && expectedText && !output.includes(expectedText)) {
+    return {
+      name,
+      required: false,
+      status: 'warn',
+      detail: `installed, but version output does not match project pin: ${output || 'ok'}`,
+      command: result.command,
+    };
+  }
+  return { name, required: false, status, detail: detail(result), command: result.command };
+}
+
 function workflowFileArgs() {
   const workflowDir = path.join(repoRoot, '.github', 'workflows');
   if (!fs.existsSync(workflowDir)) return [];
@@ -110,8 +136,34 @@ function zizmorArgs() {
   return args;
 }
 
+const pinnedRustToolchain = readPinnedRustToolchain();
+const pinnedRustVersionText = pinnedRustToolchain;
+
 const checks = [
   checkFromResult('publint', true, run('publint', ['packages/npm/cli'], { localBin: true })),
+  optionalRustToolCheck({
+    name: 'rustc',
+    args: ['--version'],
+    expectedText: pinnedRustVersionText,
+    missing: `Install Rust ${pinnedRustToolchain} with rustup before running npm run check:rust.`,
+  }),
+  optionalRustToolCheck({
+    name: 'cargo',
+    args: ['--version'],
+    expectedText: pinnedRustVersionText,
+    missing: `Install Cargo from the Rust ${pinnedRustToolchain} toolchain before refreshing Cargo.lock.`,
+  }),
+  optionalRustToolCheck({
+    name: 'rustfmt',
+    args: ['--version'],
+    expectedText: pinnedRustVersionText,
+    missing: `Install rustfmt for Rust ${pinnedRustToolchain}: rustup component add rustfmt --toolchain ${pinnedRustToolchain}.`,
+  }),
+  optionalRustToolCheck({
+    name: 'cargo',
+    args: ['clippy', '--version'],
+    missing: `Install clippy for Rust ${pinnedRustToolchain}: rustup component add clippy --toolchain ${pinnedRustToolchain}.`,
+  }),
   optionalToolCheck({
     name: 'check-jsonschema',
     args: ['--schemafile', 'schemas/mcpace-hub.schema.json', 'examples/mcpace-hub.minimal.json', 'examples/mcpace-hub.workstation.json'],

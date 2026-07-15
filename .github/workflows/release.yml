@@ -1,70 +1,138 @@
 name: release-artifacts
 
-# Release artifact builds are manual-only in the no-paid-runner posture. Push tag
-# automation can be restored when GitHub Actions billing or a trusted
+# Release artifact builds are manual-only in the no-paid-runner posture.
+# Push tag automation can be restored when GitHub Actions billing or a trusted
 # self-hosted runner is configured.
 on:
   workflow_dispatch:
     inputs:
       create_github_release:
-        description: Create or update a draft GitHub Release from the built assets.
+        description: >-
+          Create or update a draft GitHub Release from the built assets.
         required: false
         default: false
         type: boolean
       release_tag:
-        description: Tag to use when create_github_release is true on a manual run.
+        description: >-
+          Tag to use when create_github_release is true on a manual run.
         required: false
-        default: ''
+        default: ""
         type: string
 
 permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  # Serialize every run that can mutate the same draft tag.
+  group: >-
+    release-${{ inputs.release_tag || github.ref_name }}
   cancel-in-progress: false
 
 jobs:
+  release-context:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      release_requested: ${{ steps.context.outputs.release_requested }}
+      release_tag: ${{ steps.context.outputs.release_tag }}
+      release_sha: ${{ steps.context.outputs.release_sha }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Validate immutable release context
+        id: context
+        env:
+          MCPACE_CREATE_RELEASE: ${{ inputs.create_github_release }}
+          MCPACE_INPUT_TAG: ${{ inputs.release_tag }}
+          MCPACE_REF_TYPE: ${{ github.ref_type }}
+          MCPACE_REF_NAME: ${{ github.ref_name }}
+          MCPACE_BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          release_requested=false
+          release_tag=""
+          if [ "$MCPACE_CREATE_RELEASE" = "true" ]; then
+            release_requested=true
+            if [ -n "$MCPACE_INPUT_TAG" ]; then
+              release_tag="$MCPACE_INPUT_TAG"
+            elif [ "$MCPACE_REF_TYPE" = "tag" ]; then
+              release_tag="$MCPACE_REF_NAME"
+            fi
+          fi
+          if [ "$release_requested" = "true" ]; then
+            if [[ ! "$release_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              printf '%s\n' \
+                "release tag must be a stable vX.Y.Z tag; got '$release_tag'" \
+                >&2
+              exit 1
+            fi
+            package_version="$(node -p "require('./package.json').version")"
+            if [ "$release_tag" != "v$package_version" ]; then
+              printf '%s\n' \
+                "release tag $release_tag does not match package version" \
+                "$package_version" >&2
+              exit 1
+            fi
+            tag_sha="$(git rev-parse "refs/tags/$release_tag^{commit}")"
+            if [ "$tag_sha" != "$MCPACE_BUILD_SHA" ]; then
+              printf '%s\n' \
+                "release tag $release_tag resolves to $tag_sha," \
+                "but this run builds $MCPACE_BUILD_SHA" >&2
+              exit 1
+            fi
+          fi
+          echo "release_requested=$release_requested" >> "$GITHUB_OUTPUT"
+          echo "release_tag=$release_tag" >> "$GITHUB_OUTPUT"
+          echo "release_sha=$MCPACE_BUILD_SHA" >> "$GITHUB_OUTPUT"
+        shell: bash
+
   source-release:
+    needs: release-context
     runs-on: ubuntu-latest
     permissions:
       contents: read
       id-token: write
       attestations: write
-    timeout-minutes: 20
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version-file: .nvmrc
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff
 
       - name: Install locked Node tooling
         run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
 
-      - name: Verify release contracts
+      - name: Verify complete release contracts
+        # check:ci invokes the endgame gate, which owns the single live
+        # Rust proof.
         run: npm run check:ci
 
       - name: Build source release artifact bundle
         run: npm run build:release-artifacts
 
       - name: Generate source release artifact attestation
-        uses: actions/attest@v4
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
         with:
           subject-path: dist/*
 
       - name: Upload source release artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: source-release
           path: dist/**
 
   native-release-assets:
+    needs: release-context
     name: native GitHub installer / ${{ matrix.key }}
     runs-on: ${{ matrix.runner }}
     permissions:
@@ -93,11 +161,13 @@ jobs:
             runner: macos-15-intel
             rust_target: x86_64-apple-darwin
             binary_name: mcpace
+            macos_binary_arch: x86_64
           - key: darwin-arm64
             platform: darwin
             runner: macos-15
             rust_target: aarch64-apple-darwin
             binary_name: mcpace
+            macos_binary_arch: arm64
           - key: win32-x64-msvc
             platform: win32
             runner: windows-2025
@@ -109,16 +179,16 @@ jobs:
             rust_target: aarch64-pc-windows-msvc
             binary_name: mcpace.exe
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version-file: .nvmrc
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff
 
       - name: Install locked Node tooling
         run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
@@ -144,14 +214,43 @@ jobs:
         if: matrix.platform != 'linux'
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
-        run: cargo build --release --target "$MCPACE_RUST_TARGET"
+        run: >-
+          cargo build --release --locked
+          --target "$MCPACE_RUST_TARGET" --bins
         shell: bash
 
       - name: Smoke native binary
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
           MCPACE_BINARY_NAME: ${{ matrix.binary_name }}
-        run: npm run platform:binary-smoke -- --binary "target/${MCPACE_RUST_TARGET}/release/${MCPACE_BINARY_NAME}"
+        run: >-
+          npm run platform:binary-smoke -- --binary
+          "target/${MCPACE_RUST_TARGET}/release/${MCPACE_BINARY_NAME}"
+        shell: bash
+
+      - name: Verify macOS native architecture and dependencies
+        if: matrix.platform == 'darwin'
+        env:
+          MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
+          MCPACE_BINARY_NAME: ${{ matrix.binary_name }}
+          MCPACE_MACOS_BINARY_ARCH: ${{ matrix.macos_binary_arch }}
+        run: |
+          set -euo pipefail
+          binary="target/${MCPACE_RUST_TARGET}/release/${MCPACE_BINARY_NAME}"
+          test -x "$binary"
+          file "$binary"
+          arches="$(lipo -archs "$binary" 2>&1)"
+          printf '%s\n' "$arches"
+          case "$arches" in
+            *"$MCPACE_MACOS_BINARY_ARCH"*) ;;
+            *)
+              printf '%s\n' \
+                "expected Mach-O architecture" \
+                "$MCPACE_MACOS_BINARY_ARCH, got: $arches" >&2
+              exit 1
+              ;;
+          esac
+          otool -L "$binary"
         shell: bash
 
       - name: Install WiX Toolset for Windows MSI
@@ -159,7 +258,8 @@ jobs:
         shell: pwsh
         run: |
           dotnet tool install --global wix --version 7.0.0
-          "$env:USERPROFILE\.dotnet\tools" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "$env:USERPROFILE\.dotnet\tools" |
+            Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           & "$env:USERPROFILE\.dotnet\tools\wix.exe" --version
 
       - name: Build GitHub native installer
@@ -170,20 +270,29 @@ jobs:
         run: |
           set -euo pipefail
           binary="target/${MCPACE_RUST_TARGET}/release/${MCPACE_BINARY_NAME}"
-          node scripts/build-native-installer-asset.mjs --target "$MCPACE_TARGET_KEY" --binary "$binary" --out-dir dist/github --json
+          node scripts/build-native-installer-asset.mjs \
+            --target "$MCPACE_TARGET_KEY" \
+            --binary "$binary" \
+            --out-dir dist/github \
+            --json
         shell: bash
 
       - name: Verify Ubuntu/Debian installer
         if: matrix.platform == 'linux'
         run: |
           set -euo pipefail
-          installer="$(find dist/github -maxdepth 1 -type f -name '*.deb' -print -quit)"
+          installer="$(
+            find dist/github -maxdepth 1 -type f \
+              -name '*.deb' -print -quit
+          )"
           test -n "$installer"
           sudo apt-get update
           sudo apt-get install -y "./$installer"
           command -v mcpace
           mcpace help >/dev/null
           dpkg -s mcpace >/dev/null
+          npm run check:installer-runtime-smoke -- \
+            --binary /usr/bin/mcpace --json
           sudo apt-get remove -y mcpace
         shell: bash
 
@@ -191,38 +300,114 @@ jobs:
         if: matrix.platform == 'win32'
         shell: pwsh
         run: |
-          $installer = Get-ChildItem -LiteralPath dist/github -Filter *.msi | Select-Object -First 1
+          $installer = Get-ChildItem `
+            -LiteralPath dist/github `
+            -Filter *.msi |
+            Select-Object -First 1
           if (-not $installer) { throw 'missing MSI installer' }
           function Invoke-Msi([string[]] $Arguments) {
-            $process = Start-Process msiexec.exe -ArgumentList $Arguments -Wait -NoNewWindow -PassThru
-            if ($process.ExitCode -ne 0) { throw "msiexec failed with exit code $($process.ExitCode): $($Arguments -join ' ')" }
+            $process = Start-Process msiexec.exe `
+              -ArgumentList $Arguments `
+              -Wait `
+              -NoNewWindow `
+              -PassThru
+            if ($process.ExitCode -ne 0) {
+              $detail = $Arguments -join ' '
+              throw "msiexec failed ($($process.ExitCode)): $detail"
+            }
           }
           Invoke-Msi @('/i', $installer.FullName, '/qn', '/norestart')
           $installed = Join-Path $env:ProgramFiles 'MCPace\mcpace.exe'
-          if (-not (Test-Path -LiteralPath $installed)) { throw "installed binary not found: $installed" }
+          $installedLauncher = Join-Path `
+            $env:ProgramFiles `
+            'MCPace\mcpace-agent-launcher.exe'
+          if (-not (Test-Path -LiteralPath $installed)) {
+            throw "installed binary not found: $installed"
+          }
+          if (-not (Test-Path -LiteralPath $installedLauncher)) {
+            throw "installed launcher not found: $installedLauncher"
+          }
           & $installed help | Out-Null
+          $probeRoot = Join-Path $env:RUNNER_TEMP 'mcpace-autostart-root'
+          New-Item -ItemType Directory -Force -Path $probeRoot | Out-Null
+          $configPath = Join-Path $probeRoot 'mcpace.config.json'
+          Set-Content -LiteralPath $configPath -Value '{}'
+          $planJson = & $installed autostart print `
+            --root $probeRoot `
+            --json
+          $autostartPlan = $planJson | ConvertFrom-Json
+          if (
+            $autostartPlan.launchMode -ne `
+              'windows-native-hidden-launcher-plan'
+          ) {
+            throw "unexpected launchMode: $($autostartPlan.launchMode)"
+          }
+          if (-not $autostartPlan.nativeBackground) {
+            throw 'Windows autostart plan is not nativeBackground=true'
+          }
+          $launchProgramPath = [string]$autostartPlan.launchProgramPath
+          $plannedLauncher = [System.IO.Path]::GetFullPath(
+            $launchProgramPath
+          )
+          $expectedLauncher = [System.IO.Path]::GetFullPath(
+            $installedLauncher
+          )
+          $launcherMatches = [string]::Equals(
+            $plannedLauncher,
+            $expectedLauncher,
+            [System.StringComparison]::OrdinalIgnoreCase
+          )
+          if (-not $launcherMatches) {
+            throw (
+              'autostart launchProgramPath does not use installed launcher: ' +
+              $launchProgramPath
+            )
+          }
+          npm run check:installer-runtime-smoke -- `
+            --binary $installed --json
           Invoke-Msi @('/x', $installer.FullName, '/qn', '/norestart')
 
-      - name: Verify macOS PKG installer
+      - name: Verify macOS PKG installer, receipt, and runtime
         if: matrix.platform == 'darwin'
+        env:
+          MCPACE_MACOS_BINARY_ARCH: ${{ matrix.macos_binary_arch }}
         run: |
           set -euo pipefail
-          installer="$(find dist/github -maxdepth 1 -type f -name '*.pkg' -print -quit)"
+          installer="$(
+            find dist/github -maxdepth 1 -type f \
+              -name '*.pkg' -print -quit
+          )"
           test -n "$installer"
           sudo installer -pkg "$installer" -target /
+          test -x /usr/local/bin/mcpace
           /usr/local/bin/mcpace help >/dev/null
+          sudo pkgutil --pkg-info io.github.ramenm.mcpace
+          installed_arches="$(lipo -archs /usr/local/bin/mcpace 2>&1)"
+          printf '%s\n' "$installed_arches"
+          case "$installed_arches" in
+            *"$MCPACE_MACOS_BINARY_ARCH"*) ;;
+            *)
+              printf '%s\n' \
+                "installed binary is missing" \
+                "$MCPACE_MACOS_BINARY_ARCH: $installed_arches" >&2
+              exit 1
+              ;;
+          esac
+          otool -L /usr/local/bin/mcpace
+          npm run check:installer-runtime-smoke -- \
+            --binary /usr/local/bin/mcpace --json
           sudo rm -f /usr/local/bin/mcpace
           sudo rm -rf /usr/local/share/doc/mcpace
           sudo pkgutil --forget io.github.ramenm.mcpace || true
         shell: bash
 
       - name: Generate native release asset attestation
-        uses: actions/attest@v4
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
         with:
           subject-path: dist/github/*
 
       - name: Upload native GitHub installer
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-release-${{ matrix.key }}
           path: dist/github/*
@@ -236,17 +421,20 @@ jobs:
       - native-release-assets
     permissions:
       contents: read
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version-file: .nvmrc
           cache: npm
 
-      - uses: actions/download-artifact@v8
+      # actions/download-artifact v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: native-release-*
           path: dist/downloaded-release-assets
@@ -255,21 +443,31 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p dist/release-assets
-          find dist/downloaded-release-assets -type f -print0 | while IFS= read -r -d '' file; do
+          while IFS= read -r -d '' file; do
             base="$(basename "$file")"
             if [ -e "dist/release-assets/$base" ]; then
               echo "duplicate release asset basename: $base" >&2
               exit 1
             fi
             cp "$file" "dist/release-assets/$base"
-          done
+          done < <(
+            find dist/downloaded-release-assets -type f -print0
+          )
         shell: bash
 
       - name: Generate checksums and release asset manifest
-        run: node scripts/build-release-index.mjs --json --asset-dir dist/release-assets --out-dir dist/release-assets
+        run: >-
+          node scripts/build-release-index.mjs --json
+          --asset-dir dist/release-assets
+          --out-dir dist/release-assets
+
+      - name: Attest composed GitHub release asset set
+        uses: actions/attest@a1948c3f048ba23858d222213b7c278aabede763  # v4
+        with:
+          subject-path: dist/release-assets/*
 
       - name: Upload composed GitHub release asset set
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: github-release-assets
           path: dist/release-assets/*
@@ -278,24 +476,67 @@ jobs:
   github-draft-release:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    needs: compose-release-assets
-    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.create_github_release == true)
+    needs:
+      - release-context
+      - compose-release-assets
+    if: needs.release-context.outputs.release_requested == 'true'
+    environment: github-release
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v8
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      # actions/download-artifact v8
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: github-release-assets
           path: dist/release-assets
 
-      - name: Create or update draft GitHub release
+      - name: Reconcile immutable draft GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || inputs.release_tag }}
+          RELEASE_TAG: ${{ needs.release-context.outputs.release_tag }}
+          EXPECTED_RELEASE_SHA: >-
+            ${{ needs.release-context.outputs.release_sha }}
+          GITHUB_REPOSITORY_NAME: ${{ github.repository }}
         run: |
+          set -euo pipefail
           shopt -s nullglob
+
+          assert_tag_binding() {
+            git fetch --force --no-tags origin \
+              "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            current_sha="$(
+              git rev-parse "refs/tags/$RELEASE_TAG^{commit}"
+            )"
+            if [ "$current_sha" != "$EXPECTED_RELEASE_SHA" ]; then
+              printf 'release tag moved: expected %s, got %s\n' \
+                "$EXPECTED_RELEASE_SHA" "$current_sha" >&2
+              exit 1
+            fi
+          }
+
+          read_release() {
+            gh api \
+              "repos/$GITHUB_REPOSITORY_NAME/releases/tags/$RELEASE_TAG"
+          }
+
+          assert_release_is_draft() {
+            is_draft="$(read_release | jq -r '.draft')"
+            if [ "$is_draft" != "true" ]; then
+              printf '%s %s\n' \
+                "refusing to mutate published release" "$RELEASE_TAG" >&2
+              exit 1
+            fi
+          }
+
           if [ -z "$RELEASE_TAG" ]; then
-            echo "release_tag input is required for manual draft release creation outside a tag ref" >&2
+            printf '%s\n' \
+              "release_tag input is required for manual draft" \
+              "release creation outside a tag ref" >&2
             exit 1
           fi
           assets=(dist/release-assets/*)
@@ -303,8 +544,82 @@ jobs:
             echo "no release assets found" >&2
             exit 1
           fi
-          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+
+          declare -A expected_by_name=()
+          for asset in "${assets[@]}"; do
+            asset_name="$(basename "$asset")"
+            if [[ -v "expected_by_name[$asset_name]" ]]; then
+              echo "duplicate local asset name: $asset_name" >&2
+              exit 1
+            fi
+            expected_by_name["$asset_name"]="$asset"
+          done
+
+          # Cover both mutation and all-identical/no-op reconciliation paths.
+          assert_tag_binding
+          release_error="$(mktemp)"
+          if release_json="$(read_release 2>"$release_error")"; then
+            :
+          elif grep -q 'HTTP 404' "$release_error"; then
+            assert_tag_binding
+            gh release create "$RELEASE_TAG" \
+              --draft \
+              --verify-tag \
+              --target "$EXPECTED_RELEASE_SHA" \
+              --title "$RELEASE_TAG" \
+              --notes "Automated assets. Verify checksums before publish."
+            release_json="$(read_release)"
           else
-            gh release create "$RELEASE_TAG" "${assets[@]}" --draft --verify-tag --title "$RELEASE_TAG" --notes "Automated MCPace release assets. Verify checksums before publishing."
+            cat "$release_error" >&2
+            rm -f "$release_error"
+            exit 1
           fi
+          rm -f "$release_error"
+          assert_release_is_draft
+
+          declare -A identical_assets=()
+          while IFS=$'\t' read -r existing_name existing_digest; do
+            [ -n "$existing_name" ] || continue
+            if [[ ! -v "expected_by_name[$existing_name]" ]]; then
+              echo "unexpected draft asset: $existing_name" >&2
+              exit 1
+            fi
+            local_asset="${expected_by_name[$existing_name]}"
+            local_digest="sha256:$(
+              sha256sum "$local_asset" | cut -d' ' -f1
+            )"
+            if [ -z "$existing_digest" ]; then
+              download_dir="$(mktemp -d)"
+              gh release download "$RELEASE_TAG" \
+                --pattern "$existing_name" \
+                --dir "$download_dir"
+              downloaded_asset="$download_dir/$existing_name"
+              existing_digest="sha256:$(
+                sha256sum "$downloaded_asset" | cut -d' ' -f1
+              )"
+              rm -rf "$download_dir"
+            fi
+            if [ "$existing_digest" != "$local_digest" ]; then
+              printf 'draft asset digest mismatch: %s\n' \
+                "$existing_name" >&2
+              exit 1
+            fi
+            identical_assets["$existing_name"]=true
+          done < <(
+            printf '%s' "$release_json" |
+              jq -r '.assets[] | [.name, (.digest // "")] | @tsv'
+          )
+
+          for asset in "${assets[@]}"; do
+            asset_name="$(basename "$asset")"
+            if [[ -v "identical_assets[$asset_name]" ]]; then
+              echo "identical draft asset exists; skipping $asset_name"
+              continue
+            fi
+            assert_tag_binding
+            assert_release_is_draft
+            gh release upload "$RELEASE_TAG" "$asset"
+          done
+          assert_tag_binding
+          assert_release_is_draft
+        shell: bash

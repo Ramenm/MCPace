@@ -3,7 +3,7 @@ use super::{
     http_tool_definitions_for_protocol, http_tool_names, now_ms, run_http_tool,
     write_empty_response, write_empty_response_with_headers, write_json_response,
     write_json_response_with_owned_headers, write_text_response, DashboardConfig, HttpRequest,
-    McpHttpResponse, ServeSurface,
+    McpHttpResponse,
 };
 use crate::adapter;
 use crate::json::{parse_str, JsonValue};
@@ -19,31 +19,14 @@ pub(super) fn handle_mcp_http_route(
 ) -> Result<(), String> {
     match request.method.as_str() {
         "GET" => {
-            if http_boundary::accepts(request, "text/event-stream") {
-                write_empty_response_with_headers(
-                    stream,
-                    "405 Method Not Allowed",
-                    &[("Allow", "POST")],
-                )?;
-                return Ok(());
-            }
-            let payload = JsonValue::object([
-                ("ok", JsonValue::bool(true)),
-                (
-                    "surface",
-                    JsonValue::string(match config.surface {
-                        ServeSurface::Dashboard => "dashboard-http",
-                        ServeSurface::UnifiedServe => "unified-serve-http",
-                    }),
-                ),
-                (
-                    "message",
-                    JsonValue::string(
-                        "Use HTTP POST with a single JSON-RPC request body at this endpoint.",
-                    ),
-                ),
-            ]);
-            write_json_response(stream, "200 OK", &payload)?;
+            // Streamable HTTP reserves GET for an SSE listening stream. MCPace
+            // does not implement that optional stream yet, so every GET must
+            // fail consistently instead of exposing a non-protocol JSON page.
+            write_empty_response_with_headers(
+                stream,
+                "405 Method Not Allowed",
+                &[("Allow", "POST, DELETE")],
+            )?;
         }
         "DELETE" => {
             let close_result = config
@@ -97,7 +80,7 @@ pub(super) fn write_json_error_response(
     code: &str,
     message: &str,
 ) -> Result<(), String> {
-    write_json_response(
+    Ok(write_json_response(
         stream,
         status,
         &JsonValue::object([
@@ -111,7 +94,7 @@ pub(super) fn write_json_error_response(
                 ]),
             ),
         ]),
-    )
+    )?)
 }
 
 fn handle_mcp_http_request(
@@ -167,7 +150,10 @@ fn handle_mcp_http_request(
                 }
                 return Ok(McpHttpResponse::Accepted);
             }
-            return Err("missing JSON-RPC method".to_string());
+            return Ok(McpHttpResponse::JsonStatus(
+                "400 Bad Request",
+                mcp_error_response(id, mcp::ERROR_INVALID_REQUEST, "missing JSON-RPC method"),
+            ));
         }
     };
     if let Err(error) = mcp::validate_request_envelope(&message) {
@@ -183,6 +169,19 @@ fn handle_mcp_http_request(
                 id,
                 mcp::ERROR_INVALID_REQUEST,
                 "MCP notifications must not include a JSON-RPC id",
+            ),
+        ));
+    }
+    if request_id
+        .as_ref()
+        .is_some_and(|value| !mcp::request_id_is_within_limit(value))
+    {
+        return Ok(McpHttpResponse::JsonStatus(
+            "400 Bad Request",
+            mcp_error_response(
+                id,
+                mcp::ERROR_INVALID_REQUEST,
+                "JSON-RPC request id exceeds the 256 byte limit",
             ),
         ));
     }
@@ -271,7 +270,7 @@ fn handle_mcp_http_request(
             let client_version =
                 json_helpers::string_at_path(&message, &["params", "clientInfo", "version"])
                     .map(ToOwned::to_owned);
-            config
+            let create_result = config
                 .http_session_store
                 .lock()
                 .unwrap_or_else(|poisoned| poisoned.into_inner())
@@ -283,6 +282,9 @@ fn handle_mcp_http_request(
                     request_id.as_ref().and_then(mcp::request_id_key),
                     now_ms(),
                 );
+            if let Err(error) = create_result {
+                return Ok(session_error_response(error, id));
+            }
             Ok(McpHttpResponse::JsonWithHeaders(
                 JsonValue::object([
                     ("jsonrpc", JsonValue::string("2.0")),
@@ -510,7 +512,7 @@ fn handle_mcp_http_request(
                         JsonValue::object([
                             ("ok", JsonValue::bool(false)),
                             ("tool", JsonValue::string(tool_name)),
-                            ("error", JsonValue::string(error)),
+                            ("error", JsonValue::string(error.to_string())),
                         ]),
                         true,
                         ToolResultOptions::default(),
@@ -524,7 +526,7 @@ fn handle_mcp_http_request(
                         JsonValue::object([
                             ("ok", JsonValue::bool(false)),
                             ("tool", JsonValue::string(tool_name)),
-                            ("error", JsonValue::string(error)),
+                            ("error", JsonValue::string(error.to_string())),
                             (
                                 "supportedTools",
                                 JsonValue::array(http_tool_definitions().into_iter().filter_map(
@@ -571,7 +573,7 @@ fn touch_mcp_session_for_request(
     request: &HttpRequest,
     config: &DashboardConfig,
     id: JsonValue,
-) -> Result<http_session::McpHttpSession, McpHttpResponse> {
+) -> Result<http_session::McpHttpSessionView, McpHttpResponse> {
     let result = config
         .http_session_store
         .lock()
@@ -584,7 +586,8 @@ fn touch_mcp_session_for_request(
                 http_session::McpHttpSessionErrorKind::Missing
                 | http_session::McpHttpSessionErrorKind::Invalid
                 | http_session::McpHttpSessionErrorKind::ProtocolMismatch
-                | http_session::McpHttpSessionErrorKind::DuplicateRequestId => {
+                | http_session::McpHttpSessionErrorKind::DuplicateRequestId
+                | http_session::McpHttpSessionErrorKind::RequestIdLimit => {
                     mcp::ERROR_INVALID_REQUEST
                 }
                 http_session::McpHttpSessionErrorKind::Unknown
@@ -604,7 +607,7 @@ fn prepare_mcp_session_for_request(
     id: JsonValue,
     request_id_key: Option<&str>,
     require_initialized: bool,
-) -> Result<http_session::McpHttpSession, McpHttpResponse> {
+) -> Result<http_session::McpHttpSessionView, McpHttpResponse> {
     let mut session_store = config
         .http_session_store
         .lock()
@@ -641,7 +644,7 @@ fn mark_mcp_session_initialized(
     request: &HttpRequest,
     config: &DashboardConfig,
     id: JsonValue,
-) -> Result<http_session::McpHttpSession, McpHttpResponse> {
+) -> Result<http_session::McpHttpSessionView, McpHttpResponse> {
     let result = config
         .http_session_store
         .lock()
@@ -661,7 +664,8 @@ fn session_error_response(
         http_session::McpHttpSessionErrorKind::Missing
         | http_session::McpHttpSessionErrorKind::Invalid
         | http_session::McpHttpSessionErrorKind::ProtocolMismatch
-        | http_session::McpHttpSessionErrorKind::DuplicateRequestId => mcp::ERROR_INVALID_REQUEST,
+        | http_session::McpHttpSessionErrorKind::DuplicateRequestId
+        | http_session::McpHttpSessionErrorKind::RequestIdLimit => mcp::ERROR_INVALID_REQUEST,
         http_session::McpHttpSessionErrorKind::Unknown
         | http_session::McpHttpSessionErrorKind::Expired => mcp::ERROR_NOT_INITIALIZED,
     };

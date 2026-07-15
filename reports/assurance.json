@@ -1,14 +1,14 @@
 {
   "schema": "mcpace.projectAssurance.v1",
-  "generatedAt": "2026-07-04T15:37:14.585Z",
+  "generatedAt": "2026-07-15T02:29:52.132Z",
   "root": ".",
-  "rootName": "mcpace_work",
-  "overall": "needs-live-rust-proof",
+  "rootName": "mcpace",
+  "overall": "pass",
   "summary": {
-    "pass": 12,
-    "warn": 2,
+    "pass": 14,
+    "warn": 0,
     "fail": 0,
-    "worstStatus": "warn"
+    "worstStatus": "pass"
   },
   "reviewModel": [
     {
@@ -57,7 +57,7 @@
       "why": "The first screen should answer the base setup path: backend, client, source, tools, and routing.",
       "evidence": [
         "src/dashboard/overview.rs:dashboardFoundation",
-        "src/dashboard/frontend/app.js:renderBaseSetup"
+        "src/dashboard/frontend/app.render.js:renderBaseSetup"
       ],
       "failureMode": "Users see many facts but cannot decide what basic setup step to complete next.",
       "nextCheck": "Open dashboard after mcpace up and confirm the base foundation changes when no servers, parked servers, unchecked servers, and ready servers are present."
@@ -69,7 +69,7 @@
       "why": "Per-server UI should be driven by backend evidence: lane, blocker, next action, and commands to run.",
       "evidence": [
         "src/dashboard/overview.rs:operatorPlan",
-        "src/dashboard/frontend/app.js:renderServerRunbook"
+        "src/dashboard/frontend/app.render.js:renderServerRunbook"
       ],
       "failureMode": "Frontend invents readiness from partial fields and drifts away from backend runtime truth.",
       "nextCheck": "Compare each server row with mcpace server capabilities <name> --json and verify the same launch/evidence/policy direction."
@@ -82,7 +82,7 @@
       "evidence": [
         "src/dashboard/overview.rs:runtimeControlPlane",
         "src/dashboard/overview.rs:serverResourceMonitoring",
-        "src/dashboard/frontend/app.js:renderRuntimeControl"
+        "src/dashboard/frontend/app.render.js:renderRuntimeControl"
       ],
       "failureMode": "The UI claims readiness without connecting tool evidence, risk, concurrency, isolation, and observed resource use.",
       "nextCheck": "Run a harmless upstream_call and verify /api/resources reports a live per-server session row with pid/resource data."
@@ -94,7 +94,7 @@
       "why": "UI can be pretty but useless if buttons, routes, payload keys, or DOM ids drift independently.",
       "evidence": [
         "tests/node/dashboard-contract.test.mjs",
-        "src/dashboard.rs:22 static routes"
+        "src/dashboard.rs:33 static routes"
       ],
       "failureMode": "A user clicks Enable/Test/Add server and nothing real happens, or an action reaches backend with the wrong JSON.",
       "nextCheck": "Run npm run check before every release and add a new assertion for every new UI action."
@@ -144,7 +144,7 @@
       "why": "MCP tools expose external actions; the UI should make tool exposure and evidence visible instead of quietly trusting package names.",
       "evidence": [
         "src/dashboard/overview.rs:operator_plan_for_server",
-        "src/dashboard/frontend/app.js:server-test"
+        "src/dashboard/frontend/app.render.js:server-test"
       ],
       "failureMode": "The user thinks a server is ready just because it is configured, even though no live initialize/tools-list proof exists.",
       "nextCheck": "For a new server: add disabled, enable intentionally, run Test once, compare tool names/count with server capabilities JSON."
@@ -164,16 +164,16 @@
     },
     {
       "id": "platform-proof-matrix",
-      "title": "Linux, macOS, and Windows have an explicit proof matrix",
+      "title": "Linux, macOS, and Windows have an explicit static proof plan",
       "status": "pass",
-      "why": "Cross-platform readiness cannot be inferred from a Linux-only source review; each desktop OS needs Node checks, Rust build/test, and native binary smoke commands.",
+      "why": "This claim proves the declared cross-platform plan and smoke coverage only. Actual readiness still requires successful Node checks, Rust build/test, and native binary smoke artifacts from each desktop OS.",
       "evidence": [
         ".github/workflows/platform-proof.yml",
         "reports/platform-proof.json",
         "scripts/platform-binary-smoke.mjs"
       ],
       "failureMode": "The project appears portable while Windows/macOS path, shell, process, service, or binary resolution code is untested.",
-      "nextCheck": "Run the manual platform-proof workflow with full=true and keep reports/platform-proof.json green."
+      "nextCheck": "Run the manual platform-proof workflow with full=true and retain per-OS artifacts bound to the release commit; the static report alone is not execution evidence."
     },
     {
       "id": "console-ui-scope",
@@ -189,29 +189,27 @@
     },
     {
       "id": "rust-runtime-unverified-here",
-      "title": "Rust compile/clippy/test pass remains a required live gate",
-      "status": "warn",
-      "why": "Static assurance does not execute cargo itself; the release gate still requires rustfmt, clippy, tests, and a release build on a Rust 1.95.0 host.",
+      "title": "Rust check/test/format/Clippy and release build are source-bound",
+      "status": "pass",
+      "why": "The tracked Rust live proof records a stable full build-input fingerprint and the SHA-256 of the release binary produced after all locked Cargo gates passed.",
       "evidence": [
-        "package.json:check:rust",
-        "scripts/cargo-task.mjs",
-        "rust-toolchain.toml"
+        "reports/rust-live-proof.json",
+        "scripts/rust-live-proof.mjs"
       ],
       "failureMode": "Dashboard/static contracts are green but the shipped native binary fails to build or runtime paths fail under Cargo tests.",
-      "nextCheck": "Run on a Rust host: rustup toolchain install 1.95.0 && npm run check:rust && cargo build --release."
+      "nextCheck": "Regenerate the proof after any Rust build-input or proof-generator change."
     },
     {
       "id": "live-e2e-unverified-here",
-      "title": "Live add-enable-test-upstream-call path needs one real target-machine proof",
-      "status": "warn",
-      "why": "Static checks show wiring and contracts, but user confidence also needs one real server and one real client call through /mcp.",
+      "title": "Live add-enable-test-upstream-call path is proven on this source",
+      "status": "pass",
+      "why": "A source-bound proof used dashboard add/enable/Test, initialized a real /mcp client, listed adapter tools, executed one harmless read-only upstream_call, and observed its runtime resource row.",
       "evidence": [
-        "scripts/load-test-local.mjs",
-        "src/dashboard/overview.rs:flow",
-        "tests/node/dashboard-contract.test.mjs"
+        "reports/live-mcp-e2e-proof.json",
+        "scripts/live-mcp-e2e-proof.mjs"
       ],
       "failureMode": "Everything is connected in source, but target OS process spawning, firewall, client config path, or upstream stdio runtime fails in practice.",
-      "nextCheck": "Run mcpace up, add a harmless server, enable it, Test it, connect a client to /mcp, and execute one read-only upstream_call."
+      "nextCheck": "Repeat proof:live-mcp-e2e on each release target after building the final binary."
     }
   ]
 }

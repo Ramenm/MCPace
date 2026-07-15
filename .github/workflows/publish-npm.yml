@@ -3,30 +3,24 @@ name: publish-npm
 on:
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: Run npm publish with --dry-run instead of publishing.
-        required: false
-        default: true
-        type: boolean
       version_override:
-        description: Stable x.y.z version to publish before source metadata is bumped.
+        description: >-
+          Stable x.y.z version used only for a packaging dry-run.
         required: false
-        default: ''
+        default: ""
         type: string
   push:
     branches:
-      - main
-      - master
       - dev
     tags:
-      - 'v*'
+      - "v*"
 
 permissions:
   contents: read
-  id-token: write
 
 concurrency:
-  group: publish-npm-${{ github.ref }}
+  # Serialize every ref so branch/tag runs cannot race on one immutable version.
+  group: publish-npm
   cancel-in-progress: false
 
 jobs:
@@ -39,6 +33,7 @@ jobs:
       base_version: ${{ steps.plan.outputs.base_version }}
       version_override: ${{ steps.plan.outputs.version_override }}
       effective_version: ${{ steps.plan.outputs.effective_version }}
+      release_sha: ${{ steps.plan.outputs.release_sha }}
       channel: ${{ steps.plan.outputs.channel }}
       dist_tag: ${{ steps.plan.outputs.dist_tag }}
       dry_run: ${{ steps.plan.outputs.dry_run }}
@@ -46,19 +41,42 @@ jobs:
       should_publish: ${{ steps.plan.outputs.should_publish }}
       reason: ${{ steps.plan.outputs.reason }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version-file: .nvmrc
+          package-manager-cache: false
+
+      - name: Validate immutable tag checkout
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          MCPACE_BUILD_REF: ${{ github.ref }}
+          MCPACE_BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          tag_sha="$(git rev-parse "$MCPACE_BUILD_REF^{commit}")"
+          head_sha="$(git rev-parse HEAD)"
+          if [ "$tag_sha" != "$head_sha" ]; then
+            printf '%s\n' \
+              "tag resolves to $tag_sha, but checkout is $head_sha" >&2
+            exit 1
+          fi
+          printf 'verified tag checkout: %s (%s)\n' \
+            "$MCPACE_BUILD_REF" "$MCPACE_BUILD_SHA"
+        shell: bash
 
       - name: Plan npm publish channel
         id: plan
         env:
-          MCPACE_PUBLISH_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run || 'false' }}
-          MCPACE_VERSION_OVERRIDE: ${{ github.event_name == 'workflow_dispatch' && inputs.version_override || '' }}
+          MCPACE_PUBLISH_DRY_RUN: >-
+            ${{ github.event_name == 'workflow_dispatch' }}
+          MCPACE_VERSION_OVERRIDE: >-
+            ${{ github.event_name == 'workflow_dispatch'
+              && inputs.version_override || '' }}
         run: node scripts/plan-npm-publish.mjs --github-output
 
       - name: Show npm publish plan
@@ -68,6 +86,7 @@ jobs:
           MCPACE_BASE_VERSION: ${{ steps.plan.outputs.base_version }}
           MCPACE_VERSION_OVERRIDE: ${{ steps.plan.outputs.version_override }}
           MCPACE_EFFECTIVE_VERSION: ${{ steps.plan.outputs.effective_version }}
+          MCPACE_RELEASE_SHA: ${{ steps.plan.outputs.release_sha }}
           MCPACE_DIST_TAG: ${{ steps.plan.outputs.dist_tag }}
           MCPACE_SHOULD_PUBLISH: ${{ steps.plan.outputs.should_publish }}
           MCPACE_PLAN_REASON: ${{ steps.plan.outputs.reason }}
@@ -77,6 +96,7 @@ jobs:
           echo "base-version=$MCPACE_BASE_VERSION"
           echo "version-override=$MCPACE_VERSION_OVERRIDE"
           echo "version=$MCPACE_EFFECTIVE_VERSION"
+          echo "release-sha=$MCPACE_RELEASE_SHA"
           echo "dist-tag=$MCPACE_DIST_TAG"
           echo "should-publish=$MCPACE_SHOULD_PUBLISH"
           echo "reason=$MCPACE_PLAN_REASON"
@@ -89,6 +109,8 @@ jobs:
     timeout-minutes: 45
     permissions:
       contents: read
+    env:
+      MCPACE_RELEASE_SHA: ${{ needs.publish-plan.outputs.release_sha }}
     strategy:
       fail-fast: false
       matrix:
@@ -126,16 +148,16 @@ jobs:
             rust_target: aarch64-pc-windows-msvc
             binary_name: mcpace.exe
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version-file: .nvmrc
-          cache: npm
+          package-manager-cache: false
 
-      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff
         with:
           components: rustfmt, clippy
 
@@ -144,8 +166,11 @@ jobs:
 
       - name: Prepare effective npm release version
         env:
-          MCPACE_RELEASE_VERSION: ${{ needs.publish-plan.outputs.effective_version }}
-        run: node scripts/prepare-npm-release-version.mjs --version "$MCPACE_RELEASE_VERSION"
+          MCPACE_RELEASE_VERSION: >-
+            ${{ needs.publish-plan.outputs.effective_version }}
+        run: >-
+          node scripts/prepare-npm-release-version.mjs
+          --version "$MCPACE_RELEASE_VERSION"
         shell: bash
 
       - name: Install Rust target
@@ -164,14 +189,18 @@ jobs:
         if: matrix.platform != 'linux'
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
-        run: cargo clippy --all-targets --target "$MCPACE_RUST_TARGET" -- -D warnings
+        run: >-
+          cargo clippy --locked --all-targets
+          --target "$MCPACE_RUST_TARGET" -- -D warnings
         shell: bash
 
       - name: Test Rust target
         if: matrix.platform != 'linux'
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
-        run: cargo test --target "$MCPACE_RUST_TARGET" -- --test-threads=1
+        run: >-
+          cargo test --locked --target "$MCPACE_RUST_TARGET"
+          -- --test-threads=1
         shell: bash
 
       - name: Build and test Linux native binary in glibc baseline container
@@ -188,7 +217,9 @@ jobs:
         if: matrix.platform != 'linux'
         env:
           MCPACE_RUST_TARGET: ${{ matrix.rust_target }}
-        run: cargo build --release --target "$MCPACE_RUST_TARGET"
+        run: >-
+          cargo build --release --locked
+          --target "$MCPACE_RUST_TARGET" --bins
         shell: bash
 
       - name: Pack native npm package
@@ -199,11 +230,42 @@ jobs:
         run: |
           set -euo pipefail
           binary="target/${MCPACE_RUST_TARGET}/release/${MCPACE_BINARY_NAME}"
-          node scripts/build-native-npm-package.mjs --target "$MCPACE_TARGET_KEY" --binary "$binary" --out-dir dist/npm --json
+          node scripts/build-native-npm-package.mjs \
+            --target "$MCPACE_TARGET_KEY" \
+            --binary "$binary" \
+            --out-dir dist/npm \
+            --json
+        shell: bash
+
+      - name: Verify standard launcher package runtime
+        env:
+          MCPACE_TARGET_KEY: ${{ matrix.key }}
+        run: |
+          set -euo pipefail
+          proof_dir="$(mktemp -d)"
+          trap 'rm -rf "$proof_dir"' EXIT
+          npm pack --workspace @mcpace/cli --json \
+            --pack-destination "$proof_dir" \
+            --ignore-scripts --no-audit --no-fund >/dev/null
+          main_tarball="$(
+            find "$proof_dir" -maxdepth 1 -type f \
+              -name 'mcpace-cli-*.tgz' -print -quit
+          )"
+          native_tarball="$(
+            find dist/npm -maxdepth 1 -type f \
+              -name '*.tgz' -print -quit
+          )"
+          test -n "$main_tarball"
+          test -n "$native_tarball"
+          npm run check:native-npm-install-smoke -- \
+            --target "$MCPACE_TARGET_KEY" \
+            --main-tarball "$main_tarball" \
+            --native-tarball "$native_tarball" \
+            --json
         shell: bash
 
       - name: Upload native npm tarball
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         with:
           name: native-package-${{ matrix.key }}
           path: dist/npm/*.tgz
@@ -220,37 +282,74 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      MCPACE_RELEASE_SHA: ${{ needs.publish-plan.outputs.release_sha }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           persist-credentials: false
+          fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - name: Revalidate immutable npm publish identity
+        env:
+          MCPACE_CHANNEL: ${{ needs.publish-plan.outputs.channel }}
+          MCPACE_BUILD_REF: ${{ github.ref }}
+          MCPACE_BUILD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          head_sha="$(git rev-parse HEAD)"
+          if [ "$head_sha" != "$MCPACE_RELEASE_SHA" ] || \
+             [ "$MCPACE_BUILD_SHA" != "$MCPACE_RELEASE_SHA" ]; then
+            echo "publish checkout does not match planned release SHA" >&2
+            exit 1
+          fi
+          if [ "$MCPACE_CHANNEL" = "stable" ]; then
+            case "$MCPACE_BUILD_REF" in
+              refs/tags/v*) ;;
+              *) echo "stable npm publish requires a version tag" >&2; exit 1 ;;
+            esac
+            git fetch --force --no-tags origin \
+              "+$MCPACE_BUILD_REF:$MCPACE_BUILD_REF"
+            tag_sha="$(git rev-parse "$MCPACE_BUILD_REF^{commit}")"
+            if [ "$tag_sha" != "$MCPACE_RELEASE_SHA" ]; then
+              echo "npm release tag moved before publication" >&2
+              exit 1
+            fi
+          fi
+        shell: bash
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version-file: .nvmrc
-          registry-url: https://registry.npmjs.org
-          cache: npm
+          # A publish-capable job must not restore caches created by
+          # lower-privilege jobs.
+          package-manager-cache: false
 
       - name: Install locked Node tooling
         run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
 
       - name: Prepare effective npm release version
         env:
-          MCPACE_RELEASE_VERSION: ${{ needs.publish-plan.outputs.effective_version }}
-        run: node scripts/prepare-npm-release-version.mjs --version "$MCPACE_RELEASE_VERSION"
+          MCPACE_RELEASE_VERSION: >-
+            ${{ needs.publish-plan.outputs.effective_version }}
+        run: >-
+          node scripts/prepare-npm-release-version.mjs
+          --version "$MCPACE_RELEASE_VERSION"
         shell: bash
 
       - name: Verify exact npm version for trusted publishing
         run: npm exec --yes --package=npm@11.13.0 -- npm --version
 
       - name: Validate source and launcher package
+        # check:ci includes release-readiness, endgame, and one live Rust proof.
         run: |
-          npm run check
+          npm run check:ci
           npm run check:package
           npm run pack:npm:dry-run
 
       - name: Download native package artifacts
-        uses: actions/download-artifact@v8
+        # actions/download-artifact v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: native-package-*
           path: dist/npm
@@ -259,16 +358,55 @@ jobs:
       - name: Refuse incomplete native package publication
         run: node scripts/verify-npm-publish-contract.mjs --enforce
 
-      - name: Publish native npm packages
+      - name: Publish or resume native npm package set
         env:
           MCPACE_PUBLISH_DRY_RUN: ${{ needs.publish-plan.outputs.dry_run }}
           MCPACE_NPM_DIST_TAG: ${{ needs.publish-plan.outputs.dist_tag }}
+          MCPACE_RELEASE_VERSION: >-
+            ${{ needs.publish-plan.outputs.effective_version }}
         run: |
           set -euo pipefail
           shopt -s nullglob
+
+          registry_has_matching_release() {
+            local package_spec="$1"
+            local metadata_file error_file existing_sha
+            metadata_file="$(mktemp)"
+            error_file="$(mktemp)"
+            if npm exec --yes --package=npm@11.13.0 -- npm view \
+              "$package_spec" --json \
+              >"$metadata_file" 2>"$error_file"; then
+              existing_sha="$(
+                MCPACE_REGISTRY_METADATA="$(cat "$metadata_file")" \
+                  node -p \
+                  'JSON.parse(process.env.MCPACE_REGISTRY_METADATA)
+                    .mcpace?.releaseSha || ""'
+              )"
+              rm -f "$metadata_file" "$error_file"
+              if [ "$existing_sha" != "$MCPACE_RELEASE_SHA" ]; then
+                printf 'refusing mixed-SHA resume for %s: %s != %s\n' \
+                  "$package_spec" "${existing_sha:-<missing>}" \
+                  "$MCPACE_RELEASE_SHA" >&2
+                return 2
+              fi
+              return 0
+            fi
+            rm -f "$metadata_file"
+            if grep -Eiq \
+              'E404|ETARGET|404 Not Found|No matching version found' \
+              "$error_file"; then
+              rm -f "$error_file"
+              return 1
+            fi
+            cat "$error_file" >&2
+            rm -f "$error_file"
+            return 2
+          }
+
           tarballs=(dist/npm/*.tgz)
           if [ "${#tarballs[@]}" -ne 6 ]; then
-            echo "expected 6 native npm tarballs, found ${#tarballs[@]}" >&2
+            printf 'expected 6 native npm tarballs, found %s\n' \
+              "${#tarballs[@]}" >&2
             exit 1
           fi
           dry_run_args=()
@@ -276,18 +414,102 @@ jobs:
             dry_run_args=(--dry-run)
           fi
           for tarball in "${tarballs[@]}"; do
-            npm exec --yes --package=npm@11.13.0 -- npm publish "$tarball" "${dry_run_args[@]}" --access public --tag "$MCPACE_NPM_DIST_TAG" --provenance
+            package_json="$(tar -xOf "$tarball" package/package.json)"
+            package_name="$(
+              MCPACE_PACKAGE_JSON="$package_json" node -p \
+                "JSON.parse(process.env.MCPACE_PACKAGE_JSON).name"
+            )"
+            package_version="$(
+              MCPACE_PACKAGE_JSON="$package_json" node -p \
+                "JSON.parse(process.env.MCPACE_PACKAGE_JSON).version"
+            )"
+            package_release_sha="$(
+              MCPACE_PACKAGE_JSON="$package_json" node -p \
+                "JSON.parse(process.env.MCPACE_PACKAGE_JSON)
+                  .mcpace?.releaseSha || ''"
+            )"
+            if [ "$package_release_sha" != "$MCPACE_RELEASE_SHA" ]; then
+              printf 'unexpected release SHA for %s: %s\n' \
+                "$package_name" "${package_release_sha:-<missing>}" >&2
+              exit 1
+            fi
+            if [ "$package_version" != "$MCPACE_RELEASE_VERSION" ]; then
+              printf 'unexpected package version for %s: %s\n' \
+                "$package_name" "$package_version" >&2
+              exit 1
+            fi
+            package_spec="$package_name@$package_version"
+            if [ "$MCPACE_PUBLISH_DRY_RUN" != "true" ]; then
+              if registry_has_matching_release "$package_spec"; then
+                echo "already published; skipping $package_spec"
+                continue
+              else
+                registry_status=$?
+                if [ "$registry_status" -ne 1 ]; then
+                  exit "$registry_status"
+                fi
+              fi
+            fi
+            npm exec --yes --package=npm@11.13.0 -- npm publish \
+              "$tarball" "${dry_run_args[@]}" \
+              --access public \
+              --tag "$MCPACE_NPM_DIST_TAG" \
+              --provenance
           done
 
-      - name: Publish main npm launcher
+      - name: Publish main npm launcher last
         working-directory: packages/npm/cli
         env:
           MCPACE_PUBLISH_DRY_RUN: ${{ needs.publish-plan.outputs.dry_run }}
           MCPACE_NPM_DIST_TAG: ${{ needs.publish-plan.outputs.dist_tag }}
+          MCPACE_RELEASE_VERSION: >-
+            ${{ needs.publish-plan.outputs.effective_version }}
         run: |
           set -euo pipefail
+          local_release_sha="$(node -p \
+            "require('./package.json').mcpace?.releaseSha || ''")"
+          if [ "$local_release_sha" != "$MCPACE_RELEASE_SHA" ]; then
+            printf 'launcher release SHA mismatch: %s != %s\n' \
+              "${local_release_sha:-<missing>}" "$MCPACE_RELEASE_SHA" >&2
+            exit 1
+          fi
           dry_run_args=()
           if [ "$MCPACE_PUBLISH_DRY_RUN" = "true" ]; then
             dry_run_args=(--dry-run)
+          else
+            package_spec="@mcpace/cli@$MCPACE_RELEASE_VERSION"
+            metadata_file="$(mktemp)"
+            error_file="$(mktemp)"
+            if npm exec --yes --package=npm@11.13.0 -- npm view \
+              "$package_spec" --json \
+              >"$metadata_file" 2>"$error_file"; then
+              existing_sha="$(
+                MCPACE_REGISTRY_METADATA="$(cat "$metadata_file")" \
+                  node -p \
+                  'JSON.parse(process.env.MCPACE_REGISTRY_METADATA)
+                    .mcpace?.releaseSha || ""'
+              )"
+              rm -f "$metadata_file" "$error_file"
+              if [ "$existing_sha" != "$MCPACE_RELEASE_SHA" ]; then
+                printf 'refusing mixed-SHA launcher resume: %s != %s\n' \
+                  "${existing_sha:-<missing>}" "$MCPACE_RELEASE_SHA" >&2
+                exit 2
+              fi
+              echo "already published; skipping $package_spec"
+              exit 0
+            fi
+            rm -f "$metadata_file"
+            if ! grep -Eiq \
+              'E404|ETARGET|404 Not Found|No matching version found' \
+              "$error_file"; then
+              cat "$error_file" >&2
+              rm -f "$error_file"
+              exit 2
+            fi
+            rm -f "$error_file"
           fi
-          npm exec --yes --package=npm@11.13.0 -- npm publish "${dry_run_args[@]}" --access public --tag "$MCPACE_NPM_DIST_TAG" --provenance
+          npm exec --yes --package=npm@11.13.0 -- npm publish \
+            "${dry_run_args[@]}" \
+            --access public \
+            --tag "$MCPACE_NPM_DIST_TAG" \
+            --provenance

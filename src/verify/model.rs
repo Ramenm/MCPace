@@ -4,6 +4,7 @@ use crate::profile;
 use crate::server;
 use crate::text_utils;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::path::Path;
 
 #[derive(Debug, Clone)]
@@ -32,10 +33,53 @@ pub struct ReadinessReport {
     pub ready_for_runtime_ops: bool,
 }
 
-pub fn collect_readiness(root_path: &Path) -> Result<ReadinessReport, String> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReadinessError {
+    message: String,
+}
+
+pub type ReadinessResult<T> = std::result::Result<T, ReadinessError>;
+
+impl ReadinessError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for ReadinessError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ReadinessError {}
+
+impl From<String> for ReadinessError {
+    fn from(message: String) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<&str> for ReadinessError {
+    fn from(message: &str) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<ReadinessError> for String {
+    fn from(error: ReadinessError) -> Self {
+        error.message
+    }
+}
+
+pub fn collect_readiness(root_path: &Path) -> ReadinessResult<ReadinessReport> {
     let doctor_report = doctor::run_without_version_probes(Some(root_path.to_path_buf()));
-    let server_records = server::load_server_records(root_path)?;
-    let runtime_profile = profile::load_runtime_profile_selection(root_path)?;
+    let server_records = server::load_server_records(root_path)
+        .map_err(|error| ReadinessError::from(error.to_string()))?;
+    let runtime_profile = profile::load_runtime_profile_selection(root_path)
+        .map_err(|error| ReadinessError::from(error.to_string()))?;
     Ok(build_readiness_report(
         &doctor_report,
         &runtime_profile,

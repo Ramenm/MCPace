@@ -4,7 +4,62 @@ use crate::runtimepaths;
 use crate::text_utils;
 use std::collections::BTreeMap;
 use std::env;
+use std::fmt;
 use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ClientCatalogError {
+    ReadFailed { path: String, reason: String },
+    EmptyCatalog { path: String },
+}
+
+pub type ClientCatalogResult<T> = std::result::Result<T, ClientCatalogError>;
+
+impl ClientCatalogError {
+    fn read_failed(path: &Path, reason: impl Into<String>) -> Self {
+        Self::ReadFailed {
+            path: path.display().to_string(),
+            reason: reason.into(),
+        }
+    }
+
+    fn empty_catalog(path: &Path) -> Self {
+        Self::EmptyCatalog {
+            path: path.display().to_string(),
+        }
+    }
+
+    pub fn contains(&self, needle: &str) -> bool {
+        self.to_string().contains(needle)
+    }
+}
+
+impl fmt::Display for ClientCatalogError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ReadFailed { path, reason } => {
+                write!(
+                    formatter,
+                    "client catalog extension could not read '{}': {}",
+                    path, reason
+                )
+            }
+            Self::EmptyCatalog { path } => write!(
+                formatter,
+                "client catalog '{}' did not contain any targets",
+                path
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ClientCatalogError {}
+
+impl From<ClientCatalogError> for String {
+    fn from(error: ClientCatalogError) -> Self {
+        error.to_string()
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ClientInstallKind {
@@ -106,7 +161,7 @@ pub struct ClientTargetRecord {
     pub source: String,
 }
 
-pub fn load_registry(root_path: Option<&Path>) -> Result<ClientRegistry, String> {
+pub fn load_registry(root_path: Option<&Path>) -> ClientCatalogResult<ClientRegistry> {
     let mut targets = BTreeMap::<String, ClientTargetRecord>::new();
     let mut sources = vec!["builtin-client-catalog".to_string()];
     let mut warnings = Vec::new();
@@ -178,7 +233,7 @@ pub fn load_registry(root_path: Option<&Path>) -> Result<ClientRegistry, String>
     for catalog_path in catalog_paths {
         match load_targets_from_file(&catalog_path) {
             Ok(items) => merge_targets(&mut targets, items, &mut warnings),
-            Err(error) => warnings.push(error),
+            Err(error) => warnings.push(error.to_string()),
         }
     }
 
@@ -592,8 +647,9 @@ impl Default for JsonMcpServerShapeRecord {
     }
 }
 
-fn load_targets_from_file(path: &Path) -> Result<Vec<ClientTargetRecord>, String> {
-    let json = json_helpers::read_json_file(path)?;
+fn load_targets_from_file(path: &Path) -> ClientCatalogResult<Vec<ClientTargetRecord>> {
+    let json = json_helpers::read_json_file(path)
+        .map_err(|error| ClientCatalogError::read_failed(path, error))?;
     let source = format!("file:{}", path.display());
     let mut warnings = Vec::new();
     let targets = match json.as_array() {
@@ -604,10 +660,7 @@ fn load_targets_from_file(path: &Path) -> Result<Vec<ClientTargetRecord>, String
         },
     };
     if targets.is_empty() && warnings.is_empty() {
-        return Err(format!(
-            "client catalog '{}' did not contain any targets",
-            path.display()
-        ));
+        return Err(ClientCatalogError::empty_catalog(path));
     }
     Ok(targets)
 }

@@ -333,6 +333,7 @@ impl ServerCoordinationPlan {
                 "maxInFlightPerWorker",
                 JsonValue::number(self.max_in_flight_per_worker),
             ),
+            ("execution", self.execution.to_json_value()),
             (
                 "lockDomains",
                 JsonValue::array(self.lock_domains.iter().cloned().map(JsonValue::string)),
@@ -370,6 +371,11 @@ impl ServerCoordinationPlan {
                     Some(value) => JsonValue::string(value.clone()),
                     None => JsonValue::Null,
                 },
+            ),
+            ("affinityResolved", JsonValue::bool(self.affinity_resolved)),
+            (
+                "affinityFingerprint",
+                JsonValue::string(self.affinity_fingerprint.clone()),
             ),
             (
                 "warnings",

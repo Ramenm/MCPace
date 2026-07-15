@@ -13,8 +13,9 @@ mod render;
 mod sources;
 mod test;
 mod toggle;
+use crate::diagnostics;
 
-use self::args::{parse_args, write_help};
+use self::args::{parse_cli, write_help};
 pub use self::loader::load_server_records;
 pub use self::model::ServerRecord;
 use crate::candidates;
@@ -27,9 +28,9 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help || parsed.action.is_none() {

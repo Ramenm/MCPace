@@ -1,9 +1,12 @@
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_sources;
-use crate::text_utils::normalize_flag;
+use clap::{error::ErrorKind, ArgAction, Parser};
 use std::collections::BTreeMap;
 use std::env;
+use std::ffi::OsString;
+use std::fmt;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
@@ -52,15 +55,48 @@ pub struct RuntimeProfileSelection {
     pub server_overrides: BTreeMap<String, bool>,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RuntimeProfileError {
+    ConfigRead {
+        path: PathBuf,
+        source: json_helpers::JsonFileError,
+    },
+}
+
+pub type RuntimeProfileResult<T> = Result<T, RuntimeProfileError>;
+
+impl fmt::Display for RuntimeProfileError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ConfigRead { path, source } => {
+                write!(
+                    formatter,
+                    "failed to load runtime profile config {}: {}",
+                    path.display(),
+                    source
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for RuntimeProfileError {}
+
+impl From<RuntimeProfileError> for String {
+    fn from(error: RuntimeProfileError) -> Self {
+        error.to_string()
+    }
+}
+
 pub fn run(
     args: &[String],
     default_root: Option<PathBuf>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
 
@@ -71,21 +107,24 @@ pub fn run(
 
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
     let catalog = match build_profile_catalog_from_config(&root_path) {
         Ok(config) => config,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
     let resolved = match load_runtime_profile_selection(&root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -115,7 +154,9 @@ pub fn run(
     }
 }
 
-pub fn load_runtime_profile_selection(root_path: &Path) -> Result<RuntimeProfileSelection, String> {
+pub fn load_runtime_profile_selection(
+    root_path: &Path,
+) -> RuntimeProfileResult<RuntimeProfileSelection> {
     let catalog = build_profile_catalog_from_config(root_path)?;
     let (active_profile, selection_source) = resolve_active_profile(&catalog);
     let server_overrides = read_server_overrides(root_path, &active_profile)?;
@@ -136,62 +177,117 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "Native Rust path supports read-only profile inspection."
-    );
-    let _ = writeln!(
-        stdout,
-        "Profile mutation is not implemented yet in the Rust-only repo."
+        "Native Rust path supports read-only profile inspection; profile writes are reviewed through mcpace.config.json."
     );
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace profile",
+    disable_version_flag = true,
+    about = "Inspect MCPace runtime profiles"
+)]
+struct ProfileCli {
+    /// Profile action. The Rust CLI currently exposes show.
+    action: Option<String>,
 
-    while index < args.len() {
-        let token = normalize_flag(&args[index]);
-        match token.as_str() {
-            "show" => {
-                index += 1;
+    /// Emit machine-readable JSON.
+    #[arg(long = "json", short = 'j')]
+    json_output: bool,
+
+    /// MCPace project/root directory.
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+
+    /// Reserved for future reviewed profile writes.
+    #[arg(long = "name", value_name = "PROFILE", hide = true)]
+    mutation_name: Option<String>,
+
+    /// Reserved for future reviewed profile writes.
+    #[arg(long = "apply", action = ArgAction::SetTrue, hide = true)]
+    apply: bool,
+}
+
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match ProfileCli::try_parse_from(profile_argv(args)) {
+        Ok(cli) => compose_profile_args(cli),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
             }
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("profile requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            "--name" | "-name" | "--apply" | "-apply" => {
-                parsed.error = Some(
-                    "profile mutation is not implemented yet in the Rust-only repo".to_string(),
-                );
-                return parsed;
-            }
-            _ => {
-                parsed.error = Some(format!(
+        }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn compose_profile_args(cli: ProfileCli) -> ParsedArgs {
+    if cli.apply || cli.mutation_name.is_some() {
+        return ParsedArgs {
+            error: Some(
+                "profile writes are intentionally reviewed through mcpace.config.json; use profile show to inspect the active profile".to_string(),
+            ),
+            ..ParsedArgs::default()
+        };
+    }
+
+    if let Some(action) = cli.action.as_deref() {
+        if action != "show" {
+            return ParsedArgs {
+                error: Some(format!(
                     "unsupported profile arguments in the Rust-only repo: {}",
-                    args[index]
-                ));
-                return parsed;
-            }
+                    action
+                )),
+                ..ParsedArgs::default()
+            };
         }
     }
 
-    parsed
+    ParsedArgs {
+        json_output: cli.json_output,
+        help: false,
+        root_override: cli.root_override,
+        error: None,
+    }
 }
 
-fn build_profile_catalog_from_config(root_path: &Path) -> Result<ProfileCatalog, String> {
+fn profile_argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace profile"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_profile_flag(arg))),
+    );
+    argv
+}
+
+fn normalize_profile_flag(arg: &str) -> &str {
+    match arg {
+        "-json" => "--json",
+        "-root" => "--root",
+        "-name" => "--name",
+        "-apply" => "--apply",
+        "-?" => "--help",
+        other => other,
+    }
+}
+
+fn build_profile_catalog_from_config(root_path: &Path) -> RuntimeProfileResult<ProfileCatalog> {
     let config_path = root_path.join("mcpace.config.json");
-    let json = json_helpers::read_json_file(&config_path)?;
+    let json = json_helpers::read_json_file(&config_path).map_err(|source| {
+        RuntimeProfileError::ConfigRead {
+            path: config_path.clone(),
+            source,
+        }
+    })?;
     let runtime = json_helpers::object_at_path(&json, &["profiles", "runtime"]);
     let default = runtime
         .and_then(|runtime| runtime.get("default"))
@@ -308,9 +404,14 @@ fn resolve_active_profile(catalog: &ProfileCatalog) -> (String, String) {
 fn read_server_overrides(
     root_path: &Path,
     active_profile: &str,
-) -> Result<BTreeMap<String, bool>, String> {
+) -> RuntimeProfileResult<BTreeMap<String, bool>> {
     let config_path = root_path.join("mcpace.config.json");
-    let json = json_helpers::read_json_file(&config_path)?;
+    let json = json_helpers::read_json_file(&config_path).map_err(|source| {
+        RuntimeProfileError::ConfigRead {
+            path: config_path.clone(),
+            source,
+        }
+    })?;
     let runtime_profiles =
         json_helpers::object_at_path(&json, &["profiles", "runtime", "profiles"]);
     let mut overrides = BTreeMap::new();

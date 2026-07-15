@@ -5,6 +5,7 @@ use crate::mcp_sources;
 use crate::runtimepaths::{self, ServeEndpoint};
 use crate::server::ServerRecord;
 use crate::{server, verify};
+use std::fmt;
 use std::path::Path;
 
 #[derive(Clone, Debug)]
@@ -65,13 +66,49 @@ pub(super) struct ConnectReadiness {
     pub(super) missing_profile_commands: Vec<String>,
 }
 
-pub(super) fn build_report(root_path: &Path, parsed: &ParsedArgs) -> Result<ConnectReport, String> {
+#[derive(Debug)]
+pub(super) enum ConnectReportError {
+    Sources(String),
+    Servers(String),
+    Clients(String),
+    Readiness(String),
+}
+
+impl fmt::Display for ConnectReportError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            ConnectReportError::Sources(source) => {
+                write!(formatter, "failed to load MCP sources: {}", source)
+            }
+            ConnectReportError::Servers(source) => {
+                write!(formatter, "failed to load server records: {}", source)
+            }
+            ConnectReportError::Clients(source) => {
+                write!(formatter, "failed to load client registry: {}", source)
+            }
+            ConnectReportError::Readiness(source) => {
+                write!(formatter, "failed to collect readiness: {}", source)
+            }
+        }
+    }
+}
+
+impl std::error::Error for ConnectReportError {}
+
+pub(super) fn build_report(
+    root_path: &Path,
+    parsed: &ParsedArgs,
+) -> Result<ConnectReport, ConnectReportError> {
     let endpoint =
         ConnectEndpoint::from_endpoint(runtimepaths::resolve_serve_endpoint(Some(root_path)));
-    let source_report = mcp_sources::load_mcp_source_report(root_path)?;
-    let server_records = server::load_server_records(root_path)?;
-    let client_registry = client_catalog::load_registry(Some(root_path))?;
-    let readiness_report = verify::collect_readiness(root_path)?;
+    let source_report = mcp_sources::load_mcp_source_report(root_path)
+        .map_err(|error| ConnectReportError::Sources(error.to_string()))?;
+    let server_records = server::load_server_records(root_path)
+        .map_err(|error| ConnectReportError::Servers(error.to_string()))?;
+    let client_registry = client_catalog::load_registry(Some(root_path))
+        .map_err(|error| ConnectReportError::Clients(error.to_string()))?;
+    let readiness_report = verify::collect_readiness(root_path)
+        .map_err(|error| ConnectReportError::Readiness(error.to_string()))?;
 
     let selected_client = select_client(&client_registry.targets, parsed.client_id.as_deref());
     let upstream = summarize_upstreams(

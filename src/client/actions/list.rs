@@ -4,6 +4,7 @@ use super::read_client_key_name;
 use crate::client_catalog::{
     self, client_install_support_summary_for_targets, ClientTargetRecord as ClientTarget,
 };
+use crate::diagnostics;
 use crate::doctor;
 use crate::json::JsonValue;
 use std::io::Write;
@@ -23,7 +24,7 @@ pub(in crate::client) fn run_list(
     let registry = match client_catalog::load_registry(root_path.as_deref()) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };

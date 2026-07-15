@@ -16,4 +16,6 @@ test('modernization budget keeps remaining legacy seams intentional and bounded'
   assert.equal(report.failures, 0);
   assert.ok(report.findings.some((item) => item.id === 'manual-cli-parsing' && item.actual <= item.max));
   assert.ok(report.findings.some((item) => item.id === 'cargo-lock-needs-refresh' && item.actual <= item.max));
+  assert.ok(report.findings.some((item) => item.id === 'raw-http-tcp' && item.actual <= 4));
+  assert.ok(report.findings.some((item) => item.id === 'stringly-errors' && item.actual <= 16));
 });

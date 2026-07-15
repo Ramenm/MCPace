@@ -6,10 +6,46 @@ use crate::runtimepaths;
 use crate::text_utils::yes_no;
 use crate::verify;
 use std::collections::BTreeSet;
+use std::fmt;
 use std::io::Write;
 use std::path::Path;
 
-pub(super) fn collect_status(root_path: &Path) -> Result<HubStatus, String> {
+#[derive(Debug)]
+pub(super) struct HubStatusError {
+    message: String,
+}
+
+type HubStatusResult<T> = Result<T, HubStatusError>;
+
+impl fmt::Display for HubStatusError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for HubStatusError {}
+
+impl From<String> for HubStatusError {
+    fn from(message: String) -> Self {
+        Self { message }
+    }
+}
+
+impl From<verify::ReadinessError> for HubStatusError {
+    fn from(error: verify::ReadinessError) -> Self {
+        Self {
+            message: error.to_string(),
+        }
+    }
+}
+
+impl From<HubStatusError> for String {
+    fn from(error: HubStatusError) -> Self {
+        error.to_string()
+    }
+}
+
+pub(super) fn collect_status(root_path: &Path) -> HubStatusResult<HubStatus> {
     let readiness = verify::collect_readiness(root_path)?;
     let state_root = runtimepaths::resolve_state_root(root_path);
     let runtime_dir = runtimepaths::runtime_dir(&state_root);

@@ -1,19 +1,21 @@
+use super::http_runtime::run_http_tools_list;
+use super::stdio_runtime::run_stdio_tools_list;
 use super::{
-    cache_root_path, run_http_request, run_stdio_request, server_fingerprint, UpstreamServerConfig,
-    TOOL_LIST_CACHE_MAX_ENTRIES, TOOL_LIST_CACHE_TTL,
+    cache_root_path, server_fingerprint, UpstreamServerConfig, TOOL_LIST_CACHE_MAX_ENTRIES,
+    TOOL_LIST_CACHE_TTL,
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_sources;
 use crate::runtimepaths;
 use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Condvar, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-const TOOL_LIST_DISK_CACHE_SCHEMA_VERSION: i64 = 2;
-const TOOL_LIST_DISK_CACHE_TTL: Duration = Duration::from_secs(24 * 60 * 60);
+const TOOL_LIST_DISK_CACHE_SCHEMA_VERSION: i64 = 3;
 
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub(super) struct ToolListCacheKey {
@@ -30,6 +32,45 @@ pub(super) struct CachedToolList {
     pub(super) tools: JsonValue,
 }
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum ToolListCacheError {
+    RuntimePath(runtimepaths::RuntimePathError),
+    ClockBeforeUnixEpoch,
+    Upstream(String),
+}
+
+pub(super) type ToolListCacheResult<T> = Result<T, ToolListCacheError>;
+
+impl fmt::Display for ToolListCacheError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RuntimePath(error) => write!(formatter, "{}", error),
+            Self::ClockBeforeUnixEpoch => formatter.write_str("system clock is before UNIX epoch"),
+            Self::Upstream(error) => write!(formatter, "{}", error),
+        }
+    }
+}
+
+impl std::error::Error for ToolListCacheError {}
+
+impl From<runtimepaths::RuntimePathError> for ToolListCacheError {
+    fn from(error: runtimepaths::RuntimePathError) -> Self {
+        Self::RuntimePath(error)
+    }
+}
+
+impl From<String> for ToolListCacheError {
+    fn from(error: String) -> Self {
+        Self::Upstream(error)
+    }
+}
+
+impl From<ToolListCacheError> for String {
+    fn from(error: ToolListCacheError) -> Self {
+        error.to_string()
+    }
+}
+
 pub(super) static TOOL_LIST_CACHE: OnceLock<Mutex<BTreeMap<ToolListCacheKey, CachedToolList>>> =
     OnceLock::new();
 static TOOL_LIST_INFLIGHT: OnceLock<(Mutex<BTreeSet<ToolListCacheKey>>, Condvar)> = OnceLock::new();
@@ -39,43 +80,78 @@ pub(super) fn cached_tools_list(
     server: &UpstreamServerConfig,
     timeout: Duration,
     refresh: bool,
-) -> Result<(JsonValue, bool), String> {
+) -> ToolListCacheResult<(JsonValue, bool)> {
     let key = tool_list_cache_key(root_path, server);
     if !refresh {
         if let Some(tools) = read_cached_tools(&key) {
             return Ok((tools, true));
         }
-        match acquire_tool_list_load_permit_or_cached(&key) {
-            ToolListCacheAcquire::Cached(tools) => return Ok((tools, true)),
-            ToolListCacheAcquire::Load(permit) => {
-                let result = run_tool_list_request(root_path, server, timeout)?;
-                let tools = json_helpers::value_at_path(&result, &["tools"])
-                    .cloned()
-                    .unwrap_or_else(|| JsonValue::array([]));
-                write_cached_tools(key, tools.clone());
-                drop(permit);
-                return Ok((tools, false));
-            }
+    }
+    match acquire_tool_list_load_permit_or_cached(&key) {
+        ToolListCacheAcquire::Cached(tools) => Ok((tools, true)),
+        ToolListCacheAcquire::Load(permit) => {
+            let result = run_tool_list_request(root_path, server, timeout)?;
+            let tools = validate_tools_list_result(server, &result)?;
+            write_cached_tools(key, tools.clone());
+            drop(permit);
+            Ok((tools, false))
         }
     }
+}
 
-    let result = run_tool_list_request(root_path, server, timeout)?;
-    let tools = json_helpers::value_at_path(&result, &["tools"])
-        .cloned()
-        .unwrap_or_else(|| JsonValue::array([]));
-    write_cached_tools(key, tools.clone());
-    Ok((tools, false))
+pub(super) fn validate_tools_list_result(
+    server: &UpstreamServerConfig,
+    result: &JsonValue,
+) -> ToolListCacheResult<JsonValue> {
+    let tools = json_helpers::value_at_path(result, &["tools"])
+        .and_then(JsonValue::as_array)
+        .ok_or_else(|| {
+            ToolListCacheError::Upstream(format!(
+                "upstream server '{}' tools/list result must contain a tools array",
+                server.name
+            ))
+        })?;
+    let mut names = BTreeSet::new();
+    for (index, tool) in tools.iter().enumerate() {
+        let name = json_helpers::string_at_path(tool, &["name"])
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ToolListCacheError::Upstream(format!(
+                    "upstream server '{}' tools/list item {} has no non-empty name",
+                    server.name, index
+                ))
+            })?;
+        if !names.insert(name.to_string()) {
+            return Err(ToolListCacheError::Upstream(format!(
+                "upstream server '{}' tools/list returned duplicate tool name '{}'",
+                server.name, name
+            )));
+        }
+        if !matches!(
+            json_helpers::value_at_path(tool, &["inputSchema"]),
+            Some(JsonValue::Object(_))
+        ) {
+            return Err(ToolListCacheError::Upstream(format!(
+                "upstream server '{}' tool '{}' has no object inputSchema",
+                server.name, name
+            )));
+        }
+    }
+    Ok(JsonValue::array(tools.to_vec()))
 }
 
 fn run_tool_list_request(
     root_path: &Path,
     server: &UpstreamServerConfig,
     timeout: Duration,
-) -> Result<JsonValue, String> {
+) -> ToolListCacheResult<JsonValue> {
     if server.source_type == "http" {
-        return run_http_request(server, "tools/list", None, timeout);
+        return run_http_tools_list(server, timeout)
+            .map_err(|error| ToolListCacheError::Upstream(error.to_string()));
     }
-    run_stdio_request(root_path, server, "tools/list", None, timeout, None)
+    run_stdio_tools_list(root_path, server, timeout, None)
+        .map_err(|error| ToolListCacheError::Upstream(error.to_string()))
 }
 
 enum ToolListCacheAcquire {
@@ -184,7 +260,9 @@ fn read_disk_cached_tools(key: &ToolListCacheKey) -> Option<JsonValue> {
     }
     let stored_at = u128_at_path(&value, &["storedAtUnixMs"])?;
     let now = runtimepaths::unix_time_ms_checked()?;
-    if stored_at.saturating_add(TOOL_LIST_DISK_CACHE_TTL.as_millis()) < now {
+    if stored_at > now.saturating_add(Duration::from_secs(5 * 60).as_millis())
+        || stored_at.saturating_add(TOOL_LIST_CACHE_TTL.as_millis()) < now
+    {
         let _ = fs::remove_file(path);
         return None;
     }
@@ -193,13 +271,13 @@ fn read_disk_cached_tools(key: &ToolListCacheKey) -> Option<JsonValue> {
     Some(tools)
 }
 
-fn write_disk_cached_tools(key: &ToolListCacheKey, tools: &JsonValue) -> Result<(), String> {
+fn write_disk_cached_tools(key: &ToolListCacheKey, tools: &JsonValue) -> ToolListCacheResult<()> {
     let Some(items) = tools.as_array() else {
         return Ok(());
     };
     let path = write_disk_cache_path(key)?;
-    let stored_at = runtimepaths::unix_time_ms_checked()
-        .ok_or_else(|| "system clock is before UNIX epoch".to_string())?;
+    let stored_at =
+        runtimepaths::unix_time_ms_checked().ok_or(ToolListCacheError::ClockBeforeUnixEpoch)?;
     let envelope = JsonValue::object([
         (
             "schemaVersion",
@@ -219,7 +297,41 @@ fn write_disk_cached_tools(key: &ToolListCacheKey, tools: &JsonValue) -> Result<
         ("toolCount", JsonValue::number(items.len())),
         ("tools", tools.clone()),
     ]);
-    runtimepaths::write_text_atomic(&path, &envelope.to_compact_string())
+    runtimepaths::write_text_atomic(&path, &envelope.to_compact_string())?;
+    if let Some(directory) = path.parent() {
+        prune_disk_tool_cache(directory);
+    }
+    Ok(())
+}
+
+fn prune_disk_tool_cache(directory: &Path) {
+    let Ok(entries) = fs::read_dir(directory) else {
+        return;
+    };
+    let mut files = entries
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let file_type = entry.file_type().ok()?;
+            if !file_type.is_file() || file_type.is_symlink() {
+                return None;
+            }
+            let path = entry.path();
+            if !path
+                .extension()
+                .and_then(|value| value.to_str())
+                .map(|value| value.eq_ignore_ascii_case("json"))
+                .unwrap_or(false)
+            {
+                return None;
+            }
+            let modified = entry.metadata().ok()?.modified().ok()?;
+            Some((modified, path))
+        })
+        .collect::<Vec<_>>();
+    files.sort_by(|left, right| right.0.cmp(&left.0).then_with(|| left.1.cmp(&right.1)));
+    for (_modified, path) in files.into_iter().skip(TOOL_LIST_CACHE_MAX_ENTRIES) {
+        let _ = fs::remove_file(path);
+    }
 }
 
 fn read_disk_cache_path(key: &ToolListCacheKey) -> Option<PathBuf> {
@@ -232,7 +344,7 @@ fn read_disk_cache_path(key: &ToolListCacheKey) -> Option<PathBuf> {
     Some(dir.join(disk_cache_file_name(key)))
 }
 
-fn write_disk_cache_path(key: &ToolListCacheKey) -> Result<PathBuf, String> {
+fn write_disk_cache_path(key: &ToolListCacheKey) -> ToolListCacheResult<PathBuf> {
     let root_path = Path::new(&key.root_path);
     let state_root = runtimepaths::resolve_state_root(root_path);
     let dir = runtimepaths::ensure_tool_list_cache_dir(&state_root)?;

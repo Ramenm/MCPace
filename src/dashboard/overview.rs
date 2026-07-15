@@ -1,7 +1,7 @@
 use super::response::{now_ms, sanitize_root_path};
 use super::{
-    run_json_command, run_json_command_vec, CachedHealth, CachedOverview, DashboardConfig,
-    ServeSurface,
+    run_json_command, run_json_command_vec, CachedHealth, CachedOverview, CachedOverviewFailure,
+    DashboardConfig, ServeSurface,
 };
 use crate::json::JsonValue;
 use crate::json_helpers;
@@ -9,8 +9,24 @@ use crate::resources;
 use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
+
+#[cfg(test)]
+static OVERVIEW_BUILD_INVOCATIONS: AtomicUsize = AtomicUsize::new(0);
+
+#[cfg(test)]
+pub(super) fn reset_overview_build_invocations() {
+    OVERVIEW_BUILD_INVOCATIONS.store(0, Ordering::Release);
+}
+
+#[cfg(test)]
+pub(super) fn overview_build_invocations() -> usize {
+    OVERVIEW_BUILD_INVOCATIONS.load(Ordering::Acquire)
+}
 
 pub(super) fn cached_health_json(
     config: &DashboardConfig,
@@ -131,31 +147,66 @@ pub(super) fn cached_overview_json(
         .overview_cache
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
-    if !refresh {
-        if let Some(cached) = guard.as_ref() {
-            let age = cached.stored_at.elapsed();
-            if age <= config.overview_cache_ttl {
-                return Ok(with_runtime_cache_metadata(
-                    cached.value.clone(),
-                    config,
-                    CacheMetadata {
-                        hit: true,
-                        bypassed: false,
-                        stale: false,
-                        ttl: config.overview_cache_ttl,
-                        age: Some(age),
-                        refresh_error: None,
-                    },
-                ));
-            }
+
+    if let Some(cached) = guard.entry.clone() {
+        let age = cached.stored_at.elapsed();
+        if guard.refreshing {
+            drop(guard);
+            return Ok(with_runtime_cache_metadata(
+                (*cached.value).clone(),
+                config,
+                CacheMetadata {
+                    hit: true,
+                    bypassed: refresh,
+                    stale: true,
+                    ttl: config.overview_cache_ttl,
+                    age: Some(age),
+                    refresh_error: None,
+                },
+            ));
         }
+        if !refresh && age <= config.overview_cache_ttl {
+            drop(guard);
+            return Ok(with_runtime_cache_metadata(
+                (*cached.value).clone(),
+                config,
+                CacheMetadata {
+                    hit: true,
+                    bypassed: false,
+                    stale: false,
+                    ttl: config.overview_cache_ttl,
+                    age: Some(age),
+                    refresh_error: None,
+                },
+            ));
+        }
+
+        // Expired and explicit-refresh requests share one refresh generation.
+        // Concurrent callers receive the last immutable snapshot instead of
+        // multiplying the subprocess-backed overview rebuild.
+        guard.refreshing = true;
+        drop(guard);
+        return refresh_overview_cache(config, Some(cached), refresh);
     }
 
+    // Cold failures are retained briefly so callers that waited on the same
+    // generation observe its result instead of rebuilding serially.
+    let failure_ttl = config.overview_cache_ttl.min(Duration::from_secs(1));
+    if let Some(failure) = guard.cold_failure.as_ref() {
+        if failure.stored_at.elapsed() <= failure_ttl {
+            return Err(failure.error.clone());
+        }
+    }
+    guard.cold_failure = None;
+
+    // Cold start stays single-flight under the lock. Once a snapshot exists,
+    // later stale and explicit-refresh requests use the coalesced path above.
     match build_overview_json(&config.root_path) {
         Ok(value) => {
-            *guard = Some(CachedOverview {
+            guard.cold_failure = None;
+            guard.entry = Some(CachedOverview {
                 stored_at: Instant::now(),
-                value: value.clone(),
+                value: Arc::new(value.clone()),
             });
             Ok(with_runtime_cache_metadata(
                 value,
@@ -171,13 +222,56 @@ pub(super) fn cached_overview_json(
             ))
         }
         Err(error) => {
-            if let Some(cached) = guard.as_ref() {
+            guard.cold_failure = Some(CachedOverviewFailure {
+                stored_at: Instant::now(),
+                error: error.clone(),
+            });
+            Err(error)
+        }
+    }
+}
+
+fn refresh_overview_cache(
+    config: &DashboardConfig,
+    previous: Option<CachedOverview>,
+    bypassed: bool,
+) -> Result<JsonValue, String> {
+    let refresh_result = build_overview_json(&config.root_path);
+    let mut guard = config
+        .overview_cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    guard.refreshing = false;
+
+    match refresh_result {
+        Ok(value) => {
+            guard.entry = Some(CachedOverview {
+                stored_at: Instant::now(),
+                value: Arc::new(value.clone()),
+            });
+            Ok(with_runtime_cache_metadata(
+                value,
+                config,
+                CacheMetadata {
+                    hit: false,
+                    bypassed,
+                    stale: false,
+                    ttl: config.overview_cache_ttl,
+                    age: Some(Duration::from_millis(0)),
+                    refresh_error: None,
+                },
+            ))
+        }
+        Err(error) => {
+            let cached = guard.entry.clone().or(previous);
+            drop(guard);
+            if let Some(cached) = cached {
                 return Ok(with_runtime_cache_metadata(
-                    cached.value.clone(),
+                    (*cached.value).clone(),
                     config,
                     CacheMetadata {
                         hit: true,
-                        bypassed: refresh,
+                        bypassed,
                         stale: true,
                         ttl: config.overview_cache_ttl,
                         age: Some(cached.stored_at.elapsed()),
@@ -244,29 +338,16 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
     let resource_governor_snapshot = config
         .resource_governor
         .snapshot_json(&process_resource_snapshot);
-    let mut upstream_pool_size = 0usize;
-    let mut upstream_pool_max_size = 0usize;
-    let mut upstream_pool_idle_ttl_ms = 0u128;
-    let mut upstream_pool_locked_shards = 0usize;
-    let mut upstream_pool_evicted_idle_count = 0usize;
-    let mut upstream_session_snapshots = Vec::new();
-
-    for pool_lock in &config.upstream_session_pools {
-        if let Ok(mut pool) = pool_lock.lock() {
-            upstream_pool_evicted_idle_count =
-                upstream_pool_evicted_idle_count.saturating_add(pool.purge_idle_and_exited());
-            upstream_pool_size = upstream_pool_size.saturating_add(pool.session_count());
-            upstream_pool_max_size =
-                upstream_pool_max_size.saturating_add(pool.max_session_count());
-            upstream_pool_idle_ttl_ms = pool.idle_ttl_ms();
-            upstream_pool_locked_shards = upstream_pool_locked_shards.saturating_add(1);
-            upstream_session_snapshots.extend(
-                pool.session_snapshots()
-                    .into_iter()
-                    .map(|snapshot| snapshot.to_json_value()),
-            );
-        }
-    }
+    let upstream_pool_evicted_idle_count = config.upstream_session_pool.purge_idle_and_exited();
+    let upstream_pool_size = config.upstream_session_pool.session_count();
+    let upstream_pool_max_size = config.upstream_session_pool.max_session_count();
+    let upstream_pool_idle_ttl_ms = config.upstream_session_pool.idle_ttl_ms();
+    let upstream_session_snapshots = config
+        .upstream_session_pool
+        .session_snapshots()
+        .into_iter()
+        .map(|snapshot| snapshot.to_json_value())
+        .collect::<Vec<_>>();
 
     let http_session_snapshot = config
         .http_session_store
@@ -469,6 +550,24 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
                             .unwrap_or_default(),
                     ),
                 ),
+                (
+                    "requestIdReplayBytes",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.request_id_replay_bytes)
+                            .unwrap_or_default(),
+                    ),
+                ),
+                (
+                    "maxRequestIdReplayBytes",
+                    JsonValue::number(
+                        http_session_snapshot
+                            .as_ref()
+                            .map(|snapshot| snapshot.max_request_id_replay_bytes)
+                            .unwrap_or_default(),
+                    ),
+                ),
                 ("locked", JsonValue::bool(http_session_snapshot.is_some())),
             ]),
         ),
@@ -482,14 +581,8 @@ pub(super) fn runtime_status_json(config: &DashboardConfig) -> JsonValue {
                     "evictedIdleCount",
                     JsonValue::number(upstream_pool_evicted_idle_count),
                 ),
-                (
-                    "shardCount",
-                    JsonValue::number(config.upstream_session_pools.len()),
-                ),
-                (
-                    "lockedShardCount",
-                    JsonValue::number(upstream_pool_locked_shards),
-                ),
+                ("managerCount", JsonValue::number(1)),
+                ("busyManagerCount", JsonValue::number(0)),
                 (
                     "sessions",
                     JsonValue::array(upstream_session_snapshots.clone()),
@@ -599,6 +692,11 @@ pub(super) fn query_bool_flag(query: &str, key: &str) -> bool {
 }
 
 pub(super) fn build_overview_json(root_path: &Path) -> Result<JsonValue, String> {
+    #[cfg(test)]
+    if root_path.join(".count-overview-builds").is_file() {
+        OVERVIEW_BUILD_INVOCATIONS.fetch_add(1, Ordering::AcqRel);
+    }
+
     let mut results = run_json_commands_parallel(
         root_path,
         vec![
@@ -800,7 +898,11 @@ fn build_dashboard_foundation_json(
             "tools",
             "Tools",
             tools_status,
-            if cached_ok > 0 { "Tools evidence exists" } else { "Run Test" },
+            if cached_ok > 0 {
+                "Tools evidence exists"
+            } else {
+                "Test enabled sources"
+            },
             if cached_ok > 0 {
                 "At least one source has cached tools/list evidence."
             } else if total_servers > 0 {
@@ -809,7 +911,7 @@ fn build_dashboard_foundation_json(
                 "Tools can only be checked after a source exists."
             },
             "servers",
-            if cached_ok > 0 { "Open tools" } else { "Run test" },
+            "Open servers",
         ),
         foundation_step(
             "routing",
@@ -886,7 +988,7 @@ fn build_dashboard_foundation_json(
         "backend" => "The safest base path is: start or reconnect the dashboard backend, then refresh before reading server state.",
         "client" => "MCPace is useful only when a client points at its local endpoint. Preview that patch before editing files.",
         "source" => "Bring in one source, save it parked, review it, enable deliberately, then run Test before normal use.",
-        "tools" => "A saved or enabled source is not enough; wait for initialize/tools-list evidence before treating tools as available.",
+        "tools" => "A saved or enabled source is not ready until Test confirms which tools it provides.",
         "routing" if !runtime_ready => "Runtime prerequisites are checked at the routing/use boundary. Repair them after client, source, and tool setup are clear.",
         "routing" if enabled_servers == 0 => "Saved sources are still parked. Review one, enable it deliberately, then run Test before normal routing.",
         "routing" => "Solve blockers and policy fixes before adding workers or exposing more servers.",
@@ -943,9 +1045,9 @@ fn build_dashboard_foundation_json(
             JsonValue::array([
                 JsonValue::string("Show backend, client, source, tools, and routing before advanced controls."),
                 JsonValue::string("Backend online only means /api/overview responded; runtime readiness is checked before routing/use."),
-                JsonValue::string("Keep workers, raw env, headers, leases, and protocol diagnostics folded."),
+                JsonValue::string("Keep workers, raw env, headers, leases, and protocol diagnostics in their named task workspace."),
                 JsonValue::string("Use preview, save disabled, review, enable, then test as the default change path."),
-                JsonValue::string("Render secret values as names only; keep raw env, headers, and tokens hidden or folded."),
+                JsonValue::string("Render secret values as names only; keep raw env, headers, and tokens hidden or inside the Source task."),
             ]),
         ),
         (
@@ -2560,7 +2662,9 @@ fn build_user_readiness_json(
                 JsonValue::string("environment variable values"),
                 JsonValue::string("HTTP header values"),
                 JsonValue::string("raw JSON and logs unless diagnostics are opened"),
-                JsonValue::string("manual worker/policy controls unless Details is opened"),
+                JsonValue::string(
+                    "manual worker/policy controls unless the Routing task is opened",
+                ),
                 JsonValue::string("disabled server tools as if they were usable"),
             ]),
         ),
@@ -3135,30 +3239,69 @@ pub(super) fn run_json_commands_parallel(
         return Ok(results);
     }
 
-    let handles = commands
-        .into_iter()
-        .map(|(name, args)| {
-            let root_path = root_path.to_path_buf();
-            (
-                name,
-                thread::spawn(move || {
-                    run_json_command_vec(&root_path, args.into_iter().map(str::to_string).collect())
-                }),
-            )
-        })
-        .collect::<Vec<_>>();
+    let mut handles = Vec::with_capacity(commands.len());
+    for (name, args) in commands {
+        let root_path = root_path.to_path_buf();
+        match thread::Builder::new()
+            .name(format!("mcpace-overview-{name}"))
+            .spawn(move || {
+                run_json_command_vec(&root_path, args.into_iter().map(str::to_string).collect())
+            }) {
+            Ok(handle) => handles.push((name, handle)),
+            Err(error) => {
+                for (_, handle) in handles {
+                    let _ = handle.join();
+                }
+                return Err(format!(
+                    "{}: failed to start command worker: {}",
+                    name, error
+                ));
+            }
+        }
+    }
 
+    join_json_command_handles(handles).map_err(|error| error.to_string())
+}
+
+#[derive(Debug)]
+pub(super) struct JsonCommandJoinError(String);
+
+impl std::fmt::Display for JsonCommandJoinError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+pub(super) fn join_json_command_handles<E>(
+    handles: Vec<(&'static str, thread::JoinHandle<Result<JsonValue, E>>)>,
+) -> Result<BTreeMap<&'static str, JsonValue>, JsonCommandJoinError>
+where
+    E: std::fmt::Display,
+{
     let mut results = BTreeMap::new();
+    let mut first_error = None;
     for (name, handle) in handles {
         match handle.join() {
             Ok(Ok(value)) => {
                 results.insert(name, value);
             }
-            Ok(Err(error)) => return Err(format!("{}: {}", name, error)),
-            Err(_) => return Err(format!("{}: command worker panicked", name)),
+            Ok(Err(error)) => {
+                if first_error.is_none() {
+                    first_error = Some(format!("{}: {}", name, error));
+                }
+            }
+            Err(_) => {
+                if first_error.is_none() {
+                    first_error = Some(format!("{}: command worker panicked", name));
+                }
+            }
         }
     }
-    Ok(results)
+    if let Some(error) = first_error {
+        Err(JsonCommandJoinError(error))
+    } else {
+        Ok(results)
+    }
 }
 
 pub(super) fn take_parallel_result(

@@ -1,3 +1,4 @@
+use crate::execution::ExecutionPolicy;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
@@ -15,6 +16,7 @@ use std::time::{Duration, Instant};
 mod diagnostics;
 mod http_runtime;
 mod inventory;
+mod lease_queue;
 mod lease_runtime;
 mod policy_audit;
 mod policy_suggestions;
@@ -46,7 +48,6 @@ pub use self::session_pool::UpstreamSessionPool;
 use self::diagnostics::stderr_suffix;
 #[cfg(test)]
 use self::diagnostics::DIAGNOSTIC_REDACTION;
-use self::http_runtime::run_http_request;
 #[cfg(test)]
 use self::inventory::{catalog_cache_counts, flatten_catalog_tools};
 #[cfg(test)]
@@ -65,6 +66,7 @@ use self::server_config::{
     context_string, load_servers, optional_json_string, run_server_tasks, select_servers,
 };
 use self::source_type::infer_source_type;
+#[cfg(test)]
 use self::stdio_runtime::run_stdio_request;
 use self::tool_cache::{cached_tools_list, read_cached_tools, tool_list_cache_key};
 #[cfg(test)]
@@ -83,6 +85,94 @@ const TOOL_LIST_CACHE_MAX_ENTRIES: usize = 128;
 const UPSTREAM_SESSION_IDLE_TTL: Duration = Duration::from_secs(300);
 const INITIALIZE_ID: i64 = 1;
 const METHOD_ID: i64 = 2;
+const UPSTREAM_TOOL_LIST_MAX_PAGES: usize = 100;
+const UPSTREAM_TOOL_LIST_MAX_TOOLS: usize = 10_000;
+const UPSTREAM_TOOL_LIST_MAX_BYTES: usize = 32 * 1024 * 1024;
+
+struct ToolListPagination {
+    tools: Vec<JsonValue>,
+    seen_cursors: BTreeSet<String>,
+    pages: usize,
+    bytes: usize,
+}
+
+impl ToolListPagination {
+    fn new() -> Self {
+        Self {
+            tools: Vec::new(),
+            seen_cursors: BTreeSet::new(),
+            pages: 0,
+            bytes: 0,
+        }
+    }
+
+    fn add_page(
+        &mut self,
+        server_name: &str,
+        result: &JsonValue,
+    ) -> Result<Option<String>, String> {
+        let page_tools = json_helpers::array_at_path(result, &["tools"]).ok_or_else(|| {
+            format!(
+                "upstream server '{}' tools/list result must contain a tools array",
+                server_name
+            )
+        })?;
+        if self.tools.len().saturating_add(page_tools.len()) > UPSTREAM_TOOL_LIST_MAX_TOOLS {
+            return Err(format!(
+                "upstream server '{}' tools/list exceeded the {}-tool safety limit",
+                server_name, UPSTREAM_TOOL_LIST_MAX_TOOLS
+            ));
+        }
+        for tool in page_tools {
+            self.bytes = self.bytes.saturating_add(tool.to_compact_string().len());
+            if self.bytes > UPSTREAM_TOOL_LIST_MAX_BYTES {
+                return Err(format!(
+                    "upstream server '{}' tools/list exceeded the {}-byte cumulative safety limit",
+                    server_name, UPSTREAM_TOOL_LIST_MAX_BYTES
+                ));
+            }
+            self.tools.push(tool.clone());
+        }
+        self.pages = self.pages.saturating_add(1);
+        let cursor = match json_helpers::value_at_path(result, &["nextCursor"]) {
+            None | Some(JsonValue::Null) => None,
+            Some(JsonValue::String(value)) if value.trim().is_empty() => None,
+            Some(JsonValue::String(value)) if value.len() <= 4_096 => Some(value.clone()),
+            Some(JsonValue::String(_)) => {
+                return Err(format!(
+                    "upstream server '{}' tools/list returned an oversized nextCursor",
+                    server_name
+                ));
+            }
+            Some(_) => {
+                return Err(format!(
+                    "upstream server '{}' tools/list returned a non-string nextCursor",
+                    server_name
+                ));
+            }
+        };
+        let Some(cursor) = cursor else {
+            return Ok(None);
+        };
+        if self.pages >= UPSTREAM_TOOL_LIST_MAX_PAGES {
+            return Err(format!(
+                "upstream server '{}' tools/list exceeded the {}-page safety limit",
+                server_name, UPSTREAM_TOOL_LIST_MAX_PAGES
+            ));
+        }
+        if !self.seen_cursors.insert(cursor.clone()) {
+            return Err(format!(
+                "upstream server '{}' tools/list repeated pagination cursor '{}'",
+                server_name, cursor
+            ));
+        }
+        Ok(Some(cursor))
+    }
+
+    fn finish(self) -> JsonValue {
+        JsonValue::object([("tools", JsonValue::array(self.tools))])
+    }
+}
 
 fn max_pooled_upstream_sessions() -> usize {
     resources::default_upstream_session_pool_limit()
@@ -97,9 +187,11 @@ struct UpstreamServerConfig {
     command: Option<String>,
     args: Vec<String>,
     env: BTreeMap<String, String>,
+    headers: BTreeMap<String, String>,
     cwd: Option<PathBuf>,
     url: Option<String>,
     timeout_ms: u64,
+    execution: ExecutionPolicy,
     tool_policies: Vec<ToolRiskPolicy>,
 }
 
@@ -116,6 +208,7 @@ struct UpstreamServerPolicy {
     profile_enabled: bool,
     platform_supported: bool,
     runtime_enabled: bool,
+    execution: ExecutionPolicy,
     tool_policies: Vec<ToolRiskPolicy>,
 }
 
@@ -146,31 +239,37 @@ fn cache_root_path(root_path: &Path) -> String {
 }
 
 fn server_fingerprint(server: &UpstreamServerConfig) -> String {
-    let env_values = server
-        .env
-        .iter()
-        .map(|(key, value)| format!("{}:{}", key, fingerprint_env_value(value)))
-        .collect::<Vec<_>>()
-        .join("\u{1f}");
+    let env_values = fingerprint_secret_map(&server.env);
+    let header_values = fingerprint_secret_map(&server.headers);
     format!(
-        "protocol={}|enabled={}|type={}|command={}|args={}|env={}|cwd={}|url={}|timeout={}",
+        "protocol={}|enabled={}|type={}|command={}|args={}|env={}|headers={}|cwd={}|url={}|timeout={}|execution={}",
         mcp::CURRENT_PROTOCOL_VERSION,
         server.enabled,
         server.source_type,
         server.command.as_deref().unwrap_or_default(),
         server.args.join("\u{1f}"),
         env_values,
+        header_values,
         server
             .cwd
             .as_ref()
             .map(|value| value.display().to_string())
             .unwrap_or_default(),
         server.url.as_deref().unwrap_or_default(),
-        server.timeout_ms
+        server.timeout_ms,
+        server.execution.fingerprint()
     )
 }
 
-fn fingerprint_env_value(value: &str) -> String {
+fn fingerprint_secret_map(values: &BTreeMap<String, String>) -> String {
+    values
+        .iter()
+        .map(|(key, value)| format!("{}:{}", key, fingerprint_secret_value(value)))
+        .collect::<Vec<_>>()
+        .join("\u{1f}")
+}
+
+fn fingerprint_secret_value(value: &str) -> String {
     let mut hasher = DefaultHasher::new();
     value.hash(&mut hasher);
     format!("len{}-hash{:016x}", value.len(), hasher.finish())
@@ -197,7 +296,7 @@ fn ensure_callable_stdio(root_path: &Path, server: &UpstreamServerConfig) -> Res
     }
     if server.source_type != "stdio" && server.source_type != "http" {
         return Err(format!(
-            "upstream server '{}' uses '{}' transport. This MCPace bridge currently forwards stdio and plain local Streamable HTTP upstreams; configure a stdio adapter or call runtime_diagnostics for exact status.",
+            "upstream server '{}' uses '{}' transport. This MCPace bridge forwards stdio and Streamable HTTP/HTTPS upstreams; configure a compatibility adapter or call runtime_diagnostics for exact status.",
             server.name, server.source_type
         ));
     }
@@ -218,6 +317,10 @@ fn probe_timeout_for(server: &UpstreamServerConfig, requested_ms: Option<u64>) -
     let default_ms = server.timeout_ms.min(DEFAULT_PROBE_TIMEOUT_MS);
     let millis = requested_ms.unwrap_or(default_ms).clamp(1_000, 300_000);
     Duration::from_millis(millis)
+}
+
+pub(crate) fn http_upstream_url_is_callable(url: &str) -> bool {
+    http_runtime::http_upstream_configuration_error(url, &BTreeMap::new()).is_none()
 }
 
 fn server_runtime_callable(
@@ -243,27 +346,10 @@ fn server_runtime_callable(
                 )),
             );
         };
-        if url.to_ascii_lowercase().starts_with("http://") {
-            return (true, None, None);
+        if let Some(error) = http_runtime::http_upstream_configuration_error(url, &server.headers) {
+            return (false, None, Some(error));
         }
-        if url.to_ascii_lowercase().starts_with("https://") {
-            return (
-                false,
-                None,
-                Some(format!(
-                    "upstream server '{}' uses HTTPS; direct TLS upstream forwarding is not enabled in this build. Use a stdio adapter such as mcp-remote or a local HTTP gateway for now.",
-                    server.name
-                )),
-            );
-        }
-        return (
-            false,
-            None,
-            Some(format!(
-                "HTTP upstream server '{}' url must start with http:// or https://",
-                server.name
-            )),
-        );
+        return (true, None, None);
     }
     if server.source_type == "legacy-sse" {
         return (
@@ -282,6 +368,28 @@ fn server_runtime_callable(
             Some(format!(
                 "upstream server '{}' uses unsupported '{}' transport",
                 server.name, server.source_type
+            )),
+        );
+    }
+    if server.args.iter().any(|argument| argument.contains('\0')) {
+        return (
+            false,
+            None,
+            Some(format!(
+                "upstream server '{}' contains a NUL byte in a stdio argument",
+                server.name
+            )),
+        );
+    }
+    if let Some((name, _value)) = server.env.iter().find(|(name, value)| {
+        name.is_empty() || name.contains('=') || name.contains('\0') || value.contains('\0')
+    }) {
+        return (
+            false,
+            None,
+            Some(format!(
+                "upstream server '{}' contains an invalid environment entry '{}'",
+                server.name, name
             )),
         );
     }
@@ -325,18 +433,7 @@ fn upstream_blocked_status(server: &UpstreamServerConfig) -> &'static str {
     }
     match server.source_type.as_str() {
         "stdio" => "blocked-command-not-found",
-        "http" => {
-            if server
-                .url
-                .as_deref()
-                .map(|url| url.trim().to_ascii_lowercase().starts_with("https://"))
-                .unwrap_or(false)
-            {
-                "blocked-https-upstream"
-            } else {
-                "blocked-http-upstream"
-            }
-        }
+        "http" => "blocked-http-upstream",
         "legacy-sse" => "blocked-legacy-sse-upstream",
         _ => "blocked-unsupported-transport",
     }
@@ -1280,6 +1377,101 @@ fn server_inventory_item(root_path: &Path, server: &UpstreamServerConfig) -> Jso
                 .unwrap_or(JsonValue::Null),
         ),
     ])
+}
+
+fn batch_tool_call_error(
+    server_name: &str,
+    completed: usize,
+    total: usize,
+    error: impl std::fmt::Display,
+) -> String {
+    format!(
+        "upstream server '{}' batch stopped at call {} of {} after {} completed call(s); earlier calls may already have side effects: {}",
+        server_name,
+        completed.saturating_add(1),
+        total,
+        completed,
+        error
+    )
+}
+
+fn validate_tool_call_result(
+    server_name: &str,
+    tool_name: &str,
+    result: &JsonValue,
+) -> Result<bool, String> {
+    let object = result.as_object().ok_or_else(|| {
+        format!(
+            "upstream server '{}' tool '{}' returned a non-object tools/call result",
+            server_name, tool_name
+        )
+    })?;
+    if !matches!(object.get("content"), Some(JsonValue::Array(_))) {
+        return Err(format!(
+            "upstream server '{}' tool '{}' tools/call result must contain a content array",
+            server_name, tool_name
+        ));
+    }
+    match object.get("isError") {
+        Some(JsonValue::Bool(value)) => Ok(*value),
+        Some(_) => Err(format!(
+            "upstream server '{}' tool '{}' returned a non-boolean isError value",
+            server_name, tool_name
+        )),
+        None => Ok(false),
+    }
+}
+
+fn negotiated_protocol_version(
+    server_name: &str,
+    initialize_result: &JsonValue,
+) -> Result<String, String> {
+    let version = json_helpers::string_at_path(initialize_result, &["protocolVersion"])
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| {
+            format!(
+                "upstream server '{}' initialize result did not contain protocolVersion",
+                server_name
+            )
+        })?;
+    if !mcp::is_supported_protocol_version(version) {
+        return Err(format!(
+            "upstream server '{}' selected unsupported MCP protocol version '{}'",
+            server_name, version
+        ));
+    }
+    if !matches!(
+        json_helpers::value_at_path(initialize_result, &["capabilities"]),
+        Some(JsonValue::Object(_))
+    ) {
+        return Err(format!(
+            "upstream server '{}' initialize result must contain a capabilities object",
+            server_name
+        ));
+    }
+    let server_info =
+        json_helpers::object_at_path(initialize_result, &["serverInfo"]).ok_or_else(|| {
+            format!(
+                "upstream server '{}' initialize result must contain a serverInfo object",
+                server_name
+            )
+        })?;
+    for field in ["name", "version"] {
+        if !server_info
+            .get(field)
+            .and_then(JsonValue::as_str)
+            .map(str::trim)
+            .map(|value| !value.is_empty())
+            .unwrap_or(false)
+        {
+            return Err(format!(
+                "upstream server '{}' initialize serverInfo must contain non-empty '{}'",
+                server_name, field
+            ));
+        }
+    }
+    Ok(version.to_string())
 }
 
 fn empty_object() -> JsonValue {

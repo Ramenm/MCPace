@@ -1,13 +1,72 @@
-use crate::json::JsonValue;
+use crate::json::{JsonParseError, JsonValue};
 use std::collections::BTreeMap;
-use std::fs;
-use std::path::Path;
+use std::fmt;
+use std::fs::File;
+use std::io::Read;
+use std::path::{Path, PathBuf};
 
-pub fn read_json_file(path: &Path) -> Result<JsonValue, String> {
-    let raw = fs::read_to_string(path)
-        .map_err(|error| format!("failed to read {}: {}", path.display(), error))?;
-    crate::json::parse_str(&raw)
-        .map_err(|error| format!("failed to parse {}: {}", path.display(), error))
+const MAX_JSON_FILE_BYTES: u64 = 64 * 1024 * 1024;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum JsonFileError {
+    Read {
+        path: PathBuf,
+        source: String,
+    },
+    Parse {
+        path: PathBuf,
+        source: JsonParseError,
+    },
+}
+
+impl JsonFileError {
+    #[cfg(test)]
+    pub fn contains(&self, needle: &str) -> bool {
+        self.to_string().contains(needle)
+    }
+}
+
+impl fmt::Display for JsonFileError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            JsonFileError::Read { path, source } => {
+                write!(formatter, "failed to read {}: {}", path.display(), source)
+            }
+            JsonFileError::Parse { path, source } => {
+                write!(formatter, "failed to parse {}: {}", path.display(), source)
+            }
+        }
+    }
+}
+
+impl std::error::Error for JsonFileError {}
+
+impl From<JsonFileError> for String {
+    fn from(error: JsonFileError) -> Self {
+        error.to_string()
+    }
+}
+
+pub fn read_json_file(path: &Path) -> Result<JsonValue, JsonFileError> {
+    let read_error = |source: String| JsonFileError::Read {
+        path: path.to_path_buf(),
+        source,
+    };
+    let file = File::open(path).map_err(|error| read_error(error.to_string()))?;
+    let mut raw = String::new();
+    file.take(MAX_JSON_FILE_BYTES.saturating_add(1))
+        .read_to_string(&mut raw)
+        .map_err(|error| read_error(error.to_string()))?;
+    if raw.len() as u64 > MAX_JSON_FILE_BYTES {
+        return Err(read_error(format!(
+            "JSON file exceeds the {}-byte safety limit",
+            MAX_JSON_FILE_BYTES
+        )));
+    }
+    crate::json::parse_str(&raw).map_err(|source| JsonFileError::Parse {
+        path: path.to_path_buf(),
+        source,
+    })
 }
 
 pub fn object_at_path<'a>(

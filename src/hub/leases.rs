@@ -1,6 +1,7 @@
 use super::args::ParsedArgs;
 use super::runtime;
 use crate::client::{self, RuntimePlanRequest};
+use crate::diagnostics;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::runtimepaths;
@@ -216,7 +217,7 @@ pub(super) fn run(
             result.exit_code
         }
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             1
         }
     }

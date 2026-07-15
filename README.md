@@ -11,14 +11,14 @@ npm install -g @mcpace/cli@latest
 mcpace up
 ```
 
-Node.js 22+ is required. GitHub Releases also provide native `.msi`, `.deb`, and `.pkg` installers; see [`docs/release-completion.md`](docs/release-completion.md). Source installs for local development still work with `cargo install --path .`.
+Node.js 22+ is required. This is the supported public install path: npm automatically selects the matching internal native package for Windows, glibc Linux, or macOS; do not install `@mcpace/cli-<target>` packages directly. Native `.msi`, `.deb`, and `.pkg` artifacts are currently private draft proofs, not public downloads; Windows and macOS publication remains blocked on signing and notarization. See [`docs/release-completion.md`](docs/release-completion.md). Source installs for local development still work with `cargo install --path .`.
 
 `mcpace up` creates or repairs `~/.mcpace`, imports safe existing MCP servers from detected local configs, starts `http://127.0.0.1:39022/mcp`, wires detected clients, and runs readiness checks. It does **not** add a filesystem server, memory server, or any other upstream server by default.
 
 ## Daily commands
 
 | Need | Command |
-|---|---|
+| --- | --- |
 | Start or repair the local home | `mcpace up` |
 | Preview auto discovery | `mcpace auto --dry-run` |
 | Add trusted discovered servers | `mcpace auto` |
@@ -35,7 +35,7 @@ Modes are `shared`, `serialized`, `session-isolated`, `project-isolated`, `pool`
 ## Documentation
 
 | File | Purpose |
-|---|---|
+| --- | --- |
 | [`docs/README.md`](docs/README.md) | Runbook and documentation map. |
 | [`docs/architecture.md`](docs/architecture.md) | Scheduler model, planes, modes, and state classes. |
 | [`docs/dashboard-base.md`](docs/dashboard-base.md) | Dashboard information architecture, display order, and action rules. |
@@ -47,13 +47,13 @@ Modes are `shared`, `serialized`, `session-isolated`, `project-isolated`, `pool`
 
 MCPace is licensed under Apache-2.0. Copyright 2026 Ramenm.
 
-## Verify
+## Contributor verification
+
+The commands below are a fast local contributor check, not release approval. Release hosts must run the locked, fail-closed sequence in [`docs/release-readiness.md`](docs/release-readiness.md).
 
 ```bash
 npm run check
 npm run check:rust
-cargo build --release
-npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --concurrency 64
+cargo build --release --locked
+npm run load:local -- --duration-ms 5000 --concurrency 64
 ```
-
-This ZIP is source-only: no `.git`, `node_modules`, caches, runtime logs, vendored binaries, Rust `target`, or heavy build outputs.

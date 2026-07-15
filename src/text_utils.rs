@@ -29,6 +29,34 @@ pub(crate) fn ascii_alnum_dash_underscore(value: &str) -> bool {
             .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_'))
 }
 
+pub(crate) fn valid_http_header_name(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_' | b'.' | b'~'))
+}
+
+pub(crate) fn reserved_mcp_http_header_name(value: &str) -> bool {
+    matches!(
+        value.trim().to_ascii_lowercase().as_str(),
+        "host"
+            | "content-length"
+            | "transfer-encoding"
+            | "connection"
+            | "accept"
+            | "content-type"
+            | "mcp-protocol-version"
+            | "mcp-session-id"
+    )
+}
+
+pub(crate) fn valid_http_field_value(value: &str) -> bool {
+    !value.is_empty()
+        && value
+            .bytes()
+            .all(|byte| byte == b' ' || (0x21..=0x7e).contains(&byte))
+}
+
 pub(crate) fn valid_http_header_value(value: &str) -> bool {
     !value.is_empty() && value.bytes().all(|byte| (0x21..=0x7e).contains(&byte))
 }

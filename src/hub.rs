@@ -5,8 +5,9 @@ mod lifecycle;
 mod model;
 pub(crate) mod runtime;
 mod status;
+use crate::diagnostics;
 
-use self::args::{parse_args, write_help};
+use self::args::{parse_cli, write_help};
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -16,10 +17,10 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
 
     if let Some(error) = parsed.error.as_ref() {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help || parsed.action.is_none() {
@@ -29,7 +30,10 @@ pub fn run(
 
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
@@ -48,10 +52,9 @@ pub fn run(
         "lease" => leases::run(&root_path, &parsed, stdout, stderr),
         "run" => lifecycle::run_loop_command(&root_path, stderr),
         other => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "unsupported hub action in the Rust-only repo: {}",
-                other
+                format_args!("unsupported hub action in the Rust-only repo: {}", other),
             );
             2
         }

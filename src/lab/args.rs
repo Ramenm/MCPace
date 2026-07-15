@@ -1,5 +1,25 @@
+use clap::{error::ErrorKind, Parser, ValueEnum};
+use std::ffi::OsString;
+use std::fmt;
 use std::io::Write;
 use std::path::PathBuf;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum LabArgsError {
+    InvalidTimeout,
+}
+
+impl fmt::Display for LabArgsError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidTimeout => {
+                formatter.write_str("lab probe --timeout-ms must be a positive integer")
+            }
+        }
+    }
+}
+
+impl std::error::Error for LabArgsError {}
 
 #[derive(Debug, Default)]
 pub(super) struct ParsedArgs {
@@ -13,75 +33,128 @@ pub(super) struct ParsedArgs {
     pub(super) error: Option<String>,
 }
 
-pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Clone, Debug, ValueEnum)]
+enum LabAction {
+    List,
+    Matrix,
+    Show,
+    Coverage,
+    Gaps,
+    Report,
+    Run,
+    Probe,
+}
 
-    while index < args.len() {
-        match args[index].trim().to_ascii_lowercase().as_str() {
-            "list" | "matrix" | "show" | "coverage" | "gaps" | "report" | "run" | "probe" => {
-                if parsed.action.is_some() {
-                    parsed.error = Some("lab accepts only one action".to_string());
-                    return parsed;
-                }
-                parsed.action = Some(args[index].trim().to_ascii_lowercase());
-                index += 1;
-            }
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("lab requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "--timeout-ms" | "-timeout-ms" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("lab probe requires a number after --timeout-ms".to_string());
-                    return parsed;
-                };
-                match value.trim().parse::<u64>() {
-                    Ok(value) if value > 0 => parsed.timeout_ms = Some(value),
-                    _ => {
-                        parsed.error =
-                            Some("lab probe --timeout-ms must be a positive integer".to_string());
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--refresh" | "-refresh" => {
-                parsed.refresh = true;
-                index += 1;
-            }
-            "--id" | "-id" | "--name" | "-name" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("lab show requires a value after --id".to_string());
-                    return parsed;
-                };
-                parsed.id_filter = Some(value.to_string());
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            _ => {
-                parsed.error = Some(format!(
-                    "unsupported lab arguments in the Rust-only repo: {}",
-                    args[index]
-                ));
-                return parsed;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace lab",
+    disable_version_flag = true,
+    about = "Inspect and probe MCP runtime classification evidence"
+)]
+struct LabCli {
+    /// Lab action. Defaults to report.
+    #[arg(value_enum)]
+    action: Option<LabAction>,
+
+    /// Emit machine-readable JSON.
+    #[arg(long = "json", short = 'j')]
+    json_output: bool,
+
+    /// MCPace project/root directory.
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+
+    /// Scenario/server id filter for show and probe.
+    #[arg(long = "id", alias = "name", value_name = "ID")]
+    id_filter: Option<String>,
+
+    /// Live probe timeout in milliseconds.
+    #[arg(long = "timeout-ms", value_name = "MS")]
+    timeout_ms: Option<u64>,
+
+    /// Refresh cached live probe evidence.
+    #[arg(long = "refresh")]
+    refresh: bool,
+}
+
+pub(super) fn parse_cli(args: &[String]) -> ParsedArgs {
+    match LabCli::try_parse_from(argv(args)) {
+        Ok(cli) => match validate_timeout(cli.timeout_ms) {
+            Ok(timeout_ms) => ParsedArgs {
+                action: cli.action.map(lab_action_name),
+                json_output: cli.json_output,
+                help: false,
+                id_filter: cli.id_filter,
+                root_override: cli.root_override,
+                timeout_ms,
+                refresh: cli.refresh,
+                error: None,
+            },
+            Err(error) => ParsedArgs {
+                error: Some(error.to_string()),
+                ..ParsedArgs::default()
+            },
+        },
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
             }
         }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
     }
+}
 
-    parsed
+fn lab_action_name(action: LabAction) -> String {
+    match action {
+        LabAction::List => "list",
+        LabAction::Matrix => "matrix",
+        LabAction::Show => "show",
+        LabAction::Coverage => "coverage",
+        LabAction::Gaps => "gaps",
+        LabAction::Report => "report",
+        LabAction::Run => "run",
+        LabAction::Probe => "probe",
+    }
+    .to_string()
+}
+
+fn validate_timeout(value: Option<u64>) -> Result<Option<u64>, LabArgsError> {
+    match value {
+        Some(0) => Err(LabArgsError::InvalidTimeout),
+        other => Ok(other),
+    }
+}
+
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace lab"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_flag(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_flag(arg: &str) -> &str {
+    match arg {
+        "-json" => "--json",
+        "-root" => "--root",
+        "-timeout-ms" => "--timeout-ms",
+        "-refresh" => "--refresh",
+        "-id" => "--id",
+        "-name" => "--name",
+        "-?" => "--help",
+        other => other,
+    }
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
@@ -108,3 +181,6 @@ pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "lab reads runtime fixtures plus a capability inventory and turns them into an evidence report: server -> evidence -> runtimeType/stateClass/effectClass -> concurrencyPolicy. The probe action performs a safe live MCP handshake (initialize + notifications/initialized + tools/list only) and never calls tools/call.");
 }
+
+#[cfg(test)]
+mod tests;

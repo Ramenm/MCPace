@@ -1,6 +1,8 @@
 use super::actions::client_install_support_summary;
-use super::pathing::normalize;
 use crate::runtimepaths;
+use crate::text_utils::normalize_flag;
+use clap::{error::ErrorKind, Parser};
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -21,136 +23,169 @@ pub(super) struct ParsedArgs {
     pub(super) error: Option<String>,
 }
 
-pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace client",
+    disable_version_flag = true,
+    about = "Plan, export, install, restore, and list MCPace client integrations"
+)]
+struct ClientCli {
+    #[arg(value_name = "ACTION")]
+    action: Option<String>,
 
-    while index < args.len() {
-        let token = normalize(&args[index]);
-        match token.as_str() {
-            "plan" | "install" | "export" | "list" | "restore" => {
-                if parsed.action.is_some() {
-                    parsed.error = Some("client accepts only one action".to_string());
-                    return parsed;
-                }
-                parsed.action = Some(token);
-                index += 1;
-            }
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--dry-run" => {
-                parsed.dry_run = true;
-                index += 1;
-            }
-            "--diff" => {
-                parsed.diff = true;
-                index += 1;
-            }
-            "--backup" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("client restore requires a value after --backup".to_string());
-                    return parsed;
-                };
-                parsed.backup = Some(value.to_string());
-                index += 2;
-            }
-            "--latest" => {
-                parsed.backup = Some("latest".to_string());
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("client requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "--client-id" | "-client-id" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("client plan requires a value after --client-id".to_string());
-                    return parsed;
-                };
-                parsed.client_id = Some(value.to_string());
-                index += 2;
-            }
-            "--session-id" | "-session-id" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("client plan requires a value after --session-id".to_string());
-                    return parsed;
-                };
-                parsed.session_id = Some(value.to_string());
-                index += 2;
-            }
-            "--project-root" | "-project-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("client plan requires a value after --project-root".to_string());
-                    return parsed;
-                };
-                parsed.project_root = Some(value.to_string());
-                index += 2;
-            }
-            "--transport" | "-transport" | "--ingress" | "-ingress" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("client plan requires a value after --transport".to_string());
-                    return parsed;
-                };
-                parsed.transport = Some(value.to_string());
-                index += 2;
-            }
-            "--metadata-json" | "-metadata-json" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some(
-                        "client plan requires a JSON string after --metadata-json".to_string(),
-                    );
-                    return parsed;
-                };
-                parsed.metadata_json = Some(value.to_string());
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            _ => {
-                if matches!(
-                    parsed.action.as_deref(),
-                    Some("export" | "install" | "restore")
-                ) && parsed.client_id.is_none()
-                {
-                    parsed.client_id = Some(args[index].to_string());
-                    index += 1;
-                    continue;
-                }
+    #[arg(value_name = "CLIENT")]
+    target: Option<String>,
 
+    #[arg(value_name = "EXTRA")]
+    extra: Vec<String>,
+
+    #[arg(long = "json")]
+    json_output: bool,
+
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+
+    #[arg(long = "client-id", value_name = "ID")]
+    client_id: Option<String>,
+
+    #[arg(long = "session-id", value_name = "ID")]
+    session_id: Option<String>,
+
+    #[arg(long = "project-root", value_name = "PATH")]
+    project_root: Option<String>,
+
+    #[arg(
+        long = "transport",
+        alias = "ingress",
+        value_name = "stdio|streamable-http"
+    )]
+    transport: Option<String>,
+
+    #[arg(long = "metadata-json", value_name = "JSON")]
+    metadata_json: Option<String>,
+
+    #[arg(long = "dry-run")]
+    dry_run: bool,
+
+    #[arg(long = "diff")]
+    diff: bool,
+
+    #[arg(long = "backup", value_name = "ID|latest")]
+    backup: Option<String>,
+
+    #[arg(long = "latest")]
+    latest: bool,
+}
+
+pub(super) fn parse_cli(args: &[String]) -> ParsedArgs {
+    match ClientCli::try_parse_from(argv(args)) {
+        Ok(cli) => parsed_from_cli(cli),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
+            }
+        }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn parsed_from_cli(cli: ClientCli) -> ParsedArgs {
+    let action = cli.action.map(|value| normalize_flag(&value));
+    let mut parsed = ParsedArgs {
+        action,
+        json_output: cli.json_output,
+        help: false,
+        root_override: cli.root_override,
+        client_id: cli.client_id,
+        session_id: cli.session_id,
+        project_root: cli.project_root,
+        transport: cli.transport,
+        metadata_json: cli.metadata_json,
+        dry_run: cli.dry_run,
+        diff: cli.diff,
+        backup: if cli.latest {
+            Some("latest".to_string())
+        } else {
+            cli.backup
+        },
+        error: None,
+    };
+
+    if !cli.extra.is_empty() {
+        parsed.error = Some(format!(
+            "unsupported client arguments in the Rust-only repo: {}",
+            cli.extra.join(" ")
+        ));
+        return parsed;
+    }
+
+    match parsed.action.as_deref() {
+        Some("plan" | "list") | None => {
+            if cli.target.is_some() {
                 parsed.error = Some(format!(
                     "unsupported client arguments in the Rust-only repo: {}",
-                    args[index]
+                    cli.target.unwrap_or_default()
                 ));
-                return parsed;
             }
+        }
+        Some("install" | "export" | "restore") => {
+            if parsed.client_id.is_none() {
+                parsed.client_id = cli.target;
+            } else if cli.target.is_some() {
+                parsed.error = Some(
+                    "client target was provided both positionally and with --client-id".to_string(),
+                );
+            }
+            if parsed.client_id.is_none() {
+                let action = parsed.action.clone().unwrap_or_default();
+                parsed.error = Some(format!(
+                    "client {action} requires a client target; use 'mcpace client list' to inspect supported surfaces"
+                ));
+            }
+        }
+        Some(other) => {
+            parsed.error = Some(format!(
+                "unsupported client arguments in the Rust-only repo: {}",
+                other
+            ));
         }
     }
 
-    if matches!(
-        parsed.action.as_deref(),
-        Some("export" | "install" | "restore")
-    ) && parsed.client_id.is_none()
-    {
-        let action = parsed.action.clone().unwrap_or_default();
-        parsed.error = Some(format!(
-            "client {action} requires a client target; use 'mcpace client list' to inspect supported surfaces"
-        ));
-    }
-
     parsed
+}
+
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace client"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_arg(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_arg(arg: &str) -> String {
+    match normalize_flag(arg).as_str() {
+        "-json" => "--json".to_string(),
+        "-root" => "--root".to_string(),
+        "-client-id" => "--client-id".to_string(),
+        "-session-id" => "--session-id".to_string(),
+        "-project-root" => "--project-root".to_string(),
+        "-transport" => "--transport".to_string(),
+        "-ingress" => "--ingress".to_string(),
+        "-metadata-json" => "--metadata-json".to_string(),
+        "-?" => "--help".to_string(),
+        _ => arg.to_string(),
+    }
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {

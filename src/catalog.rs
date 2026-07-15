@@ -122,7 +122,7 @@ pub const COMMANDS: &[CommandSpec] = &[
     },
     CommandSpec {
         name: "stdio",
-        description: "Preview MCP stdio launch surface. This is the public launcher command; `stdio-shim` remains a compatibility alias while live forwarding is completed.",
+        description: "Live MCP stdio launch surface. This is the public launcher command; `stdio-shim` remains a compatibility alias for older client configs.",
         aliases: &["stdio-shim", "stdio_shim"],
         implemented: true,
     },

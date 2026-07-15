@@ -6,12 +6,41 @@ mod model;
 mod pathing;
 mod plan;
 mod render;
+use crate::diagnostics;
 
 use self::actions::{run_export, run_install, run_list, run_plan, run_restore};
-use self::args::{parse_args, write_help, ParsedArgs};
+use self::args::{parse_cli, write_help, ParsedArgs};
 use crate::json::JsonValue;
+use std::fmt;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ClientRuntimePlanError {
+    message: String,
+}
+
+impl fmt::Display for ClientRuntimePlanError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ClientRuntimePlanError {}
+
+impl From<String> for ClientRuntimePlanError {
+    fn from(message: String) -> Self {
+        Self { message }
+    }
+}
+
+impl From<ClientRuntimePlanError> for String {
+    fn from(error: ClientRuntimePlanError) -> Self {
+        error.to_string()
+    }
+}
+
+type ClientRuntimePlanResult<T> = Result<T, ClientRuntimePlanError>;
 
 #[derive(Debug, Default, Clone)]
 pub(crate) struct RuntimePlanRequest {
@@ -25,7 +54,7 @@ pub(crate) struct RuntimePlanRequest {
 pub(crate) fn runtime_plan_json(
     root_path: &Path,
     request: RuntimePlanRequest,
-) -> Result<JsonValue, String> {
+) -> ClientRuntimePlanResult<JsonValue> {
     let parsed = ParsedArgs {
         action: Some("plan".to_string()),
         json_output: true,
@@ -41,7 +70,7 @@ pub(crate) fn runtime_plan_json(
         backup: None,
         error: None,
     };
-    actions::build_plan_json(parsed, root_path)
+    actions::build_plan_json(parsed, root_path).map_err(ClientRuntimePlanError::from)
 }
 
 pub fn run(
@@ -50,7 +79,7 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error.clone() {
         write_command_error(&parsed, stdout, stderr, &error);
         return 2;
@@ -62,16 +91,20 @@ pub fn run(
 
     let action = parsed.action.clone().unwrap_or_default();
     if action != "install" && (parsed.dry_run || parsed.diff) {
-        let _ = writeln!(
+        diagnostics::stderr_line(
             stderr,
-            "--dry-run and --diff are currently supported only for 'mcpace client install'"
+            format_args!(
+                "--dry-run and --diff are currently supported only for 'mcpace client install'"
+            ),
         );
         return 2;
     }
     if action != "restore" && parsed.backup.is_some() {
-        let _ = writeln!(
+        diagnostics::stderr_line(
             stderr,
-            "--backup and --latest are currently supported only for 'mcpace client restore'"
+            format_args!(
+                "--backup and --latest are currently supported only for 'mcpace client restore'"
+            ),
         );
         return 2;
     }
@@ -82,10 +115,9 @@ pub fn run(
         "install" => run_install(parsed, default_root, stdout, stderr),
         "restore" => run_restore(parsed, default_root, stdout, stderr),
         other => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "unsupported client action in the Rust-only repo: {}",
-                other
+                format_args!("unsupported client action in the Rust-only repo: {}", other),
             );
             2
         }
@@ -110,58 +142,8 @@ fn write_command_error(
         return;
     }
 
-    let _ = writeln!(stderr, "{}", error);
+    diagnostics::stderr_line(stderr, format_args!("{}", error));
 }
 
 #[cfg(test)]
-mod tests {
-    use super::run;
-    use crate::json::{parse_str, JsonValue};
-
-    fn strings(items: &[&str]) -> Vec<String> {
-        items.iter().map(|item| item.to_string()).collect()
-    }
-
-    #[test]
-    fn client_export_json_missing_target_is_machine_readable() {
-        let args = strings(&["export", "--json"]);
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-
-        let status = run(&args, None, &mut stdout, &mut stderr);
-
-        assert_eq!(status, 2);
-        assert!(stderr.is_empty());
-        let output = String::from_utf8(stdout).expect("json output is utf-8");
-        let payload = parse_str(&output).expect("missing target error must be valid JSON");
-        assert_eq!(
-            payload.get("schema").and_then(JsonValue::as_str),
-            Some("mcpace.clientError.v1")
-        );
-        assert_eq!(payload.get("ok").and_then(JsonValue::as_bool), Some(false));
-        assert_eq!(
-            payload.get("action").and_then(JsonValue::as_str),
-            Some("export")
-        );
-        assert!(payload
-            .get("error")
-            .and_then(JsonValue::as_str)
-            .unwrap_or_default()
-            .contains("requires a client target"));
-    }
-
-    #[test]
-    fn client_export_text_missing_target_points_to_catalog() {
-        let args = strings(&["export"]);
-        let mut stdout = Vec::new();
-        let mut stderr = Vec::new();
-
-        let status = run(&args, None, &mut stdout, &mut stderr);
-
-        assert_eq!(status, 2);
-        assert!(stdout.is_empty());
-        let error = String::from_utf8(stderr).expect("stderr is utf-8");
-        assert!(error.contains("requires a client target"));
-        assert!(error.contains("mcpace client list"));
-    }
-}
+mod tests;

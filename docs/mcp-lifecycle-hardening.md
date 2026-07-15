@@ -24,7 +24,7 @@ Registry endpoints are normalized before use. Refresh endpoints must be HTTPS UR
 
 Discovery candidates are deduplicated by normalized server name. Installed candidates, higher trust levels, approved catalogs, and higher scores take precedence over lower-trust duplicates.
 
-Registry fetching uses trusted absolute fetch-tool paths where available, a cleaned environment, and `--` before the fetched URL for curl. PowerShell fallback passes the URL as a parameter rather than interpolating it into a command string.
+Registry fetching uses the built-in bounded Rust HTTPS client, platform certificate verification, a 15-second request deadline, an 8 MiB response cap, and no redirects. It does not depend on curl, PowerShell, shell interpolation, or the user's executable search path.
 
 ## Install planning
 
@@ -34,9 +34,9 @@ Direct `npm:`, `pypi:`, `uvx:`, `oci:`, and command-like install specs are valid
 
 Imported MCP settings often use either `enabled: false` or `disabled: true`. MCPace now treats `disabled: true` as authoritative disabled state, then falls back to `enabled` with a default of enabled.
 
-## Plain HTTP boundary
+## HTTP and TLS boundary
 
-Direct plain-HTTP upstream URLs are restricted to loopback hosts. Remote MCP endpoints should use TLS, a local gateway, or stdio.
+Direct plain-HTTP upstream URLs are restricted to `localhost` or an IP address parsed by the operating system as loopback; prefix lookalikes such as `127.example.com` are rejected. Remote Streamable HTTP endpoints use HTTPS with platform certificate verification. Configured authentication headers are validated and forwarded on each MCP lifecycle request, while transport-owned headers cannot be overridden and redirects are disabled.
 
 ## Local server startup consent boundary
 

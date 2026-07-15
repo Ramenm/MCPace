@@ -1,5 +1,6 @@
 use super::args::ParsedArgs;
 use super::render;
+use crate::diagnostics;
 use crate::mcp_autoinstall;
 use std::io::Write;
 use std::path::PathBuf;
@@ -12,7 +13,10 @@ pub(super) fn run(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
     let spec = parsed.name_filter.clone().unwrap_or_default();
@@ -25,6 +29,7 @@ pub(super) fn run(
             command: parsed.command.clone(),
             url: parsed.url.clone(),
             paths: parsed.paths.clone(),
+            launcher_args: Vec::new(),
             extra_args: parsed.args.clone(),
             env: parsed.env.clone(),
             headers: parsed.headers.clone(),
@@ -37,7 +42,7 @@ pub(super) fn run(
     ) {
         Ok(result) => result,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };

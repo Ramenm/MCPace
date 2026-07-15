@@ -1,4 +1,5 @@
 use super::model::ServerRecord;
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::mcp_sources::{McpServerRemoveResult, McpServerToggleResult};
 use crate::text_utils::join_or_none;
@@ -59,7 +60,10 @@ pub(super) fn render_capabilities(
     let filtered = filter_records(records, name_filter);
     if filtered.is_empty() {
         if let Some(name) = name_filter {
-            let _ = writeln!(stderr, "no configured server named '{}'", name);
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("no configured server named '{}'", name),
+            );
             return 1;
         }
     }

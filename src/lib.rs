@@ -8,9 +8,14 @@ pub mod cleanup;
 pub mod client;
 pub mod client_catalog;
 pub(crate) mod codex_config;
+pub(crate) mod config_edit;
 pub mod connect;
 pub mod dashboard;
+pub(crate) mod diagnostics;
 pub mod doctor;
+mod execution;
+pub(crate) mod http_client;
+pub(crate) mod http_probe;
 pub mod hub;
 pub mod init;
 pub mod json;
@@ -47,6 +52,36 @@ pub mod verify;
 pub(crate) mod windows_process;
 
 pub use app::run;
+
+#[doc(hidden)]
+pub fn write_startup_diagnostic(stderr: &mut dyn std::io::Write, message: &str) {
+    diagnostics::stderr_line(stderr, format_args!("{}", message));
+}
+
+#[doc(hidden)]
+#[derive(Debug)]
+pub struct ProcessContainmentError(String);
+
+impl std::fmt::Display for ProcessContainmentError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for ProcessContainmentError {}
+
+#[doc(hidden)]
+pub fn enable_kill_on_exit_process_tree() -> Result<(), ProcessContainmentError> {
+    #[cfg(windows)]
+    {
+        windows_process::enable_kill_on_exit_job()
+            .map_err(|error| ProcessContainmentError(error.to_string()))
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 pub(crate) static LOCAL_SERVER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());

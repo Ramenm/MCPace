@@ -1,10 +1,67 @@
 use super::model::{CapabilityRecord, LabScenarioRecord};
 use crate::json::JsonValue;
 use crate::json_helpers;
+use std::fmt;
 use std::fs;
 use std::path::Path;
 
-pub(super) fn load_runtime_scenarios(root_path: &Path) -> Result<Vec<LabScenarioRecord>, String> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum LabLoaderError {
+    ReadFailed { path: String, reason: String },
+    ParseFailed { path: String, kind: &'static str },
+}
+
+pub(super) type LabLoaderResult<T> = std::result::Result<T, LabLoaderError>;
+
+impl LabLoaderError {
+    fn read_failed(path: &Path, reason: impl Into<String>) -> Self {
+        Self::ReadFailed {
+            path: path.display().to_string(),
+            reason: reason.into(),
+        }
+    }
+
+    fn parse_failed(path: &Path, kind: &'static str) -> Self {
+        Self::ParseFailed {
+            path: path.display().to_string(),
+            kind,
+        }
+    }
+}
+
+impl fmt::Display for LabLoaderError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ReadFailed { path, reason } => {
+                write!(formatter, "failed to read {}: {}", path, reason)
+            }
+            Self::ParseFailed { path, kind } => write!(
+                formatter,
+                "failed to parse lab {} {}: required fields are missing or invalid",
+                kind, path
+            ),
+        }
+    }
+}
+
+impl std::error::Error for LabLoaderError {}
+
+impl From<String> for LabLoaderError {
+    fn from(message: String) -> Self {
+        Self::ReadFailed {
+            path: "lab input".to_string(),
+            reason: message,
+        }
+    }
+}
+
+impl From<LabLoaderError> for String {
+    fn from(error: LabLoaderError) -> Self {
+        error.to_string()
+    }
+}
+
+pub(super) fn load_runtime_scenarios(root_path: &Path) -> LabLoaderResult<Vec<LabScenarioRecord>> {
     let fixture_dir = root_path.join("eval").join("fixtures").join("runtime");
     if !fixture_dir.exists() {
         return Ok(Vec::new());
@@ -12,10 +69,10 @@ pub(super) fn load_runtime_scenarios(root_path: &Path) -> Result<Vec<LabScenario
 
     let mut paths = Vec::new();
     let entries = fs::read_dir(&fixture_dir)
-        .map_err(|error| format!("failed to read {}: {}", fixture_dir.display(), error))?;
+        .map_err(|error| LabLoaderError::read_failed(&fixture_dir, error.to_string()))?;
     for entry in entries {
-        let entry = entry
-            .map_err(|error| format!("failed to inspect {}: {}", fixture_dir.display(), error))?;
+        let entry =
+            entry.map_err(|error| LabLoaderError::read_failed(&fixture_dir, error.to_string()))?;
         let path = entry.path();
         if path
             .extension()
@@ -30,13 +87,10 @@ pub(super) fn load_runtime_scenarios(root_path: &Path) -> Result<Vec<LabScenario
 
     let mut records = Vec::new();
     for path in paths {
-        let json = json_helpers::read_json_file(&path)?;
-        let record = normalize_scenario_record(&json).ok_or_else(|| {
-            format!(
-                "failed to parse lab scenario {}: required fields are missing or invalid",
-                path.display()
-            )
-        })?;
+        let json = json_helpers::read_json_file(&path)
+            .map_err(|error| LabLoaderError::read_failed(&path, error.to_string()))?;
+        let record = normalize_scenario_record(&json)
+            .ok_or_else(|| LabLoaderError::parse_failed(&path, "scenario"))?;
         records.push(record);
     }
 
@@ -48,21 +102,20 @@ pub(super) fn load_runtime_scenarios(root_path: &Path) -> Result<Vec<LabScenario
     Ok(records)
 }
 
-pub(super) fn load_runtime_capabilities(root_path: &Path) -> Result<Vec<CapabilityRecord>, String> {
+pub(super) fn load_runtime_capabilities(
+    root_path: &Path,
+) -> LabLoaderResult<Vec<CapabilityRecord>> {
     let path = root_path.join("eval").join("runtime-capabilities.json");
     if !path.exists() {
         return Ok(Vec::new());
     }
 
-    let json = json_helpers::read_json_file(&path)?;
+    let json = json_helpers::read_json_file(&path)
+        .map_err(|error| LabLoaderError::read_failed(&path, error.to_string()))?;
     let mut records = Vec::new();
     for entry in json_helpers::array_at_path(&json, &["features"]).unwrap_or(&[]) {
-        let record = normalize_capability_record(entry).ok_or_else(|| {
-            format!(
-                "failed to parse runtime capability inventory {}: required fields are missing or invalid",
-                path.display()
-            )
-        })?;
+        let record = normalize_capability_record(entry)
+            .ok_or_else(|| LabLoaderError::parse_failed(&path, "runtime capability inventory"))?;
         records.push(record);
     }
     records.sort_by(|left, right| {

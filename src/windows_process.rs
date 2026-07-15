@@ -1,6 +1,8 @@
 #[cfg(windows)]
 use std::ffi::{OsStr, OsString};
 #[cfg(windows)]
+use std::fmt;
+#[cfg(windows)]
 use std::mem::{size_of, zeroed};
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt;
@@ -12,11 +14,49 @@ use std::path::Path;
 use std::ptr::null_mut;
 
 #[cfg(windows)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct WindowsProcessError {
+    message: String,
+}
+
+#[cfg(windows)]
+impl WindowsProcessError {
+    fn new(message: impl Into<String>) -> Self {
+        WindowsProcessError {
+            message: message.into(),
+        }
+    }
+
+    #[cfg(test)]
+    #[allow(dead_code)]
+    pub(crate) fn contains(&self, needle: &str) -> bool {
+        self.message.contains(needle)
+    }
+}
+
+#[cfg(windows)]
+impl fmt::Display for WindowsProcessError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+#[cfg(windows)]
+impl std::error::Error for WindowsProcessError {}
+
+#[cfg(windows)]
+impl From<WindowsProcessError> for String {
+    fn from(error: WindowsProcessError) -> Self {
+        error.to_string()
+    }
+}
+
+#[cfg(windows)]
 pub(crate) fn spawn_detached_no_window(
     program: &Path,
     args: &[OsString],
     current_dir: Option<&Path>,
-) -> Result<u32, String> {
+) -> Result<u32, WindowsProcessError> {
     use std::ffi::c_void;
 
     const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -101,11 +141,11 @@ pub(crate) fn spawn_detached_no_window(
         )
     };
     if created == 0 {
-        return Err(format!(
+        return Err(WindowsProcessError::new(format!(
             "failed to start hidden Windows process '{}': {}",
             program.display(),
             std::io::Error::last_os_error()
-        ));
+        )));
     }
 
     unsafe {
@@ -122,6 +162,118 @@ pub(crate) fn configure_no_window(command: &mut std::process::Command) {
 }
 
 #[cfg(windows)]
+pub(crate) fn enable_kill_on_exit_job() -> Result<(), WindowsProcessError> {
+    use std::ffi::c_void;
+    use std::sync::OnceLock;
+
+    const JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS: i32 = 9;
+    const JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE: u32 = 0x0000_2000;
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct BasicLimitInformation {
+        per_process_user_time_limit: i64,
+        per_job_user_time_limit: i64,
+        limit_flags: u32,
+        minimum_working_set_size: usize,
+        maximum_working_set_size: usize,
+        active_process_limit: u32,
+        affinity: usize,
+        priority_class: u32,
+        scheduling_class: u32,
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct IoCounters {
+        read_operation_count: u64,
+        write_operation_count: u64,
+        other_operation_count: u64,
+        read_transfer_count: u64,
+        write_transfer_count: u64,
+        other_transfer_count: u64,
+    }
+
+    #[repr(C)]
+    #[derive(Default)]
+    struct ExtendedLimitInformation {
+        basic_limit_information: BasicLimitInformation,
+        io_info: IoCounters,
+        process_memory_limit: usize,
+        job_memory_limit: usize,
+        peak_process_memory_used: usize,
+        peak_job_memory_used: usize,
+    }
+
+    #[link(name = "kernel32")]
+    extern "system" {
+        fn CreateJobObjectW(job_attributes: *mut c_void, name: *const u16) -> *mut c_void;
+        fn SetInformationJobObject(
+            job: *mut c_void,
+            information_class: i32,
+            information: *mut c_void,
+            information_length: u32,
+        ) -> i32;
+        fn AssignProcessToJobObject(job: *mut c_void, process: *mut c_void) -> i32;
+        fn GetCurrentProcess() -> *mut c_void;
+        fn CloseHandle(object: *mut c_void) -> i32;
+    }
+
+    static KILL_ON_EXIT_JOB: OnceLock<usize> = OnceLock::new();
+    if KILL_ON_EXIT_JOB.get().is_some() {
+        return Ok(());
+    }
+
+    let job = unsafe { CreateJobObjectW(null_mut(), std::ptr::null()) };
+    if job.is_null() {
+        return Err(WindowsProcessError::new(format!(
+            "failed to create Windows kill-on-exit job: {}",
+            std::io::Error::last_os_error()
+        )));
+    }
+
+    let mut limits = ExtendedLimitInformation::default();
+    limits.basic_limit_information.limit_flags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+    let configured = unsafe {
+        SetInformationJobObject(
+            job,
+            JOB_OBJECT_EXTENDED_LIMIT_INFORMATION_CLASS,
+            (&mut limits as *mut ExtendedLimitInformation).cast(),
+            size_of::<ExtendedLimitInformation>() as u32,
+        )
+    };
+    if configured == 0 {
+        let error = std::io::Error::last_os_error();
+        unsafe {
+            let _ = CloseHandle(job);
+        }
+        return Err(WindowsProcessError::new(format!(
+            "failed to configure Windows kill-on-exit job: {}",
+            error
+        )));
+    }
+
+    let assigned = unsafe { AssignProcessToJobObject(job, GetCurrentProcess()) };
+    if assigned == 0 {
+        let error = std::io::Error::last_os_error();
+        unsafe {
+            let _ = CloseHandle(job);
+        }
+        return Err(WindowsProcessError::new(format!(
+            "failed to assign MCPace to the Windows kill-on-exit job: {}",
+            error
+        )));
+    }
+
+    if KILL_ON_EXIT_JOB.set(job as usize).is_err() {
+        unsafe {
+            let _ = CloseHandle(job);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(windows)]
 fn wide_null_os(value: &OsStr) -> Vec<u16> {
     value.encode_wide().chain(Some(0)).collect()
 }
@@ -133,6 +285,19 @@ where
 {
     args.into_iter()
         .map(|arg| quote_windows_arg(&arg.to_string_lossy()))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+#[cfg(windows)]
+#[cfg(test)]
+#[allow(dead_code)]
+pub(crate) fn windows_command_line_from_strs<'a, I>(args: I) -> String
+where
+    I: IntoIterator<Item = &'a str>,
+{
+    args.into_iter()
+        .map(quote_windows_arg)
         .collect::<Vec<_>>()
         .join(" ")
 }
@@ -168,3 +333,6 @@ pub(crate) fn quote_windows_arg(arg: &str) -> String {
     quoted.push('"');
     quoted
 }
+
+#[cfg(test)]
+mod tests;

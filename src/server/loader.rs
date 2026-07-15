@@ -1,4 +1,5 @@
 use super::model::{ServerRecord, SourceServerRecord};
+use crate::execution::ExecutionPolicy;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_sources;
@@ -6,7 +7,48 @@ use crate::platform_utils;
 use crate::profile;
 use crate::text_utils;
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
+use std::fmt;
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ServerLoaderError {
+    ConfigRead { path: PathBuf, reason: String },
+    Sources { reason: String },
+    RuntimeProfile { reason: String },
+}
+
+pub type ServerLoaderResult<T> = Result<T, ServerLoaderError>;
+
+impl fmt::Display for ServerLoaderError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::ConfigRead { path, reason } => {
+                write!(
+                    formatter,
+                    "failed to read server config {}: {}",
+                    path.display(),
+                    reason
+                )
+            }
+            Self::Sources { reason } => {
+                write!(formatter, "failed to load MCP source settings: {}", reason)
+            }
+            Self::RuntimeProfile { reason } => write!(
+                formatter,
+                "failed to load runtime profile selection: {}",
+                reason
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ServerLoaderError {}
+
+impl From<ServerLoaderError> for String {
+    fn from(error: ServerLoaderError) -> Self {
+        error.to_string()
+    }
+}
 
 #[derive(Debug, Clone)]
 struct GenericSourcePolicy {
@@ -41,11 +83,21 @@ struct EvidenceDecision {
     sources: Vec<&'static str>,
 }
 
-pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String> {
+pub fn load_server_records(root_path: &Path) -> ServerLoaderResult<Vec<ServerRecord>> {
     let config_path = root_path.join("mcpace.config.json");
-    let config = json_helpers::read_json_file(&config_path)?;
+    let config = json_helpers::read_json_file(&config_path).map_err(|error| {
+        ServerLoaderError::ConfigRead {
+            path: config_path.clone(),
+            reason: error.to_string(),
+        }
+    })?;
     let source_settings = load_source_settings(root_path)?;
-    let runtime_profile = profile::load_runtime_profile_selection(root_path)?;
+    let execution_defaults = ExecutionPolicy::from_config_root(&config);
+    let runtime_profile = profile::load_runtime_profile_selection(root_path).map_err(|error| {
+        ServerLoaderError::RuntimeProfile {
+            reason: error.to_string(),
+        }
+    })?;
 
     let mut records = Vec::new();
     let mut declared_names = BTreeSet::new();
@@ -60,6 +112,7 @@ pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String
                 name,
                 value,
                 source_settings.get(&normalized_name),
+                &execution_defaults,
                 runtime_profile
                     .server_overrides
                     .get(&normalized_name)
@@ -74,7 +127,11 @@ pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String
         if declared_names.contains(normalized_name) {
             continue;
         }
-        records.push(generic_source_server_record(normalized_name, source_record));
+        records.push(generic_source_server_record(
+            normalized_name,
+            source_record,
+            &execution_defaults,
+        ));
     }
 
     records.sort_by(|left, right| {
@@ -85,8 +142,14 @@ pub fn load_server_records(root_path: &Path) -> Result<Vec<ServerRecord>, String
     Ok(records)
 }
 
-fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServerRecord>, String> {
-    let registry = mcp_sources::load_mcp_server_registry(root_path)?;
+fn load_source_settings(
+    root_path: &Path,
+) -> ServerLoaderResult<BTreeMap<String, SourceServerRecord>> {
+    let registry = mcp_sources::load_mcp_server_registry(root_path).map_err(|error| {
+        ServerLoaderError::Sources {
+            reason: error.to_string(),
+        }
+    })?;
     let mut map = BTreeMap::new();
     for entry in registry.servers.values() {
         let value = &entry.value;
@@ -143,6 +206,8 @@ fn load_source_settings(root_path: &Path) -> Result<BTreeMap<String, SourceServe
                 header_names,
                 source_path: entry.source.clone(),
                 profile_hints,
+                execution: value.get("execution").cloned(),
+                policy: value.get("policy").cloned(),
             },
         );
     }
@@ -159,6 +224,7 @@ fn object_keys(value: Option<&JsonValue>) -> Vec<String> {
 fn generic_source_server_record(
     normalized_name: &str,
     source_record: &SourceServerRecord,
+    execution_defaults: &ExecutionPolicy,
 ) -> ServerRecord {
     let source_type = infer_source_type(
         &source_record.source_type,
@@ -194,13 +260,23 @@ fn generic_source_server_record(
         &signal_args,
         &[],
     );
-    let max_workers = infer_max_workers(
-        &source_type,
+    let fallback_mode = ExecutionPolicy::inferred_mode(
         policy.scope_class,
         policy.concurrency_policy,
-        policy.parallelism_limit,
+        policy.state_binding,
+        runtime_classification.state_class,
     );
+    let execution_defaults_json = execution_defaults.to_config_json_value();
+    let execution = ExecutionPolicy::resolve_with_canonical(
+        Some(&execution_defaults_json),
+        source_record.policy.as_ref(),
+        source_record.execution.as_ref(),
+        fallback_mode,
+    );
+    let max_workers = execution.worker_limit();
+    let max_in_flight_per_worker = execution.effective_max_in_flight_per_worker(&source_type);
     let effective_enabled = source_record.enabled
+        && !execution.is_disabled()
         && !runtime_policy_disabled(
             policy.scope_class,
             policy.concurrency_policy,
@@ -249,7 +325,8 @@ fn generic_source_server_record(
             policy.credential_binding,
         ),
         max_workers,
-        max_in_flight_per_worker: 1,
+        max_in_flight_per_worker,
+        execution,
         transport_status: transport_status_for_source_type(&source_type),
         launcher_kind: infer_launcher_kind(
             &source_record.command,
@@ -1527,6 +1604,7 @@ fn normalize_server_record(
     name: &str,
     value: &JsonValue,
     source_record: Option<&SourceServerRecord>,
+    execution_defaults: &ExecutionPolicy,
     profile_override_enabled: Option<bool>,
 ) -> Option<ServerRecord> {
     let object = value.as_object()?;
@@ -1609,6 +1687,8 @@ fn normalize_server_record(
         header_names: source_header_names.clone(),
         source_path: source_path.clone(),
         profile_hints: source_profile_hints.clone(),
+        execution: source_record.and_then(|record| record.execution.clone()),
+        policy: source_record.and_then(|record| record.policy.clone()),
     };
     let normalized_name_for_policy = name.trim().to_ascii_lowercase();
     let inferred_policy = infer_generic_source_policy(
@@ -1716,24 +1796,29 @@ fn normalize_server_record(
         &state_binding,
         &credential_binding,
     );
-    let inferred_max_workers = infer_max_workers(
-        &source_type,
+    let fallback_mode = ExecutionPolicy::inferred_mode(
         &scope_class,
         &concurrency_policy,
-        parallelism_limit,
+        &state_binding,
+        &state_class,
     );
-    let max_workers = normalized_worker_count(
-        policy_usize(policy, "maxWorkers", inferred_max_workers),
-        &source_type,
-        &scope_class,
-        &concurrency_policy,
+    let execution_defaults_json = execution_defaults.to_config_json_value();
+    let canonical_execution_policy = object
+        .get("policy")
+        .or_else(|| source_record.and_then(|record| record.policy.as_ref()));
+    let server_execution = object
+        .get("execution")
+        .or_else(|| source_record.and_then(|record| record.execution.as_ref()));
+    let execution = ExecutionPolicy::resolve_with_canonical(
+        Some(&execution_defaults_json),
+        canonical_execution_policy,
+        server_execution,
+        fallback_mode,
     );
-    let max_in_flight_per_worker = if max_workers == 0 {
-        0
-    } else {
-        policy_usize(policy, "maxInFlightPerWorker", 1).max(1)
-    };
+    let max_workers = execution.worker_limit();
+    let max_in_flight_per_worker = execution.effective_max_in_flight_per_worker(&source_type);
     let effective_enabled = base_effective_enabled
+        && !execution.is_disabled()
         && !runtime_policy_disabled(
             &scope_class,
             &concurrency_policy,
@@ -1790,6 +1875,7 @@ fn normalize_server_record(
         default_pool_model,
         max_workers,
         max_in_flight_per_worker,
+        execution,
         transport_status: transport_status_for_source_type(&source_type),
         launcher_kind: infer_launcher_kind(
             &source_command,
@@ -1888,26 +1974,6 @@ fn runtime_policy_disabled(
         || concurrency_policy == "plan-only"
         || scope_class == "not-runnable"
         || max_workers == 0
-}
-
-fn allows_zero_workers(source_type: &str, scope_class: &str, concurrency_policy: &str) -> bool {
-    source_type == "sse-legacy"
-        || source_type == "sse"
-        || scope_class == "not-runnable"
-        || concurrency_policy == "plan-only"
-}
-
-fn normalized_worker_count(
-    value: usize,
-    source_type: &str,
-    scope_class: &str,
-    concurrency_policy: &str,
-) -> usize {
-    if allows_zero_workers(source_type, scope_class, concurrency_policy) {
-        value
-    } else {
-        value.max(1)
-    }
 }
 
 fn inferred_transport_preference(
@@ -2402,37 +2468,6 @@ fn infer_default_pool_model(
         return "process-pool".to_string();
     }
     "singleton".to_string()
-}
-
-fn infer_max_workers(
-    source_type: &str,
-    scope_class: &str,
-    concurrency_policy: &str,
-    parallelism_limit: usize,
-) -> usize {
-    if source_type == "sse-legacy" || source_type == "sse" {
-        return 0;
-    }
-    if scope_class == "not-runnable" || concurrency_policy == "plan-only" {
-        return 0;
-    }
-    if concurrency_policy == "single-session"
-        || concurrency_policy == "single-writer"
-        || concurrency_policy == "isolated-per-project"
-        || scope_class == "shared-exclusive"
-    {
-        return 1;
-    }
-    if parallelism_limit > 1 {
-        return parallelism_limit;
-    }
-    if source_type == "streamable-http" || source_type == "http" {
-        return 8;
-    }
-    if source_type == "stdio" && concurrency_policy == "multi-reader" {
-        return 4;
-    }
-    1
 }
 
 fn infer_lock_domains(

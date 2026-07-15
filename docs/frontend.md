@@ -1,44 +1,54 @@
 # Dashboard frontend architecture
 
-The dashboard frontend is intentionally small and boring. It has no bundler, no client framework, and no hidden build step. Rust embeds three source assets and serves them from the local dashboard HTTP surface:
+The dashboard frontend is intentionally local, framework-free, and auditable. It has no bundler and no hidden build step. Rust embeds the following 11 source assets:
 
-- `src/dashboard/index.html` — semantic shell and stable DOM ids.
-- `src/dashboard/frontend/styles.css` — visual system, layout, accessibility states, and responsive rules.
-- `src/dashboard/frontend/app.js` — rendering, local preferences, form validation, and explicit action dispatch.
+1. `src/dashboard/index.html` — the hidden/inert controller staging DOM and stable control IDs.
+2. `src/dashboard/frontend/styles.css` — controller-level layout and compatibility styles.
+3. `src/dashboard/frontend/product.css` — the canonical product shell, themes, responsive layout, focus, and accessibility states.
+4. `src/dashboard/frontend/app.js` — shared state, API helpers, sanitization, preferences, and action primitives.
+5. `src/dashboard/frontend/app.runtime.js` — runtime and resource helpers split from the core controller.
+6. `src/dashboard/frontend/app.model.js` — server risk, policy, evidence, and operator-plan view models.
+7. `src/dashboard/frontend/app.render.js` — primary controller rendering.
+8. `src/dashboard/frontend/app.render.details.js` — detailed diagnostics and secondary rendering.
+9. `src/dashboard/frontend/app.actions.js` — source, server, and client action handlers.
+10. `src/dashboard/frontend/app.boot.js` — event wiring and controller bootstrap.
+11. `src/dashboard/frontend/product.js` — the one visible product shell and its five-section interaction layer.
 
-This keeps the project easy to audit while avoiding the previous single-file dashboard drift. The HTML shell should stay readable; CSS and JavaScript can change without burying structure inside one 8k-line file.
+The two stylesheets load in the order shown. The eight scripts load with `defer` in this order: `app.js`, `app.runtime.js`, `app.model.js`, `app.render.js`, `app.render.details.js`, `app.actions.js`, `app.boot.js`, and `product.js`. This keeps the global plain-JavaScript model explicit while every `app*.js` chunk remains below the modernization budget.
+
+## Canonical information architecture
+
+There is one visible product shell and one `<main>`. It has exactly five destinations:
+
+1. **Home** — current status, the next safe action, and the five-step foundation.
+2. **Integrations** — MCP servers, routes, evidence, discovery/import/add flows, and the Server Atlas.
+3. **Applications** — supported client applications and wiring state.
+4. **Activity** — retained operations, outcomes, timing, and exports.
+5. **Settings** — preferences and advanced operational settings.
+
+`index.html` is not a second dashboard. Its controller root remains `hidden`, `inert`, and `aria-hidden="true"`; `product.js` moves only required live controls into the canonical shell. Do not add another visible shell, main landmark, navigation model, or legacy workspace switcher.
+
+A server opens in one modal inspector with named tasks such as **Summary**, **Isolation**, **Setup**, and **Activity**. Raw launch/protocol details stay in the appropriate secondary task instead of competing with the routine path.
 
 ## Ownership rules
 
-`/api/overview` owns product truth. The frontend renders `dashboardFoundation`, `accessReview`, server rows, automation status, and diagnostics, but it must not invent a different readiness model.
+`/api/overview` owns product truth. The browser renders backend-owned readiness, access review, source rows, automation state, and diagnostics; it must not invent a second readiness model.
 
 The browser may:
 
 - validate simple fields before submission;
-- focus the relevant field or drawer;
-- render fallback loading states;
+- navigate to a named destination and focus its heading;
+- render loading and unavailable states;
 - remember local display preferences;
 - dispatch explicit JSON actions through dashboard API routes.
 
 The browser must not:
 
-- infer secret values from raw env or headers;
-- decide that a source is safe without backend state;
+- infer or reveal secret values from raw environment variables or headers;
+- decide that a server is safe without backend evidence;
 - build shell command strings;
-- treat a known client catalog target as a wired client;
-- show advanced derived plans before the base setup path.
-
-## First screen contract
-
-The first visible model remains:
-
-1. Backend
-2. Client
-3. Source
-4. Tools
-5. Routing
-
-Access review may appear after this foundation as a compact boundary check. Server rows come before setup drawers. Bulk policy plans, runtime internals, protocol diagnostics, and automation internals stay folded.
+- treat a known client catalog entry as a wired application;
+- present derived plans as proven first-screen truth.
 
 ## Asset route contract
 
@@ -46,25 +56,44 @@ Access review may appear after this foundation as a compact boundary check. Serv
 
 - `GET /` → `text/html; charset=utf-8`
 - `GET /dashboard.css` → `text/css; charset=utf-8`
+- `GET /dashboard.product.css` → `text/css; charset=utf-8`
 - `GET /dashboard.js` → `application/javascript; charset=utf-8`
+- `GET /dashboard.runtime.js` → `application/javascript; charset=utf-8`
+- `GET /dashboard.model.js` → `application/javascript; charset=utf-8`
+- `GET /dashboard.render.js` → `application/javascript; charset=utf-8`
+- `GET /dashboard.render.details.js` → `application/javascript; charset=utf-8`
+- `GET /dashboard.actions.js` → `application/javascript; charset=utf-8`
+- `GET /dashboard.boot.js` → `application/javascript; charset=utf-8`
+- `GET /dashboard.product.js` → `application/javascript; charset=utf-8`
 
-The Content Security Policy allows external same-origin dashboard scripts and styles. Inline JavaScript should not be reintroduced. Inline style attributes are still tolerated for small dynamic state, so `style-src` keeps `unsafe-inline` until those attributes are removed.
+The Content Security Policy permits only same-origin dashboard scripts and styles. Do not reintroduce inline JavaScript. Inline style attributes remain temporarily allowed for small dynamic states, so `style-src` still includes `unsafe-inline`.
 
-## Form and action rules
+## Form, action, and safety rules
 
-Forms use `novalidate` so dashboard copy controls the error text. Errors should be placed next to the relevant field and explain what went wrong and how to fix it. Buttons can show a busy label while a JSON action is in flight, but a disabled button must not be the only way the user learns what is wrong.
+Forms use `novalidate` so product copy controls error text. Place errors next to the relevant field and explain both the problem and the correction. A disabled button must not be the only indication that input is invalid.
 
-Safe setup flows stay explicit:
+Safe setup flows stay explicit and preview-first:
 
-- Import: Preview → Save disabled → Review → Enable → Test.
-- Discovery: Preview → Save disabled → Review → Enable → Test.
+- Import or discovery: Preview → Save disabled → Review → Enable → Test.
 - Client wiring: Preview patch → Apply → Restore.
-- Manual server add: Save disabled → Review → Enable & test.
+- Manual server add: Save disabled → Review → Enable and test.
+
+Dynamic HTML must go through the reviewed sanitizer/escaping path. URL-bearing attributes are limited to fragments or credential-free same-origin HTTP(S). CSV exports must neutralize spreadsheet formula prefixes; JSON remains the full-fidelity export.
 
 ## Accessibility and responsive rules
 
-Keep keyboard focus visible, avoid horizontal scrolling, preserve reduced-motion behavior, and make primary touch targets large enough for mobile use. Dense system information should be grouped into rows, cards, or drawers only when the grouping makes the next action easier to find.
+Keep keyboard focus visible, preserve reduced-motion and forced-colors behavior, avoid horizontal scrolling, and keep primary touch targets at least 44 CSS pixels. Navigation uses real buttons with canonical accessible names. View changes update the hash, label the main landmark, and focus the active heading when appropriate.
 
-## Screenshot QA notes
+Tabs use the complete tab pattern where tabs are appropriate. Pressed button groups use `aria-pressed` and matching visual selectors rather than mixing tab and toggle semantics. Global shortcuts must return immediately while any modal dialog is open. Actionable Undo notifications remain available until used or dismissed.
 
-The frontend QA pass renders the dashboard with mocked `/api/overview`, `/api/logs`, and `/api/resources` state before packaging. The smoke check verifies no console errors, no horizontal overflow on desktop/mobile viewports, folded setup tools by default, and larger checkbox/focus targets for form controls.
+At narrow widths, the same five destinations remain available through the mobile navigation. Server rows become a single column and modal inspectors occupy the viewport without changing information priority.
+
+## Verification
+
+Before release:
+
+- run the dashboard Node contract suite and syntax-check all eight JavaScript chunks;
+- run `npm run proof:browser-lifecycle`;
+- load the real dashboard in a headless browser and assert one product shell, one main landmark, five view hosts, and a hidden/inert controller root;
+- verify no console errors and no failed asset requests;
+- run axe/Lighthouse and manual keyboard/screen-reader checks in dark, light, system-light, monochrome, reduced-motion, forced-colors, zoomed, and narrow layouts.

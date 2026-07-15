@@ -1,3 +1,4 @@
+use crate::execution::ExecutionPolicy;
 use crate::json::JsonValue;
 
 #[derive(Debug, Clone)]
@@ -26,6 +27,7 @@ pub struct ServerRecord {
     pub default_pool_model: String,
     pub max_workers: usize,
     pub max_in_flight_per_worker: usize,
+    pub(crate) execution: ExecutionPolicy,
     pub transport_status: String,
     pub launcher_kind: String,
     pub lock_domains: Vec<String>,
@@ -66,6 +68,8 @@ pub(super) struct SourceServerRecord {
     pub(super) header_names: Vec<String>,
     pub(super) source_path: String,
     pub(super) profile_hints: Vec<String>,
+    pub(super) execution: Option<JsonValue>,
+    pub(super) policy: Option<JsonValue>,
 }
 
 impl ServerRecord {
@@ -143,6 +147,7 @@ impl ServerRecord {
                 "maxInFlightPerWorker",
                 JsonValue::number(self.max_in_flight_per_worker),
             ),
+            ("execution", self.execution.to_json_value()),
             (
                 "transportStatus",
                 JsonValue::string(self.transport_status.clone()),
@@ -261,6 +266,7 @@ impl ServerRecord {
                         "maxInFlightPerWorker",
                         JsonValue::number(self.max_in_flight_per_worker),
                     ),
+                    ("execution", self.execution.to_json_value()),
                     (
                         "transportStatus",
                         JsonValue::string(self.transport_status.clone()),

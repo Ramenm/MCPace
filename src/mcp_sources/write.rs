@@ -521,8 +521,11 @@ impl McpServerWriteResult {
                     ]
                 } else {
                     vec![
-                        JsonValue::string("mcpace server sources --json"),
-                        JsonValue::string("HTTP upstream forwarding is inventoried only until the remote connector is implemented"),
+                        JsonValue::string(format!(
+                            "mcpace server test {} --refresh --json",
+                            self.normalized_name
+                        )),
+                        JsonValue::string("MCPace forwards Streamable HTTP directly; HTTPS uses platform certificate verification and plain HTTP is limited to loopback"),
                     ]
                 }),
             ),
@@ -647,7 +650,7 @@ fn read_settings_or_empty(path: &Path) -> Result<JsonValue, String> {
                     path.display()
                 ));
             }
-            json_helpers::read_json_file(path)
+            Ok(json_helpers::read_json_file(path)?)
         }
         Err(error) if error.kind() == ErrorKind::NotFound => Ok(JsonValue::object([(
             String::from("mcpServers"),
@@ -676,7 +679,7 @@ fn read_existing_settings(path: &Path) -> Result<JsonValue, String> {
                     path.display()
                 ));
             }
-            json_helpers::read_json_file(path)
+            Ok(json_helpers::read_json_file(path)?)
         }
         Err(error) if error.kind() == ErrorKind::NotFound => Err(format!(
             "MCP settings source '{}' does not exist",

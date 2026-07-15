@@ -7,11 +7,13 @@ import fnmatch
 import json
 import os
 import re
+import stat
 import sys
 import time
 import zipfile
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,22 +22,51 @@ from collections import defaultdict
 
 # --- “Авто-мусор”: папки/файлы, которые почти всегда генерятся и не нужны в “чистом” архиве.
 JUNK_DIR_NAMES = {
-    ".git", ".hg", ".svn",
-    ".idea", ".vscode",
-    "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".tox", ".nox",
-    ".cache", ".gradle",
+    ".git",
+    ".hg",
+    ".svn",
+    ".idea",
+    ".vscode",
+    "__pycache__",
+    ".pytest_cache",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".tox",
+    ".nox",
+    ".cache",
+    ".gradle",
     # Generated local/agent artifacts. Keep reviewable reports/ in source bundles;
     # path-prefix rules below remove machine-local runtime state instead.
-    "backups", "logs", ".claude", ".omc", ".omx", ".ops-backups", ".runtime", ".sync-backups", ".tools",
-    "memory-bank", "merge-preserved", "generated",
-    ".venv", "venv",  # NB: "env" убрано намеренно (слишком общее имя)
+    "backups",
+    "logs",
+    ".claude",
+    ".omc",
+    ".omx",
+    ".ops-backups",
+    ".runtime",
+    ".sync-backups",
+    ".tools",
+    "memory-bank",
+    "merge-preserved",
+    "generated",
+    ".venv",
+    "venv",  # NB: "env" убрано намеренно (слишком общее имя)
     "node_modules",
-    ".next", ".nuxt", ".svelte-kit", ".turbo", ".parcel-cache",
-    "dist", "build", "out", "target",
+    ".next",
+    ".nuxt",
+    ".svelte-kit",
+    ".turbo",
+    ".parcel-cache",
+    "dist",
+    "build",
+    "out",
+    "target",
 }
 
 JUNK_FILE_NAMES = {
-    ".ds_store", "thumbs.db", "desktop.ini",
+    ".ds_store",
+    "thumbs.db",
+    "desktop.ini",
 }
 
 JUNK_FILE_PATTERNS = {
@@ -69,16 +100,36 @@ ALLOWED_RUNTIME_FILE_PATHS = {
     "metadata/metadata.sqlite3",
 }
 
+
+def is_allowed_runtime_file_path(rel_posix: str) -> bool:
+    rel = rel_posix.replace("\\", "/").lstrip("./").lower()
+    return any(
+        rel == allowed or rel.endswith("/" + allowed)
+        for allowed in ALLOWED_RUNTIME_FILE_PATHS
+    )
+
+
 JUNK_EXTS = {
     # python junk
-    ".pyc", ".pyo", ".pyd",
+    ".pyc",
+    ".pyo",
+    ".pyd",
     # logs / temp / editor swap
-    ".log", ".tmp", ".swp", ".swo",
+    ".log",
+    ".tmp",
+    ".swp",
+    ".swo",
     # archives (обычно не надо складывать архив в архив)
-    ".zip", ".7z", ".rar", ".tar", ".gz", ".bz2", ".xz",
+    ".zip",
+    ".7z",
+    ".rar",
+    ".tar",
+    ".gz",
+    ".bz2",
+    ".xz",
 }
 
-DEFAULT_MAX_FILE_BYTES = 15 * 1024 * 1024   # 15 MB
+DEFAULT_MAX_FILE_BYTES = 15 * 1024 * 1024  # 15 MB
 
 # zip требует год >= 1980
 ZIP_DT = (1980, 1, 1, 0, 0, 0)
@@ -111,28 +162,40 @@ JUNK_PATH_EXACT = {
     "target",
 }
 
+
 def generated_state_path_reason(rel_posix: str) -> Optional[str]:
     rel = rel_posix.replace("\\", "/").lstrip("./")
-    if rel.lower() in ALLOWED_RUNTIME_FILE_PATHS:
+    if is_allowed_runtime_file_path(rel):
         return None
-    if rel in JUNK_PATH_EXACT or any(rel.startswith(prefix) for prefix in JUNK_PATH_PREFIXES):
+    if rel in JUNK_PATH_EXACT or any(
+        rel.startswith(prefix) for prefix in JUNK_PATH_PREFIXES
+    ):
         return "generated_runtime_or_build_state"
     lower = rel.lower()
+    if re.fullmatch(r"catalog/registry-cache(?:-search-[a-f0-9]+)?\.json", lower):
+        return "generated_registry_cache"
     if lower.endswith(".sqlite") or lower.endswith(".sqlite3") or lower.endswith(".db"):
         return "generated_database_state"
-    if lower.startswith("data/runtime/") and (lower.endswith(".exe") or lower.endswith(".vbs")):
+    if lower.startswith("data/runtime/") and (
+        lower.endswith(".exe") or lower.endswith(".vbs")
+    ):
         return "generated_runtime_executable_or_launcher"
     return None
 
 
-
 EXECUTABLE_BASENAMES = {
-    "start.sh", "stop.sh", "pipctl.sh", "apply_migrations.sh", "collect_pip_logs.sh", "pip_diag.sh",
+    "start.sh",
+    "stop.sh",
+    "pipctl.sh",
+    "apply_migrations.sh",
+    "collect_pip_logs.sh",
+    "pip_diag.sh",
 }
 
 EXECUTABLE_RELATIVE_PATHS = {
     "packages/npm/cli/bin/mcpace.js",
 }
+
 
 def normalized_zip_mode(arcname: str, st_mode: Optional[int] = None) -> int:
     """Return deterministic unix mode bits for zip entries.
@@ -151,15 +214,19 @@ def normalized_zip_mode(arcname: str, st_mode: Optional[int] = None) -> int:
     # missing. Release checks intentionally treat scripts with shebangs as
     # executable entrypoints; infer the common release-script locations here so
     # a clean ZIP can be extracted and used directly on Linux/macOS.
-    if rel == "cleanzip_fast.py" or (rel.startswith("scripts/") and name.endswith(".py")):
+    if rel == "cleanzip_fast.py" or (
+        rel.startswith("scripts/") and name.endswith(".py")
+    ):
         return 0o100755
     if st_mode is not None and st_mode & 0o111:
         return 0o100755
     return 0o100644
 
+
 # -------------------------------------------------------------------
 # Статистика / отчёт
 # -------------------------------------------------------------------
+
 
 @dataclass
 class PackStats:
@@ -169,7 +236,9 @@ class PackStats:
     max_bytes: int
     allow_dotenv: bool
     used_git: bool = False
-    generated_at_utc: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    generated_at_utc: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat()
+    )
 
     kept: int = 0
     dropped: int = 0
@@ -179,21 +248,29 @@ class PackStats:
     dropped_reasons: Dict[str, int] = field(default_factory=lambda: defaultdict(int))
     dropped_samples: List[Dict[str, object]] = field(default_factory=list)
 
-    def add_drop(self, reason: str, rel: Optional[str] = None, size: Optional[int] = None) -> None:
+    def add_drop(
+        self,
+        reason: str,
+        rel: Optional[str] = None,
+        size: Optional[int] = None,
+        detail: Optional[str] = None,
+    ) -> None:
         self.dropped += 1
         if size is not None and size >= 0:
-            self.dropped_bytes += int(size)
+            self.dropped_bytes += size
         self.dropped_reasons[reason] += 1
 
         if rel and len(self.dropped_samples) < REPORT_SAMPLES_LIMIT:
-            item = {"path": rel, "reason": reason}
+            item: Dict[str, object] = {"path": rel, "reason": reason}
             if size is not None and size >= 0:
-                item["size"] = int(size)
+                item["size"] = size
+            if detail:
+                item["detail"] = detail[:240]
             self.dropped_samples.append(item)
 
     def add_keep(self, size: int) -> None:
         self.kept += 1
-        self.kept_bytes += int(size)
+        self.kept_bytes += size
 
     def to_jsonable(self) -> Dict[str, object]:
         return {
@@ -217,11 +294,14 @@ class PackStats:
 # Вспомогательные функции
 # -------------------------------------------------------------------
 
+
 def now_stamp() -> str:
     return time.strftime("%Y%m%d_%H%M%S")
 
+
 def make_output_name(base: str) -> str:
     return f"{base}_clean_{now_stamp()}.zip"
+
 
 def is_unsafe_zip_relpath(rel: str) -> bool:
     """
@@ -235,6 +315,7 @@ def is_unsafe_zip_relpath(rel: str) -> bool:
     parts = [p for p in rel.split("/") if p]
     return any(p == ".." for p in parts)
 
+
 def looks_like_dotenv_secret(name: str) -> bool:
     """
     True для ".env" и ".env.*" кроме шаблонов:
@@ -247,6 +328,7 @@ def looks_like_dotenv_secret(name: str) -> bool:
                 return False
         return True
     return False
+
 
 def strip_leading_dot_slash(path: str) -> str:
     """
@@ -273,6 +355,7 @@ def path_has_junk_prefix(rel_posix: str) -> bool:
 # Фильтрация “оставить/удалить”
 # -------------------------------------------------------------------
 
+
 def matches_junk_path_prefix(rel_posix: str) -> Optional[str]:
     rel = strip_leading_dot_slash(rel_posix.replace("\\", "/")).strip("/").lower()
     for prefix in JUNK_PATH_PREFIXES:
@@ -280,6 +363,7 @@ def matches_junk_path_prefix(rel_posix: str) -> Optional[str]:
         if rel == p or rel.startswith(p + "/"):
             return prefix
     return None
+
 
 def matches_runtime_file_pattern(rel_posix: str) -> Optional[str]:
     rel = strip_leading_dot_slash(rel_posix.replace("\\", "/"))
@@ -291,7 +375,14 @@ def matches_runtime_file_pattern(rel_posix: str) -> Optional[str]:
         return "tool-list-cache"
     return None
 
-def drop_reason_for_file(rel_posix: str, size: int, max_bytes: int, allow_dotenv: bool, dotenv_fallback_filter: bool) -> Optional[str]:
+
+def drop_reason_for_file(
+    rel_posix: str,
+    size: int,
+    max_bytes: int,
+    allow_dotenv: bool,
+    dotenv_fallback_filter: bool,
+) -> Optional[str]:
     """
     Возвращает причину дропа или None если файл надо оставить.
     """
@@ -302,7 +393,7 @@ def drop_reason_for_file(rel_posix: str, size: int, max_bytes: int, allow_dotenv
     rel_lower = rel_posix.lower()
     name = rel_lower.rsplit("/", 1)[-1]
 
-    if rel_lower in ALLOWED_RUNTIME_FILE_PATHS:
+    if is_allowed_runtime_file_path(rel_lower):
         return None
 
     if any(path_matches_prefix(rel_lower, prefix) for prefix in JUNK_PATH_PREFIXES):
@@ -346,6 +437,7 @@ def drop_reason_for_file(rel_posix: str, size: int, max_bytes: int, allow_dotenv
 # Git-интеграция
 # -------------------------------------------------------------------
 
+
 def try_git_toplevel(start_dir: Path) -> Optional[Path]:
     """
     Если внутри git — возвращаем корень.
@@ -362,6 +454,7 @@ def try_git_toplevel(start_dir: Path) -> Optional[Path]:
         return Path(p).resolve() if p else None
     except Exception:
         return None
+
 
 def _git_ls_files(repo_root: Path, args: List[str]) -> Optional[List[str]]:
     """
@@ -386,6 +479,7 @@ def _git_ls_files(repo_root: Path, args: List[str]) -> Optional[List[str]]:
     except Exception:
         return None
 
+
 def build_force_include_specs(subpath: str) -> List[str]:
     """
     Строит pathspec-и для добора env-шаблонов, даже если они игнорируются.
@@ -406,7 +500,10 @@ def build_force_include_specs(subpath: str) -> List[str]:
             specs.append(f":(glob){sub}/**/{pat}")
     return specs
 
-def try_git_file_list(input_dir: Path) -> Tuple[Optional[Path], Optional[List[str]], Optional[List[str]]]:
+
+def try_git_file_list(
+    input_dir: Path,
+) -> Tuple[Optional[Path], Optional[List[str]], Optional[List[str]]]:
     """
     Возвращает (repo_root, files_main, files_ignored_templates)
     - files_main: tracked + untracked (без игнорируемых), ограниченные input_dir
@@ -424,7 +521,9 @@ def try_git_file_list(input_dir: Path) -> Tuple[Optional[Path], Optional[List[st
         subpath = "."
 
     # tracked (-c) + others/untracked (-o), но без игноров (--exclude-standard)
-    files_main = _git_ls_files(repo_root, ["-co", "--exclude-standard", "-z", "--", subpath])
+    files_main = _git_ls_files(
+        repo_root, ["-co", "--exclude-standard", "-z", "--", subpath]
+    )
     if files_main is None:
         return repo_root, None, None
 
@@ -446,7 +545,99 @@ def try_git_file_list(input_dir: Path) -> Tuple[Optional[Path], Optional[List[st
 # Итерация файлов директории
 # -------------------------------------------------------------------
 
-def iter_files_from_dir(root: Path, output_zip: Path, stats: PackStats) -> Iterable[Tuple[Path, str, bool]]:
+
+def path_is_within(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def stat_open_fingerprint(value) -> Tuple[int, int, int, int, int]:
+    return (
+        value.st_dev,
+        value.st_ino,
+        value.st_mode,
+        value.st_size,
+        value.st_mtime_ns,
+    )
+
+
+def stat_stability_fingerprint(value) -> Tuple[int, int, int, int, int, int]:
+    return (*stat_open_fingerprint(value), value.st_ctime_ns)
+
+
+def path_entry_is_link_or_reparse(path: Path, entry_stat) -> bool:
+    if stat.S_ISLNK(entry_stat.st_mode):
+        return True
+    if getattr(path, "is_junction", lambda: False)():
+        return True
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    return bool(getattr(entry_stat, "st_file_attributes", 0) & reparse_flag)
+
+
+def path_has_link_component(path: Path, root: Path) -> bool:
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return True
+    current = root
+    for part in relative.parts:
+        current = current / part
+        try:
+            entry_stat = current.lstat()
+        except OSError:
+            return True
+        if path_entry_is_link_or_reparse(current, entry_stat):
+            return True
+    return False
+
+
+def open_regular_file_no_follow(path: Path, expected_stat):
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(path, flags)
+    try:
+        opened_stat = os.fstat(descriptor)
+        if not stat.S_ISREG(opened_stat.st_mode):
+            raise OSError("archive input is not a regular file")
+        if stat_open_fingerprint(expected_stat) != stat_open_fingerprint(opened_stat):
+            raise OSError("archive input changed while it was being opened")
+        return os.fdopen(descriptor, "rb")
+    except Exception:
+        os.close(descriptor)
+        raise
+
+
+def read_regular_file_stable(path: Path, root: Path, expected_stat):
+    if path_has_link_component(path, root):
+        raise OSError("archive input contains a symlink or reparse-point component")
+    staged = tempfile.SpooledTemporaryFile(max_size=8 * 1024 * 1024, mode="w+b")
+    try:
+        with open_regular_file_no_follow(path, expected_stat) as source:
+            opened_before = os.fstat(source.fileno())
+            shutil.copyfileobj(source, staged, length=1024 * 1024)
+            opened_after = os.fstat(source.fileno())
+        path_after = path.lstat()
+        if path_has_link_component(path, root):
+            raise OSError("archive input path changed to a symlink or reparse point")
+        opened_fingerprint = stat_stability_fingerprint(opened_before)
+        if (
+            stat_stability_fingerprint(opened_after) != opened_fingerprint
+            or stat_open_fingerprint(path_after) != stat_open_fingerprint(opened_after)
+            or staged.tell() != opened_before.st_size
+        ):
+            raise OSError("archive input changed while it was being read")
+        staged.seek(0)
+        return staged
+    except Exception:
+        staged.close()
+        raise
+
+
+def iter_files_from_dir(
+    root: Path, output_zip: Path, stats: PackStats
+) -> Iterable[Tuple[Path, str, bool]]:
     """
     Отдаёт (abs_path, rel_posix_in_zip, dotenv_fallback_filter)
     - Если git доступен — берём список через git (deterministic), плюс добор env-шаблонов.
@@ -478,12 +669,6 @@ def iter_files_from_dir(root: Path, output_zip: Path, stats: PackStats) -> Itera
                 stats.add_drop("junk_path_prefix", rel=rel_posix)
                 continue
 
-            abs_path = (repo_root / rel_posix).resolve()
-            if abs_path == out_zip_resolved:
-                continue
-            if not abs_path.is_file():
-                continue
-
             # arcname в zip должен быть относительно input_dir (root), а не repo_root
             if sub_rel in ("", "."):
                 arcname = rel_posix
@@ -492,26 +677,60 @@ def iter_files_from_dir(root: Path, output_zip: Path, stats: PackStats) -> Itera
                 if not rel_posix.startswith(prefix):
                     # на всякий: если вдруг git вернул что-то вне input_dir
                     continue
-                arcname = rel_posix[len(prefix):]
+                arcname = rel_posix[len(prefix) :]
 
             arcname = strip_leading_dot_slash(arcname.replace("\\", "/"))
             if not arcname or is_unsafe_zip_relpath(arcname):
                 stats.add_drop("unsafe_arcname", rel=arcname)
                 continue
 
-            yield abs_path, arcname, False  # dotenv_fallback_filter=False (в git-режиме не фильтруем)
+            abs_path = repo_root / rel_posix
+            try:
+                entry_stat = abs_path.lstat()
+                resolved_path = abs_path.resolve(strict=True)
+            except OSError:
+                stats.add_drop("stat_failed", rel=arcname)
+                continue
+            if path_has_link_component(abs_path, root):
+                stats.add_drop("symlink_component", rel=arcname)
+                continue
+            if not stat.S_ISREG(entry_stat.st_mode):
+                stats.add_drop("non_regular_file", rel=arcname)
+                continue
+            if not path_is_within(resolved_path, root):
+                stats.add_drop("outside_input_root", rel=arcname)
+                continue
+            if resolved_path == out_zip_resolved:
+                continue
+
+            yield (
+                abs_path,
+                arcname,
+                False,
+            )  # dotenv_fallback_filter=False (в git-режиме не фильтруем)
 
         return
 
     # fallback: os.walk (детерминированный порядок)
     root_str = str(root)
-    for dirpath, dirnames, filenames in os.walk(root_str, topdown=True, followlinks=False):
+    for dirpath, dirnames, filenames in os.walk(
+        root_str, topdown=True, followlinks=False
+    ):
         rel_dir = os.path.relpath(dirpath, root_str)
         rel_dir = "" if rel_dir == "." else rel_dir
         rel_dir_posix = rel_dir.replace(os.sep, "/")
         kept_dirs = []
         for d in dirnames:
             child_rel = d if not rel_dir_posix else f"{rel_dir_posix}/{d}"
+            child_path = root / child_rel
+            try:
+                child_stat = child_path.lstat()
+            except OSError:
+                stats.add_drop("stat_failed", rel=child_rel)
+                continue
+            if path_entry_is_link_or_reparse(child_path, child_stat):
+                stats.add_drop("symlink_dir", rel=child_rel)
+                continue
             if d in JUNK_DIR_NAMES or path_has_junk_prefix(child_rel):
                 stats.add_drop("junk_dir", rel=child_rel)
                 continue
@@ -527,16 +746,31 @@ def iter_files_from_dir(root: Path, output_zip: Path, stats: PackStats) -> Itera
                 stats.add_drop("unsafe_path_walk", rel=rel_posix)
                 continue
 
-            abs_path = (root / rel_path).resolve()
-            if abs_path == out_zip_resolved:
+            abs_path = root / rel_path
+            try:
+                entry_stat = abs_path.lstat()
+                resolved_path = abs_path.resolve(strict=True)
+            except OSError:
+                stats.add_drop("stat_failed", rel=rel_posix)
                 continue
-            if abs_path.is_file():
-                yield abs_path, rel_posix, True  # dotenv_fallback_filter=True
+            if path_has_link_component(abs_path, root):
+                stats.add_drop("symlink_component", rel=rel_posix)
+                continue
+            if not stat.S_ISREG(entry_stat.st_mode):
+                stats.add_drop("non_regular_file", rel=rel_posix)
+                continue
+            if not path_is_within(resolved_path, root):
+                stats.add_drop("outside_input_root", rel=rel_posix)
+                continue
+            if resolved_path == out_zip_resolved:
+                continue
+            yield abs_path, rel_posix, True  # dotenv_fallback_filter=True
 
 
 # -------------------------------------------------------------------
 # Добавление в ZIP
 # -------------------------------------------------------------------
+
 
 def zip_add_stream(
     zout: zipfile.ZipFile,
@@ -552,23 +786,42 @@ def zip_add_stream(
     with zout.open(zi, "w") as dst:
         shutil.copyfileobj(src_file, dst, length=1024 * 1024)
 
+
 def open_zip_write(output_zip: Path) -> zipfile.ZipFile:
     """
     compresslevel поддерживается не во всех версиях Python (добавили в 3.7),
     поэтому пробуем и откатываемся.
     """
-    kwargs = dict(mode="w", compression=zipfile.ZIP_DEFLATED)
     try:
-        return zipfile.ZipFile(output_zip, compresslevel=1, **kwargs)
+        return zipfile.ZipFile(
+            output_zip,
+            mode="w",
+            compression=zipfile.ZIP_DEFLATED,
+            compresslevel=1,
+        )
     except TypeError:
-        return zipfile.ZipFile(output_zip, **kwargs)
+        return zipfile.ZipFile(
+            output_zip,
+            mode="w",
+            compression=zipfile.ZIP_DEFLATED,
+        )
 
 
 # -------------------------------------------------------------------
 # Упаковка директории
 # -------------------------------------------------------------------
 
-def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_dotenv: bool, report_path: Optional[Path]) -> None:
+
+def pack_dir_fast(
+    input_dir: Path,
+    output_zip: Path,
+    max_bytes: int,
+    allow_dotenv: bool,
+    report_path: Optional[Path],
+) -> None:
+    input_stat = input_dir.lstat()
+    if path_entry_is_link_or_reparse(input_dir, input_stat):
+        raise ValueError("input directory must not be a symlink or reparse point")
     root = input_dir.resolve()
     output_zip.parent.mkdir(parents=True, exist_ok=True)
 
@@ -581,7 +834,9 @@ def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_doten
     )
 
     with open_zip_write(output_zip) as zout:
-        for abs_path, rel_posix, dotenv_fallback_filter in iter_files_from_dir(root, output_zip, stats):
+        for abs_path, rel_posix, dotenv_fallback_filter in iter_files_from_dir(
+            root, output_zip, stats
+        ):
             # режем мусорные директории и machine-local runtime path prefixes
             if path_has_junk_prefix(rel_posix):
                 stats.add_drop("junk_path_prefix", rel=rel_posix)
@@ -595,19 +850,31 @@ def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_doten
                 continue
 
             try:
-                st = abs_path.stat()
-                size = int(st.st_size)
-            except Exception:
+                st = abs_path.lstat()
+                resolved_path = abs_path.resolve(strict=True)
+            except OSError:
                 stats.add_drop("stat_failed", rel=rel_posix)
                 continue
+            if path_has_link_component(abs_path, root):
+                stats.add_drop("symlink_component", rel=rel_posix)
+                continue
+            if not stat.S_ISREG(st.st_mode):
+                stats.add_drop("non_regular_file", rel=rel_posix)
+                continue
+            if not path_is_within(resolved_path, root):
+                stats.add_drop("outside_input_root", rel=rel_posix)
+                continue
+            size = st.st_size
 
-            reason = drop_reason_for_file(rel_posix, size, max_bytes, allow_dotenv, dotenv_fallback_filter)
+            reason = drop_reason_for_file(
+                rel_posix, size, max_bytes, allow_dotenv, dotenv_fallback_filter
+            )
             if reason:
                 stats.add_drop(reason, rel=rel_posix, size=size)
                 continue
 
             try:
-                with abs_path.open("rb") as f:
+                with read_regular_file_stable(abs_path, root, st) as f:
                     zip_add_stream(
                         zout,
                         rel_posix,
@@ -615,8 +882,13 @@ def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_doten
                         st_mode=getattr(st, "st_mode", None),
                     )
                 stats.add_keep(size)
-            except Exception:
-                stats.add_drop("read_or_zip_failed", rel=rel_posix, size=size)
+            except Exception as error:
+                stats.add_drop(
+                    "read_or_zip_failed",
+                    rel=rel_posix,
+                    size=size,
+                    detail=str(error),
+                )
 
     print(f"OK: {output_zip}")
     print(f"kept={stats.kept} dropped={stats.dropped}")
@@ -625,13 +897,17 @@ def pack_dir_fast(input_dir: Path, output_zip: Path, max_bytes: int, allow_doten
 
     if report_path:
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(stats.to_jsonable(), ensure_ascii=False, indent=2), encoding="utf-8")
+        report_path.write_text(
+            json.dumps(stats.to_jsonable(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         print(f"report: {report_path}")
 
 
 # -------------------------------------------------------------------
 # Очистка существующего ZIP
 # -------------------------------------------------------------------
+
 
 def detect_single_toplevel_prefix(names: Iterable[str]) -> str:
     first_parts = set()
@@ -654,7 +930,14 @@ def detect_single_toplevel_prefix(names: Iterable[str]) -> str:
             return ""
     return prefix
 
-def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dotenv: bool, report_path: Optional[Path]) -> None:
+
+def clean_zip_fast(
+    input_zip: Path,
+    output_zip: Path,
+    max_bytes: int,
+    allow_dotenv: bool,
+    report_path: Optional[Path],
+) -> None:
     output_zip.parent.mkdir(parents=True, exist_ok=True)
 
     stats = PackStats(
@@ -667,7 +950,9 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
 
     with zipfile.ZipFile(input_zip, "r") as zin, open_zip_write(output_zip) as zout:
         infos = [i for i in zin.infolist() if not i.is_dir()]
-        prefix = detect_single_toplevel_prefix(i.filename.replace("\\", "/") for i in infos)
+        prefix = detect_single_toplevel_prefix(
+            i.filename.replace("\\", "/") for i in infos
+        )
 
         # Детерминированный порядок: сортируем по будущему имени в архиве
         sortable: List[Tuple[str, zipfile.ZipInfo]] = []
@@ -680,7 +965,7 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
 
             rel = name
             if prefix and rel.startswith(prefix):
-                rel = rel[len(prefix):]
+                rel = rel[len(prefix) :]
 
             rel = strip_leading_dot_slash(rel.replace("\\", "/"))
             if not rel:
@@ -698,24 +983,26 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
                 continue
 
             if path_has_junk_prefix(rel):
-                stats.add_drop("junk_path_prefix", rel=rel, size=int(info.file_size or 0))
+                stats.add_drop("junk_path_prefix", rel=rel, size=info.file_size or 0)
                 continue
             path_reason = generated_state_path_reason(rel)
             if path_reason:
-                stats.add_drop(path_reason, rel=rel, size=int(info.file_size or 0))
+                stats.add_drop(path_reason, rel=rel, size=info.file_size or 0)
                 continue
             if any(part in JUNK_DIR_NAMES for part in rel.split("/")):
-                stats.add_drop("junk_dir", rel=rel, size=int(info.file_size or 0))
+                stats.add_drop("junk_dir", rel=rel, size=info.file_size or 0)
                 continue
 
-            size = int(info.file_size or 0)
+            size = info.file_size or 0
 
             # Для режима очистки ZIP мы НЕ знаем, был ли оригинальный проект под git,
             # поэтому safety-net по .env применяем ВСЕГДА если allow_dotenv=False.
             # (Иначе можно случайно упаковать реальные секреты из чужого zip)
             dotenv_fallback_filter = True
 
-            reason = drop_reason_for_file(rel, size, max_bytes, allow_dotenv, dotenv_fallback_filter)
+            reason = drop_reason_for_file(
+                rel, size, max_bytes, allow_dotenv, dotenv_fallback_filter
+            )
             if reason:
                 stats.add_drop(reason, rel=rel, size=size)
                 continue
@@ -726,7 +1013,9 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
                     zi.create_system = 3
                     zi.date_time = ZIP_DT
                     zi.compress_type = zout.compression
-                    zi.external_attr = normalized_zip_mode(rel, info.external_attr >> 16) << 16
+                    zi.external_attr = (
+                        normalized_zip_mode(rel, info.external_attr >> 16) << 16
+                    )
 
                     with zout.open(zi, "w") as dst:
                         shutil.copyfileobj(f, dst, length=1024 * 1024)
@@ -741,7 +1030,10 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
 
     if report_path:
         report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(stats.to_jsonable(), ensure_ascii=False, indent=2), encoding="utf-8")
+        report_path.write_text(
+            json.dumps(stats.to_jsonable(), ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         print(f"report: {report_path}")
 
 
@@ -749,11 +1041,13 @@ def clean_zip_fast(input_zip: Path, output_zip: Path, max_bytes: int, allow_dote
 # CLI
 # -------------------------------------------------------------------
 
+
 def _try_parse_int(s: str) -> Optional[int]:
     try:
         return int(s)
     except Exception:
         return None
+
 
 def print_help() -> None:
     exe = Path(sys.argv[0]).name
@@ -780,7 +1074,10 @@ Examples:
 """
     )
 
-def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optional[str], bool, Optional[str]]:
+
+def parse_cli(
+    argv: List[str],
+) -> Tuple[Optional[str], Optional[str], int, Optional[str], bool, Optional[str]]:
     """
     Returns: (input_str, out_str, max_bytes, report_str, allow_dotenv, err)
     Keeps backward compatibility with positional [input] [output] [max_bytes].
@@ -804,7 +1101,14 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
 
         if a in ("--report", "-r"):
             if i + 1 >= len(argv):
-                return None, None, DEFAULT_MAX_FILE_BYTES, None, allow_dotenv, "ERROR: --report requires PATH"
+                return (
+                    None,
+                    None,
+                    DEFAULT_MAX_FILE_BYTES,
+                    None,
+                    allow_dotenv,
+                    "ERROR: --report requires PATH",
+                )
             report_str = argv[i + 1]
             i += 2
             continue
@@ -816,10 +1120,24 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
 
         if a in ("--max-bytes", "--max"):
             if i + 1 >= len(argv):
-                return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: --max-bytes requires N"
+                return (
+                    None,
+                    None,
+                    DEFAULT_MAX_FILE_BYTES,
+                    report_str,
+                    allow_dotenv,
+                    "ERROR: --max-bytes requires N",
+                )
             v = _try_parse_int(argv[i + 1])
             if v is None:
-                return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: --max-bytes must be integer"
+                return (
+                    None,
+                    None,
+                    DEFAULT_MAX_FILE_BYTES,
+                    report_str,
+                    allow_dotenv,
+                    "ERROR: --max-bytes must be integer",
+                )
             max_bytes = v
             i += 2
             continue
@@ -827,7 +1145,14 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
         if a.startswith("--max-bytes=") or a.startswith("--max="):
             v = _try_parse_int(a.split("=", 1)[1])
             if v is None:
-                return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: --max-bytes must be integer"
+                return (
+                    None,
+                    None,
+                    DEFAULT_MAX_FILE_BYTES,
+                    report_str,
+                    allow_dotenv,
+                    "ERROR: --max-bytes must be integer",
+                )
             max_bytes = v
             i += 1
             continue
@@ -846,7 +1171,14 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
         max_bytes = DEFAULT_MAX_FILE_BYTES
 
     if max_bytes <= 0:
-        return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: max_bytes must be > 0"
+        return (
+            None,
+            None,
+            DEFAULT_MAX_FILE_BYTES,
+            report_str,
+            allow_dotenv,
+            "ERROR: max_bytes must be > 0",
+        )
 
     if len(args) == 0:
         return None, None, max_bytes, report_str, allow_dotenv, None
@@ -855,7 +1187,15 @@ def parse_cli(argv: List[str]) -> Tuple[Optional[str], Optional[str], int, Optio
     if len(args) == 2:
         return args[0], args[1], max_bytes, report_str, allow_dotenv, None
 
-    return None, None, DEFAULT_MAX_FILE_BYTES, report_str, allow_dotenv, "ERROR: too many arguments"
+    return (
+        None,
+        None,
+        DEFAULT_MAX_FILE_BYTES,
+        report_str,
+        allow_dotenv,
+        "ERROR: too many arguments",
+    )
+
 
 def pick_input_auto(cwd: Path) -> Tuple[str, Path]:
     zips: List[Path] = []
@@ -871,8 +1211,11 @@ def pick_input_auto(cwd: Path) -> Tuple[str, Path]:
     root = try_git_toplevel(cwd) or cwd
     return "dir", root
 
+
 def main() -> int:
-    input_str, out_str, max_bytes, report_str, allow_dotenv, err = parse_cli(sys.argv[1:])
+    input_str, out_str, max_bytes, report_str, allow_dotenv, err = parse_cli(
+        sys.argv[1:]
+    )
     if err == "EXIT_HELP":
         return 0
     if err:
@@ -882,7 +1225,7 @@ def main() -> int:
     cwd = Path.cwd()
 
     if input_str:
-        src = Path(input_str).expanduser().resolve()
+        src = Path(os.path.abspath(Path(input_str).expanduser()))
         if not src.exists():
             print(f"ERROR: input not found: {src}", file=sys.stderr)
             return 2
@@ -897,12 +1240,25 @@ def main() -> int:
         root = src
         base = root.name or "project"
         final_out = out_zip if out_zip else (root / make_output_name(base))
-        pack_dir_fast(root, final_out, max_bytes=max_bytes, allow_dotenv=allow_dotenv, report_path=report_path)
+        pack_dir_fast(
+            root,
+            final_out,
+            max_bytes=max_bytes,
+            allow_dotenv=allow_dotenv,
+            report_path=report_path,
+        )
         return 0
 
     final_out = out_zip if out_zip else (src.parent / make_output_name(src.stem))
-    clean_zip_fast(src, final_out, max_bytes=max_bytes, allow_dotenv=allow_dotenv, report_path=report_path)
+    clean_zip_fast(
+        src,
+        final_out,
+        max_bytes=max_bytes,
+        allow_dotenv=allow_dotenv,
+        report_path=report_path,
+    )
     return 0
+
 
 if __name__ == "__main__":
     raise SystemExit(main())

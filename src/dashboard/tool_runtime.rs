@@ -1,6 +1,6 @@
 use super::{
     empty_object, http_boundary, http_tool_names, run_json_command, run_json_command_vec,
-    runtime_diagnostics, upstream_pool_for_context, DashboardConfig, HttpRequest,
+    runtime_diagnostics, DashboardConfig, HttpRequest,
 };
 use crate::adapter;
 use crate::json::JsonValue;
@@ -38,7 +38,7 @@ pub(super) fn run_http_tool(
                 &upstream_arguments,
                 timeout_ms,
                 Some(&context),
-                upstream_pool_for_context(config, &target.server, &context),
+                &config.upstream_session_pool,
             );
         }
     }
@@ -78,7 +78,7 @@ pub(super) fn run_http_tool(
                 ],
             )
         }
-        "runtime_diagnostics" => runtime_diagnostics(config),
+        "runtime_diagnostics" => runtime_diagnostics(config).map_err(String::from),
         "adapter_profile" => {
             let include_live_catalog =
                 json_helpers::bool_at_path(args, &["includeLiveCatalog"]).unwrap_or(false);
@@ -98,6 +98,7 @@ pub(super) fn run_http_tool(
                 timeout_ms,
                 refresh,
             )
+            .map_err(String::from)
         }
         "adapter_route" => {
             let include_live_catalog =
@@ -151,6 +152,7 @@ pub(super) fn run_http_tool(
                 timeout_ms,
                 refresh,
             )
+            .map_err(String::from)
         }
         "upstream_tools" => {
             let server = json_helpers::string_at_path(args, &["server"]);
@@ -168,7 +170,7 @@ pub(super) fn run_http_tool(
                 .filter(|value| *value > 0)
                 .map(|value| value as u64);
             let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
-            upstream::probe_servers(root_path, server, timeout_ms, refresh)
+            upstream::probe_servers(root_path, server, timeout_ms, refresh).map_err(String::from)
         }
         "upstream_catalog" => {
             let server = json_helpers::string_at_path(args, &["server"]);
@@ -177,7 +179,7 @@ pub(super) fn run_http_tool(
                 .filter(|value| *value > 0)
                 .map(|value| value as u64);
             let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
-            upstream::catalog_tools(root_path, server, timeout_ms, refresh)
+            upstream::catalog_tools(root_path, server, timeout_ms, refresh).map_err(String::from)
         }
         "upstream_policy_audit" => {
             let server = json_helpers::string_at_path(args, &["server"]);
@@ -186,7 +188,7 @@ pub(super) fn run_http_tool(
                 .filter(|value| *value > 0)
                 .map(|value| value as u64);
             let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
-            upstream::audit_tool_policies(root_path, server, timeout_ms, refresh)
+            upstream::audit_tool_policies(root_path, server, timeout_ms, refresh).map_err(String::from)
         }
         "upstream_policy_suggest" => {
             let server = json_helpers::string_at_path(args, &["server"]);
@@ -195,7 +197,7 @@ pub(super) fn run_http_tool(
                 .filter(|value| *value > 0)
                 .map(|value| value as u64);
             let refresh = json_helpers::bool_at_path(args, &["refresh"]).unwrap_or(false);
-            upstream::suggest_tool_policies(root_path, server, timeout_ms, refresh)
+            upstream::suggest_tool_policies(root_path, server, timeout_ms, refresh).map_err(String::from)
         }
         "upstream_call" => {
             let server = json_helpers::string_at_path(args, &["server"])
@@ -215,7 +217,7 @@ pub(super) fn run_http_tool(
                 &arguments,
                 timeout_ms,
                 Some(&context),
-                upstream_pool_for_context(config, server, &context),
+                &config.upstream_session_pool,
             )
         }
         "upstream_batch" => {
@@ -238,7 +240,7 @@ pub(super) fn run_http_tool(
                 &calls,
                 timeout_ms,
                 Some(&context),
-                upstream_pool_for_context(config, server, &context),
+                &config.upstream_session_pool,
             )
         }
         "client_list" => run_json_command(root_path, &["client", "list", "--json"]),

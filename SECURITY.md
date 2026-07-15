@@ -17,12 +17,12 @@ Please do not include live credentials, tokens, private keys, or private file co
 
 ## Supported versions
 
-Until the first public stable release, only the current `main` branch and the latest tagged pre-release are in scope for security fixes.
+Until the first public stable release, only the current `main` branch and the latest tagged release are in scope for security fixes. A stable-looking pre-1.0 tag such as `v0.x.y` is still the tagged release for this policy; GitHub's optional prerelease label does not change support.
 
 | Version | Security support |
-|---|---|
+| --- | --- |
 | Latest `main` | Yes |
-| Latest tagged pre-release | Best effort |
+| Latest tagged release | Best effort |
 | Older commits/tags | No, unless the maintainer explicitly says otherwise |
 
 ## Current security boundary
@@ -33,13 +33,15 @@ User-specific MCP server configuration belongs outside the repository, for examp
 
 ## Localhost and network exposure
 
-The default product posture is local-first. Binding to `127.0.0.1` is different from binding to `0.0.0.0` or exposing MCPace through a tunnel, relay, or public URL.
+The built-in HTTP server is loopback-only because it does not terminate TLS. It rejects `0.0.0.0`, LAN/public addresses, and the deprecated non-loopback opt-in flags even when a bearer token is configured; reusable bearer credentials must not be sent over direct cleartext non-loopback HTTP.
 
-Before any public/non-local mode is treated as supported, MCPace should require explicit security configuration such as authentication, clear origin policy, and user-visible warnings. Origin checks are useful defense-in-depth, but they are not a replacement for authentication on a public endpoint.
+For remote access, terminate HTTPS in a trusted reverse proxy or tunnel on the same host and forward only to MCPace's loopback listener. The proxy must authenticate users, restrict origins, and rewrite both upstream Host and Origin to the same loopback authority (including port) expected by MCPace. Configure `MCPACE_HTTP_AUTH_TOKEN` for every proxied deployment as defense in depth; invalid credentials are rate-limited before request bodies are read. Rotate the token if proxy or network logs could have captured it. Origin checks are not a replacement for proxy authentication.
 
 ## Upstream MCP servers
 
 MCPace does not silently install arbitrary upstream MCP servers. Presets write reviewable config fragments, and runtime execution still happens through commands or URLs the user configured.
+
+Remote Streamable HTTP upstreams use HTTPS with operating-system certificate verification. MCPace does not follow upstream redirects, validates configured header names/values, prevents overriding transport-owned headers, and never copies Registry credential placeholders into configuration. Plain HTTP upstreams are accepted only for `localhost` or parsed loopback IP addresses.
 
 Security-sensitive upstream concerns include:
 
@@ -57,10 +59,12 @@ Security-sensitive upstream concerns include:
 
 Default install rules:
 
-- `mcpace auto` refreshes stale registry metadata, then installs only `trusted` or `approved` candidates;
+- a no-query `mcpace auto` uses only the pinned embedded/local curated catalog; named searches refresh a bounded query-specific Registry cache;
+- Registry publication and publisher-supplied fields never grant trust: Registry entries remain `review` even when a custom cache path is configured;
 - `review` matches require a local catalog/config trust decision or an advanced review flag;
-- unknown, blocked, deprecated, deleted, or ambiguous candidates stay plan-only;
-- after any trusted install, auto mode runs the same live `initialize`/`tools/list` probe path used by `mcpace server test <name> --refresh` unless run with `--dry-run`.
+- unknown package managers, custom package registry bases, blocked/deleted entries, repeated cursors, malformed metadata, and ambiguous matches stay plan-only or fail closed;
+- required Registry arguments, environment values, URL variables, and HTTP headers must be supplied explicitly; credential placeholders are not persisted as secrets;
+- after any trusted install, auto mode runs the same bounded, paginated `initialize`/`tools/list` probe path used by `mcpace server test <name> --refresh` unless run with `--dry-run`, and failed probes are not reported as ready.
 
 ## Logging and diagnostics
 

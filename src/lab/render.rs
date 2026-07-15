@@ -1,6 +1,7 @@
 use super::analysis::{build_gap_list, build_next_steps, capability_index, readiness_counts};
 use super::model::{CapabilityGap, CapabilityRecord, ScenarioAssessment};
 use crate::client_catalog;
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::text_utils::join_or_none;
 use std::collections::BTreeMap;
@@ -687,7 +688,7 @@ pub(super) fn render_show(
     stderr: &mut dyn Write,
 ) -> i32 {
     let Some(id_filter) = id_filter else {
-        let _ = writeln!(stderr, "lab show requires --id <scenario>");
+        diagnostics::stderr_line(stderr, format_args!("lab show requires --id <scenario>"));
         return 2;
     };
 
@@ -695,7 +696,10 @@ pub(super) fn render_show(
         .iter()
         .find(|assessment| assessment.record.id.eq_ignore_ascii_case(id_filter.trim()))
     else {
-        let _ = writeln!(stderr, "lab scenario not found: {}", id_filter);
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("lab scenario not found: {}", id_filter),
+        );
         return 1;
     };
 

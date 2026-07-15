@@ -1,9 +1,10 @@
 mod args;
 mod model;
 mod render;
+use crate::diagnostics;
 
-use self::args::{parse_args, write_help};
-pub use self::model::{collect_readiness, ReadinessReport};
+use self::args::{parse_cli, write_help};
+pub use self::model::{collect_readiness, ReadinessError, ReadinessReport};
 use self::render::{run_grouped_doctor, run_readiness};
 use std::io::Write;
 use std::path::PathBuf;
@@ -14,9 +15,9 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error.clone() {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help || parsed.action.is_none() {
@@ -39,10 +40,9 @@ pub fn run(
             stderr,
         ),
         other => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "unsupported verify action in the Rust-only repo: {}",
-                other
+                format_args!("unsupported verify action in the Rust-only repo: {}", other),
             );
             2
         }

@@ -6,7 +6,37 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpListener;
 use std::thread;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+struct ScopedEnvRemoval {
+    values: Vec<(&'static str, Option<std::ffi::OsString>)>,
+}
+
+impl ScopedEnvRemoval {
+    fn new(names: &[&'static str]) -> Self {
+        let values = names
+            .iter()
+            .map(|name| {
+                let value = std::env::var_os(name);
+                std::env::remove_var(name);
+                (*name, value)
+            })
+            .collect();
+        Self { values }
+    }
+}
+
+impl Drop for ScopedEnvRemoval {
+    fn drop(&mut self) {
+        for (name, value) in self.values.drain(..) {
+            if let Some(value) = value {
+                std::env::set_var(name, value);
+            } else {
+                std::env::remove_var(name);
+            }
+        }
+    }
+}
 
 fn temp_root() -> PathBuf {
     let unique = format!(
@@ -20,6 +50,137 @@ fn temp_root() -> PathBuf {
     let path = env::temp_dir().join(unique);
     fs::create_dir_all(&path).unwrap();
     path
+}
+
+fn write_pool_concurrency_server_config(root: &std::path::Path) -> PathBuf {
+    let script = root.join("upstream-pool-concurrency.js");
+    fs::write(
+        &script,
+        r#"
+const fs = require('fs');
+const path = require('path');
+const readline = require('readline');
+const root = process.argv[2];
+const startedPath = path.join(root, 'started-pids.txt');
+const sleeper = new Int32Array(new SharedArrayBuffer(4));
+const rl = readline.createInterface({ input: process.stdin });
+
+function send(id, result) {
+  process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id, result }) + '\n');
+}
+
+rl.on('line', (line) => {
+  const message = JSON.parse(line);
+  if (message.method === 'initialize') {
+    send(message.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'pool-probe', version: '0.1.0' } });
+  } else if (message.method === 'tools/list') {
+    send(message.id, { tools: [{ name: 'block', inputSchema: { type: 'object', properties: { gate: { type: 'string' } }, required: ['gate'] } }] });
+  } else if (message.method === 'tools/call') {
+    fs.appendFileSync(startedPath, `${process.pid}\n`);
+    const gatePath = path.join(root, String(message.params.arguments.gate));
+    while (!fs.existsSync(gatePath)) Atomics.wait(sleeper, 0, 0, 20);
+    send(message.id, { content: [{ type: 'text', text: 'ok' }], isError: false, pid: process.pid });
+  }
+});
+"#,
+    )
+    .unwrap();
+    let escaped_script = script
+        .display()
+        .to_string()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let escaped_root = root
+        .display()
+        .to_string()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    fs::write(
+        root.join("mcp_settings.json"),
+        format!(
+            r#"{{
+  "mcpServers": {{
+    "pool-probe": {{
+      "enabled": true,
+      "type": "stdio",
+      "command": "node",
+      "args": ["{escaped_script}", "{escaped_root}"],
+      "execution": {{
+        "mode": "pool",
+        "affinity": [],
+        "maxWorkers": 2,
+        "maxInFlightPerWorker": 1,
+        "queueTimeoutMs": 5000
+      }}
+    }},
+    "isolated-probe": {{
+      "enabled": true,
+      "type": "stdio",
+      "command": "node",
+      "args": ["{escaped_script}", "{escaped_root}"],
+      "execution": {{
+        "mode": "session-isolated",
+        "affinity": ["client", "chat"],
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "queueTimeoutMs": 5000
+      }}
+    }}
+  }}
+}}"#,
+        ),
+    )
+    .unwrap();
+    fs::write(
+        root.join("mcpace.config.json"),
+        r#"{
+  "version": "0.3.5",
+  "client": { "keyName": "MCPace" },
+  "profiles": {
+    "runtime": {
+      "default": "safe",
+      "profiles": { "safe": { "description": "Safe", "serverOverrides": { "pool-probe": true, "isolated-probe": true } } }
+    }
+  },
+  "servers": {
+    "pool-probe": {
+      "execution": {
+        "mode": "pool",
+        "affinity": [],
+        "maxWorkers": 2,
+        "maxInFlightPerWorker": 1,
+        "queueTimeoutMs": 5000
+      }
+    },
+    "isolated-probe": {
+      "execution": {
+        "mode": "session-isolated",
+        "affinity": ["client", "chat"],
+        "maxWorkers": 1,
+        "maxInFlightPerWorker": 1,
+        "queueTimeoutMs": 5000
+      }
+    }
+  }
+}"#,
+    )
+    .unwrap();
+    script
+}
+
+fn wait_for_started_pids(path: &std::path::Path, count: usize, timeout: Duration) -> Vec<u32> {
+    let deadline = Instant::now() + timeout;
+    loop {
+        let pids = fs::read_to_string(path)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|line| line.trim().parse::<u32>().ok())
+            .collect::<Vec<_>>();
+        if pids.len() >= count || Instant::now() >= deadline {
+            return pids;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
 }
 
 fn write_exiting_upstream_server_config(root: &std::path::Path) -> PathBuf {
@@ -39,11 +200,25 @@ rl.on('line', (line) => {
   if (message.method === 'initialize') {
     send(message.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'exit-probe', version: '0.1.0' } });
   } else if (message.method === 'tools/list') {
-    send(message.id, {
-      tools: [{ name: 'ping', inputSchema: { type: 'object' } }],
-    });
+    if (message.params && message.params.cursor === 'page-two') {
+      send(message.id, {
+        tools: [{ name: 'second', inputSchema: { type: 'object' } }],
+      });
+    } else {
+      send(message.id, {
+        tools: [
+          { name: 'ping', inputSchema: { type: 'object' } },
+          { name: 'invalid', inputSchema: { type: 'object' } },
+        ],
+        nextCursor: 'page-two',
+      });
+    }
   } else if (message.method === 'tools/call') {
-    send(message.id, { content: [{ type: 'text', text: 'ok' }], isError: false });
+    if (message.params && message.params.name === 'invalid') {
+      send(message.id, {});
+    } else {
+      send(message.id, { content: [{ type: 'text', text: 'ok' }], isError: false });
+    }
   }
 });
 "#,
@@ -58,7 +233,13 @@ rl.on('line', (line) => {
       "enabled": true,
       "type": "stdio",
       "command": "node",
-      "args": ["{}"]
+      "args": ["{}"],
+      "execution": {{
+        "mode": "session-isolated",
+        "affinity": ["client", "chat"],
+        "maxWorkers": 1,
+        "idleTtlMs": 1000
+      }}
     }}
   }}
 }}"#,
@@ -81,11 +262,20 @@ rl.on('line', (line) => {
     "runtime": {
       "default": "safe",
       "profiles": {
-        "safe": { "description": "Safe", "serverOverrides": {} }
+        "safe": { "description": "Safe", "serverOverrides": { "exit-probe": true } }
       }
     }
   },
-  "servers": {}
+  "servers": {
+    "exit-probe": {
+      "execution": {
+        "mode": "session-isolated",
+        "affinity": ["client", "chat"],
+        "maxWorkers": 1,
+        "idleTtlMs": 1000
+      }
+    }
+  }
 }"#,
     )
     .unwrap();
@@ -102,9 +292,11 @@ fn config_declared_sensitive_tools_require_explicit_policy_flags() {
         command: Some("tool".to_string()),
         args: Vec::new(),
         env: BTreeMap::new(),
+        headers: BTreeMap::new(),
         cwd: None,
         url: None,
         timeout_ms: DEFAULT_TIMEOUT_MS,
+        execution: ExecutionPolicy::default(),
         tool_policies: vec![
             ToolRiskPolicy {
                 tools: vec!["Screenshot".to_string(), "Snapshot".to_string()],
@@ -226,9 +418,91 @@ fn allow_policy_argument_collectors_normalize_shared_bridge_inputs() {
 }
 
 #[test]
-fn server_fingerprint_does_not_embed_secret_env_values() {
+fn stdio_request_write_obeys_deadline_when_child_stops_reading() {
+    if std::process::Command::new("node")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping blocked stdin regression because node is unavailable");
+        return;
+    }
+
+    let root = temp_root();
+    let script = root.join("blocked-stdin-server.js");
+    fs::write(
+        &script,
+        r#"
+const readline = require('readline');
+const rl = readline.createInterface({ input: process.stdin });
+rl.on('line', (line) => {
+  const message = JSON.parse(line);
+  if (message.method === 'initialize') {
+    process.stdout.write(JSON.stringify({
+      jsonrpc: '2.0',
+      id: message.id,
+      result: {
+        protocolVersion: '2025-11-25',
+        capabilities: { tools: {} },
+        serverInfo: { name: 'blocked-stdin', version: '0.1.0' }
+      }
+    }) + '\n');
+    rl.close();
+    process.stdin.pause();
+  }
+});
+setInterval(() => {}, 1000);
+"#,
+    )
+    .unwrap();
+    let server = UpstreamServerConfig {
+        name: "blocked-stdin".to_string(),
+        enabled: true,
+        disabled_reason: None,
+        source_type: "stdio".to_string(),
+        command: Some("node".to_string()),
+        args: vec![script.display().to_string()],
+        env: BTreeMap::new(),
+        headers: BTreeMap::new(),
+        cwd: Some(root.clone()),
+        url: None,
+        timeout_ms: 2_000,
+        execution: ExecutionPolicy::default(),
+        tool_policies: Vec::new(),
+    };
+    let params = JsonValue::object([("blob", JsonValue::string("x".repeat(16 * 1024 * 1024)))]);
+    let started = Instant::now();
+    let error = run_stdio_request(
+        &root,
+        &server,
+        "tools/call",
+        Some(params),
+        Duration::from_secs(2),
+        None,
+    )
+    .expect_err("a child that stops reading stdin must time out");
+    let elapsed = started.elapsed();
+
+    assert!(
+        error.to_string().contains("timed out writing"),
+        "unexpected blocked-write error: {error}"
+    );
+    assert!(
+        elapsed < Duration::from_secs(6),
+        "blocked stdin exceeded its bounded deadline and cleanup window: {elapsed:?}"
+    );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn server_fingerprint_does_not_embed_secret_env_or_header_values() {
     let mut env = BTreeMap::new();
     env.insert("API_TOKEN".to_string(), "secret-value".to_string());
+    let mut headers = BTreeMap::new();
+    headers.insert(
+        "Authorization".to_string(),
+        "Bearer header-secret".to_string(),
+    );
     let server = UpstreamServerConfig {
         name: "secret-probe".to_string(),
         enabled: true,
@@ -237,9 +511,11 @@ fn server_fingerprint_does_not_embed_secret_env_values() {
         command: Some("node".to_string()),
         args: Vec::new(),
         env,
+        headers,
         cwd: None,
         url: None,
         timeout_ms: 1_000,
+        execution: ExecutionPolicy::default(),
         tool_policies: Vec::new(),
     };
 
@@ -248,6 +524,8 @@ fn server_fingerprint_does_not_embed_secret_env_values() {
     assert!(fingerprint.contains("API_TOKEN:"));
     assert!(!fingerprint.contains("secret-value"));
     assert!(fingerprint.contains("len12-hash"));
+    assert!(fingerprint.contains("Authorization:"));
+    assert!(!fingerprint.contains("header-secret"));
 }
 
 #[test]
@@ -276,23 +554,194 @@ fn env_var_names_accept_codex_local_object_entries_and_skip_remote_entries() {
 }
 
 #[test]
+fn pooled_upstream_session_runs_max_workers_without_fragmenting_global_affinity() {
+    let _environment = ScopedEnvRemoval::new(&[
+        "MCPACE_MCP_SETTINGS",
+        "MCPACE_MCP_SETTINGS_DIRS",
+        "MCPACE_ALLOW_UNKNOWN_UPSTREAM_TOOLS",
+    ]);
+    if std::process::Command::new("node")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping pool concurrency smoke test because node is unavailable");
+        return;
+    }
+
+    let root = temp_root();
+    write_pool_concurrency_server_config(&root);
+    let pool = std::sync::Arc::new(UpstreamSessionPool::with_max_sessions(4));
+    let started_path = root.join("started-pids.txt");
+
+    let spawn_call = |client: &str, session: &str, gate: &str| {
+        let root = root.clone();
+        let pool = std::sync::Arc::clone(&pool);
+        let client = client.to_string();
+        let session = session.to_string();
+        let gate = gate.to_string();
+        thread::spawn(move || {
+            let context = UpstreamLeaseContext {
+                client_id: Some(client),
+                session_id: Some(session),
+                ..Default::default()
+            };
+            call_tool_with_pooled_context(
+                &root,
+                "pool-probe",
+                "block",
+                &JsonValue::object([("gate", JsonValue::string(gate))]),
+                Some(10_000),
+                Some(&context),
+                &pool,
+            )
+            .expect("pooled blocking call")
+        })
+    };
+
+    let first = spawn_call("client-a", "session-a", "release-first-two");
+    let second = spawn_call("client-b", "session-b", "release-first-two");
+    let started = wait_for_started_pids(&started_path, 2, Duration::from_secs(8));
+    assert_eq!(
+        started.len(),
+        2,
+        "two pool workers should enter concurrently"
+    );
+    assert_ne!(
+        started[0], started[1],
+        "concurrent stdio work needs distinct child processes"
+    );
+
+    let third = spawn_call("client-c", "session-c", "release-third");
+    thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        wait_for_started_pids(&started_path, 2, Duration::from_millis(20)).len(),
+        2,
+        "a third same-affinity call must wait for the configured two-worker limit"
+    );
+
+    fs::write(root.join("release-first-two"), "release").unwrap();
+    let first_result = first.join().expect("first call thread");
+    let second_result = second.join().expect("second call thread");
+    let started = wait_for_started_pids(&started_path, 3, Duration::from_secs(5));
+    assert_eq!(
+        started.len(),
+        3,
+        "queued call should start after one worker is released"
+    );
+    fs::write(root.join("release-third"), "release").unwrap();
+    let third_result = third.join().expect("third call thread");
+
+    let result_pid = |value: &JsonValue| {
+        json_helpers::value_at_path(value, &["upstreamResult", "pid"])
+            .and_then(JsonValue::as_i64)
+            .expect("upstream pid") as u32
+    };
+    let first_pid = result_pid(&first_result);
+    let second_pid = result_pid(&second_result);
+    let third_pid = result_pid(&third_result);
+    assert_ne!(first_pid, second_pid);
+    assert!(
+        [first_pid, second_pid].contains(&third_pid),
+        "queued call should reuse one of the two initialized workers"
+    );
+    assert_eq!(
+        json_helpers::bool_at_path(&first_result, &["sessionPoolHit"]),
+        Some(false)
+    );
+    assert_eq!(
+        json_helpers::bool_at_path(&second_result, &["sessionPoolHit"]),
+        Some(false)
+    );
+    assert_eq!(
+        json_helpers::bool_at_path(&third_result, &["sessionPoolHit"]),
+        Some(true)
+    );
+    assert_eq!(pool.session_count(), 2);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn pooled_upstream_manager_does_not_block_unrelated_affinity_groups() {
+    let _environment = ScopedEnvRemoval::new(&[
+        "MCPACE_MCP_SETTINGS",
+        "MCPACE_MCP_SETTINGS_DIRS",
+        "MCPACE_ALLOW_UNKNOWN_UPSTREAM_TOOLS",
+    ]);
+    if std::process::Command::new("node")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping affinity concurrency smoke test because node is unavailable");
+        return;
+    }
+
+    let root = temp_root();
+    write_pool_concurrency_server_config(&root);
+    let pool = std::sync::Arc::new(UpstreamSessionPool::with_max_sessions(4));
+    let started_path = root.join("started-pids.txt");
+
+    let spawn_call = |client: &str, session: &str| {
+        let root = root.clone();
+        let pool = std::sync::Arc::clone(&pool);
+        let client = client.to_string();
+        let session = session.to_string();
+        thread::spawn(move || {
+            let context = UpstreamLeaseContext {
+                client_id: Some(client),
+                session_id: Some(session),
+                ..Default::default()
+            };
+            call_tool_with_pooled_context(
+                &root,
+                "isolated-probe",
+                "block",
+                &JsonValue::object([("gate", JsonValue::string("release-isolated"))]),
+                Some(10_000),
+                Some(&context),
+                &pool,
+            )
+            .expect("isolated blocking call")
+        })
+    };
+
+    let first = spawn_call("client-a", "session-a");
+    let second = spawn_call("client-b", "session-b");
+    let started = wait_for_started_pids(&started_path, 2, Duration::from_secs(8));
+    assert_eq!(
+        started.len(),
+        2,
+        "distinct canonical affinity groups must not wait behind one manager lock"
+    );
+    assert_ne!(started[0], started[1]);
+
+    fs::write(root.join("release-isolated"), "release").unwrap();
+    let first_result = first.join().expect("first isolated thread");
+    let second_result = second.join().expect("second isolated thread");
+    assert_eq!(
+        json_helpers::bool_at_path(&first_result, &["sessionPoolHit"]),
+        Some(false)
+    );
+    assert_eq!(
+        json_helpers::bool_at_path(&second_result, &["sessionPoolHit"]),
+        Some(false)
+    );
+    assert_eq!(pool.session_count(), 2);
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn pooled_upstream_session_recycles_oldest_session_when_capacity_is_reached() {
-    let original_mcpace_mcp_settings = std::env::var_os("MCPACE_MCP_SETTINGS");
-    let original_mcpace_mcp_settings_dirs = std::env::var_os("MCPACE_MCP_SETTINGS_DIRS");
-    std::env::remove_var("MCPACE_MCP_SETTINGS");
-    std::env::remove_var("MCPACE_MCP_SETTINGS_DIRS");
+    let _environment = ScopedEnvRemoval::new(&["MCPACE_MCP_SETTINGS", "MCPACE_MCP_SETTINGS_DIRS"]);
 
     if std::process::Command::new("node")
         .arg("-v")
         .output()
         .is_err()
     {
-        if let Some(value) = original_mcpace_mcp_settings {
-            std::env::set_var("MCPACE_MCP_SETTINGS", value);
-        }
-        if let Some(value) = original_mcpace_mcp_settings_dirs {
-            std::env::set_var("MCPACE_MCP_SETTINGS_DIRS", value);
-        }
         eprintln!("skipping upstream session exit reaping smoke test because node is unavailable");
         return;
     }
@@ -301,7 +750,7 @@ fn pooled_upstream_session_recycles_oldest_session_when_capacity_is_reached() {
     write_exiting_upstream_server_config(&root);
     let servers = load_servers(&root).expect("load exit-probe server");
     assert_eq!(servers.len(), 1);
-    let pool = std::sync::Mutex::new(UpstreamSessionPool::with_max_sessions(1));
+    let pool = UpstreamSessionPool::with_max_sessions(1);
     let arguments = JsonValue::object([("payload", JsonValue::string("test"))]);
     let shared_context = UpstreamLeaseContext {
         session_id: Some("shared-session".to_string()),
@@ -317,7 +766,7 @@ fn pooled_upstream_session_recycles_oldest_session_when_capacity_is_reached() {
         "exit-probe",
         "ping",
         &arguments,
-        Some(2_000),
+        Some(10_000),
         Some(&shared_context),
         &pool,
     )
@@ -344,7 +793,7 @@ fn pooled_upstream_session_recycles_oldest_session_when_capacity_is_reached() {
         "exit-probe",
         "ping",
         &arguments,
-        Some(2_000),
+        Some(10_000),
         Some(&another_context),
         &pool,
     )
@@ -366,12 +815,106 @@ fn pooled_upstream_session_recycles_oldest_session_when_capacity_is_reached() {
         "pool should remain within max size after eviction"
     );
 
-    if let Some(value) = original_mcpace_mcp_settings {
-        std::env::set_var("MCPACE_MCP_SETTINGS", value);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn pooled_upstream_session_honors_configured_idle_ttl() {
+    let _environment = ScopedEnvRemoval::new(&["MCPACE_MCP_SETTINGS", "MCPACE_MCP_SETTINGS_DIRS"]);
+    if std::process::Command::new("node")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping upstream idle TTL smoke test because node is unavailable");
+        return;
     }
-    if let Some(value) = original_mcpace_mcp_settings_dirs {
-        std::env::set_var("MCPACE_MCP_SETTINGS_DIRS", value);
+
+    let root = temp_root();
+    write_exiting_upstream_server_config(&root);
+    let pool = UpstreamSessionPool::with_max_sessions(1);
+    let result = call_tool_with_pooled_context(
+        &root,
+        "exit-probe",
+        "ping",
+        &JsonValue::object([("payload", JsonValue::string("ttl"))]),
+        Some(10_000),
+        Some(&UpstreamLeaseContext {
+            session_id: Some("ttl-session".to_string()),
+            ..Default::default()
+        }),
+        &pool,
+    )
+    .expect("pooled tool call");
+    assert_eq!(
+        json_helpers::value_at_path(&result, &["sessionPoolIdleTtlMs"]).and_then(JsonValue::as_i64),
+        Some(1_000)
+    );
+    assert_eq!(pool.idle_ttl_ms(), 1_000);
+    assert_eq!(pool.session_count(), 1);
+
+    thread::sleep(Duration::from_millis(1_200));
+    assert_eq!(pool.purge_idle_and_exited(), 1);
+    assert_eq!(pool.session_count(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn pooled_single_call_invalid_result_evicts_worker_before_reuse() {
+    let _environment = ScopedEnvRemoval::new(&[
+        "MCPACE_MCP_SETTINGS",
+        "MCPACE_MCP_SETTINGS_DIRS",
+        "MCPACE_ALLOW_UNKNOWN_UPSTREAM_TOOLS",
+    ]);
+    if std::process::Command::new("node")
+        .arg("-v")
+        .output()
+        .is_err()
+    {
+        eprintln!("skipping invalid pooled result smoke test because node is unavailable");
+        return;
     }
+
+    let root = temp_root();
+    write_exiting_upstream_server_config(&root);
+    let pool = UpstreamSessionPool::with_max_sessions(1);
+    let context = UpstreamLeaseContext {
+        session_id: Some("invalid-result-session".to_string()),
+        ..Default::default()
+    };
+    let invalid = call_tool_with_pooled_context(
+        &root,
+        "exit-probe",
+        "invalid",
+        &empty_object(),
+        Some(10_000),
+        Some(&context),
+        &pool,
+    )
+    .expect_err("structurally invalid pooled result must fail");
+    assert!(invalid.contains("content"), "unexpected error: {invalid}");
+    assert_eq!(
+        pool.session_count(),
+        0,
+        "invalid result must evict the checked-out worker"
+    );
+
+    let valid = call_tool_with_pooled_context(
+        &root,
+        "exit-probe",
+        "ping",
+        &empty_object(),
+        Some(10_000),
+        Some(&context),
+        &pool,
+    )
+    .expect("fresh worker should handle the next valid call");
+    assert_eq!(
+        json_helpers::bool_at_path(&valid, &["sessionPoolHit"]),
+        Some(false),
+        "the valid retry must not reuse the invalid worker"
+    );
+    assert_eq!(pool.session_count(), 1);
     let _ = fs::remove_dir_all(root);
 }
 
@@ -435,17 +978,25 @@ fn spawn_stdio_server_does_not_forward_unspecified_parent_environment() {
                 r#"printf '%s|%s|%s|%s\n' "$MCPACE_PARENT_SECRET_DO_NOT_FORWARD" "$MCPACE_ALLOWED_TOKEN_TEST" "$EXPLICIT_TOKEN" "$MCPACE_PRIMARY_WORKSPACE""#.to_string(),
             ],
             env: explicit_env,
+            headers: BTreeMap::new(),
             cwd: None,
             url: None,
             timeout_ms: 1_000,
+            execution: ExecutionPolicy::default(),
             tool_policies: Vec::new(),
         };
 
     let running = spawn_stdio_server(&root, &server).expect("spawn env probe");
-    let line = running
+    let line = match running
         .stdout_rx
         .recv_timeout(Duration::from_secs(2))
-        .expect("env probe output");
+        .expect("env probe output")
+    {
+        super::stdio_runtime::StdioOutput::Line(line) => line,
+        super::stdio_runtime::StdioOutput::Error(error) => {
+            panic!("env probe output error: {error}")
+        }
+    };
     let fields = line.split('|').collect::<Vec<_>>();
 
     assert_eq!(fields[0], "");
@@ -584,9 +1135,11 @@ fn server_runtime_callable_blocks_missing_cwd_before_spawn() {
         command: Some("node".to_string()),
         args: Vec::new(),
         env: BTreeMap::new(),
+        headers: BTreeMap::new(),
         cwd: Some(missing_cwd.clone()),
         url: None,
         timeout_ms: 1_000,
+        execution: ExecutionPolicy::default(),
         tool_policies: Vec::new(),
     };
 
@@ -790,7 +1343,7 @@ fn plain_http_upstream_lists_and_calls_tools() {
     let handle = thread::spawn(move || {
         let deadline = std::time::Instant::now() + Duration::from_secs(5);
         let mut handled = 0usize;
-        while handled < 6 && std::time::Instant::now() < deadline {
+        while handled < 14 && std::time::Instant::now() < deadline {
             match listener.accept() {
                 Ok((mut stream, _)) => {
                     handled += 1;
@@ -810,7 +1363,7 @@ fn plain_http_upstream_lists_and_calls_tools() {
         format!(
             r#"{{
   "mcpServers": {{
-    "remote": {{ "enabled": true, "type": "http", "url": "http://127.0.0.1:{}/mcp" }}
+    "remote": {{ "enabled": true, "type": "http", "url": "http://127.0.0.1:{}/mcp", "headers": {{ "Authorization": "Bearer test-token" }} }}
   }}
 }}"#,
             port
@@ -822,17 +1375,108 @@ fn plain_http_upstream_lists_and_calls_tools() {
     let listed = list_tools(&root, Some("remote"), Some(5_000), true).expect("list HTTP tools");
     assert_eq!(
         json_helpers::value_at_path(&listed, &["toolCount"]).and_then(JsonValue::as_i64),
-        Some(1)
+        Some(2)
     );
     let called =
         call_tool(&root, "remote", "ok", &empty_object(), Some(5_000)).expect("call HTTP tool");
     assert_eq!(json_helpers::bool_at_path(&called, &["ok"]), Some(true));
+    let batch = call_tools(
+        &root,
+        "remote",
+        &[
+            UpstreamToolCall {
+                tool: "ok".to_string(),
+                arguments: empty_object(),
+            },
+            UpstreamToolCall {
+                tool: "ok".to_string(),
+                arguments: empty_object(),
+            },
+        ],
+        Some(5_000),
+    )
+    .expect("batch HTTP tools in one MCP session");
+    assert_eq!(
+        json_helpers::value_at_path(&batch, &["callCount"]).and_then(JsonValue::as_i64),
+        Some(2)
+    );
     let handled = handle.join().unwrap();
-    assert_eq!(handled, 6);
+    assert_eq!(handled, 14);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn non_pooled_call_uses_one_timeout_budget_for_verification_and_call() {
+    let root = temp_root();
+    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind delayed HTTP MCP server");
+    listener.set_nonblocking(true).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let server_stop = std::sync::Arc::clone(&stop);
+    let handle = thread::spawn(move || {
+        while !server_stop.load(std::sync::atomic::Ordering::Acquire) {
+            match listener.accept() {
+                Ok((mut stream, _)) => serve_mock_http_mcp_request_with_delays(
+                    &mut stream,
+                    Duration::from_millis(600),
+                    Duration::from_millis(600),
+                ),
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    fs::write(
+        root.join("mcp_settings.json"),
+        format!(
+            r#"{{
+  "mcpServers": {{
+    "delayed": {{ "enabled": true, "type": "http", "url": "http://127.0.0.1:{}/mcp", "headers": {{ "Authorization": "Bearer test-token" }} }}
+  }}
+}}"#,
+            port
+        ),
+    )
+    .unwrap();
+    fs::write(root.join("mcpace.config.json"), r#"{ "version": "0.8.0" }"#).unwrap();
+
+    let started = Instant::now();
+    let result = call_tool(&root, "delayed", "ok", &empty_object(), Some(1_000));
+    let elapsed = started.elapsed();
+    stop.store(true, std::sync::atomic::Ordering::Release);
+    let _ = handle.join();
+
+    let error = match result {
+        Ok(_) => panic!("verification and tools/call must share one timeout budget"),
+        Err(error) => error,
+    };
+    assert!(
+        error.to_ascii_lowercase().contains("timed out")
+            || error.to_ascii_lowercase().contains("timeout"),
+        "unexpected timeout error: {error}"
+    );
+    assert!(
+        elapsed < Duration::from_millis(2_500),
+        "one-second upstream budget took {elapsed:?}"
+    );
     let _ = fs::remove_dir_all(root);
 }
 
 fn serve_mock_http_mcp_request(stream: &mut std::net::TcpStream) {
+    serve_mock_http_mcp_request_with_delays(stream, Duration::ZERO, Duration::ZERO);
+}
+
+fn serve_mock_http_mcp_request_with_delays(
+    stream: &mut std::net::TcpStream,
+    tools_list_delay: Duration,
+    tools_call_delay: Duration,
+) {
+    stream
+        .set_nonblocking(false)
+        .expect("make accepted HTTP fixture stream blocking");
     let _ = stream.set_read_timeout(Some(Duration::from_secs(2)));
     let mut raw = Vec::new();
     let mut buffer = [0u8; 1024];
@@ -848,6 +1492,24 @@ fn serve_mock_http_mcp_request(stream: &mut std::net::TcpStream) {
         let Some((headers, body)) = text.split_once("\r\n\r\n") else {
             continue;
         };
+        assert!(
+            headers
+                .lines()
+                .any(|line| line.eq_ignore_ascii_case("Authorization: Bearer test-token")),
+            "configured HTTP authorization header was not forwarded"
+        );
+        if headers.starts_with("DELETE ") {
+            assert!(
+                headers
+                    .lines()
+                    .any(|line| line.eq_ignore_ascii_case("MCP-Protocol-Version: 2025-03-26")),
+                "session cleanup must use the negotiated protocol version"
+            );
+            let response =
+                "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+            let _ = stream.write_all(response.as_bytes());
+            return;
+        }
         let content_length = headers
             .lines()
             .find_map(|line| {
@@ -862,6 +1524,16 @@ fn serve_mock_http_mcp_request(stream: &mut std::net::TcpStream) {
         }
         let request = parse_str(&body[..content_length]).unwrap();
         let method = json_helpers::string_at_path(&request, &["method"]).unwrap_or_default();
+        let expected_protocol = if method == "initialize" {
+            mcp::CURRENT_PROTOCOL_VERSION
+        } else {
+            "2025-03-26"
+        };
+        assert!(
+            headers.lines().any(|line| line
+                .eq_ignore_ascii_case(&format!("MCP-Protocol-Version: {}", expected_protocol))),
+            "request for {method} did not use expected protocol version {expected_protocol}"
+        );
         let id = json_helpers::value_at_path(&request, &["id"])
             .cloned()
             .unwrap_or(JsonValue::Null);
@@ -871,10 +1543,7 @@ fn serve_mock_http_mcp_request(stream: &mut std::net::TcpStream) {
                 mcp::result(
                     id,
                     JsonValue::object([
-                        (
-                            "protocolVersion",
-                            JsonValue::string(mcp::CURRENT_PROTOCOL_VERSION),
-                        ),
+                        ("protocolVersion", JsonValue::string("2025-03-26")),
                         (
                             "capabilities",
                             JsonValue::object([("tools", empty_object())]),
@@ -892,43 +1561,55 @@ fn serve_mock_http_mcp_request(stream: &mut std::net::TcpStream) {
                 "Mcp-Session-Id: sess-test\r\n",
             ),
             "notifications/initialized" => ("202 Accepted", String::new(), ""),
-            "tools/list" => (
-                "200 OK",
-                mcp::result(
-                    id,
-                    JsonValue::object([(
-                        "tools",
-                        JsonValue::array([JsonValue::object([
-                            ("name", JsonValue::string("ok")),
-                            ("description", JsonValue::string("ok")),
-                            (
-                                "inputSchema",
-                                JsonValue::object([
-                                    ("type", JsonValue::string("object")),
-                                    ("properties", empty_object()),
-                                ]),
-                            ),
-                        ])]),
-                    )]),
+            "tools/list" => {
+                thread::sleep(tools_list_delay);
+                let cursor = json_helpers::string_at_path(&request, &["params", "cursor"]);
+                let tool_name = if cursor == Some("page-two") {
+                    "second"
+                } else {
+                    "ok"
+                };
+                let mut result = BTreeMap::from([(
+                    "tools".to_string(),
+                    JsonValue::array([JsonValue::object([
+                        ("name", JsonValue::string(tool_name)),
+                        ("description", JsonValue::string(tool_name)),
+                        (
+                            "inputSchema",
+                            JsonValue::object([
+                                ("type", JsonValue::string("object")),
+                                ("properties", empty_object()),
+                            ]),
+                        ),
+                    ])]),
+                )]);
+                if cursor.is_none() {
+                    result.insert("nextCursor".to_string(), JsonValue::string("page-two"));
+                }
+                (
+                    "200 OK",
+                    mcp::result(id, JsonValue::Object(result)).to_compact_string(),
+                    "",
                 )
-                .to_compact_string(),
-                "",
-            ),
-            "tools/call" => (
-                "200 OK",
-                mcp::result(
-                    id,
-                    JsonValue::object([(
-                        "content",
-                        JsonValue::array([JsonValue::object([
-                            ("type", JsonValue::string("text")),
-                            ("text", JsonValue::string("called")),
-                        ])]),
-                    )]),
+            }
+            "tools/call" => {
+                thread::sleep(tools_call_delay);
+                (
+                    "200 OK",
+                    mcp::result(
+                        id,
+                        JsonValue::object([(
+                            "content",
+                            JsonValue::array([JsonValue::object([
+                                ("type", JsonValue::string("text")),
+                                ("text", JsonValue::string("called")),
+                            ])]),
+                        )]),
+                    )
+                    .to_compact_string(),
+                    "",
                 )
-                .to_compact_string(),
-                "",
-            ),
+            }
             _ => (
                 "404 Not Found",
                 mcp::error(id, -32601, "not found", None).to_compact_string(),
@@ -1017,6 +1698,17 @@ fn surface_manifest_is_explicit_about_wrapper_projection() {
             &[
                 "configurationModel",
                 "packagedDefaults",
+                "candidateRecommendations"
+            ]
+        ),
+        Some(true)
+    );
+    assert_eq!(
+        json_helpers::bool_at_path(
+            &manifest,
+            &[
+                "configurationModel",
+                "packagedDefaults",
                 "requiresHardcodedServerNames"
             ]
         ),
@@ -1052,7 +1744,7 @@ fn surface_manifest_is_explicit_about_wrapper_projection() {
             &manifest,
             &["configurationModel", "httpsUpstreamForwardingImplemented"]
         ),
-        Some(false)
+        Some(true)
     );
     assert!(json_helpers::string_at_path(&manifest, &["summary"])
         .unwrap_or_default()
@@ -1103,6 +1795,124 @@ fn inventory_and_probe_report_missing_future_server_commands() {
         json_helpers::value_at_path(&probe, &["cacheHitCount"]).and_then(JsonValue::as_i64),
         Some(0)
     );
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn buggy_stdio_servers_fail_bounded_without_hiding_a_healthy_peer() {
+    let _environment_lock = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _environment = ScopedEnvRemoval::new(&["MCPACE_MCP_SETTINGS", "MCPACE_MCP_SETTINGS_DIRS"]);
+    if std::process::Command::new("node")
+        .arg("--version")
+        .output()
+        .is_err()
+    {
+        return;
+    }
+    let root = temp_root();
+    let script = root.join("buggy-mcp.js");
+    fs::write(
+        &script,
+        r#"
+const readline = require('readline');
+const mode = process.argv[2];
+const rl = readline.createInterface({ input: process.stdin });
+const send = (value) => process.stdout.write(JSON.stringify(value) + '\n');
+rl.on('line', (line) => {
+  const message = JSON.parse(line);
+  if (message.method === 'initialize') {
+    if (mode === 'hang') return;
+    if (mode === 'crash') {
+      process.stderr.write('startup TOKEN=super-secret\n');
+      process.exit(3);
+    }
+    if (mode === 'malformed-json') {
+      process.stdout.write('{not-json\n');
+      process.exit(4);
+    }
+    if (mode === 'wrong-version') {
+      send({ jsonrpc: '1.0', id: message.id, result: { protocolVersion: '2025-11-25' } });
+      return;
+    }
+    const protocolVersion = mode === 'unsupported-protocol' ? '2099-01-01' : '2025-11-25';
+    send({ jsonrpc: '2.0', id: message.id, result: { protocolVersion, capabilities: { tools: {} }, serverInfo: { name: mode, version: '1.0.0' } } });
+    return;
+  }
+  if (message.method === 'tools/list') {
+    if (mode === 'missing-tools') {
+      send({ jsonrpc: '2.0', id: message.id, result: {} });
+    } else if (mode === 'duplicate-tools') {
+      const tool = { name: 'same', inputSchema: { type: 'object' } };
+      send({ jsonrpc: '2.0', id: message.id, result: { tools: [tool, tool] } });
+    } else {
+      send({ jsonrpc: '2.0', id: message.id, result: { tools: [{ name: 'ok', inputSchema: { type: 'object' } }] } });
+    }
+  }
+});
+"#,
+    )
+    .unwrap();
+    let script = script
+        .display()
+        .to_string()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
+    let modes = [
+        "healthy",
+        "hang",
+        "crash",
+        "malformed-json",
+        "wrong-version",
+        "unsupported-protocol",
+        "missing-tools",
+        "duplicate-tools",
+    ];
+    let servers = modes
+        .iter()
+        .map(|mode| {
+            format!(
+                r#""{}":{{"enabled":true,"type":"stdio","command":"node","args":["{}","{}"]}}"#,
+                mode, script, mode
+            )
+        })
+        .collect::<Vec<_>>()
+        .join(",");
+    fs::write(
+        root.join("mcp_settings.json"),
+        format!(r#"{{"mcpServers":{{{servers}}}}}"#),
+    )
+    .unwrap();
+
+    let started = Instant::now();
+    let report = probe_servers(&root, None, Some(5_000), true).expect("bounded buggy probe");
+    assert!(
+        started.elapsed() < Duration::from_secs(30),
+        "buggy probes must remain bounded even on low-core Windows hosts"
+    );
+    assert_eq!(json_helpers::bool_at_path(&report, &["ok"]), Some(false));
+    assert_eq!(
+        json_helpers::value_at_path(&report, &["okCount"]).and_then(JsonValue::as_i64),
+        Some(1)
+    );
+    assert_eq!(
+        json_helpers::value_at_path(&report, &["failedCount"]).and_then(JsonValue::as_i64),
+        Some(7)
+    );
+    let results = json_helpers::array_at_path(&report, &["results"]).unwrap();
+    let healthy = results
+        .iter()
+        .find(|result| json_helpers::string_at_path(result, &["name"]) == Some("healthy"))
+        .unwrap();
+    assert_eq!(json_helpers::bool_at_path(healthy, &["ok"]), Some(true));
+    let crash = results
+        .iter()
+        .find(|result| json_helpers::string_at_path(result, &["name"]) == Some("crash"))
+        .unwrap();
+    let crash_error = json_helpers::string_at_path(crash, &["error"]).unwrap_or_default();
+    assert!(crash_error.contains(DIAGNOSTIC_REDACTION));
+    assert!(!crash_error.contains("super-secret"));
     let _ = fs::remove_dir_all(root);
 }
 
@@ -1209,9 +2019,11 @@ setInterval(() => {}, 1000);
             pid_path.display().to_string(),
         ],
         env: BTreeMap::new(),
+        headers: BTreeMap::new(),
         cwd: Some(root.clone()),
         url: None,
         timeout_ms: 5_000,
+        execution: ExecutionPolicy::default(),
         tool_policies: Vec::new(),
     };
 
@@ -1313,9 +2125,11 @@ setInterval(() => {}, 1000);
             pid_path.display().to_string(),
         ],
         env: BTreeMap::new(),
+        headers: BTreeMap::new(),
         cwd: Some(root.clone()),
         url: None,
         timeout_ms: 5_000,
+        execution: ExecutionPolicy::default(),
         tool_policies: Vec::new(),
     };
 
@@ -1418,9 +2232,11 @@ fn bounded_server_task_runner_preserves_input_order() {
             command: Some("tool".to_string()),
             args: Vec::new(),
             env: BTreeMap::new(),
+            headers: BTreeMap::new(),
             cwd: None,
             url: None,
             timeout_ms: DEFAULT_TIMEOUT_MS,
+            execution: ExecutionPolicy::default(),
             tool_policies: Vec::new(),
         }
     }
@@ -1452,9 +2268,11 @@ fn bounded_server_task_runner_reports_worker_panics() {
             command: Some("tool".to_string()),
             args: Vec::new(),
             env: BTreeMap::new(),
+            headers: BTreeMap::new(),
             cwd: None,
             url: None,
             timeout_ms: DEFAULT_TIMEOUT_MS,
+            execution: ExecutionPolicy::default(),
             tool_policies: Vec::new(),
         }
     }
@@ -1485,6 +2303,181 @@ fn bounded_server_task_runner_reports_worker_panics() {
         Some("worker-panicked")
     );
     let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn tools_list_pagination_merges_pages_and_rejects_repeated_cursors() {
+    let mut pagination = ToolListPagination::new();
+    let first = JsonValue::object([
+        (
+            "tools",
+            JsonValue::array([JsonValue::object([
+                ("name", JsonValue::string("one")),
+                ("inputSchema", empty_object()),
+            ])]),
+        ),
+        ("nextCursor", JsonValue::string("next")),
+    ]);
+    assert_eq!(
+        pagination.add_page("paged", &first).unwrap().as_deref(),
+        Some("next")
+    );
+    let second = JsonValue::object([(
+        "tools",
+        JsonValue::array([JsonValue::object([
+            ("name", JsonValue::string("two")),
+            ("inputSchema", empty_object()),
+        ])]),
+    )]);
+    assert_eq!(pagination.add_page("paged", &second).unwrap(), None);
+    assert_eq!(
+        json_helpers::array_at_path(&pagination.finish(), &["tools"])
+            .unwrap()
+            .len(),
+        2
+    );
+
+    let mut repeated = ToolListPagination::new();
+    assert!(repeated.add_page("buggy", &first).is_ok());
+    assert!(repeated.add_page("buggy", &first).is_err());
+}
+
+#[test]
+fn buggy_tools_list_shapes_are_rejected_before_caching_or_projection() {
+    let server = UpstreamServerConfig {
+        name: "buggy-tools".to_string(),
+        enabled: true,
+        disabled_reason: None,
+        source_type: "stdio".to_string(),
+        command: Some("node".to_string()),
+        args: Vec::new(),
+        env: BTreeMap::new(),
+        headers: BTreeMap::new(),
+        cwd: None,
+        url: None,
+        timeout_ms: 1_000,
+        execution: ExecutionPolicy::default(),
+        tool_policies: Vec::new(),
+    };
+    let invalid = [
+        empty_object(),
+        JsonValue::object([("tools", JsonValue::string("not-an-array"))]),
+        JsonValue::object([("tools", JsonValue::array([empty_object()]))]),
+        JsonValue::object([(
+            "tools",
+            JsonValue::array([JsonValue::object([(
+                "name",
+                JsonValue::string("missing-schema"),
+            )])]),
+        )]),
+        JsonValue::object([(
+            "tools",
+            JsonValue::array([
+                JsonValue::object([
+                    ("name", JsonValue::string("duplicate")),
+                    ("inputSchema", empty_object()),
+                ]),
+                JsonValue::object([
+                    ("name", JsonValue::string("duplicate")),
+                    ("inputSchema", empty_object()),
+                ]),
+            ]),
+        )]),
+    ];
+    for result in invalid {
+        assert!(
+            super::tool_cache::validate_tools_list_result(&server, &result).is_err(),
+            "invalid tools/list result should fail: {}",
+            result.to_compact_string()
+        );
+    }
+
+    let valid = JsonValue::object([(
+        "tools",
+        JsonValue::array([JsonValue::object([
+            ("name", JsonValue::string("ok")),
+            ("inputSchema", empty_object()),
+        ])]),
+    )]);
+    assert!(super::tool_cache::validate_tools_list_result(&server, &valid).is_ok());
+}
+
+#[test]
+fn stdio_output_reader_bounds_lines_and_rejects_non_utf8() {
+    let mut valid = std::io::Cursor::new(b"one\r\ntwo\n".to_vec());
+    assert_eq!(
+        super::stdio_runtime::read_bounded_line(&mut valid, 8).unwrap(),
+        Some("one".to_string())
+    );
+    assert_eq!(
+        super::stdio_runtime::read_bounded_line(&mut valid, 8).unwrap(),
+        Some("two".to_string())
+    );
+
+    let mut oversized = std::io::Cursor::new(b"123456789\n".to_vec());
+    assert!(super::stdio_runtime::read_bounded_line(&mut oversized, 8).is_err());
+    let mut non_utf8 = std::io::Cursor::new(vec![0xff, b'\n']);
+    assert!(super::stdio_runtime::read_bounded_line(&mut non_utf8, 8).is_err());
+}
+
+#[test]
+fn buggy_tool_call_results_are_not_reported_as_success() {
+    assert!(validate_tool_call_result("buggy", "tool", &JsonValue::Null).is_err());
+    assert!(validate_tool_call_result("buggy", "tool", &empty_object()).is_err());
+    assert!(validate_tool_call_result(
+        "buggy",
+        "tool",
+        &JsonValue::object([
+            ("content", JsonValue::array([])),
+            ("isError", JsonValue::string("false")),
+        ]),
+    )
+    .is_err());
+    assert!(validate_tool_call_result(
+        "valid",
+        "tool",
+        &JsonValue::object([
+            ("content", JsonValue::array([])),
+            ("isError", JsonValue::bool(true)),
+        ]),
+    )
+    .unwrap());
+}
+
+#[test]
+fn initialize_protocol_version_is_required_and_supported() {
+    assert_eq!(
+        negotiated_protocol_version(
+            "compatible",
+            &JsonValue::object([
+                ("protocolVersion", JsonValue::string("2025-03-26")),
+                ("capabilities", empty_object()),
+                (
+                    "serverInfo",
+                    JsonValue::object([
+                        ("name", JsonValue::string("compatible")),
+                        ("version", JsonValue::string("1.0.0")),
+                    ]),
+                ),
+            ]),
+        )
+        .unwrap(),
+        "2025-03-26"
+    );
+    assert!(negotiated_protocol_version("missing", &empty_object()).is_err());
+    assert!(negotiated_protocol_version(
+        "missing-capabilities",
+        &JsonValue::object([(
+            "protocolVersion",
+            JsonValue::string(mcp::CURRENT_PROTOCOL_VERSION),
+        )]),
+    )
+    .is_err());
+    assert!(negotiated_protocol_version(
+        "future",
+        &JsonValue::object([("protocolVersion", JsonValue::string("2099-01-01"))]),
+    )
+    .is_err());
 }
 
 #[test]
@@ -1702,9 +2695,11 @@ fn tool_policy_audit_flags_unprotected_mutating_tools_without_enforcing_heuristi
         command: Some("tool".to_string()),
         args: Vec::new(),
         env: BTreeMap::new(),
+        headers: BTreeMap::new(),
         cwd: None,
         url: None,
         timeout_ms: DEFAULT_TIMEOUT_MS,
+        execution: ExecutionPolicy::default(),
         tool_policies: Vec::new(),
     };
     let audit = audit_tool(
@@ -1747,9 +2742,11 @@ fn tool_policy_audit_reports_declarative_policy_coverage() {
         command: Some("tool".to_string()),
         args: Vec::new(),
         env: BTreeMap::new(),
+        headers: BTreeMap::new(),
         cwd: None,
         url: None,
         timeout_ms: DEFAULT_TIMEOUT_MS,
+        execution: ExecutionPolicy::default(),
         tool_policies: vec![ToolRiskPolicy {
             tools: vec!["write_*".to_string()],
             risk_class: Some("filesystem-mutation".to_string()),

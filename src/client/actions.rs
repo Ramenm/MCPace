@@ -1,3 +1,4 @@
+use crate::diagnostics;
 use crate::text_utils::yes_no;
 mod backup;
 mod config_update;
@@ -10,10 +11,7 @@ use self::backup::{
     install_backup_root, now_ms, restore_client_install_backup, safe_file_segment,
     ClientInstallBackup,
 };
-use self::config_update::{
-    build_toml_managed_block, build_unified_config_diff, detect_missing_stdio_command_warnings,
-    detect_newline, upsert_json_mcp_server, upsert_toml_managed_block, upsert_yaml_mcp_server,
-};
+use self::config_update::build_unified_config_diff;
 use self::render_models::{
     AdapterContractPreview, ClientExportPreview, ClientInstallResult, ClientRestoreResult,
 };
@@ -27,6 +25,10 @@ use crate::client_catalog::{
     self, client_install_support_summary as catalog_client_install_support_summary,
     ClientInstallKindRecord as ClientInstallKind, ClientTargetRecord as ClientTarget,
     JsonMcpServerShapeRecord as JsonMcpServerShape,
+};
+use crate::config_edit::{
+    apply_json_mcp_server_entry, apply_toml_mcp_server_block, apply_yaml_mcp_server_entry,
+    build_toml_mcp_server_block, detect_missing_stdio_command_warnings, detect_newline,
 };
 use crate::doctor;
 use crate::json::JsonValue;
@@ -57,14 +59,17 @@ pub(super) fn run_plan(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
     let json = match build_plan_json(parsed.clone(), &root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -77,7 +82,7 @@ pub(super) fn run_plan(
     let plan = match build_plan_struct(parsed, &root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -120,14 +125,17 @@ pub(super) fn run_export(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
     let registry = match client_catalog::load_registry(Some(&root_path)) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -135,7 +143,7 @@ pub(super) fn run_export(
     let metadata = match load_metadata(&parsed) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 2;
         }
     };
@@ -150,11 +158,8 @@ pub(super) fn run_export(
     {
         Some(value) => value,
         None => {
-            let _ = writeln!(
-                stderr,
-                "unknown client target '{}'; use 'mcpace client list' to inspect supported surfaces",
-                context.client_id
-            );
+            diagnostics::stderr_line(stderr, format_args!("unknown client target '{}'; use 'mcpace client list' to inspect supported surfaces",
+                context.client_id));
             return 2;
         }
     };
@@ -163,7 +168,7 @@ pub(super) fn run_export(
     let server_records = match server::load_server_records(&root_path) {
         Ok(records) => records,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -195,14 +200,17 @@ pub(super) fn run_install(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
     let registry = match client_catalog::load_registry(Some(&root_path)) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -219,7 +227,7 @@ pub(super) fn run_install(
     let metadata = match load_metadata(&parsed) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 2;
         }
     };
@@ -234,11 +242,8 @@ pub(super) fn run_install(
     {
         Some(value) => value,
         None => {
-            let _ = writeln!(
-                stderr,
-                "unknown client target '{}'; use 'mcpace client list' to inspect supported surfaces",
-                context.client_id
-            );
+            diagnostics::stderr_line(stderr, format_args!("unknown client target '{}'; use 'mcpace client list' to inspect supported surfaces",
+                context.client_id));
             return 2;
         }
     };
@@ -247,7 +252,7 @@ pub(super) fn run_install(
     let server_records = match server::load_server_records(&root_path) {
         Ok(records) => records,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -264,7 +269,7 @@ pub(super) fn run_install(
     let install = match ClientInstallPlan::from_plan(&root_path, client_target, &plan) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -273,7 +278,7 @@ pub(super) fn run_install(
     let result = match install.write_with_options(&options) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -295,14 +300,14 @@ pub(super) fn run_restore(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
     let Some(client_id) = parsed.client_id.as_deref() else {
-        let _ = writeln!(
-            stderr,
-            "client restore requires a client target id, for example: mcpace client restore codex"
-        );
+        diagnostics::stderr_line(stderr, format_args!("client restore requires a client target id, for example: mcpace client restore codex"));
         return 2;
     };
 
@@ -313,7 +318,7 @@ pub(super) fn run_restore(
     let result = match restore_client_install_backup(&root_path, client_id, selector) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -335,10 +340,7 @@ fn run_restore_all(
     stderr: &mut dyn Write,
 ) -> i32 {
     if !selector.trim().is_empty() && !selector.eq_ignore_ascii_case("latest") {
-        let _ = writeln!(
-            stderr,
-            "client restore all supports only --backup latest because backup ids are per-client"
-        );
+        diagnostics::stderr_line(stderr, format_args!("client restore all supports only --backup latest because backup ids are per-client"));
         return 2;
     }
 
@@ -346,19 +348,23 @@ fn run_restore_all(
     let entries = match fs::read_dir(&backup_root) {
         Ok(value) => value,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "no client install backups found under '{}'",
-                backup_root.display()
+                format_args!(
+                    "no client install backups found under '{}'",
+                    backup_root.display()
+                ),
             );
             return 1;
         }
         Err(error) => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "failed to read client install backups '{}': {}",
-                backup_root.display(),
-                error
+                format_args!(
+                    "failed to read client install backups '{}': {}",
+                    backup_root.display(),
+                    error
+                ),
             );
             return 1;
         }
@@ -384,7 +390,7 @@ fn run_restore_all(
         let client_id = entry.file_name().to_string_lossy().to_string();
         match restore_client_install_backup(root_path, &client_id, "latest") {
             Ok(value) => restored.push(value),
-            Err(error) => failed.push((client_id, error)),
+            Err(error) => failed.push((client_id, error.to_string())),
         }
     }
 
@@ -413,7 +419,7 @@ fn run_restore_all(
             result.write_text(stdout);
         }
         for (client_id, error) in &failed {
-            let _ = writeln!(stderr, "{}: {}", client_id, error);
+            diagnostics::stderr_line(stderr, format_args!("{}: {}", client_id, error));
         }
     }
 
@@ -434,7 +440,7 @@ fn run_install_all(
     let server_records = match server::load_server_records(&root_path) {
         Ok(records) => records,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -458,7 +464,7 @@ fn run_install_all(
         let metadata = match load_metadata(&target_args) {
             Ok(value) => value,
             Err(error) => {
-                failed.push((target.id.clone(), error));
+                failed.push((target.id.clone(), error.to_string()));
                 continue;
             }
         };
@@ -483,7 +489,7 @@ fn run_install_all(
         let install = match ClientInstallPlan::from_plan(&root_path, target, &plan) {
             Ok(value) => value,
             Err(error) => {
-                failed.push((target.id.clone(), error));
+                failed.push((target.id.clone(), error.to_string()));
                 continue;
             }
         };
@@ -541,7 +547,7 @@ fn run_install_all(
             let _ = writeln!(stdout, "Skipped: {}", join_semicolon_or_none(&skipped));
         }
         for (target, error) in &failed {
-            let _ = writeln!(stderr, "{}: {}", target, error);
+            diagnostics::stderr_line(stderr, format_args!("{}: {}", target, error));
         }
     }
 
@@ -628,7 +634,10 @@ impl ClientInstallPlan {
             ));
         };
 
-        let config_path = resolve_install_path(&install_support.preferred_config_path)?;
+        let config_path = resolve_install_path(
+            platform_install_config_path(target)
+                .unwrap_or(install_support.preferred_config_path.as_str()),
+        )?;
         let config_scope = install_support.preferred_scope.clone();
         let server_url = local_mcp_url(root_path);
         let config = install_config_for_target(target, &server_url)?;
@@ -694,30 +703,33 @@ impl ClientInstallPlan {
             ClientInstallConfig::TomlManagedTable => {
                 let newline = detect_newline(&existing);
                 let managed_block =
-                    build_toml_managed_block(&self.adapter_key_name, &self.server_url, newline);
-                upsert_toml_managed_block(
+                    build_toml_mcp_server_block(&self.adapter_key_name, &self.server_url, newline);
+                apply_toml_mcp_server_block(
                     &existing,
                     &self.adapter_key_name,
                     &managed_block,
                     &self.config_path,
-                )?
+                )
+                .map_err(|error| error.to_string())?
             }
             ClientInstallConfig::JsonMcpServers {
                 servers_object_key,
                 server_config,
-            } => upsert_json_mcp_server(
+            } => apply_json_mcp_server_entry(
                 &existing,
                 &self.adapter_key_name,
                 servers_object_key,
                 server_config.clone(),
                 &self.config_path,
-            )?,
-            ClientInstallConfig::YamlMcpServers => upsert_yaml_mcp_server(
+            )
+            .map_err(|error| error.to_string())?,
+            ClientInstallConfig::YamlMcpServers => apply_yaml_mcp_server_entry(
                 &existing,
                 &self.adapter_key_name,
                 &self.server_url,
                 &self.config_path,
-            )?,
+            )
+            .map_err(|error| error.to_string())?,
         };
 
         let would_change = update.contents != existing;
@@ -862,10 +874,28 @@ fn resolve_export_mode(target: &ClientTarget, plan: &super::model::ClientPlan) -
     "local-stdio-launcher".to_string()
 }
 
+pub(super) fn platform_install_config_path(target: &ClientTarget) -> Option<&str> {
+    let preferred = target.preferred_install_config_path();
+    let platform_marker = if cfg!(windows) {
+        Some("~/appdata/")
+    } else if cfg!(target_os = "macos") {
+        Some("~/library/application support/")
+    } else {
+        Some("~/.config/")
+    };
+    let platform_path = platform_marker.and_then(|marker| {
+        target.config_paths.iter().find_map(|path| {
+            path.trim()
+                .to_ascii_lowercase()
+                .starts_with(marker)
+                .then_some(path.as_str())
+        })
+    });
+    platform_path.or(preferred)
+}
+
 fn preferred_install_config_path(target: &ClientTarget) -> &str {
-    target
-        .preferred_install_config_path()
-        .unwrap_or("client config")
+    platform_install_config_path(target).unwrap_or("client config")
 }
 
 fn preferred_install_scope(target: &ClientTarget) -> &str {
@@ -952,7 +982,7 @@ fn build_adapter_contract(
             kind: "stdio-launcher".to_string(),
             command: Some(plan.launcher_command.clone()),
             args: vec![
-                "mcp-server".to_string(),
+                "stdio".to_string(),
                 "--root".to_string(),
                 sanitize_launcher_root_path(&plan.root_path),
                 "--client-id".to_string(),
@@ -961,13 +991,13 @@ fn build_adapter_contract(
             url_template: None,
             metadata_carrier:
                 "MCP initialize params, roots, cwd, and optional _meta context hints".to_string(),
-            session_model: "preview stdio launcher contract; live lease/session forwarding is still pending runtime proof".to_string(),
+            session_model: "live stdio launcher contract; lease and session context are derived from initialize metadata and explicit CLI hints".to_string(),
             notes: vec![
                 format!(
                     "{} should see one MCPace launcher entry instead of one config block per upstream MCP server.",
                     target.display_name
                 ),
-                "This preview keeps one stable stdio launcher command, but bootstrap-only proof should not be treated as completed live forwarding yet.".to_string(),
+                "Use one stable MCPace stdio launcher command; upstream access stays brokered through MCPace instead of one client config block per upstream server.".to_string(),
             ],
         },
     }
@@ -982,28 +1012,18 @@ fn sanitize_path_for_display(path: &Path) -> String {
 }
 
 fn resolve_install_path(default_config_path: &str) -> Result<PathBuf, String> {
-    let home = runtimepaths::user_home_dir().ok_or_else(|| {
-        "failed to resolve the current user's home directory for user-scoped client config"
-            .to_string()
-    })?;
-
-    let relative = default_config_path
-        .strip_prefix("~/")
-        .or_else(|| default_config_path.strip_prefix("~\\"))
-        .ok_or_else(|| {
-            format!(
-                "client install default config path '{}' is not user-home based yet",
-                default_config_path
-            )
-        })?;
-
-    let mut path = home;
-    for segment in relative.split(['/', '\\']) {
-        if !segment.is_empty() {
-            path.push(segment);
-        }
+    if !default_config_path.starts_with("~/") && !default_config_path.starts_with("~\\") {
+        return Err(format!(
+            "client install default config path '{}' is not user-home based yet",
+            default_config_path
+        ));
     }
-    Ok(path)
+    runtimepaths::resolve_user_config_path_expression(default_config_path).ok_or_else(|| {
+        format!(
+            "client install default config path '{}' is invalid or escapes the user config directory",
+            default_config_path
+        )
+    })
 }
 
 fn install_warnings_from_plan(

@@ -1,42 +1,19 @@
+use crate::http_probe::HttpJsonResponse;
 use crate::json::{parse_str, JsonValue};
 use crate::{
-    app, client_catalog, doctor, json_helpers, mcp_protocol as mcp, mcp_sources, resources,
-    runtimepaths, server, text_utils,
+    app, client_catalog, diagnostics, doctor, http_probe, json_helpers, mcp_protocol as mcp,
+    mcp_sources, resources, runtimepaths, server, text_utils,
 };
+use clap::{error::ErrorKind as ClapErrorKind, Parser};
 use std::collections::{BTreeMap, BTreeSet};
+use std::ffi::OsString;
 use std::fs;
-use std::io::{ErrorKind, Read, Write};
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 const HTTP_PROBE_TIMEOUT: Duration = Duration::from_secs(15);
-const MAX_HTTP_SETUP_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
-
-#[derive(Clone, Debug)]
-struct HttpJsonResponse {
-    headers: Vec<(String, String)>,
-    json: JsonValue,
-}
-
-struct ParsedHttpJsonResponse<'a> {
-    status_line: String,
-    status: u16,
-    headers: Vec<(String, String)>,
-    content_type: String,
-    content_length: Option<usize>,
-    transfer_encoding: String,
-    body: &'a str,
-}
-
-impl HttpJsonResponse {
-    fn header(&self, name: &str) -> Option<&str> {
-        self.headers
-            .iter()
-            .find(|(candidate, _)| candidate.eq_ignore_ascii_case(name))
-            .map(|(_, value)| value.as_str())
-    }
-}
+const MAX_HTTP_SETUP_RESPONSE_BYTES: usize = http_probe::DEFAULT_MAX_RESPONSE_BYTES;
 
 #[derive(Debug, Default)]
 struct ParsedArgs {
@@ -84,9 +61,9 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error.clone() {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help {
@@ -97,14 +74,14 @@ pub fn run(
     let root_path = match resolve_setup_root(parsed.root_override.clone(), default_root) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
     let bootstrap = match ensure_setup_root_layout(&root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -125,224 +102,236 @@ pub fn run(
     exit_code
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace up",
+    disable_version_flag = true,
+    about = "Home-first onboarding for MCPace"
+)]
+struct SetupCli {
+    #[arg(value_name = "SERVER_SPEC_OR_PATH")]
+    values: Vec<String>,
 
-    while index < args.len() {
-        match args[index].as_str() {
-            "--" => {
-                if index + 1 >= args.len() {
-                    parsed.error = Some("setup -- requires a command after it".to_string());
-                    return parsed;
-                }
-                let mut spec = parsed.server_spec.take().unwrap_or_default();
-                if !spec.trim().is_empty() {
-                    spec.push(' ');
-                }
-                spec.push_str(&args[index + 1..].join(" "));
-                parsed.server_spec = Some(spec);
-                break;
-            }
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("setup requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "--host" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("setup requires a value after --host".to_string());
-                    return parsed;
-                };
-                parsed.host = Some(value.to_string());
-                index += 2;
-            }
-            "--port" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("setup requires a value after --port".to_string());
-                    return parsed;
-                };
-                match value.parse::<u16>() {
-                    Ok(port) => parsed.port = port,
-                    Err(_) => {
-                        parsed.error = Some("setup --port must be a valid u16".to_string());
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--max-connections" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("setup requires a value after --max-connections".to_string());
-                    return parsed;
-                };
-                match resources::parse_positive_usize(value, "setup --max-connections") {
-                    Ok(limit) => parsed.max_connections = Some(limit),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--io-timeout-ms" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("setup requires a value after --io-timeout-ms".to_string());
-                    return parsed;
-                };
-                match resources::parse_positive_u64(value, "setup --io-timeout-ms") {
-                    Ok(timeout_ms) => parsed.io_timeout_ms = Some(timeout_ms),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--max-body-bytes" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("setup requires a value after --max-body-bytes".to_string());
-                    return parsed;
-                };
-                match resources::parse_positive_usize(value, "setup --max-body-bytes") {
-                    Ok(limit) => parsed.max_body_bytes = Some(limit),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--overview-cache-ms" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("setup requires a value after --overview-cache-ms".to_string());
-                    return parsed;
-                };
-                match resources::parse_nonnegative_u64(value, "setup --overview-cache-ms") {
-                    Ok(ttl_ms) => parsed.overview_cache_ms = Some(ttl_ms),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--skip-client-install" | "--no-client" | "--skip-client" => {
-                parsed.skip_client_install = true;
-                index += 1;
-            }
-            "--client" | "--for" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some(
-                        "setup requires a client id, 'auto', 'all', or 'none' after --client"
-                            .to_string(),
-                    );
-                    return parsed;
-                };
-                let value = value.trim().to_ascii_lowercase();
-                if value == "none" || value == "skip" || value == "off" {
-                    parsed.skip_client_install = true;
-                    parsed.client_selector = None;
-                } else {
-                    parsed.client_selector = Some(value);
-                }
-                index += 2;
-            }
-            "--all-clients" => {
-                parsed.client_selector = Some("all".to_string());
-                index += 1;
-            }
-            "--auto-client" | "--auto-clients" => {
-                parsed.client_selector = Some("auto".to_string());
-                index += 1;
-            }
-            "--server" | "--with-server" | "--install-server" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("setup requires a server spec after --server".to_string());
-                    return parsed;
-                };
-                parsed.server_spec = Some(value.to_string());
-                index += 2;
-            }
-            "--as" | "--server-name" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("setup requires a server name after --as".to_string());
-                    return parsed;
-                };
-                parsed.server_name = Some(value.to_string());
-                index += 2;
-            }
-            "--path" | "--server-path" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("setup requires a filesystem path after --path".to_string());
-                    return parsed;
-                };
-                parsed.server_paths.push(value.to_string());
-                index += 2;
-            }
-            "--force" => {
-                parsed.server_force = true;
-                index += 1;
-            }
-            "--no-default-server" | "--no-server" => {
-                parsed.no_default_server = true;
-                index += 1;
-            }
-            "--install-service" | "--install-autostart" | "--autostart" => {
-                parsed.install_service = true;
-                index += 1;
-            }
-            "--no-enable" => {
-                parsed.no_enable_service = true;
-                index += 1;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            other => {
-                if parsed
-                    .server_spec
-                    .as_deref()
-                    .map(looks_like_multiword_server_command)
-                    .unwrap_or(false)
-                {
-                    let mut spec = parsed.server_spec.take().unwrap_or_default();
-                    spec.push(' ');
-                    spec.push_str(other);
-                    parsed.server_spec = Some(spec);
-                    index += 1;
-                    continue;
-                }
-                if !other.starts_with('-') {
-                    if parsed.server_spec.is_none() {
-                        parsed.server_spec = Some(other.to_string());
-                    } else {
-                        let spec = parsed.server_spec.take().unwrap_or_default();
-                        parsed.server_paths.push(other.to_string());
-                        parsed.server_spec = Some(spec);
-                    }
-                    index += 1;
-                    continue;
-                }
-                parsed.error = Some(format!("unsupported setup argument: {}", other));
-                return parsed;
+    #[arg(long = "json")]
+    json_output: bool,
+
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+
+    #[arg(long = "host", value_name = "ADDR")]
+    host: Option<String>,
+
+    #[arg(long = "port", value_name = "N")]
+    port: Option<u16>,
+
+    #[arg(long = "max-connections", value_name = "N")]
+    max_connections: Option<usize>,
+
+    #[arg(long = "io-timeout-ms", value_name = "MS")]
+    io_timeout_ms: Option<u64>,
+
+    #[arg(long = "max-body-bytes", value_name = "N")]
+    max_body_bytes: Option<usize>,
+
+    #[arg(long = "overview-cache-ms", value_name = "MS")]
+    overview_cache_ms: Option<u64>,
+
+    #[arg(
+        long = "skip-client-install",
+        alias = "no-client",
+        alias = "skip-client"
+    )]
+    skip_client_install: bool,
+
+    #[arg(long = "client", alias = "for", value_name = "auto|all|none|ID")]
+    client_selector: Option<String>,
+
+    #[arg(long = "all-clients")]
+    all_clients: bool,
+
+    #[arg(long = "auto-client", alias = "auto-clients")]
+    auto_client: bool,
+
+    #[arg(
+        long = "server",
+        alias = "with-server",
+        alias = "install-server",
+        value_name = "SPEC"
+    )]
+    server_spec: Option<String>,
+
+    #[arg(long = "as", alias = "server-name", value_name = "NAME")]
+    server_name: Option<String>,
+
+    #[arg(long = "path", alias = "server-path", value_name = "PATH")]
+    server_paths: Vec<String>,
+
+    #[arg(long = "force")]
+    server_force: bool,
+
+    #[arg(long = "no-default-server", alias = "no-server")]
+    no_default_server: bool,
+
+    #[arg(
+        long = "install-service",
+        alias = "install-autostart",
+        alias = "autostart"
+    )]
+    install_service: bool,
+
+    #[arg(long = "no-enable")]
+    no_enable_service: bool,
+}
+
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match SetupCli::try_parse_from(argv(args)) {
+        Ok(cli) => parsed_from_cli(cli),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ClapErrorKind::DisplayHelp | ClapErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
             }
         }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn parsed_from_cli(cli: SetupCli) -> ParsedArgs {
+    let (skip_client_selector, client_selector) = normalized_client_selector(cli.client_selector);
+    let mut parsed = ParsedArgs {
+        help: false,
+        json_output: cli.json_output,
+        root_override: cli.root_override,
+        host: cli.host,
+        port: cli.port.unwrap_or(0),
+        max_connections: cli.max_connections,
+        io_timeout_ms: cli.io_timeout_ms,
+        max_body_bytes: cli.max_body_bytes,
+        overview_cache_ms: cli.overview_cache_ms,
+        skip_client_install: cli.skip_client_install || skip_client_selector,
+        client_selector,
+        install_service: cli.install_service,
+        no_enable_service: cli.no_enable_service,
+        server_spec: cli.server_spec,
+        server_name: cli.server_name,
+        server_paths: cli.server_paths,
+        server_force: cli.server_force,
+        no_default_server: cli.no_default_server,
+        error: None,
+    };
+
+    if cli.all_clients {
+        parsed.skip_client_install = false;
+        parsed.client_selector = Some("all".to_string());
+    }
+    if cli.auto_client {
+        parsed.skip_client_install = false;
+        parsed.client_selector = Some("auto".to_string());
+    }
+    if parsed.max_connections == Some(0) {
+        parsed.error = Some("setup --max-connections must be a positive integer".to_string());
+        return parsed;
+    }
+    if parsed.io_timeout_ms == Some(0) {
+        parsed.error = Some("setup --io-timeout-ms must be a positive integer".to_string());
+        return parsed;
+    }
+    if parsed.max_body_bytes == Some(0) {
+        parsed.error = Some("setup --max-body-bytes must be a positive integer".to_string());
+        return parsed;
     }
 
+    apply_setup_positionals(&mut parsed, cli.values);
     parsed
+}
+
+fn normalized_client_selector(value: Option<String>) -> (bool, Option<String>) {
+    let Some(value) = value else {
+        return (false, None);
+    };
+    let value = value.trim().to_ascii_lowercase();
+    if matches!(value.as_str(), "none" | "skip" | "off") {
+        (true, None)
+    } else {
+        (false, Some(value))
+    }
+}
+
+fn apply_setup_positionals(parsed: &mut ParsedArgs, values: Vec<String>) {
+    for value in values {
+        if parsed
+            .server_spec
+            .as_deref()
+            .map(looks_like_multiword_server_command)
+            .unwrap_or(false)
+        {
+            let mut spec = parsed.server_spec.take().unwrap_or_default();
+            if !spec.trim().is_empty() {
+                spec.push(' ');
+            }
+            spec.push_str(&value);
+            parsed.server_spec = Some(spec);
+        } else if parsed.server_spec.is_none() {
+            parsed.server_spec = Some(value);
+        } else {
+            parsed.server_paths.push(value);
+        }
+    }
+}
+
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace up"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_arg(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_arg(arg: &str) -> String {
+    match arg {
+        "-json" => "--json".to_string(),
+        "-root" => "--root".to_string(),
+        "-host" => "--host".to_string(),
+        "-port" => "--port".to_string(),
+        "-max-connections" => "--max-connections".to_string(),
+        "-io-timeout-ms" => "--io-timeout-ms".to_string(),
+        "-max-body-bytes" => "--max-body-bytes".to_string(),
+        "-overview-cache-ms" => "--overview-cache-ms".to_string(),
+        "-skip-client-install" => "--skip-client-install".to_string(),
+        "-no-client" => "--no-client".to_string(),
+        "-skip-client" => "--skip-client".to_string(),
+        "-client" => "--client".to_string(),
+        "-for" => "--for".to_string(),
+        "-all-clients" => "--all-clients".to_string(),
+        "-auto-client" => "--auto-client".to_string(),
+        "-auto-clients" => "--auto-clients".to_string(),
+        "-server" => "--server".to_string(),
+        "-with-server" => "--with-server".to_string(),
+        "-install-server" => "--install-server".to_string(),
+        "-as" => "--as".to_string(),
+        "-server-name" => "--server-name".to_string(),
+        "-path" => "--path".to_string(),
+        "-server-path" => "--server-path".to_string(),
+        "-force" => "--force".to_string(),
+        "-no-default-server" => "--no-default-server".to_string(),
+        "-no-server" => "--no-server".to_string(),
+        "-install-service" => "--install-service".to_string(),
+        "-install-autostart" => "--install-autostart".to_string(),
+        "-autostart" => "--autostart".to_string(),
+        "-no-enable" => "--no-enable".to_string(),
+        "-?" => "--help".to_string(),
+        _ => arg.to_string(),
+    }
 }
 
 fn write_help(stdout: &mut dyn Write) {
@@ -406,6 +395,10 @@ fn resolve_setup_root(
         })
 }
 
+pub(crate) fn bootstrap_root_layout(root_path: &Path) -> Result<(), String> {
+    ensure_setup_root_layout(root_path).map(|_| ())
+}
+
 fn ensure_setup_root_layout(root_path: &Path) -> Result<RootBootstrap, String> {
     let existed_before = root_path.is_dir();
     fs::create_dir_all(root_path).map_err(|error| {
@@ -446,6 +439,64 @@ fn ensure_setup_root_layout(root_path: &Path) -> Result<RootBootstrap, String> {
         created_settings,
         created_settings_dir,
     })
+}
+
+fn persist_setup_endpoint_overrides(
+    root_path: &Path,
+    host_override: Option<&str>,
+    port_override: u16,
+) -> Result<bool, String> {
+    if host_override.is_none() && port_override == 0 {
+        return Ok(false);
+    }
+
+    let config_path = root_path.join("mcpace.config.json");
+    let _lock = runtimepaths::acquire_exclusive_file_lock(
+        &config_path,
+        "setup endpoint configuration update",
+    )
+    .map_err(|error| error.to_string())?;
+    let config = json_helpers::read_json_file(&config_path)
+        .map_err(|error| format!("failed to read {}: {}", config_path.display(), error))?;
+    let JsonValue::Object(mut config) = config else {
+        return Err(format!(
+            "{} must contain a JSON object",
+            config_path.display()
+        ));
+    };
+
+    let serve = config
+        .entry("serve".to_string())
+        .or_insert_with(|| JsonValue::Object(BTreeMap::new()));
+    let JsonValue::Object(serve) = serve else {
+        return Err(format!(
+            "{} field 'serve' must contain a JSON object",
+            config_path.display()
+        ));
+    };
+    if let Some(host) = host_override {
+        serve.insert("host".to_string(), JsonValue::string(host.trim()));
+    }
+    if port_override != 0 {
+        serve.insert("port".to_string(), JsonValue::number(port_override));
+    }
+
+    if port_override != 0 {
+        let ports = config
+            .entry("ports".to_string())
+            .or_insert_with(|| JsonValue::Object(BTreeMap::new()));
+        let JsonValue::Object(ports) = ports else {
+            return Err(format!(
+                "{} field 'ports' must contain a JSON object",
+                config_path.display()
+            ));
+        };
+        ports.insert("serve".to_string(), JsonValue::number(port_override));
+    }
+
+    runtimepaths::write_text_atomic(&config_path, &JsonValue::Object(config).to_pretty_string())
+        .map_err(|error| format!("failed to write {}: {}", config_path.display(), error))?;
+    Ok(true)
 }
 
 fn default_config_json() -> JsonValue {
@@ -635,6 +686,27 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         parsed.overview_cache_ms,
     );
     let serve = run_json_command(serve_args);
+    let endpoint_override_requested = parsed.host.is_some() || parsed.port != 0;
+    let endpoint_config_persisted = if endpoint_override_requested && serve.ok {
+        match persist_setup_endpoint_overrides(&root_path, parsed.host.as_deref(), parsed.port) {
+            Ok(_) => true,
+            Err(error) => {
+                warnings.push(format!(
+                    "The running endpoint override could not be persisted; client installation was blocked to avoid writing a stale URL: {}",
+                    error
+                ));
+                false
+            }
+        }
+    } else if endpoint_override_requested {
+        warnings.push(
+            "The endpoint override was not persisted because the serve process did not start successfully."
+                .to_string(),
+        );
+        false
+    } else {
+        true
+    };
 
     let client_install = if parsed.skip_client_install {
         warnings.push(
@@ -642,6 +714,24 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
                 .to_string(),
         );
         None
+    } else if !endpoint_config_persisted {
+        Some(CommandResult {
+            ok: false,
+            exit_code: 1,
+            json: Some(JsonValue::object([
+                ("mode", JsonValue::string("blocked-endpoint-config")),
+                ("ok", JsonValue::bool(false)),
+                (
+                    "error",
+                    JsonValue::string(
+                        "client install was blocked because the active endpoint could not be persisted",
+                    ),
+                ),
+            ])),
+            stdout: String::new(),
+            stderr: "client install was blocked because the active endpoint could not be persisted"
+                .to_string(),
+        })
     } else {
         Some(run_client_install(
             &root_path,
@@ -686,7 +776,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         None
     };
 
-    let probe_host = probe_host(&host);
+    let probe_host = http_probe::probe_host(&host);
     let health = http_json_get(&probe_host, port, &health_path);
     let initialize_response = http_mcp_request(
         &probe_host,
@@ -823,6 +913,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         && home_import_ok
         && server_install_ok
         && serve_ok
+        && endpoint_config_persisted
         && install_ok
         && readiness_ok
         && service_ok
@@ -965,6 +1056,10 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
                 ),
                 ("mcpToolsExpected", JsonValue::bool(tools_expected)),
                 ("serveRunning", JsonValue::bool(serve_ok)),
+                (
+                    "endpointConfigPersisted",
+                    JsonValue::bool(endpoint_config_persisted),
+                ),
                 ("clientInstallReady", JsonValue::bool(install_ok)),
                 ("serviceInstallReady", JsonValue::bool(service_ok)),
                 ("readinessReady", JsonValue::bool(readiness_ok)),
@@ -1045,10 +1140,10 @@ fn import_existing_home_mcp_servers(
                     ("mode", JsonValue::string("home-import")),
                     ("ok", JsonValue::bool(false)),
                     ("targetPath", JsonValue::string(target_text)),
-                    ("error", JsonValue::string(error.clone())),
+                    ("error", JsonValue::string(error.to_string())),
                 ])),
                 stdout: String::new(),
-                stderr: error,
+                stderr: error.to_string(),
             };
         }
     };
@@ -1063,10 +1158,10 @@ fn import_existing_home_mcp_servers(
                         ("mode", JsonValue::string("home-import")),
                         ("ok", JsonValue::bool(false)),
                         ("targetPath", JsonValue::string(target_text)),
-                        ("error", JsonValue::string(error.clone())),
+                        ("error", JsonValue::string(error.to_string())),
                     ])),
                     stdout: String::new(),
-                    stderr: error,
+                    stderr: error.to_string(),
                 };
             }
         };
@@ -1666,21 +1761,9 @@ fn expand_user_or_root_path(expr: &str, root_path: &Path) -> Option<PathBuf> {
         return None;
     }
     let trimmed = expr.trim();
-    if let Some(rest) = trimmed
-        .strip_prefix("~/")
-        .or_else(|| trimmed.strip_prefix("~\\"))
-    {
-        let mut path = runtimepaths::user_home_dir()?;
-        for segment in rest.split(['/', '\\']) {
-            if !segment.is_empty() {
-                path.push(segment);
-            }
-        }
-        return Some(path);
-    }
     let path = PathBuf::from(trimmed);
-    if path.is_absolute() {
-        Some(path)
+    if trimmed.starts_with("~/") || trimmed.starts_with("~\\") || path.is_absolute() {
+        runtimepaths::resolve_user_config_path_expression(trimmed)
     } else {
         Some(root_path.join(path))
     }
@@ -1761,11 +1844,14 @@ fn run_json_command(args: Vec<String>) -> CommandResult {
 }
 
 fn http_json_get(host: &str, port: u16, path: &str) -> Result<JsonValue, String> {
-    let request = format!(
-        "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
-        path, host
-    );
-    http_json_request(host, port, &request)
+    http_probe::json_get(
+        host,
+        port,
+        path,
+        HTTP_PROBE_TIMEOUT,
+        MAX_HTTP_SETUP_RESPONSE_BYTES,
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn http_mcp_request(
@@ -1777,14 +1863,7 @@ fn http_mcp_request(
 ) -> Result<HttpJsonResponse, String> {
     let body = body.to_compact_string();
     let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_MCP_PATH);
-    let session_header = if let Some(value) = session_id {
-        if !text_utils::valid_http_header_value(value) {
-            return Err("setup probe received an invalid MCP session id header".to_string());
-        }
-        format!("Mcp-Session-Id: {}\r\n", value)
-    } else {
-        String::new()
-    };
+    let session_header = mcp_session_header(session_id)?;
     let request = format!(
         "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMCP-Protocol-Version: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
         path,
@@ -1794,11 +1873,14 @@ fn http_mcp_request(
         body.len(),
         body
     );
-    http_json_response(host, port, &request)
-}
-
-fn http_json_request(host: &str, port: u16, request: &str) -> Result<JsonValue, String> {
-    http_json_response(host, port, request).map(|response| response.json)
+    http_probe::json_response(
+        host,
+        port,
+        &request,
+        HTTP_PROBE_TIMEOUT,
+        MAX_HTTP_SETUP_RESPONSE_BYTES,
+    )
+    .map_err(|error| error.to_string())
 }
 
 fn http_mcp_notification(
@@ -1810,14 +1892,7 @@ fn http_mcp_notification(
 ) -> Result<u16, String> {
     let body = body.to_compact_string();
     let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_MCP_PATH);
-    let session_header = if let Some(value) = session_id {
-        if !text_utils::valid_http_header_value(value) {
-            return Err("setup probe received an invalid MCP session id header".to_string());
-        }
-        format!("Mcp-Session-Id: {}\r\n", value)
-    } else {
-        String::new()
-    };
+    let session_header = mcp_session_header(session_id)?;
     let request = format!(
         "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMCP-Protocol-Version: {}\r\n{}Content-Length: {}\r\nConnection: close\r\n\r\n{}",
         path,
@@ -1827,8 +1902,15 @@ fn http_mcp_notification(
         body.len(),
         body
     );
-    let response = http_raw_response(host, port, &request)?;
-    let parsed = parse_http_setup_response(&response)?;
+    let response = http_probe::raw_response(
+        host,
+        port,
+        &request,
+        HTTP_PROBE_TIMEOUT,
+        MAX_HTTP_SETUP_RESPONSE_BYTES,
+    )
+    .map_err(|error| error.to_string())?;
+    let parsed = http_probe::parse_response(&response).map_err(|error| error.to_string())?;
     if matches!(parsed.status, 200 | 202 | 204) {
         Ok(parsed.status)
     } else {
@@ -1836,249 +1918,14 @@ fn http_mcp_notification(
     }
 }
 
-fn http_json_response(host: &str, port: u16, request: &str) -> Result<HttpJsonResponse, String> {
-    let response = http_raw_response(host, port, request)?;
-    parse_http_json_response(&response)
-}
-
-fn http_raw_response(host: &str, port: u16, request: &str) -> Result<String, String> {
-    let probe_host = probe_host(host);
-    let addrs = (probe_host.as_str(), port)
-        .to_socket_addrs()
-        .map_err(|error| format!("resolve {}:{}: {}", probe_host, port, error))?
-        .collect::<Vec<_>>();
-    if addrs.is_empty() {
-        return Err(format!("{}:{} resolved to no addresses", probe_host, port));
-    }
-
-    let mut last_error = None;
-    for addr in addrs {
-        match TcpStream::connect_timeout(&addr, HTTP_PROBE_TIMEOUT) {
-            Ok(mut stream) => {
-                stream
-                    .set_read_timeout(Some(HTTP_PROBE_TIMEOUT))
-                    .map_err(|error| format!("set read timeout: {}", error))?;
-                stream
-                    .set_write_timeout(Some(HTTP_PROBE_TIMEOUT))
-                    .map_err(|error| format!("set write timeout: {}", error))?;
-                stream
-                    .write_all(request.as_bytes())
-                    .map_err(|error| format!("write request: {}", error))?;
-                let _ = stream.shutdown(Shutdown::Write);
-                return read_http_setup_response(&mut stream);
-            }
-            Err(error) => last_error = Some(error),
-        }
-    }
-
-    Err(format!(
-        "connect {}:{}: {}",
-        probe_host,
-        port,
-        last_error
-            .map(|error| error.to_string())
-            .unwrap_or_else(|| "no resolved address accepted the connection".to_string())
-    ))
-}
-
-fn read_http_setup_response(stream: &mut TcpStream) -> Result<String, String> {
-    let mut raw = Vec::new();
-    let mut buffer = [0u8; 8192];
-    loop {
-        match stream.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(count) => {
-                raw.extend_from_slice(&buffer[..count]);
-                if raw.len() > MAX_HTTP_SETUP_RESPONSE_BYTES {
-                    return Err(
-                        "HTTP setup probe response exceeded the maximum supported size".to_string(),
-                    );
-                }
-                if let Ok(text) = std::str::from_utf8(&raw) {
-                    if http_setup_response_ready(text) {
-                        return Ok(text.to_string());
-                    }
-                }
-            }
-            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-                if let Ok(text) = std::str::from_utf8(&raw) {
-                    if http_setup_response_ready(text) {
-                        return Ok(text.to_string());
-                    }
-                }
-                return Err("timed out while reading HTTP setup probe response".to_string());
-            }
-            Err(error) => return Err(format!("read response: {}", error)),
-        }
-    }
-
-    String::from_utf8(raw).map_err(|_| "HTTP setup probe returned a non-UTF-8 response".to_string())
-}
-
-fn http_setup_response_ready(raw: &str) -> bool {
-    let Ok(parsed) = parse_http_setup_response(raw) else {
-        return false;
+fn mcp_session_header(session_id: Option<&str>) -> Result<String, String> {
+    let Some(value) = session_id else {
+        return Ok(String::new());
     };
-    if parsed.status != 200 {
-        return true;
+    if !text_utils::valid_http_header_value(value) {
+        return Err("setup probe received an invalid MCP session id header".to_string());
     }
-    let transfer_encoding = parsed.transfer_encoding.to_ascii_lowercase();
-    let content_type = parsed.content_type.to_ascii_lowercase();
-    if content_type.contains("text/event-stream") {
-        return sse_json_body(parsed.body).is_some();
-    }
-    if transfer_encoding.contains("chunked") {
-        return decode_chunked_body(parsed.body.as_bytes()).is_ok();
-    }
-    if let Some(content_length) = parsed.content_length {
-        return parsed.body.len() >= content_length;
-    }
-    parse_str(parsed.body.trim()).is_ok()
-}
-
-fn parse_http_json_response(response: &str) -> Result<HttpJsonResponse, String> {
-    let parsed = parse_http_setup_response(response)?;
-    if parsed.status != 200 {
-        return Err(format!("HTTP request failed: {}", parsed.status_line));
-    }
-    let body_bytes = if parsed
-        .transfer_encoding
-        .to_ascii_lowercase()
-        .contains("chunked")
-    {
-        decode_chunked_body(parsed.body.as_bytes())?
-    } else if let Some(content_length) = parsed.content_length {
-        parsed
-            .body
-            .as_bytes()
-            .get(..content_length.min(parsed.body.len()))
-            .unwrap_or(parsed.body.as_bytes())
-            .to_vec()
-    } else {
-        parsed.body.as_bytes().to_vec()
-    };
-    let body = String::from_utf8(body_bytes)
-        .map_err(|_| "HTTP setup probe returned a non-UTF-8 body".to_string())?;
-    let json_body = if parsed
-        .content_type
-        .to_ascii_lowercase()
-        .contains("text/event-stream")
-    {
-        sse_json_body(&body).ok_or_else(|| {
-            "HTTP setup probe SSE response did not contain a JSON-RPC response".to_string()
-        })?
-    } else {
-        body.trim().to_string()
-    };
-    let json =
-        parse_str(&json_body).map_err(|error| format!("parse HTTP JSON response: {}", error))?;
-    Ok(HttpJsonResponse {
-        headers: parsed.headers,
-        json,
-    })
-}
-
-fn parse_http_setup_response(raw: &str) -> Result<ParsedHttpJsonResponse<'_>, String> {
-    let (headers_text, body) = raw
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "HTTP response missing header/body separator".to_string())?;
-    let mut lines = headers_text.lines();
-    let status_line = lines.next().unwrap_or_default().to_string();
-    let status = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|value| value.parse::<u16>().ok())
-        .ok_or_else(|| format!("HTTP response has malformed status line: {}", status_line))?;
-    let mut headers = Vec::new();
-    let mut content_type = String::new();
-    let mut content_length = None;
-    let mut transfer_encoding = String::new();
-    for line in lines {
-        let Some((name, value)) = line.split_once(':') else {
-            continue;
-        };
-        let name = name.trim().to_string();
-        let value = value.trim().to_string();
-        match name.to_ascii_lowercase().as_str() {
-            "content-type" => content_type = value.clone(),
-            "content-length" => content_length = value.parse::<usize>().ok(),
-            "transfer-encoding" => transfer_encoding = value.clone(),
-            _ => {}
-        }
-        headers.push((name, value));
-    }
-    Ok(ParsedHttpJsonResponse {
-        status_line,
-        status,
-        headers,
-        content_type,
-        content_length,
-        transfer_encoding,
-        body,
-    })
-}
-
-fn decode_chunked_body(body: &[u8]) -> Result<Vec<u8>, String> {
-    let mut decoded = Vec::new();
-    let mut offset = 0usize;
-    loop {
-        let Some(line_end) = find_crlf(body, offset) else {
-            return Err("chunked HTTP body is incomplete".to_string());
-        };
-        let size_line = std::str::from_utf8(&body[offset..line_end])
-            .map_err(|_| "chunked HTTP body has a non-UTF-8 size line".to_string())?;
-        let size_hex = size_line.split(';').next().unwrap_or_default().trim();
-        let size = usize::from_str_radix(size_hex, 16)
-            .map_err(|_| "chunked HTTP body has an invalid chunk size".to_string())?;
-        offset = line_end + 2;
-        if size == 0 {
-            return Ok(decoded);
-        }
-        if body.len() < offset + size {
-            return Err("chunked HTTP body is incomplete".to_string());
-        }
-        decoded.extend_from_slice(&body[offset..offset + size]);
-        offset += size;
-        if body.get(offset..offset + 2) == Some(b"\r\n") {
-            offset += 2;
-        } else if offset < body.len() {
-            return Err("chunked HTTP body is missing a chunk terminator".to_string());
-        }
-    }
-}
-
-fn find_crlf(body: &[u8], start: usize) -> Option<usize> {
-    body.get(start..)?
-        .windows(2)
-        .position(|window| window == b"\r\n")
-        .map(|index| start + index)
-}
-
-fn sse_json_body(body: &str) -> Option<String> {
-    let normalized = body.replace("\r\n", "\n");
-    for event in normalized.split("\n\n") {
-        let data = event
-            .lines()
-            .filter_map(|line| line.strip_prefix("data:"))
-            .map(str::trim)
-            .collect::<Vec<_>>()
-            .join("\n");
-        let data = data.trim();
-        if data.is_empty() {
-            continue;
-        }
-        if parse_str(data).is_ok() {
-            return Some(data.to_string());
-        }
-    }
-    None
-}
-
-fn probe_host(host: &str) -> String {
-    match host {
-        "0.0.0.0" | "::" => runtimepaths::DEFAULT_LOCAL_HOST.to_string(),
-        other => other.to_string(),
-    }
+    Ok(format!("Mcp-Session-Id: {}\r\n", value))
 }
 
 fn usize_at_path(value: &JsonValue, path: &[&str]) -> Option<usize> {
@@ -2150,38 +1997,4 @@ fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn home_import_normalizes_url_alias_type_and_disabled() {
-        let value = JsonValue::object([
-            ("serverUrl", JsonValue::string("https://example.com/mcp")),
-            ("transport", JsonValue::string("http")),
-            ("disabled", JsonValue::bool(true)),
-        ]);
-        let normalized = normalize_home_imported_server_value(&value);
-        assert_eq!(
-            normalized.get("url").and_then(JsonValue::as_str),
-            Some("https://example.com/mcp")
-        );
-        assert_eq!(
-            normalized.get("type").and_then(JsonValue::as_str),
-            Some("streamable-http")
-        );
-        assert_eq!(
-            normalized.get("enabled").and_then(JsonValue::as_bool),
-            Some(false)
-        );
-    }
-
-    #[test]
-    fn home_import_skips_mcp_pace_self_name_and_endpoint() {
-        let value = JsonValue::object([("url", JsonValue::string("http://127.0.0.1:39022/mcp"))]);
-        assert!(is_mcpace_self_entry(
-            "mcp pace",
-            &value,
-            "http://127.0.0.1:39022/mcp"
-        ));
-    }
-}
+mod tests;

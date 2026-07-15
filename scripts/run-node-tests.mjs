@@ -41,7 +41,7 @@ function integerOption(name, fallback) {
 
 const quiet = process.argv.includes('--quiet');
 const noChunk = process.argv.includes('--no-chunk');
-const chunkSize = integerOption('--chunk-size', 1);
+const chunkSize = integerOption('--chunk-size', 6);
 const fromIndex = integerOption('--from-index', 0);
 const toIndex = integerOption('--to-index', 0);
 const allTests = collectTests();
@@ -67,23 +67,41 @@ if (!isChunkWorker && !noChunk && allTests.length > chunkSize) {
 
 const tests = isChunkWorker ? allTests.slice(fromIndex, toIndex || allTests.length) : allTests;
 let passed = 0;
-for (const file of tests) {
-  if (!quiet) process.stdout.write(`\n# MCPace node test file: ${file}\n`);
-  const result = spawnSync(process.execPath, ['--test', file], {
+
+function runTestFiles(files) {
+  if (!quiet) {
+    for (const file of files) process.stdout.write(`\n# MCPace node test file: ${file}\n`);
+  }
+  return spawnSync(process.execPath, ['--test', ...files], {
     cwd: repoRoot,
     encoding: quiet ? 'utf8' : undefined,
     stdio: quiet ? 'pipe' : 'inherit',
     env: process.env,
-    maxBuffer: 8 * 1024 * 1024,
+    maxBuffer: 16 * 1024 * 1024,
     windowsHide: true,
   });
+}
+
+if (quiet && tests.length > 1) {
+  const result = runTestFiles(tests);
   if (result.status !== 0) {
-    process.stderr.write(`\nFAIL ${file} exited with ${result.status ?? result.signal}\n`);
-    if (quiet) process.stderr.write(`${result.stdout || ''}${result.stderr || ''}`);
+    process.stderr.write(`\nFAIL node test chunk ${tests[0]}..${tests[tests.length - 1]} exited with ${result.status ?? result.signal}\n`);
+    process.stderr.write(`${result.stdout || ''}${result.stderr || ''}`);
     process.exit(result.status || 1);
   }
-  passed += 1;
-  if (quiet) process.stdout.write(`PASS ${file}\n`);
+  passed = tests.length;
+  for (const file of tests) process.stdout.write(`PASS ${file}\n`);
+} else {
+  for (const file of tests) {
+    const result = runTestFiles([file]);
+    if (result.status !== 0) {
+      process.stderr.write(`\nFAIL ${file} exited with ${result.status ?? result.signal}\n`);
+      if (quiet) process.stderr.write(`${result.stdout || ''}${result.stderr || ''}`);
+      process.exit(result.status || 1);
+    }
+    passed += 1;
+    if (quiet) process.stdout.write(`PASS ${file}\n`);
+  }
 }
 
 if (!isChunkWorker) process.stdout.write(`\nPASS node test files: ${passed}/${tests.length}\n`);

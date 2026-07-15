@@ -9,7 +9,7 @@ pub(super) fn stderr_suffix(stderr_rx: &Receiver<String>) -> String {
     while let Ok(line) = stderr_rx.try_recv() {
         let trimmed = line.trim();
         if !trimmed.is_empty() {
-            lines.push(sanitize_stderr_diagnostic(trimmed));
+            lines.push(sanitize_upstream_diagnostic(trimmed));
         }
         if lines.len() >= STDERR_DIAGNOSTIC_MAX_LINES {
             break;
@@ -22,7 +22,7 @@ pub(super) fn stderr_suffix(stderr_rx: &Receiver<String>) -> String {
     }
 }
 
-fn sanitize_stderr_diagnostic(value: &str) -> String {
+pub(super) fn sanitize_upstream_diagnostic(value: &str) -> String {
     truncate_diagnostic_text(&redact_sensitive_assignments(&redact_bearer_tokens(value)))
 }
 

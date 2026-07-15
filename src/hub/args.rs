@@ -1,4 +1,6 @@
 use crate::text_utils::normalize_flag;
+use clap::{error::ErrorKind, Parser};
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -23,181 +25,199 @@ pub(super) struct ParsedArgs {
     pub(super) error: Option<String>,
 }
 
-pub(super) fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs {
-        tail: 20,
-        ..ParsedArgs::default()
-    };
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace hub",
+    disable_version_flag = true,
+    about = "Manage the MCPace local hub runtime and lease store"
+)]
+struct HubCli {
+    #[arg(value_name = "ACTION")]
+    action: Option<String>,
 
-    while index < args.len() {
-        let token = normalize_flag(&args[index]);
-        match token.as_str() {
-            "up" | "down" | "repair" | "status" | "logs" | "run" => {
-                if parsed.action.is_some() {
-                    parsed.error = Some("hub accepts only one top-level action".to_string());
-                    return parsed;
-                }
-                parsed.action = Some(token);
-                index += 1;
+    #[arg(value_name = "LEASE_ACTION")]
+    lease_action: Option<String>,
+
+    #[arg(value_name = "EXTRA")]
+    extra: Vec<String>,
+
+    #[arg(long = "json")]
+    json_output: bool,
+
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+
+    #[arg(long = "tail", value_name = "N")]
+    tail: Option<usize>,
+
+    #[arg(long = "foreground")]
+    foreground: bool,
+
+    #[arg(long = "takeover", alias = "replace-existing")]
+    takeover: bool,
+
+    #[arg(long = "server", alias = "name", value_name = "NAME")]
+    server_name: Option<String>,
+
+    #[arg(long = "lease-id", value_name = "ID")]
+    lease_id: Option<String>,
+
+    #[arg(long = "client-id", value_name = "ID")]
+    client_id: Option<String>,
+
+    #[arg(long = "session-id", value_name = "ID")]
+    session_id: Option<String>,
+
+    #[arg(long = "project-root", value_name = "PATH")]
+    project_root: Option<String>,
+
+    #[arg(
+        long = "transport",
+        alias = "ingress",
+        value_name = "stdio|streamable-http"
+    )]
+    transport: Option<String>,
+
+    #[arg(long = "metadata-json", value_name = "JSON")]
+    metadata_json: Option<String>,
+
+    #[arg(long = "ttl-ms", value_name = "MS")]
+    ttl_ms: Option<u128>,
+}
+
+pub(super) fn parse_cli(args: &[String]) -> ParsedArgs {
+    match HubCli::try_parse_from(argv(args)) {
+        Ok(cli) => parsed_from_cli(cli),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                tail: 20,
+                ..ParsedArgs::default()
             }
-            "lease" | "leases" => {
-                if parsed.action.is_some() {
-                    parsed.error = Some("hub accepts only one top-level action".to_string());
-                    return parsed;
-                }
-                parsed.action = Some("lease".to_string());
-                if token == "leases" {
-                    parsed.lease_action = Some("list".to_string());
-                }
-                index += 1;
-            }
-            "acquire" | "renew" | "release" | "list" => {
-                if parsed.action.is_none() {
-                    parsed.action = Some("lease".to_string());
-                }
-                if parsed.action.as_deref() != Some("lease") {
-                    parsed.error = Some(format!(
-                        "hub sub-action '{}' is only valid under hub lease",
-                        token
-                    ));
-                    return parsed;
-                }
-                if parsed.lease_action.is_some() {
-                    parsed.error = Some("hub lease accepts only one action".to_string());
-                    return parsed;
-                }
-                parsed.lease_action = Some(token);
-                index += 1;
-            }
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("hub requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "--tail" | "-tail" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("hub logs requires a value after --tail".to_string());
-                    return parsed;
-                };
-                let parsed_tail = match value.parse::<usize>() {
-                    Ok(number) if number > 0 => number,
-                    _ => {
-                        parsed.error =
-                            Some("hub logs --tail must be a positive integer".to_string());
-                        return parsed;
-                    }
-                };
-                parsed.tail = parsed_tail;
-                index += 2;
-            }
-            "--foreground" | "-foreground" => {
-                parsed.foreground = true;
-                index += 1;
-            }
-            "--takeover" | "-takeover" | "--replace-existing" | "-replace-existing" => {
-                parsed.takeover = true;
-                index += 1;
-            }
-            "--server" | "-server" | "--name" | "-name" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("hub lease requires a value after --server".to_string());
-                    return parsed;
-                };
-                parsed.server_name = Some(value.to_string());
-                index += 2;
-            }
-            "--lease-id" | "-lease-id" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some(
-                        "hub lease release/renew requires a value after --lease-id".to_string(),
-                    );
-                    return parsed;
-                };
-                parsed.lease_id = Some(value.to_string());
-                index += 2;
-            }
-            "--client-id" | "-client-id" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("hub lease requires a value after --client-id".to_string());
-                    return parsed;
-                };
-                parsed.client_id = Some(value.to_string());
-                index += 2;
-            }
-            "--session-id" | "-session-id" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("hub lease requires a value after --session-id".to_string());
-                    return parsed;
-                };
-                parsed.session_id = Some(value.to_string());
-                index += 2;
-            }
-            "--project-root" | "-project-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("hub lease requires a value after --project-root".to_string());
-                    return parsed;
-                };
-                parsed.project_root = Some(value.to_string());
-                index += 2;
-            }
-            "--transport" | "-transport" | "--ingress" | "-ingress" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("hub lease requires a value after --transport".to_string());
-                    return parsed;
-                };
-                parsed.transport = Some(value.to_string());
-                index += 2;
-            }
-            "--metadata-json" | "-metadata-json" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("hub lease requires a JSON string after --metadata-json".to_string());
-                    return parsed;
-                };
-                parsed.metadata_json = Some(value.to_string());
-                index += 2;
-            }
-            "--ttl-ms" | "-ttl-ms" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("hub lease acquire/renew requires a value after --ttl-ms".to_string());
-                    return parsed;
-                };
-                match value.parse::<u128>() {
-                    Ok(number) if number > 0 => parsed.ttl_ms = Some(number),
-                    _ => {
-                        parsed.error =
-                            Some("hub lease --ttl-ms must be a positive integer".to_string());
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            _ => {
-                parsed.error = Some(format!(
-                    "unsupported hub arguments in the Rust-only repo: {}",
-                    args[index]
-                ));
-                return parsed;
-            }
+        }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            tail: 20,
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn parsed_from_cli(cli: HubCli) -> ParsedArgs {
+    let mut action = cli.action.map(|value| normalize_flag(&value));
+    let mut lease_action = cli.lease_action.map(|value| normalize_flag(&value));
+
+    if action.as_deref() == Some("leases") {
+        action = Some("lease".to_string());
+        lease_action.get_or_insert_with(|| "list".to_string());
+    }
+    if matches!(
+        action.as_deref(),
+        Some("acquire" | "renew" | "release" | "list")
+    ) {
+        lease_action = action.take();
+        action = Some("lease".to_string());
+    }
+
+    let mut parsed = ParsedArgs {
+        action,
+        lease_action,
+        json_output: cli.json_output,
+        help: false,
+        root_override: cli.root_override,
+        tail: cli.tail.unwrap_or(20),
+        foreground: cli.foreground,
+        server_name: cli.server_name,
+        lease_id: cli.lease_id,
+        client_id: cli.client_id,
+        session_id: cli.session_id,
+        project_root: cli.project_root,
+        transport: cli.transport,
+        metadata_json: cli.metadata_json,
+        ttl_ms: cli.ttl_ms,
+        takeover: cli.takeover,
+        error: None,
+    };
+
+    if parsed.tail == 0 {
+        parsed.error = Some("hub logs --tail must be a positive integer".to_string());
+        return parsed;
+    }
+    if parsed.ttl_ms == Some(0) {
+        parsed.error = Some("hub lease --ttl-ms must be a positive integer".to_string());
+        return parsed;
+    }
+    if !cli.extra.is_empty() {
+        parsed.error = Some(format!(
+            "unsupported hub arguments in the Rust-only repo: {}",
+            cli.extra.join(" ")
+        ));
+        return parsed;
+    }
+
+    match parsed.action.as_deref() {
+        None | Some("up" | "down" | "repair" | "status" | "logs" | "run" | "lease") => {}
+        Some(other) => {
+            parsed.error = Some(format!(
+                "unsupported hub arguments in the Rust-only repo: {}",
+                other
+            ));
+        }
+    }
+    if parsed.action.as_deref() != Some("lease") && parsed.lease_action.is_some() {
+        parsed.error = Some(format!(
+            "hub sub-action '{}' is only valid under hub lease",
+            parsed.lease_action.clone().unwrap_or_default()
+        ));
+    }
+    if let Some(lease_action) = parsed.lease_action.as_deref() {
+        if !matches!(lease_action, "acquire" | "renew" | "release" | "list") {
+            parsed.error = Some(format!(
+                "hub sub-action '{}' is only valid under hub lease",
+                lease_action
+            ));
         }
     }
 
     parsed
+}
+
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace hub"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_arg(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_arg(arg: &str) -> String {
+    match normalize_flag(arg).as_str() {
+        "-json" => "--json".to_string(),
+        "-root" => "--root".to_string(),
+        "-tail" => "--tail".to_string(),
+        "-foreground" => "--foreground".to_string(),
+        "-takeover" => "--takeover".to_string(),
+        "-replace-existing" => "--replace-existing".to_string(),
+        "-server" => "--server".to_string(),
+        "-name" => "--name".to_string(),
+        "-lease-id" => "--lease-id".to_string(),
+        "-client-id" => "--client-id".to_string(),
+        "-session-id" => "--session-id".to_string(),
+        "-project-root" => "--project-root".to_string(),
+        "-transport" => "--transport".to_string(),
+        "-ingress" => "--ingress".to_string(),
+        "-metadata-json" => "--metadata-json".to_string(),
+        "-ttl-ms" => "--ttl-ms".to_string(),
+        "-?" => "--help".to_string(),
+        _ => arg.to_string(),
+    }
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {

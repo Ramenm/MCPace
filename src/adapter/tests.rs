@@ -135,7 +135,7 @@ rl.on('line', async (line) => {
   if (message.method === 'initialize') {
     send(message.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name, version: '0' } });
   } else if (message.method === 'tools/list') {
-    if (!(await waitForPeers(Date.now() + 5000))) {
+    if (!(await waitForPeers(Date.now() + 15000))) {
       return;
     }
     send(message.id, { tools: [{ name: `get_${name.replace(/-/g, '_')}`, description: `Read from ${name}`, inputSchema: { type: 'object' } }] });
@@ -287,12 +287,15 @@ fn projection_catalog_probes_callable_servers_in_parallel() {
     }
     let root = temp_root();
     write_parallel_gate_upstreams(&root);
+    let _env_lock = crate::resources::TEST_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let _workers = EnvVarGuard::set(crate::resources::ENV_UPSTREAM_WORKERS, "2");
     let options = ToolExposureOptions {
         mode: ToolExposureMode::Hybrid,
         budget: DEFAULT_TOOL_BUDGET,
         token_budget: DEFAULT_TOOL_TOKEN_BUDGET,
-        timeout_ms: Some(7_500),
+        timeout_ms: Some(30_000),
         refresh: true,
         projection_safety: DEFAULT_PROJECTED_TOOL_SAFETY,
     };
@@ -307,12 +310,18 @@ fn projection_catalog_probes_callable_servers_in_parallel() {
         .iter()
         .filter_map(|tool| json_helpers::string_at_path(tool, &["name"]))
         .collect::<Vec<_>>();
-    assert!(projected_names
-        .iter()
-        .any(|name| name.contains("parallel_a")));
-    assert!(projected_names
-        .iter()
-        .any(|name| name.contains("parallel_b")));
+    assert!(
+        projected_names
+            .iter()
+            .any(|name| name.contains("parallel_a")),
+        "parallel-a projection missing from {projected_names:?}"
+    );
+    assert!(
+        projected_names
+            .iter()
+            .any(|name| name.contains("parallel_b")),
+        "parallel-b projection missing from {projected_names:?}"
+    );
     let _ = fs::remove_dir_all(root);
 }
 

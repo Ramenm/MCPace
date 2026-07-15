@@ -9,9 +9,9 @@ description = "Public platform target keys used for release matrix metadata."
 condition = "AND"
 regexTarget = "line"
 regexes = [
-  '''(?i)(?:-\s*)?key:\s+(win32-(?:x64|arm64)-msvc)''',
-  '''(?i)(?:"key":\s+"|entry\.key\s*===\s*['"])(win32-(?:x64|arm64)-msvc)''',
+  '''(?i)(?:-\s*)?key:\s*[`'"]?(win32-(?:x64|arm64)-msvc)[`'"]?''',
+  '''(?i)(?:"(?:targetKey|key)":\s+"|(?:entry|target)\.key\s*===\s*['"])(win32-(?:x64|arm64)-msvc)''',
 ]
 paths = [
-  '''(^|/)(?:\.github/workflows/publish-npm\.yml|packages/npm/cli/lib/targets\.js|packages/npm/cli/test/platform\.test\.mjs|packages/npm/cli/release-targets\.json|release-targets\.json|reports/platform-proof\.json)$''',
+  '''(^|/)(?:\.github/workflows/(?:publish-npm|release)\.yml|packages/npm/cli(?:-win32-(?:x64|arm64)-msvc/README\.md|/lib/(?:platform|targets)\.js|/test/(?:platform|resolve-binary)\.test\.mjs|/release-targets\.json)|release-targets\.json|reports/(?:boot-harness-latest|install-readiness-latest|local-prepublish-latest|platform-proof|product-practice-latest|publish-decision-latest|runtime-trace-latest|vendored-binary(?:-latest|-win32-x64-msvc))\.json|tests/node/(?:npm-publish-contract\.test\.mjs|platform-packages-contract\.test\.js))$''',
 ]

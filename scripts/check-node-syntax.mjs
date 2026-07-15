@@ -8,7 +8,7 @@ import { repoRoot } from './lib/project-metadata.mjs';
 import { writeFileAtomicSync } from './lib/atomic-fs.mjs';
 import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
-export const SOURCE_ROOTS = Object.freeze(['packages/npm/cli', 'scripts', 'tests/node', 'tests/fixtures', 'examples']);
+export const SOURCE_ROOTS = Object.freeze(['packages/npm/cli', 'scripts', 'tests/node', 'tests/fixtures', 'examples', 'src/dashboard/frontend']);
 const NODE_EXTENSIONS = new Set(['.js', '.mjs']);
 const SKIP_DIRS = new Set(['.git', 'node_modules', 'target', 'dist', 'vendor', 'data', 'logs', 'backups']);
 const SKIP_PREFIXES = ['.tmp-', 'tmp-'];

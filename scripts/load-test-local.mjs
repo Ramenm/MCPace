@@ -11,6 +11,7 @@ import { repoRoot } from './lib/project-metadata.mjs';
 import { cleanChildEnv } from './lib/safe-child-env.mjs';
 
 const MAX_LOAD_SERVER_CONNECTIONS = 256;
+const MAX_LOAD_GLOBAL_ACTIVE_REQUESTS = 1024;
 const MAX_LOAD_SERVER_BODY_BYTES = 16 * 1024 * 1024;
 const DEFAULT_MAX_REQUESTS_PER_SCENARIO = 100;
 
@@ -22,6 +23,7 @@ function parseArgs(argv) {
     concurrency: 50,
     port: 0,
     maxConnections: 0,
+    globalActiveRequestLimit: 0,
     maxBodyBytes: 65_536,
     maxRequestsPerScenario: DEFAULT_MAX_REQUESTS_PER_SCENARIO,
     overviewCacheMs: 250,
@@ -53,6 +55,9 @@ function parseArgs(argv) {
         break;
       case '--max-connections':
         parsed.maxConnections = positiveBoundedInteger(readValue(), arg, MAX_LOAD_SERVER_CONNECTIONS);
+        break;
+      case '--global-active-request-limit':
+        parsed.globalActiveRequestLimit = positiveBoundedInteger(readValue(), arg, MAX_LOAD_GLOBAL_ACTIVE_REQUESTS);
         break;
       case '--max-body-bytes':
         parsed.maxBodyBytes = positiveBoundedInteger(readValue(), arg, MAX_LOAD_SERVER_BODY_BYTES);
@@ -164,7 +169,7 @@ function assertRunnableBinary(binaryPath) {
 
 function printHelp() {
   console.log(`Usage: node scripts/load-test-local.mjs [options]\n\nOptions:\n  --binary <path>           MCPace binary to run; env fallback: MCPACE_BINARY, MCPACE_BINARY_PATH, MCPACE_DEV_BINARY; default: target/release/mcpace, then target/debug/mcpace\n  --root <path>             Existing MCPace root. Omit to create an isolated temporary root\n  --port <n>                Server port. Default: auto-reserve a free loopback port
-  --duration-ms <n>         Duration per load scenario. Default: 10000\n  --concurrency <n>         Concurrent request loops per scenario. Default: 50\n  --max-connections <n>     Server-side connection cap. Default: min(256, max(16, concurrency * 2))\n  --max-body-bytes <n>      Server-side body cap, also used by edge-case probes. Default: 65536; max: 16777216\n  --max-requests-per-scenario <n>  Client-side request cap per scenario. Default: 100; use 0 for duration-only stress\n  --overview-cache-ms <n>   Server overview cache TTL. Default: 250\n  --json                   Emit JSON only`);
+  --duration-ms <n>         Duration per load scenario. Default: 10000\n  --concurrency <n>         Concurrent request loops per scenario. Default: 50\n  --max-connections <n>     Server-side connection cap. Default: min(256, max(16, concurrency * 2))\n  --global-active-request-limit <n>  Override the active-request governor for overload probes\n  --max-body-bytes <n>      Server-side body cap, also used by edge-case probes. Default: 65536; max: 16777216\n  --max-requests-per-scenario <n>  Client-side request cap per scenario. Default: 100; use 0 for duration-only stress\n  --overview-cache-ms <n>   Server overview cache TTL. Default: 250\n  --json                   Emit JSON only`);
 }
 
 async function makeIsolatedRoot() {
@@ -242,7 +247,10 @@ async function startServerOnce(options, root) {
       String(options.overviewCacheMs),
     ],
     {
-      env: cleanChildEnv({ MCPACE_TOOL_LIST_WARMUP: '0' }),
+      env: cleanChildEnv({
+        MCPACE_TOOL_LIST_WARMUP: '0',
+        MCPACE_GLOBAL_ACTIVE_REQUEST_LIMIT: options.globalActiveRequestLimit || undefined,
+      }),
       stdio: ['ignore', 'pipe', 'pipe'],
     },
   );
@@ -628,6 +636,7 @@ async function main() {
         concurrency: options.concurrency,
         port: options.port || 'auto',
         maxConnections: options.maxConnections,
+        globalActiveRequestLimit: options.globalActiveRequestLimit || 'auto',
         maxBodyBytes: options.maxBodyBytes,
         maxRequestsPerScenario: options.maxRequestsPerScenario,
         overviewCacheMs: options.overviewCacheMs,

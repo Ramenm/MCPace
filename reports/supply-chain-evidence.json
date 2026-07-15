@@ -1,0 +1,67 @@
+{
+  "schema": "mcpace.supplyChainEvidence.v1",
+  "generatedAt": "2026-07-15T02:29:51.962Z",
+  "repoRoot": ".",
+  "status": "pass",
+  "enforce": false,
+  "blockers": 0,
+  "warnings": 0,
+  "fileHashes": {
+    "packageJson": "6685e2d4ed0c92be94d7449bdf406f18628df164ab45103e3c17cfd1bc1de1b0",
+    "packageLock": "779081d561e68fdf1db8789ccb276801fd8c446008ec9c29c3dae78348006a0b",
+    "cargoToml": "62b6546650869f7f8d4cd149c01a0c4a73c71c593bca78c8bf2ab505b5eead37",
+    "cargoLock": "db203271fc855a228ac99b1b6b64905a08ad07d5f1bf29441214981cb4da3e77",
+    "releaseManifest": "b9ab4c822b402dadad9a298e462c4397253370bc8512f94e447008c70713b0fd"
+  },
+  "findings": [
+    {
+      "id": "npm-lock-integrity",
+      "status": "pass",
+      "detail": "package-lock.json pins 6 external npm packages with registry integrity evidence",
+      "lockfileVersion": 3,
+      "externalPackageCount": 6,
+      "missingIntegrity": [],
+      "nonRegistry": [],
+      "lifecycleScripts": []
+    },
+    {
+      "id": "npm-install-scripts-disabled",
+      "status": "pass",
+      "detail": "npm lifecycle scripts are disabled by local config and CI install commands",
+      "hasIgnoreScripts": true,
+      "ciUsesIgnoreScripts": true,
+      "packageScriptCount": 74,
+      "scriptBytes": 3784
+    },
+    {
+      "id": "cargo-dependency-evidence",
+      "status": "pass",
+      "detail": "Cargo.toml has 7 dependency specs and Cargo.lock has 120 packages",
+      "dependencyCount": 7,
+      "lockedPackageCount": 120,
+      "pathDependencies": [],
+      "lockIssues": []
+    },
+    {
+      "id": "workflow-supply-chain-shape",
+      "status": "pass",
+      "detail": "publish/release/security workflows expose OIDC, provenance, attestation, CodeQL, and Scorecard controls",
+      "checks": {
+        "publish-oidc": true,
+        "publish-provenance": true,
+        "release-artifact-attestation": true,
+        "release-enforces-readiness": true,
+        "release-rust-live-proof": true,
+        "security-codeql": true,
+        "security-scorecard": true
+      }
+    },
+    {
+      "id": "release-manifest-hygiene",
+      "status": "pass",
+      "detail": "source manifest includes proof gates and excludes forbidden build/runtime paths",
+      "forbidden": [],
+      "missing": []
+    }
+  ]
+}

@@ -1,0 +1,260 @@
+{
+  "schema": "mcpace.official-server-compatibility-lab.v1",
+  "generatedAt": "2026-07-11T07:08:24.769Z",
+  "purpose": "Compatibility evidence only. Packages were installed into an isolated lab with npm --ignore-scripts and were not added to MCPace user configuration.",
+  "protocolLab": "MCP SDK stdio initialize + listTools/listResources/listPrompts + safe call",
+  "node": "v22.16.0",
+  "packages": {
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@modelcontextprotocol/server-everything": "2026.7.4",
+    "@modelcontextprotocol/server-filesystem": "2026.7.10",
+    "@modelcontextprotocol/server-memory": "2026.7.4",
+    "@modelcontextprotocol/server-sequential-thinking": "2026.7.4",
+    "@playwright/mcp": "0.0.78"
+  },
+  "results": [
+    {
+      "id": "filesystem",
+      "package": "@modelcontextprotocol/server-filesystem",
+      "connectOk": true,
+      "serverVersion": {
+        "name": "secure-filesystem-server",
+        "version": "0.2.0"
+      },
+      "toolCount": 14,
+      "resources": {
+        "supported": false,
+        "count": 0,
+        "detail": "MCP error -32601: Method not found"
+      },
+      "prompts": {
+        "supported": false,
+        "count": 0,
+        "detail": "MCP error -32601: Method not found"
+      },
+      "readOnlyAnnotated": 10,
+      "destructiveAnnotated": 3,
+      "openWorldAnnotated": 0,
+      "safeCall": {
+        "name": "list_allowed_directories",
+        "ok": true,
+        "skipped": null,
+        "durationMs": 3.23,
+        "requestBytes": 2,
+        "responseBytes": 214,
+        "estimatedPayloadTokens": 54
+      },
+      "timingsMs": {
+        "connect": 289.91,
+        "listTools": 21.78,
+        "total": 322.56
+      },
+      "errors": [],
+      "capabilities": {
+        "tools": {
+          "listChanged": true
+        }
+      }
+    },
+    {
+      "id": "memory",
+      "package": "@modelcontextprotocol/server-memory",
+      "connectOk": true,
+      "serverVersion": {
+        "name": "memory-server",
+        "version": "0.6.3"
+      },
+      "toolCount": 9,
+      "resources": {
+        "supported": true,
+        "count": 1
+      },
+      "prompts": {
+        "supported": false,
+        "count": 0,
+        "detail": "MCP error -32601: Method not found"
+      },
+      "readOnlyAnnotated": 3,
+      "destructiveAnnotated": 3,
+      "openWorldAnnotated": 0,
+      "safeCall": {
+        "name": "read_graph",
+        "ok": true,
+        "skipped": null,
+        "durationMs": 2.76,
+        "requestBytes": 2,
+        "responseBytes": 136,
+        "estimatedPayloadTokens": 35
+      },
+      "timingsMs": {
+        "connect": 252.16,
+        "listTools": 20.08,
+        "listResources": 1.81,
+        "total": 278.64
+      },
+      "errors": [],
+      "capabilities": {
+        "resources": {
+          "subscribe": true,
+          "listChanged": true
+        },
+        "tools": {
+          "listChanged": true
+        }
+      }
+    },
+    {
+      "id": "sequential-thinking",
+      "package": "@modelcontextprotocol/server-sequential-thinking",
+      "connectOk": true,
+      "serverVersion": {
+        "name": "sequential-thinking-server",
+        "version": "0.2.0"
+      },
+      "toolCount": 1,
+      "resources": {
+        "supported": false,
+        "count": 0,
+        "detail": "MCP error -32601: Method not found"
+      },
+      "prompts": {
+        "supported": false,
+        "count": 0,
+        "detail": "MCP error -32601: Method not found"
+      },
+      "readOnlyAnnotated": 1,
+      "destructiveAnnotated": 0,
+      "openWorldAnnotated": 0,
+      "safeCall": {
+        "name": "sequentialthinking",
+        "ok": true,
+        "skipped": null,
+        "durationMs": 2.99,
+        "requestBytes": 129,
+        "responseBytes": 301,
+        "estimatedPayloadTokens": 108
+      },
+      "timingsMs": {
+        "connect": 254.71,
+        "listTools": 8,
+        "total": 268.08
+      },
+      "errors": [],
+      "capabilities": {
+        "tools": {
+          "listChanged": true
+        }
+      }
+    },
+    {
+      "id": "everything",
+      "package": "@modelcontextprotocol/server-everything",
+      "connectOk": true,
+      "serverVersion": {
+        "name": "mcp-servers/everything",
+        "title": "Everything Reference Server",
+        "version": "2.0.0"
+      },
+      "toolCount": 13,
+      "resources": {
+        "supported": true,
+        "count": 7
+      },
+      "prompts": {
+        "supported": true,
+        "count": 4
+      },
+      "readOnlyAnnotated": 9,
+      "destructiveAnnotated": 0,
+      "openWorldAnnotated": 1,
+      "safeCall": {
+        "name": "echo",
+        "ok": true,
+        "skipped": null,
+        "durationMs": 2.08,
+        "requestBytes": 40,
+        "responseBytes": 71,
+        "estimatedPayloadTokens": 28
+      },
+      "timingsMs": {
+        "connect": 273.65,
+        "listTools": 7.8,
+        "listResources": 1.26,
+        "listPrompts": 1.61,
+        "total": 286.95
+      },
+      "errors": [],
+      "capabilities": {
+        "logging": {},
+        "completions": {},
+        "prompts": {
+          "listChanged": true
+        },
+        "resources": {
+          "subscribe": true,
+          "listChanged": true
+        },
+        "tools": {
+          "listChanged": true
+        },
+        "tasks": {
+          "list": {},
+          "cancel": {},
+          "requests": {
+            "tools": {
+              "call": {}
+            }
+          }
+        }
+      }
+    },
+    {
+      "id": "playwright",
+      "package": "@playwright/mcp",
+      "connectOk": true,
+      "serverVersion": {
+        "name": "Playwright",
+        "version": "1.62.0-alpha-1783623505000"
+      },
+      "toolCount": 24,
+      "resources": {
+        "supported": false,
+        "count": 0,
+        "detail": "MCP error -32601: Method not found"
+      },
+      "prompts": {
+        "supported": false,
+        "count": 0,
+        "detail": "MCP error -32601: Method not found"
+      },
+      "readOnlyAnnotated": 7,
+      "destructiveAnnotated": 17,
+      "openWorldAnnotated": 24,
+      "safeCall": {
+        "name": null,
+        "ok": null,
+        "skipped": "list-only safety probe",
+        "durationMs": null,
+        "requestBytes": null,
+        "responseBytes": null,
+        "estimatedPayloadTokens": null
+      },
+      "timingsMs": {
+        "connect": 385.9,
+        "listTools": 7.3,
+        "total": 396.58
+      },
+      "errors": [],
+      "capabilities": {
+        "tools": {}
+      }
+    }
+  ],
+  "conclusions": [
+    "A single connected/green state is insufficient: capability surfaces and risk annotations differ substantially.",
+    "Filesystem and Playwright expose mixed read-only and mutating tools; the UI should show risk by tool and scope of access.",
+    "Memory and Sequential Thinking can carry state despite small tool counts; conservative isolation remains appropriate until policy evidence says otherwise.",
+    "Everything exercises tools, resources, prompts, logging, completions, and tasks and is useful as a protocol-coverage fixture rather than a production recommendation.",
+    "Payload bytes and latency are directly measurable. Token counts are not a standard MCP tool-call result field, so estimates must be labelled and reported usage must stay distinct."
+  ]
+}

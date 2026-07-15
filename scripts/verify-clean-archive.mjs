@@ -2,8 +2,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
-import { spawnSync } from 'node:child_process';
 import { repoRoot as defaultRepoRoot } from './lib/project-metadata.mjs';
+import { listWorkingTreeFiles } from './lib/repo-files.mjs';
 import { listZipEntries } from './lib/zip-writer.mjs';
 import { normalizeArchivePath, sourceArchivePolicyViolations } from './lib/source-archive-policy.mjs';
 
@@ -34,68 +34,9 @@ function parseArgs(argv) {
 }
 
 function walkFiles(root) {
-  const gitFiles = walkGitSourceFiles(root);
-  if (gitFiles) return gitFiles;
-
-  const files = [];
-  const stack = ['.'];
-  while (stack.length > 0) {
-    const relativeDir = stack.pop();
-    const fullDir = path.join(root, relativeDir);
-    if (!fs.existsSync(fullDir)) continue;
-    for (const entry of fs.readdirSync(fullDir, { withFileTypes: true }).sort((left, right) => left.name.localeCompare(right.name))) {
-      const relative = normalizeArchivePath(path.posix.join(relativeDir.split(path.sep).join('/'), entry.name));
-      if (entry.isDirectory()) {
-        if (['.git', 'node_modules', 'target', 'dist'].includes(entry.name)) continue;
-        stack.push(relative);
-      } else if (entry.isFile()) {
-        files.push(relative);
-      }
-    }
-  }
-  return files.sort();
-}
-
-function walkGitSourceFiles(root) {
-  const topLevel = spawnSync('git', ['-C', root, 'rev-parse', '--show-toplevel'], {
-    encoding: 'utf8',
-    windowsHide: true,
-  });
-  if (topLevel.status !== 0) return null;
-  const gitRoot = path.resolve(topLevel.stdout.trim());
-  let relativeRoot;
-  try {
-    relativeRoot = path.relative(gitRoot, root) || '.';
-  } catch {
-    return null;
-  }
-  if (relativeRoot.startsWith('..') || path.isAbsolute(relativeRoot)) return null;
-
-  const listed = spawnSync(
-    'git',
-    ['-C', gitRoot, 'ls-files', '-co', '--exclude-standard', '-z', '--', relativeRoot],
-    { encoding: 'buffer', windowsHide: true },
-  );
-  if (listed.status !== 0) return null;
-
-  return listed.stdout
-    .toString('utf8')
-    .split('\0')
-    .filter(Boolean)
-    .filter((entry) => {
-      try {
-        return fs.statSync(path.join(gitRoot, entry)).isFile();
-      } catch {
-        return false;
-      }
-    })
-    .map((entry) => {
-      const normalized = normalizeArchivePath(entry);
-      if (relativeRoot === '.') return normalized;
-      const prefix = `${normalizeArchivePath(relativeRoot)}/`;
-      return normalized.startsWith(prefix) ? normalized.slice(prefix.length) : normalized;
-    })
-    .sort((left, right) => left.localeCompare(right));
+  return listWorkingTreeFiles(root)
+    .map((file) => normalizeArchivePath(path.relative(root, file)))
+    .sort();
 }
 
 function checkArchive(archivePath) {

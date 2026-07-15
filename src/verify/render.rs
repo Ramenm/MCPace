@@ -1,3 +1,4 @@
+use crate::diagnostics;
 use crate::doctor;
 use crate::text_utils::join_or_none;
 use crate::text_utils::yes_no;
@@ -32,14 +33,17 @@ pub(super) fn run_readiness(
     stderr: &mut dyn Write,
 ) -> i32 {
     let Some(root_path) = root_override else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
     let readiness = match collect_readiness(&root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };

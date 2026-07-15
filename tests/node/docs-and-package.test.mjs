@@ -16,9 +16,15 @@ const REQUIRED_DOCS = new Set([
   'supported-clients.md',
   'troubleshooting.md',
   'lab-harness.md',
+  'legacy-retirement-plan.md',
   'main-logic-runtime-check.md',
   'mcp-lifecycle-hardening.md',
+  'mcp-transport-contract.md',
+  'rust-live-proof.md',
+  'rust-boundary-contract.md',
+  'endgame-readiness.md',
   'platform-testing.md',
+  'release-readiness.md',
   'release-completion.md',
   'signing-and-notarization.md',
   'supply-chain.md'
@@ -132,7 +138,7 @@ test('source bundle excludes stale public-repo docs and heavyweight artifacts', 
 
 test('release manifest matches the normalized bundle contract', () => {
   const manifest = JSON.parse(readText('release-manifest.json'));
-  for (const required of ['README.md', 'docs/README.md', 'docs/lab-harness.md', 'reports/summary.md', 'tests/node', 'packages/npm/cli', 'catalog', 'manifests', 'eval', 'scripts/check-node-syntax.mjs']) {
+  for (const required of ['README.md', 'docs/README.md', 'docs/lab-harness.md', 'reports/summary.md', 'tests/node', 'packages/npm/cli', 'catalog', 'manifests', 'eval', 'scripts/check-node-syntax.mjs', 'scripts/rust-live-proof.mjs', 'scripts/rust-boundary-contract.mjs', 'scripts/supply-chain-evidence.mjs', 'scripts/endgame-readiness.mjs', 'docs/rust-live-proof.md', 'docs/rust-boundary-contract.md', 'docs/endgame-readiness.md']) {
     assert.ok(manifest.includePaths.includes(required), `manifest missing ${required}`);
   }
   for (const removed of [...REMOVED_ROOT_DOCS, ...REMOVED_LEGACY_CONFIGS]) {

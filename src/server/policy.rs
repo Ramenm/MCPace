@@ -1,11 +1,56 @@
 use super::args::ParsedArgs;
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::runtimepaths;
 use std::collections::BTreeMap;
+use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::path::PathBuf;
+
+#[derive(Debug)]
+enum ServerPolicyError {
+    UnsupportedMode {
+        mode: String,
+    },
+    InvalidConfigShape {
+        label: String,
+    },
+    ExistingConfigRead {
+        path: std::path::PathBuf,
+        source: json_helpers::JsonFileError,
+    },
+}
+
+type ServerPolicyResult<T> = Result<T, ServerPolicyError>;
+
+impl fmt::Display for ServerPolicyError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedMode { mode } => write!(
+                formatter,
+                "unsupported execution mode '{}'; expected shared, serialized, session-isolated, project-isolated, pool, or disabled",
+                mode
+            ),
+            Self::InvalidConfigShape { label } => write!(formatter, "{} must be a JSON object", label),
+            Self::ExistingConfigRead { path, source } => write!(
+                formatter,
+                "failed to read existing server policy config {}: {}",
+                path.display(),
+                source
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ServerPolicyError {}
+
+impl From<ServerPolicyError> for String {
+    fn from(error: ServerPolicyError) -> Self {
+        error.to_string()
+    }
+}
 
 #[derive(Debug, Clone)]
 struct ExecutionPreset {
@@ -36,7 +81,10 @@ pub(super) fn run(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
     let Some(server_name) = parsed
@@ -45,10 +93,7 @@ pub(super) fn run(
         .map(str::trim)
         .filter(|name| !name.is_empty())
     else {
-        let _ = writeln!(
-            stderr,
-            "server set-policy requires a server name, for example: mcpace server set-policy filesystem --mode session-isolated"
-        );
+        diagnostics::stderr_line(stderr, format_args!("server set-policy requires a server name, for example: mcpace server set-policy filesystem --mode session-isolated"));
         return 2;
     };
 
@@ -56,7 +101,7 @@ pub(super) fn run(
     let preset = match preset_for_mode(mode) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 2;
         }
     };
@@ -68,7 +113,7 @@ pub(super) fn run(
         match runtimepaths::acquire_exclusive_file_lock(&config_path, "server policy update") {
             Ok(lock) => Some(lock),
             Err(error) => {
-                let _ = writeln!(stderr, "{}", error);
+                diagnostics::stderr_line(stderr, format_args!("{}", error));
                 return 1;
             }
         }
@@ -76,11 +121,9 @@ pub(super) fn run(
     let raw = match fs::read_to_string(&config_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "failed to read {}: {}",
-                config_path.display(),
-                error
+                format_args!("failed to read {}: {}", config_path.display(), error),
             );
             return 1;
         }
@@ -88,11 +131,9 @@ pub(super) fn run(
     let mut config = match crate::json::parse_str(&raw) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "failed to parse {}: {}",
-                config_path.display(),
-                error
+                format_args!("failed to parse {}: {}", config_path.display(), error),
             );
             return 1;
         }
@@ -134,7 +175,7 @@ pub(super) fn run(
     );
 
     if let Err(error) = upsert_policy(&mut config, server_name, policy.clone(), execution.clone()) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
@@ -167,7 +208,7 @@ pub(super) fn run(
             &config_path,
             &format!("{}\n", config.to_pretty_string()),
         ) {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     }
@@ -197,24 +238,21 @@ pub(super) fn run(
     0
 }
 
-fn preset_for_mode(raw_mode: &str) -> Result<ExecutionPreset, String> {
+fn preset_for_mode(raw_mode: &str) -> ServerPolicyResult<ExecutionPreset> {
     let normalized = raw_mode.trim().to_ascii_lowercase().replace('_', "-");
     let mode = match normalized.as_str() {
         "shared" | "parallel" | "parallel-safe" | "multi-reader" => "shared",
         "serialized" | "serial" | "single-writer" | "queue" | "queued" => "serialized",
-        "session" | "session-isolated" | "per-session" | "single-session" => {
-            "session-isolated"
-        }
+        "session" | "session-isolated" | "per-session" | "single-session" => "session-isolated",
         "project" | "project-isolated" | "per-project" | "isolated-per-project" => {
             "project-isolated"
         }
         "pool" | "process-pool" | "worker-pool" => "pool",
         "disabled" | "off" => "disabled",
         other => {
-            return Err(format!(
-                "unsupported execution mode '{}'; expected shared, serialized, session-isolated, project-isolated, pool, or disabled",
-                other
-            ))
+            return Err(ServerPolicyError::UnsupportedMode {
+                mode: other.to_string(),
+            })
         }
     };
 
@@ -462,7 +500,7 @@ fn upsert_policy(
     server_name: &str,
     policy: JsonValue,
     execution: JsonValue,
-) -> Result<(), String> {
+) -> ServerPolicyResult<()> {
     let root = ensure_object(config, "mcpace.config.json root")?;
     let servers = ensure_child_object(root, "servers");
     let server = ensure_child_object(servers, server_name);
@@ -483,9 +521,11 @@ fn upsert_policy(
 fn ensure_object<'a>(
     value: &'a mut JsonValue,
     label: &str,
-) -> Result<&'a mut BTreeMap<String, JsonValue>, String> {
+) -> ServerPolicyResult<&'a mut BTreeMap<String, JsonValue>> {
     if !matches!(value, JsonValue::Object(_)) {
-        return Err(format!("{} must be a JSON object", label));
+        return Err(ServerPolicyError::InvalidConfigShape {
+            label: label.to_string(),
+        });
     }
     match value {
         JsonValue::Object(map) => Ok(map),
@@ -508,6 +548,11 @@ fn ensure_child_object<'a>(
 }
 
 #[allow(dead_code)]
-fn existing_config_value(config_path: &std::path::Path) -> Result<JsonValue, String> {
-    json_helpers::read_json_file(config_path)
+fn existing_config_value(config_path: &std::path::Path) -> ServerPolicyResult<JsonValue> {
+    json_helpers::read_json_file(config_path).map_err(|source| {
+        ServerPolicyError::ExistingConfigRead {
+            path: config_path.to_path_buf(),
+            source,
+        }
+    })
 }

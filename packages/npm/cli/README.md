@@ -9,7 +9,7 @@ npm install -g @mcpace/cli@latest
 mcpace up
 ```
 
-Node.js 22+ is required. The package resolves and launches `mcpace`; it does not duplicate the Rust runtime. Resolution order:
+Node.js 22+ is required. This is the only npm package users install: npm selects exactly one matching internal native optional package for Windows, glibc Linux, or macOS. The package resolves and launches `mcpace`; it does not duplicate the Rust runtime. Resolution order:
 
 1. `MCPACE_BINARY_PATH` or `MCPACE_DEV_BINARY`
 2. local source builds under `target/` or `dist/` when running inside the MCPace source workspace

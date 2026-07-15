@@ -12,6 +12,7 @@ test('server install command shell-composition guard is shared by dashboard and 
   const textUtils = read('src/text_utils.rs');
   const dashboard = read('src/dashboard.rs');
   const autoinstall = read('src/mcp_autoinstall.rs');
+  const autoinstallTests = read('src/mcp_autoinstall/tests.rs');
 
   assert.match(textUtils, /fn uses_shell_composition\(value: &str\) -> bool/);
   assert.match(textUtils, /matches!\(ch, '`' \| ';' \| '\|' \| '<' \| '>' \| '&'\)/);
@@ -19,5 +20,5 @@ test('server install command shell-composition guard is shared by dashboard and 
   assert.match(dashboard, /fn command_line_uses_shell_composition\(value: &str\) -> bool \{\n\s+text_utils::uses_shell_composition\(value\)/);
   assert.match(autoinstall, /text_utils::uses_shell_composition\(value\)/);
   assert.match(autoinstall, /background operators/);
-  assert.match(autoinstall, /command_like_install_rejects_shell_composition/);
+  assert.match(autoinstallTests, /command_like_install_rejects_shell_composition/);
 });

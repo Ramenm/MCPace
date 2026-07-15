@@ -2,10 +2,12 @@ use crate::catalog::{find, normalize};
 use crate::client_catalog::client_install_support_summary;
 use crate::runtimepaths;
 use crate::{
-    agent, autostart, candidates, cleanup, client, connect, dashboard, doctor, hub, init, lab,
-    mcp_server, profile, projects, release, repair, reporoot, serve, server, service, setup,
-    stdio_shim, update, verify,
+    agent, autostart, candidates, cleanup, client, connect, dashboard, diagnostics, doctor, hub,
+    init, lab, mcp_server, profile, projects, release, repair, reporoot, serve, server, service,
+    setup, stdio_shim, update, verify,
 };
+use clap::{error::ErrorKind, Parser};
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -75,8 +77,11 @@ pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) ->
         "update" => update::run(&args[1..], stdout, stderr),
         "release" => release::run(&args[1..], root_path, stdout, stderr),
         _ => {
-            let _ = writeln!(stderr, "unknown command: {}", args[0]);
-            let _ = writeln!(stderr, "Run 'mcpace help' to see the public commands.");
+            diagnostics::stderr_line(stderr, format_args!("unknown command: {}", args[0]));
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("Run 'mcpace help' to see the public commands."),
+            );
             2
         }
     }
@@ -87,49 +92,72 @@ fn run_version(stdout: &mut dyn Write) -> i32 {
     0
 }
 
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace doctor",
+    disable_version_flag = true,
+    about = "Run MCPace doctor checks"
+)]
+struct DoctorCli {
+    /// Emit machine-readable JSON.
+    #[arg(long = "json", short = 'j')]
+    json_output: bool,
+
+    /// MCPace project/root directory.
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+}
+
 fn run_doctor(
     args: &[String],
     default_root: Option<PathBuf>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let mut json_output = false;
-    let mut root_override = default_root;
-    let mut index = 0usize;
-
-    while index < args.len() {
-        match args[index].as_str() {
-            "--json" => {
-                json_output = true;
-                index += 1;
-            }
-            "--root" => {
-                let Some(value) = args.get(index + 1) else {
-                    let _ = writeln!(stderr, "doctor requires a path after --root");
-                    return 2;
-                };
-                root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "-h" | "--help" => {
-                let _ = writeln!(stdout, "Usage: mcpace doctor [--json] [--root <path>]");
-                return 0;
-            }
-            other => {
-                let _ = writeln!(stderr, "unsupported doctor argument: {}", other);
-                return 2;
-            }
+    let cli = match DoctorCli::try_parse_from(doctor_argv(args)) {
+        Ok(cli) => cli,
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            let _ = writeln!(stdout, "Usage: mcpace doctor [--json] [--root <path>]");
+            return 0;
         }
-    }
+        Err(error) => {
+            let _ = write!(stderr, "{}", error);
+            return 2;
+        }
+    };
 
-    let report = doctor::run(root_override);
-    if json_output {
+    let report = doctor::run(cli.root_override.or(default_root));
+    if cli.json_output {
         let _ = writeln!(stdout, "{}", report.to_pretty_json());
         return 0;
     }
 
     doctor::write_text_report(&report, stdout);
     0
+}
+
+fn doctor_argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace doctor"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_doctor_flag(arg))),
+    );
+    argv
+}
+
+fn normalize_doctor_flag(arg: &str) -> &str {
+    match arg {
+        "-json" => "--json",
+        "-root" => "--root",
+        "-?" => "--help",
+        other => other,
+    }
 }
 
 fn run_server_with_action(
@@ -157,10 +185,12 @@ fn run_verify_with_action(
 }
 
 fn run_planned(name: &str, stderr: &mut dyn Write) -> i32 {
-    let _ = writeln!(
+    diagnostics::stderr_line(
         stderr,
-        "command '{}' is not available in the public CLI surface; run 'mcpace help' for supported commands.",
-        name
+        format_args!(
+            "command '{}' is not available in the public CLI surface; run 'mcpace help' for supported commands.",
+            name
+        ),
     );
     2
 }
@@ -185,7 +215,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "  mcpace serve [start|stop|status]");
     let _ = writeln!(
         stdout,
-        "  mcpace stdio [--json] [--root <path>]      # MCP stdio launch surface"
+        "  mcpace stdio [--root <path>]              # MCP stdio launch surface"
     );
     let _ = writeln!(
         stdout,
@@ -211,61 +241,4 @@ fn write_help(stdout: &mut dyn Write) {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::ffi::OsString;
-    use std::fs;
-
-    struct EnvGuard {
-        key: &'static str,
-        previous: Option<OsString>,
-    }
-
-    impl EnvGuard {
-        fn set(key: &'static str, value: &std::path::Path) -> Self {
-            let previous = std::env::var_os(key);
-            std::env::set_var(key, value);
-            Self { key, previous }
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            match &self.previous {
-                Some(value) => std::env::set_var(self.key, value),
-                None => std::env::remove_var(self.key),
-            }
-        }
-    }
-
-    #[test]
-    fn version_reports_binary_version_not_project_config_version() {
-        let mut root = std::env::temp_dir();
-        root.push(format!(
-            "mcpace-version-test-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
-        fs::create_dir_all(&root).unwrap();
-        fs::write(
-            root.join("mcpace.config.json"),
-            r#"{ "version": "999.999.999" }"#,
-        )
-        .unwrap();
-        let _root_env = EnvGuard::set("MCPACE_ROOT", &root);
-
-        let mut stdout = Vec::new();
-        let status = run(vec!["--version".to_string()], &mut stdout, &mut Vec::new());
-
-        assert_eq!(status, 0);
-        assert_eq!(
-            String::from_utf8(stdout).unwrap().trim(),
-            env!("CARGO_PKG_VERSION")
-        );
-
-        let _ = fs::remove_dir_all(root);
-    }
-}
+mod tests;

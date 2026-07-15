@@ -14,6 +14,7 @@ pub struct McpAutoInstallOptions {
     pub command: Option<String>,
     pub url: Option<String>,
     pub paths: Vec<String>,
+    pub launcher_args: Vec<String>,
     pub extra_args: Vec<String>,
     pub env: Vec<String>,
     pub headers: Vec<String>,
@@ -58,7 +59,7 @@ pub fn install_auto(
     root_path: &Path,
     options: McpAutoInstallOptions,
 ) -> Result<McpAutoInstallResult, String> {
-    let plan = plan_auto_install(&options)?;
+    let plan = build_auto_install_plan(&options, Some(root_path))?;
     let mut profile_hints = options.profile_hints.clone();
     profile_hints.extend(profile_hints_for_plan(&plan));
     profile_hints.sort();
@@ -85,10 +86,13 @@ pub fn install_auto(
 }
 
 pub fn plan_auto_install(options: &McpAutoInstallOptions) -> Result<McpAutoInstallPlan, String> {
-    build_auto_install_plan(options)
+    build_auto_install_plan(options, None)
 }
 
-fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoInstallPlan, String> {
+fn build_auto_install_plan(
+    options: &McpAutoInstallOptions,
+    install_root: Option<&Path>,
+) -> Result<McpAutoInstallPlan, String> {
     let spec = options.spec.trim();
     let explicit_type = options
         .server_type
@@ -123,7 +127,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
             && explicit_command.is_none()
             && ((spec.is_empty() && !options.paths.is_empty()) || looks_like_local_path_spec(spec)))
     {
-        return Ok(filesystem_path_install_plan(options, spec));
+        return Ok(filesystem_path_install_plan(options, spec, install_root));
     }
 
     let url_requested = explicit_url.is_some()
@@ -157,11 +161,12 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
 
     if let Some(command) = explicit_command {
         if let Some(command_like) = command_like_spec(&command)? {
-            return command_like_install_plan(options, spec, command_like);
+            return command_like_install_plan(options, spec, command_like, install_root);
         }
         let name = resolve_name(options, || name_from_spec(spec, "local-command"));
-        let mut args = options.extra_args.clone();
-        args.extend(options.paths.iter().cloned());
+        let mut args = options.launcher_args.clone();
+        args.extend(options.extra_args.iter().cloned());
+        extend_install_path_args(&mut args, &options.paths, install_root);
         return Ok(McpAutoInstallPlan {
             original_spec: spec.to_string(),
             name: name.clone(),
@@ -181,7 +186,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
     }
 
     if let Some(command_like) = command_like_spec(spec)? {
-        return command_like_install_plan(options, spec, command_like);
+        return command_like_install_plan(options, spec, command_like, install_root);
     }
 
     let method = choose_package_method(spec, explicit_type.as_deref());
@@ -189,9 +194,17 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
         "npm" => {
             let package = validate_install_identifier("npm", strip_known_prefix(spec, "npm:"))?;
             let name = resolve_name(options, || name_from_spec(&package, "npm"));
-            let mut args = vec!["-y".to_string(), package.clone()];
+            let mut args = vec!["-y".to_string()];
+            args.extend(
+                options
+                    .launcher_args
+                    .iter()
+                    .filter(|value| !matches!(value.as_str(), "-y" | "--yes"))
+                    .cloned(),
+            );
+            args.push(package.clone());
             args.extend(options.extra_args.iter().cloned());
-            args.extend(options.paths.iter().cloned());
+            extend_install_path_args(&mut args, &options.paths, install_root);
             Ok(McpAutoInstallPlan {
                 original_spec: spec.to_string(),
                 name: name.clone(),
@@ -203,7 +216,7 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
                 package: Some(package),
                 args,
                 assumptions: vec![
-                    "npm package execution is explicit through npx -y; install scripts are not run by MCPace itself"
+                    "npm package execution uses npx -y; the first live probe/call may download the package and execute its npm lifecycle scripts, so review the package identity and use --dry-run before allowing execution"
                         .to_string(),
                     "statefulness is inferred later from source hints and live MCP probes, not from a packaged upstream catalog"
                         .to_string(),
@@ -217,9 +230,10 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
                 strip_known_prefix(strip_known_prefix(spec, "pypi:"), "uvx:"),
             )?;
             let name = resolve_name(options, || name_from_spec(&package, "pypi"));
-            let mut args = vec![package.clone()];
+            let mut args = options.launcher_args.clone();
+            args.push(package.clone());
             args.extend(options.extra_args.iter().cloned());
-            args.extend(options.paths.iter().cloned());
+            extend_install_path_args(&mut args, &options.paths, install_root);
             Ok(McpAutoInstallPlan {
                 original_spec: spec.to_string(),
                 name: name.clone(),
@@ -245,9 +259,11 @@ fn build_auto_install_plan(options: &McpAutoInstallOptions) -> Result<McpAutoIns
                 strip_known_prefix(strip_known_prefix(spec, "oci:"), "docker:"),
             )?;
             let name = resolve_name(options, || name_from_spec(&image, "oci"));
-            let mut args = vec!["run".to_string(), "--rm".to_string(), image.clone()];
+            let mut args = vec!["run".to_string(), "--rm".to_string()];
+            args.extend(options.launcher_args.iter().cloned());
+            args.push(image.clone());
             args.extend(options.extra_args.iter().cloned());
-            args.extend(options.paths.iter().cloned());
+            extend_install_path_args(&mut args, &options.paths, install_root);
             Ok(McpAutoInstallPlan {
                 original_spec: spec.to_string(),
                 name: name.clone(),
@@ -280,14 +296,16 @@ fn command_like_install_plan(
     options: &McpAutoInstallOptions,
     spec: &str,
     command_like: CommandLikeSpec,
+    install_root: Option<&Path>,
 ) -> Result<McpAutoInstallPlan, String> {
     if let Some(package) = command_like.package.as_deref() {
         let _ = validate_install_identifier(&command_like.method, package)?;
     }
     let name = resolve_name(options, || name_from_command_like(&command_like, spec));
-    let mut args = command_like.args.clone();
+    let mut args = options.launcher_args.clone();
+    args.extend(command_like.args.iter().cloned());
     args.extend(options.extra_args.iter().cloned());
-    args.extend(options.paths.iter().cloned());
+    extend_install_path_args(&mut args, &options.paths, install_root);
     Ok(McpAutoInstallPlan {
         original_spec: spec.to_string(),
         name: name.clone(),
@@ -416,9 +434,29 @@ fn has_filesystem_path_argument(plan: &McpAutoInstallPlan) -> bool {
     false
 }
 
-fn filesystem_path_install_plan(options: &McpAutoInstallOptions, spec: &str) -> McpAutoInstallPlan {
+fn extend_install_path_args(args: &mut Vec<String>, paths: &[String], install_root: Option<&Path>) {
+    args.extend(
+        paths
+            .iter()
+            .map(|path| absolutize_local_path_arg(path, install_root)),
+    );
+}
+
+fn filesystem_path_install_plan(
+    options: &McpAutoInstallOptions,
+    spec: &str,
+    install_root: Option<&Path>,
+) -> McpAutoInstallPlan {
     let name = resolve_name(options, || "filesystem".to_string());
-    let mut args = vec!["-y".to_string(), FILESYSTEM_NPM_PACKAGE.to_string()];
+    let mut args = vec!["-y".to_string()];
+    args.extend(
+        options
+            .launcher_args
+            .iter()
+            .filter(|value| !matches!(value.as_str(), "-y" | "--yes"))
+            .cloned(),
+    );
+    args.push(FILESYSTEM_NPM_PACKAGE.to_string());
     args.extend(options.extra_args.iter().cloned());
 
     let mut paths = Vec::new();
@@ -429,7 +467,11 @@ fn filesystem_path_install_plan(options: &McpAutoInstallOptions, spec: &str) -> 
     if paths.is_empty() {
         paths.push(".".to_string());
     }
-    args.extend(paths.iter().map(|path| absolutize_local_path_arg(path)));
+    args.extend(
+        paths
+            .iter()
+            .map(|path| absolutize_local_path_arg(path, install_root)),
+    );
 
     McpAutoInstallPlan {
         original_spec: spec.to_string(),
@@ -612,31 +654,29 @@ fn ensure_npx_yes(args: &mut Vec<String>) {
 }
 
 fn first_non_option_arg(args: &[String], start_index: usize) -> Option<String> {
-    let mut index = start_index;
-    while index < args.len() {
-        let arg = args[index].trim();
+    let mut iter = args.iter().skip(start_index).peekable();
+    while let Some(raw_arg) = iter.next() {
+        let arg = raw_arg.trim();
         if arg == "--" {
-            return args.get(index + 1).cloned();
+            return iter.next().cloned();
         }
         if let Some(value) = inline_package_option_value(arg) {
             return Some(value.to_string());
         }
         if launcher_option_selects_package(arg) {
-            return args.get(index + 1).cloned();
+            return iter.next().cloned();
         }
         if launcher_option_takes_value(arg) {
-            index += 2;
+            let _ = iter.next();
             continue;
         }
         if arg.starts_with("--") && arg.contains('=') {
-            index += 1;
             continue;
         }
         if arg.starts_with('-') {
-            index += 1;
             continue;
         }
-        return Some(args[index].clone());
+        return Some(raw_arg.clone());
     }
     None
 }
@@ -677,25 +717,24 @@ fn launcher_option_takes_value(arg: &str) -> bool {
 }
 
 fn docker_image_arg(args: &[String]) -> Option<String> {
-    let mut index = usize::from(args.first().map(|value| value == "run").unwrap_or(false));
-    while index < args.len() {
-        let arg = args[index].trim();
+    let start_index = usize::from(args.first().map(|value| value == "run").unwrap_or(false));
+    let mut iter = args.iter().skip(start_index).peekable();
+    while let Some(raw_arg) = iter.next() {
+        let arg = raw_arg.trim();
         if arg == "--" {
-            return args.get(index + 1).cloned();
+            return iter.next().cloned();
         }
         if docker_option_takes_value(arg) {
-            index += 2;
+            let _ = iter.next();
             continue;
         }
         if arg.starts_with("--") && arg.contains('=') {
-            index += 1;
             continue;
         }
         if arg.starts_with('-') {
-            index += 1;
             continue;
         }
-        return Some(args[index].clone());
+        return Some(raw_arg.clone());
     }
     None
 }
@@ -862,7 +901,7 @@ fn local_path_argument(spec: &str) -> Option<String> {
     })
 }
 
-fn absolutize_local_path_arg(value: &str) -> String {
+fn absolutize_local_path_arg(value: &str, install_root: Option<&Path>) -> String {
     let trimmed = value.trim();
     if trimmed.is_empty() {
         return ".".to_string();
@@ -881,18 +920,32 @@ fn absolutize_local_path_arg(value: &str) -> String {
             return path.display().to_string();
         }
     }
+    if trimmed == "." {
+        if let Some(root) = install_root {
+            return install_path_string(
+                &std::fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf()),
+            );
+        }
+    }
     let path = PathBuf::from(trimmed);
     let candidate = if path.is_absolute() {
         path
     } else {
-        std::env::current_dir()
-            .map(|cwd| cwd.join(path))
-            .unwrap_or_else(|_| PathBuf::from(trimmed))
+        install_root
+            .map(Path::to_path_buf)
+            .or_else(|| std::env::current_dir().ok())
+            .map(|base| base.join(path))
+            .unwrap_or_else(|| PathBuf::from(trimmed))
     };
-    std::fs::canonicalize(&candidate)
-        .unwrap_or(candidate)
-        .display()
-        .to_string()
+    install_path_string(&std::fs::canonicalize(&candidate).unwrap_or(candidate))
+}
+
+fn install_path_string(path: &Path) -> String {
+    let value = path.display().to_string();
+    if let Some(rest) = value.strip_prefix("\\\\?\\UNC\\") {
+        return format!("\\\\{}", rest);
+    }
+    value.strip_prefix("\\\\?\\").unwrap_or(&value).to_string()
 }
 
 fn strip_known_prefix<'a>(value: &'a str, prefix: &str) -> &'a str {
@@ -905,11 +958,16 @@ fn strip_known_prefix<'a>(value: &'a str, prefix: &str) -> &'a str {
 }
 
 fn name_from_url(url: &str) -> String {
-    let mut value = url
-        .trim()
-        .trim_start_matches("https://")
-        .trim_start_matches("http://")
-        .trim_matches('/');
+    let trimmed = url.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    let without_scheme = if lower.starts_with("https://") {
+        &trimmed["https://".len()..]
+    } else if lower.starts_with("http://") {
+        &trimmed["http://".len()..]
+    } else {
+        trimmed
+    };
+    let mut value = without_scheme.trim_matches('/');
     if let Some((host, path)) = value.split_once('/') {
         value = if path.trim().is_empty() { host } else { path };
     }
@@ -1040,58 +1098,4 @@ impl McpAutoInstallResult {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{plan_auto_install, McpAutoInstallOptions};
-
-    #[test]
-    fn command_like_install_rejects_shell_composition() {
-        for spec in [
-            "npx @modelcontextprotocol/server-memory && rm -rf /",
-            "npx @modelcontextprotocol/server-memory &",
-            "uvx safe-package | sh",
-            "docker run image > out",
-            "npx `whoami`",
-            "npx $(whoami)",
-        ] {
-            let options = McpAutoInstallOptions {
-                spec: spec.to_string(),
-                ..McpAutoInstallOptions::default()
-            };
-            let error =
-                plan_auto_install(&options).expect_err("shell composition must be rejected");
-            assert!(
-                error.contains("remove shell chaining"),
-                "unexpected error for {spec:?}: {error}"
-            );
-        }
-    }
-
-    #[test]
-    fn command_like_install_prefers_package_flags_for_identity() {
-        let options = McpAutoInstallOptions {
-            spec:
-                "npx --package @modelcontextprotocol/server-filesystem mcp-server-filesystem /repo"
-                    .to_string(),
-            ..McpAutoInstallOptions::default()
-        };
-        let plan = plan_auto_install(&options).expect("npx package flag plan");
-        assert_eq!(
-            plan.package.as_deref(),
-            Some("@modelcontextprotocol/server-filesystem")
-        );
-    }
-
-    #[test]
-    fn command_like_install_skips_value_options_before_package() {
-        let options = McpAutoInstallOptions {
-            spec: "npx --registry https://registry.npmjs.org @modelcontextprotocol/server-memory"
-                .to_string(),
-            ..McpAutoInstallOptions::default()
-        };
-        let plan = plan_auto_install(&options).expect("npx registry plan");
-        assert_eq!(
-            plan.package.as_deref(),
-            Some("@modelcontextprotocol/server-memory")
-        );
-    }
-}
+mod tests;

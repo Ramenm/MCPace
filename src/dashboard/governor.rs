@@ -17,12 +17,20 @@ pub(super) struct GlobalResourceGovernor {
 
 impl Default for GlobalResourceGovernor {
     fn default() -> Self {
+        Self::for_http_connections(resources::default_http_connection_limit())
+    }
+}
+
+impl GlobalResourceGovernor {
+    pub(super) fn for_http_connections(max_connections: usize) -> Self {
         Self {
             active_requests: AtomicUsize::new(0),
             completed_requests: AtomicUsize::new(0),
             rejected_requests: AtomicUsize::new(0),
             max_active_requests: AtomicUsize::new(0),
-            active_request_limit: resources::default_global_active_request_limit(),
+            active_request_limit: resources::global_active_request_limit_for_http_connections(
+                max_connections,
+            ),
             rss_soft_bytes: resources::default_process_rss_soft_bytes(),
             fd_soft_limit: resources::default_process_fd_soft_limit(),
             thread_soft_limit: resources::default_process_thread_soft_limit(),

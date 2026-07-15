@@ -1,3 +1,4 @@
+use crate::diagnostics;
 use crate::service;
 use std::io::Write;
 use std::path::PathBuf;
@@ -26,7 +27,10 @@ pub fn run(
             "repair" => "install".to_string(),
             "status" | "verify" | "print" | "install" | "uninstall" => action.to_ascii_lowercase(),
             other => {
-                let _ = writeln!(stderr, "unsupported autostart action: {}", other);
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("unsupported autostart action: {}", other),
+                );
                 return 2;
             }
         };

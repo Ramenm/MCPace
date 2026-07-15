@@ -1,23 +1,74 @@
 use super::http_boundary::request_header_string_unique;
 use super::HttpRequest;
+use crate::mcp_protocol;
 use crate::resources;
 use std::collections::{BTreeSet, HashMap};
+use std::fmt;
 
 pub(super) const DEFAULT_MCP_HTTP_SESSION_TTL_MS: u128 = 60 * 60 * 1000;
 pub(super) const DEFAULT_MCP_HTTP_SESSION_LIMIT: usize = 1024;
 pub(super) const MAX_MCP_HTTP_SESSION_ID_BYTES: usize = 256;
+pub(super) const MAX_MCP_HTTP_REQUEST_IDS_PER_SESSION: usize = 4096;
+pub(super) const MAX_MCP_HTTP_REQUEST_ID_STORAGE_BYTES: usize =
+    mcp_protocol::MAX_REQUEST_ID_BYTES + 2;
+pub(super) const MAX_MCP_HTTP_REQUEST_ID_REPLAY_BYTES: usize = 512 * 1024;
+pub(super) const MAX_MCP_HTTP_GLOBAL_REQUEST_ID_REPLAY_BYTES: usize = 16 * 1024 * 1024;
+pub(super) const MAX_MCP_HTTP_CLIENT_INFO_FIELD_BYTES: usize = 256;
+
+#[derive(Debug)]
+pub(super) enum McpHttpSessionIdError {
+    Randomness { source: getrandom::Error },
+}
+
+impl fmt::Display for McpHttpSessionIdError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            McpHttpSessionIdError::Randomness { source } => {
+                write!(formatter, "OS randomness unavailable: {}", source)
+            }
+        }
+    }
+}
+
+impl std::error::Error for McpHttpSessionIdError {}
+
+impl From<McpHttpSessionIdError> for String {
+    fn from(error: McpHttpSessionIdError) -> Self {
+        error.to_string()
+    }
+}
+
+type McpHttpSessionIdResult<T> = Result<T, McpHttpSessionIdError>;
+
+#[derive(Debug)]
+pub(super) struct McpHttpSession {
+    id: String,
+    protocol_version: String,
+    client_name: Option<String>,
+    client_version: Option<String>,
+    created_at_ms: u128,
+    last_seen_at_ms: u128,
+    expires_at_ms: u128,
+    initialized: bool,
+    seen_request_ids: BTreeSet<String>,
+    seen_request_id_bytes: usize,
+}
 
 #[derive(Clone, Debug)]
-pub(super) struct McpHttpSession {
+pub(super) struct McpHttpSessionView {
     pub(super) id: String,
     pub(super) protocol_version: String,
-    pub(super) client_name: Option<String>,
-    pub(super) client_version: Option<String>,
-    pub(super) created_at_ms: u128,
-    pub(super) last_seen_at_ms: u128,
-    pub(super) expires_at_ms: u128,
     pub(super) initialized: bool,
-    seen_request_ids: BTreeSet<String>,
+}
+
+impl McpHttpSession {
+    fn view(&self) -> McpHttpSessionView {
+        McpHttpSessionView {
+            id: self.id.clone(),
+            protocol_version: self.protocol_version.clone(),
+            initialized: self.initialized,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -28,6 +79,7 @@ pub(super) enum McpHttpSessionErrorKind {
     Expired,
     ProtocolMismatch,
     DuplicateRequestId,
+    RequestIdLimit,
 }
 
 #[derive(Clone, Debug)]
@@ -51,6 +103,7 @@ impl McpHttpSessionError {
             | McpHttpSessionErrorKind::Invalid
             | McpHttpSessionErrorKind::ProtocolMismatch
             | McpHttpSessionErrorKind::DuplicateRequestId => "400 Bad Request",
+            McpHttpSessionErrorKind::RequestIdLimit => "429 Too Many Requests",
         }
     }
 }
@@ -66,6 +119,8 @@ pub(super) struct McpHttpSessionSnapshot {
     pub(super) named_client_sessions: usize,
     pub(super) versioned_client_sessions: usize,
     pub(super) mcpace_generated_sessions: usize,
+    pub(super) request_id_replay_bytes: usize,
+    pub(super) max_request_id_replay_bytes: usize,
 }
 
 #[derive(Debug)]
@@ -103,12 +158,55 @@ impl McpHttpSessionStore {
         client_version: Option<String>,
         initialize_request_id_key: Option<String>,
         now_ms: u128,
-    ) -> McpHttpSession {
+    ) -> Result<McpHttpSessionView, McpHttpSessionError> {
+        if client_name
+            .as_ref()
+            .is_some_and(|value| value.len() > MAX_MCP_HTTP_CLIENT_INFO_FIELD_BYTES)
+            || client_version
+                .as_ref()
+                .is_some_and(|value| value.len() > MAX_MCP_HTTP_CLIENT_INFO_FIELD_BYTES)
+        {
+            return Err(McpHttpSessionError::new(
+                McpHttpSessionErrorKind::Invalid,
+                "MCP clientInfo name/version exceeds the 256 byte field limit",
+            ));
+        }
+        if initialize_request_id_key
+            .as_ref()
+            .is_some_and(|key| key.len() > MAX_MCP_HTTP_REQUEST_ID_STORAGE_BYTES)
+        {
+            return Err(McpHttpSessionError::new(
+                McpHttpSessionErrorKind::Invalid,
+                "JSON-RPC request id exceeds the 256 byte limit",
+            ));
+        }
+
         self.prune_expired(now_ms);
         if !self.sessions.contains_key(&session_id) {
             self.evict_until_capacity_for_insert();
         }
         let mut seen_request_ids = BTreeSet::new();
+        let seen_request_id_bytes = initialize_request_id_key
+            .as_ref()
+            .map_or(0, |id_key| id_key.len());
+        let replaced_request_id_bytes = self
+            .sessions
+            .get(&session_id)
+            .map_or(0, |session| session.seen_request_id_bytes);
+        let global_request_id_bytes = self
+            .sessions
+            .values()
+            .map(|session| session.seen_request_id_bytes)
+            .sum::<usize>()
+            .saturating_sub(replaced_request_id_bytes);
+        if global_request_id_bytes.saturating_add(seen_request_id_bytes)
+            > MAX_MCP_HTTP_GLOBAL_REQUEST_ID_REPLAY_BYTES
+        {
+            return Err(McpHttpSessionError::new(
+                McpHttpSessionErrorKind::RequestIdLimit,
+                "global MCP HTTP request-id replay budget is full; close an idle session and retry",
+            ));
+        }
         if let Some(id_key) = initialize_request_id_key {
             seen_request_ids.insert(id_key);
         }
@@ -122,16 +220,18 @@ impl McpHttpSessionStore {
             expires_at_ms: now_ms.saturating_add(self.ttl_ms),
             initialized: false,
             seen_request_ids,
+            seen_request_id_bytes,
         };
-        self.sessions.insert(session_id, session.clone());
-        session
+        let view = session.view();
+        self.sessions.insert(session_id, session);
+        Ok(view)
     }
 
     pub(super) fn touch_from_request(
         &mut self,
         request: &HttpRequest,
         now_ms: u128,
-    ) -> Result<McpHttpSession, McpHttpSessionError> {
+    ) -> Result<McpHttpSessionView, McpHttpSessionError> {
         let raw_session_id = request_header_string_unique(Some(request), "mcp-session-id")
             .map_err(|message| McpHttpSessionError::new(McpHttpSessionErrorKind::Invalid, message))?
             .ok_or_else(|| {
@@ -158,7 +258,7 @@ impl McpHttpSessionStore {
         session_id: &str,
         protocol_header: Option<&str>,
         now_ms: u128,
-    ) -> Result<McpHttpSession, McpHttpSessionError> {
+    ) -> Result<McpHttpSessionView, McpHttpSessionError> {
         if let Some(session) = self.sessions.get(session_id) {
             if session.expires_at_ms <= now_ms {
                 self.sessions.remove(session_id);
@@ -191,14 +291,14 @@ impl McpHttpSessionStore {
 
         session.last_seen_at_ms = now_ms;
         session.expires_at_ms = now_ms.saturating_add(self.ttl_ms);
-        Ok(session.clone())
+        Ok(session.view())
     }
 
     pub(super) fn mark_initialized_from_request(
         &mut self,
         request: &HttpRequest,
         now_ms: u128,
-    ) -> Result<McpHttpSession, McpHttpSessionError> {
+    ) -> Result<McpHttpSessionView, McpHttpSessionError> {
         let touched = self.touch_from_request(request, now_ms)?;
         let session = self.sessions.get_mut(&touched.id).ok_or_else(|| {
             McpHttpSessionError::new(
@@ -207,34 +307,68 @@ impl McpHttpSessionStore {
             )
         })?;
         session.initialized = true;
-        Ok(session.clone())
+        Ok(session.view())
     }
 
     pub(super) fn track_request_id(
         &mut self,
         session_id: &str,
         request_id_key: &str,
-    ) -> Result<McpHttpSession, McpHttpSessionError> {
+    ) -> Result<McpHttpSessionView, McpHttpSessionError> {
+        let global_request_id_bytes = self
+            .sessions
+            .values()
+            .map(|session| session.seen_request_id_bytes)
+            .sum::<usize>();
         let session = self.sessions.get_mut(session_id).ok_or_else(|| {
             McpHttpSessionError::new(
                 McpHttpSessionErrorKind::Unknown,
                 "unknown MCP HTTP session; initialize again before sending more requests",
             )
         })?;
-        if !session.seen_request_ids.insert(request_id_key.to_string()) {
+        if session.seen_request_ids.contains(request_id_key) {
             return Err(McpHttpSessionError::new(
                 McpHttpSessionErrorKind::DuplicateRequestId,
                 "JSON-RPC request id was already used in this MCP HTTP session",
             ));
         }
-        Ok(session.clone())
+        if request_id_key.len() > MAX_MCP_HTTP_REQUEST_ID_STORAGE_BYTES {
+            return Err(McpHttpSessionError::new(
+                McpHttpSessionErrorKind::Invalid,
+                "JSON-RPC request id exceeds the 256 byte limit",
+            ));
+        }
+        if global_request_id_bytes.saturating_add(request_id_key.len())
+            > MAX_MCP_HTTP_GLOBAL_REQUEST_ID_REPLAY_BYTES
+        {
+            return Err(McpHttpSessionError::new(
+                McpHttpSessionErrorKind::RequestIdLimit,
+                "global MCP HTTP request-id replay budget is full; close an idle session and retry",
+            ));
+        }
+        if session.seen_request_ids.len() >= MAX_MCP_HTTP_REQUEST_IDS_PER_SESSION
+            || session
+                .seen_request_id_bytes
+                .saturating_add(request_id_key.len())
+                > MAX_MCP_HTTP_REQUEST_ID_REPLAY_BYTES
+        {
+            return Err(McpHttpSessionError::new(
+                McpHttpSessionErrorKind::RequestIdLimit,
+                "MCP HTTP session request-id replay budget is full; initialize a new session",
+            ));
+        }
+        session.seen_request_ids.insert(request_id_key.to_string());
+        session.seen_request_id_bytes = session
+            .seen_request_id_bytes
+            .saturating_add(request_id_key.len());
+        Ok(session.view())
     }
 
     pub(super) fn close_from_request(
         &mut self,
         request: &HttpRequest,
         now_ms: u128,
-    ) -> Result<McpHttpSession, McpHttpSessionError> {
+    ) -> Result<McpHttpSessionView, McpHttpSessionError> {
         let raw_session_id = request_header_string_unique(Some(request), "mcp-session-id")
             .map_err(|message| McpHttpSessionError::new(McpHttpSessionErrorKind::Invalid, message))?
             .ok_or_else(|| {
@@ -256,7 +390,7 @@ impl McpHttpSessionStore {
         &mut self,
         session_id: &str,
         now_ms: u128,
-    ) -> Result<McpHttpSession, McpHttpSessionError> {
+    ) -> Result<McpHttpSessionView, McpHttpSessionError> {
         if let Some(session) = self.sessions.get(session_id) {
             if session.expires_at_ms <= now_ms {
                 self.sessions.remove(session_id);
@@ -267,12 +401,13 @@ impl McpHttpSessionStore {
                 ));
             }
         }
-        self.sessions.remove(session_id).ok_or_else(|| {
+        let session = self.sessions.remove(session_id).ok_or_else(|| {
             McpHttpSessionError::new(
                 McpHttpSessionErrorKind::Unknown,
                 "unknown MCP HTTP session; initialize again before sending more requests",
             )
-        })
+        })?;
+        Ok(session.view())
     }
 
     pub(super) fn snapshot(&mut self, now_ms: u128) -> McpHttpSessionSnapshot {
@@ -307,6 +442,12 @@ impl McpHttpSessionStore {
                 .values()
                 .filter(|session| session.id.starts_with("mcpace-"))
                 .count(),
+            request_id_replay_bytes: self
+                .sessions
+                .values()
+                .map(|session| session.seen_request_id_bytes)
+                .sum(),
+            max_request_id_replay_bytes: MAX_MCP_HTTP_GLOBAL_REQUEST_ID_REPLAY_BYTES,
         }
     }
 
@@ -338,9 +479,9 @@ pub(super) fn generated_mcp_http_session_id(
     _request: &HttpRequest,
     _id: &crate::json::JsonValue,
     _protocol: &str,
-) -> Result<String, String> {
+) -> McpHttpSessionIdResult<String> {
     let random =
-        os_random_hex(16).map_err(|error| format!("OS randomness unavailable: {}", error))?;
+        os_random_hex(16).map_err(|error| McpHttpSessionIdError::Randomness { source: error })?;
     Ok(format!("mcpace-{}", random))
 }
 
@@ -374,3 +515,6 @@ fn hex_bytes(bytes: &[u8]) -> String {
     }
     output
 }
+
+#[cfg(test)]
+mod tests;

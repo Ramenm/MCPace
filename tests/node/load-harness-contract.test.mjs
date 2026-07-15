@@ -17,6 +17,16 @@ test('local load harness bounds server worker fanout before launching the binary
   assert.match(result.stderr, /--max-connections must be <= 256/);
 });
 
+test('local load harness bounds the global active-request overload probe', () => {
+  const result = spawnSync(process.execPath, [loadHarness, '--global-active-request-limit', '1025'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+  assert.equal(result.status, 1, result.stdout || result.stderr);
+  assert.match(result.stderr, /--global-active-request-limit must be <= 1024/);
+});
+
 test('local load harness bounds server request bodies before launching the binary', () => {
   const result = spawnSync(process.execPath, [loadHarness, '--max-body-bytes', '16777217'], {
     cwd: repoRoot,
@@ -35,6 +45,7 @@ test('local load harness documents its adaptive server connection default', () =
   });
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /Default: min\(256, max\(16, concurrency \* 2\)\)/);
+  assert.match(result.stdout, /--global-active-request-limit <n>/);
   assert.match(result.stdout, /--max-requests-per-scenario <n>/);
   assert.match(result.stdout, /Default: 100; use 0 for duration-only stress/);
 });

@@ -9,7 +9,49 @@ use crate::mcp_protocol as mcp;
 use crate::tool_result;
 use crate::upstream;
 use std::collections::BTreeSet;
+use std::fmt;
 use std::path::Path;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct AdapterProfileError {
+    message: String,
+}
+
+pub type AdapterProfileResult<T> = std::result::Result<T, AdapterProfileError>;
+
+impl AdapterProfileError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for AdapterProfileError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for AdapterProfileError {}
+
+impl From<String> for AdapterProfileError {
+    fn from(message: String) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<&str> for AdapterProfileError {
+    fn from(message: &str) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<AdapterProfileError> for String {
+    fn from(error: AdapterProfileError) -> Self {
+        error.message
+    }
+}
 
 pub fn adapter_profile(
     root_path: &Path,
@@ -19,7 +61,7 @@ pub fn adapter_profile(
     include_live_catalog: bool,
     timeout_ms: Option<u64>,
     refresh: bool,
-) -> Result<JsonValue, String> {
+) -> AdapterProfileResult<JsonValue> {
     let env_options = ToolExposureOptions::from_env();
     let options = ToolExposureOptions {
         timeout_ms: timeout_ms.or(env_options.timeout_ms),
@@ -38,14 +80,13 @@ pub fn adapter_profile(
             .collect::<BTreeSet<_>>();
         projected_tool_set(root_path, &reserved, &options).ok()
     };
-    let inventory = upstream::configured_inventory(root_path)?;
+    let inventory = upstream::configured_inventory(root_path)
+        .map_err(|error| AdapterProfileError::from(error.to_string()))?;
     let live_catalog = if include_live_catalog {
-        Some(upstream::catalog_tools(
-            root_path,
-            None,
-            options.timeout_ms,
-            options.refresh,
-        )?)
+        Some(
+            upstream::catalog_tools(root_path, None, options.timeout_ms, options.refresh)
+                .map_err(|error| AdapterProfileError::from(error.to_string()))?,
+        )
     } else {
         None
     };

@@ -1,6 +1,57 @@
 use std::env;
+use std::fmt;
 use std::fs;
 use std::path::{Path, PathBuf};
+
+#[derive(Debug)]
+pub(super) enum UpstreamProcessConfigError {
+    EmptyCommand,
+    AbsoluteCommandMissing {
+        path: PathBuf,
+    },
+    CommandResolve {
+        command: String,
+        source: which::Error,
+    },
+}
+
+impl fmt::Display for UpstreamProcessConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            UpstreamProcessConfigError::EmptyCommand => formatter.write_str("empty command"),
+            UpstreamProcessConfigError::AbsoluteCommandMissing { path } => write!(
+                formatter,
+                "absolute command path '{}' does not exist",
+                path.display()
+            ),
+            UpstreamProcessConfigError::CommandResolve { command, source } => {
+                write!(
+                    formatter,
+                    "failed to resolve command '{}': {}",
+                    command, source
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for UpstreamProcessConfigError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            UpstreamProcessConfigError::CommandResolve { source, .. } => Some(source),
+            UpstreamProcessConfigError::EmptyCommand
+            | UpstreamProcessConfigError::AbsoluteCommandMissing { .. } => None,
+        }
+    }
+}
+
+impl From<UpstreamProcessConfigError> for String {
+    fn from(error: UpstreamProcessConfigError) -> Self {
+        error.to_string()
+    }
+}
+
+type UpstreamProcessConfigResult<T> = Result<T, UpstreamProcessConfigError>;
 
 pub(super) fn redact_command(command: &str) -> String {
     Path::new(command)
@@ -72,10 +123,13 @@ pub(super) fn validate_stdio_cwd(cwd: &Path, server_name: &str) -> Option<String
     }
 }
 
-pub(super) fn resolve_command_for_cwd(command: &str, cwd: &Path) -> Result<PathBuf, String> {
+pub(super) fn resolve_command_for_cwd(
+    command: &str,
+    cwd: &Path,
+) -> UpstreamProcessConfigResult<PathBuf> {
     let command = command.trim();
     if command.is_empty() {
-        return Err("empty command".to_string());
+        return Err(UpstreamProcessConfigError::EmptyCommand);
     }
 
     let raw = PathBuf::from(command);
@@ -83,10 +137,7 @@ pub(super) fn resolve_command_for_cwd(command: &str, cwd: &Path) -> Result<PathB
         return if raw.exists() {
             Ok(raw.canonicalize().unwrap_or(raw))
         } else {
-            Err(format!(
-                "absolute command path '{}' does not exist",
-                raw.display()
-            ))
+            Err(UpstreamProcessConfigError::AbsoluteCommandMissing { path: raw })
         };
     }
 
@@ -101,7 +152,10 @@ pub(super) fn resolve_command_for_cwd(command: &str, cwd: &Path) -> Result<PathB
         }
     }
 
-    which::which(command).map_err(|error| error.to_string())
+    which::which(command).map_err(|error| UpstreamProcessConfigError::CommandResolve {
+        command: command.to_string(),
+        source: error,
+    })
 }
 
 pub(super) fn spawn_program_for_command(command: &str, resolved: &Path) -> PathBuf {

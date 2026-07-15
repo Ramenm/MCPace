@@ -37,16 +37,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
           persist-credentials: false
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6
         with:
           node-version-file: .nvmrc
           cache: npm
 
-      - uses: dtolnay/rust-toolchain@1.95.0
+      - uses: dtolnay/rust-toolchain@eac0f66a48bc4b70a10b9acd4c4e930f835d95ff # 1.95.0
         with:
           components: rustfmt, clippy
 
@@ -58,7 +58,7 @@ jobs:
 
       - name: Build compact release binary
         if: ${{ inputs.profile == 'release' || inputs.profile == 'both' }}
-        run: cargo build --release
+        run: cargo build --release --locked --bins
 
       - name: Load-test compact release binary
         if: ${{ inputs.profile == 'release' || inputs.profile == 'both' }}
@@ -76,7 +76,7 @@ jobs:
 
       - name: Build speed-oriented perf binary
         if: ${{ inputs.profile == 'perf' || inputs.profile == 'both' }}
-        run: cargo build --profile perf
+        run: cargo build --profile perf --locked
 
       - name: Load-test speed-oriented perf binary
         if: ${{ inputs.profile == 'perf' || inputs.profile == 'both' }}
@@ -94,7 +94,7 @@ jobs:
 
       - name: Upload load reports
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7
         with:
           name: performance-proof-reports
           path: reports/load/**

@@ -1,9 +1,11 @@
 use crate::app;
+use crate::diagnostics as stderr_diagnostics;
 use crate::json::{parse_str, JsonValue};
 use crate::resources;
 use crate::runtimepaths;
 use crate::text_utils;
 use crate::upstream;
+use clap::{error::ErrorKind, Parser};
 
 mod admission;
 mod diagnostics;
@@ -14,6 +16,7 @@ mod http_session;
 mod http_tools;
 mod latency;
 mod mcp_http;
+mod operations;
 mod overview;
 mod rate_limit;
 mod response;
@@ -45,8 +48,7 @@ use self::tool_runtime::run_http_tool;
 use self::trace::{OperationTraceObservation, OperationTraceTracker};
 #[cfg(test)]
 use http_boundary::{is_allowed_local_host, is_allowed_local_origin};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use std::ffi::OsString;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
@@ -60,6 +62,8 @@ use std::time::{Duration, Instant};
 const HTTP_WORKER_STACK_BYTES: usize = 4 * 1024 * 1024;
 const DEFAULT_LOG_TAIL: usize = 20;
 const MAX_LOG_TAIL: usize = 500;
+const DEFAULT_OPERATIONS_LIMIT: usize = 2000;
+const MAX_OPERATIONS_LIMIT: usize = 5000;
 
 #[derive(Debug)]
 struct ParsedArgs {
@@ -101,13 +105,26 @@ impl Default for ParsedArgs {
 #[derive(Clone, Debug)]
 struct CachedOverview {
     stored_at: Instant,
-    value: JsonValue,
+    value: Arc<JsonValue>,
 }
 
 #[derive(Clone, Debug)]
 struct CachedHealth {
     stored_at: Instant,
     value: JsonValue,
+}
+
+#[derive(Clone, Debug)]
+struct CachedOverviewFailure {
+    stored_at: Instant,
+    error: String,
+}
+
+#[derive(Default)]
+struct OverviewCacheState {
+    entry: Option<CachedOverview>,
+    cold_failure: Option<CachedOverviewFailure>,
+    refreshing: bool,
 }
 
 #[derive(Default)]
@@ -234,7 +251,7 @@ struct DashboardConfig {
     max_body_bytes: usize,
     overview_cache_ttl: Duration,
     health_cache_ttl: Duration,
-    overview_cache: Mutex<Option<CachedOverview>>,
+    overview_cache: Mutex<OverviewCacheState>,
     health_cache: Mutex<Option<CachedHealth>>,
     request_latencies: Mutex<RequestLatencyTracker>,
     operation_traces: Mutex<OperationTraceTracker>,
@@ -244,9 +261,8 @@ struct DashboardConfig {
     http_session_store: Mutex<http_session::McpHttpSessionStore>,
     metrics: HttpRuntimeMetrics,
     surface: ServeSurface,
-    upstream_session_pools: Vec<Mutex<upstream::UpstreamSessionPool>>,
+    upstream_session_pool: upstream::UpstreamSessionPool,
     auth_token: Option<String>,
-    allow_nonlocal_host: bool,
 }
 
 #[derive(Clone, Copy)]
@@ -286,9 +302,9 @@ fn run_internal(
     stderr: &mut dyn Write,
     surface: ServeSurface,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        stderr_diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help {
@@ -297,7 +313,10 @@ fn run_internal(
     }
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        stderr_diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
@@ -310,33 +329,28 @@ fn run_internal(
     let auth_token = match resolve_http_auth_token(&parsed) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            stderr_diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 2;
         }
     };
-    let non_loopback_bind = !is_loopback_bind_host(&host);
-    if non_loopback_bind && !parsed.allow_nonlocal_bind {
-        let _ = writeln!(
+    if parsed.allow_nonlocal_bind || parsed.insecure_nonlocal_bind {
+        stderr_diagnostics::stderr_line(
             stderr,
-            "refusing to bind non-loopback host '{}'; MCPace local HTTP mode is loopback-only unless --allow-nonlocal-bind is set intentionally",
-            host
+            format_args!(
+                "direct non-loopback HTTP flags are no longer supported; keep MCPace on loopback and terminate HTTPS in a trusted reverse proxy or tunnel"
+            ),
         );
         return 2;
     }
-    if non_loopback_bind && auth_token.is_none() && !parsed.insecure_nonlocal_bind {
-        let _ = writeln!(
+    if !is_loopback_bind_host(&host) {
+        stderr_diagnostics::stderr_line(
             stderr,
-            "refusing unauthenticated non-loopback bind '{}'; set MCPACE_HTTP_AUTH_TOKEN or --auth-token-env <NAME>, or pass --insecure-nonlocal-bind for an explicit unauthenticated lab-only bind",
-            host
+            format_args!(
+                "refusing to bind non-loopback host '{}'; the built-in HTTP server is loopback-only because it does not terminate TLS; use a trusted HTTPS reverse proxy or tunnel",
+                host
+            ),
         );
         return 2;
-    }
-    if non_loopback_bind && parsed.insecure_nonlocal_bind {
-        let _ = writeln!(
-            stderr,
-            "warning: non-loopback bind '{}' is unauthenticated because --insecure-nonlocal-bind was provided",
-            host
-        );
     }
     let port = if parsed.port == 0 {
         if matches!(surface, ServeSurface::UnifiedServe) {
@@ -351,7 +365,10 @@ fn run_internal(
     let listener = match TcpListener::bind((host.as_str(), port)) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "failed to bind local HTTP listener: {}", error);
+            stderr_diagnostics::stderr_line(
+                stderr,
+                format_args!("failed to bind local HTTP listener: {}", error),
+            );
             return 1;
         }
     };
@@ -359,7 +376,10 @@ fn run_internal(
     let address = match listener.local_addr() {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "failed to resolve local HTTP address: {}", error);
+            stderr_diagnostics::stderr_line(
+                stderr,
+                format_args!("failed to resolve local HTTP address: {}", error),
+            );
             return 1;
         }
     };
@@ -396,19 +416,18 @@ fn run_internal(
             max_body_bytes: parsed.max_body_bytes,
             overview_cache_ttl: parsed.overview_cache_ttl,
             health_cache_ttl: resources::default_dashboard_health_cache_ttl(),
-            overview_cache: Mutex::new(None),
+            overview_cache: Mutex::new(OverviewCacheState::default()),
             health_cache: Mutex::new(None),
             request_latencies: Mutex::new(RequestLatencyTracker::default()),
             operation_traces: Mutex::new(OperationTraceTracker::default()),
             rate_limiter: Mutex::new(HttpRateLimiter::default()),
             admission: HttpAdmissionController::default(),
-            resource_governor: GlobalResourceGovernor::default(),
+            resource_governor: GlobalResourceGovernor::for_http_connections(parsed.max_connections),
             http_session_store: Mutex::new(http_session::McpHttpSessionStore::default()),
             metrics: HttpRuntimeMetrics::default(),
             surface,
-            upstream_session_pools: new_upstream_session_pools(),
+            upstream_session_pool: new_upstream_session_pool(),
             auth_token,
-            allow_nonlocal_host: non_loopback_bind,
         },
         stderr,
     )
@@ -467,158 +486,174 @@ fn is_loopback_bind_host(host: &str) -> bool {
     http_boundary::is_loopback_host(host)
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace dashboard",
+    disable_version_flag = true,
+    about = "Serve the local MCPace dashboard UI"
+)]
+struct DashboardCli {
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
 
-    while index < args.len() {
-        match args[index].as_str() {
-            "--root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("dashboard requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "--host" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("dashboard requires a value after --host".to_string());
-                    return parsed;
-                };
-                parsed.host = Some(value.to_string());
-                index += 2;
-            }
-            "--port" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("dashboard requires a value after --port".to_string());
-                    return parsed;
-                };
-                match value.parse::<u16>() {
-                    Ok(port) => parsed.port = port,
-                    Err(_) => {
-                        parsed.error = Some("dashboard --port must be a valid u16".to_string());
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--max-requests" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("dashboard requires a value after --max-requests".to_string());
-                    return parsed;
-                };
-                match resources::parse_positive_usize(value, "dashboard --max-requests") {
-                    Ok(limit) => parsed.max_requests = Some(limit),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--max-connections" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("dashboard requires a value after --max-connections".to_string());
-                    return parsed;
-                };
-                match resources::parse_positive_usize(value, "dashboard --max-connections") {
-                    Ok(limit) => parsed.max_connections = limit,
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--io-timeout-ms" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("dashboard requires a value after --io-timeout-ms".to_string());
-                    return parsed;
-                };
-                match resources::parse_positive_u64(value, "dashboard --io-timeout-ms") {
-                    Ok(timeout_ms) => parsed.io_timeout = Duration::from_millis(timeout_ms),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--max-body-bytes" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("dashboard requires a value after --max-body-bytes".to_string());
-                    return parsed;
-                };
-                match resources::parse_positive_usize(value, "dashboard --max-body-bytes") {
-                    Ok(limit) => parsed.max_body_bytes = limit,
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--overview-cache-ms" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("dashboard requires a value after --overview-cache-ms".to_string());
-                    return parsed;
-                };
-                match resources::parse_nonnegative_u64(value, "dashboard --overview-cache-ms") {
-                    Ok(ttl_ms) => parsed.overview_cache_ttl = Duration::from_millis(ttl_ms),
-                    Err(error) => {
-                        parsed.error = Some(error);
-                        return parsed;
-                    }
-                }
-                index += 2;
-            }
-            "--allow-nonlocal-bind" => {
-                parsed.allow_nonlocal_bind = true;
-                index += 1;
-            }
-            "--insecure-nonlocal-bind" => {
-                parsed.insecure_nonlocal_bind = true;
-                index += 1;
-            }
-            "--auth-token-env" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some(
-                        "dashboard requires an environment variable name after --auth-token-env"
-                            .to_string(),
-                    );
-                    return parsed;
-                };
-                if value.trim().is_empty() {
-                    parsed.error = Some("dashboard --auth-token-env must not be empty".to_string());
-                    return parsed;
-                }
-                parsed.auth_token_env = Some(value.to_string());
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            other => {
-                parsed.error = Some(format!("unsupported dashboard argument: {}", other));
-                return parsed;
+    #[arg(long = "host", value_name = "ADDR")]
+    host: Option<String>,
+
+    #[arg(long = "port", value_name = "N")]
+    port: Option<u16>,
+
+    #[arg(long = "max-requests", value_name = "N")]
+    max_requests: Option<usize>,
+
+    #[arg(long = "max-connections", value_name = "N")]
+    max_connections: Option<usize>,
+
+    #[arg(long = "io-timeout-ms", value_name = "MS")]
+    io_timeout_ms: Option<u64>,
+
+    #[arg(long = "max-body-bytes", value_name = "N")]
+    max_body_bytes: Option<usize>,
+
+    #[arg(long = "overview-cache-ms", value_name = "MS")]
+    overview_cache_ms: Option<u64>,
+
+    #[arg(long = "allow-nonlocal-bind", hide = true)]
+    allow_nonlocal_bind: bool,
+
+    #[arg(long = "insecure-nonlocal-bind", hide = true)]
+    insecure_nonlocal_bind: bool,
+
+    #[arg(long = "auth-token-env", value_name = "NAME")]
+    auth_token_env: Option<String>,
+}
+
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match DashboardCli::try_parse_from(argv(args)) {
+        Ok(cli) => parsed_from_cli(cli),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
             }
         }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn parsed_from_cli(cli: DashboardCli) -> ParsedArgs {
+    let mut parsed = ParsedArgs {
+        root_override: cli.root_override,
+        host: cli.host,
+        port: cli.port.unwrap_or(0),
+        max_requests: cli.max_requests,
+        allow_nonlocal_bind: cli.allow_nonlocal_bind,
+        insecure_nonlocal_bind: cli.insecure_nonlocal_bind,
+        auth_token_env: cli.auth_token_env,
+        ..ParsedArgs::default()
+    };
+
+    if parsed.max_requests == Some(0) {
+        parsed.error = Some("dashboard --max-requests must be a positive integer".to_string());
+        return parsed;
+    }
+    if let Some(limit) = cli.max_connections {
+        if limit == 0 {
+            parsed.error =
+                Some("dashboard --max-connections must be a positive integer".to_string());
+            return parsed;
+        }
+        if limit > resources::HTTP_CONNECTION_LIMIT_MAX {
+            parsed.error = Some(format!(
+                "dashboard --max-connections must not exceed {}",
+                resources::HTTP_CONNECTION_LIMIT_MAX
+            ));
+            return parsed;
+        }
+        parsed.max_connections = limit;
+    }
+    if let Some(timeout_ms) = cli.io_timeout_ms {
+        if timeout_ms == 0 {
+            parsed.error = Some("dashboard --io-timeout-ms must be a positive integer".to_string());
+            return parsed;
+        }
+        if timeout_ms > resources::HTTP_IO_TIMEOUT_MS_MAX {
+            parsed.error = Some(format!(
+                "dashboard --io-timeout-ms must not exceed {}",
+                resources::HTTP_IO_TIMEOUT_MS_MAX
+            ));
+            return parsed;
+        }
+        parsed.io_timeout = Duration::from_millis(timeout_ms);
+    }
+    if let Some(limit) = cli.max_body_bytes {
+        if limit == 0 {
+            parsed.error =
+                Some("dashboard --max-body-bytes must be a positive integer".to_string());
+            return parsed;
+        }
+        if limit > resources::HTTP_BODY_BYTES_MAX {
+            parsed.error = Some(format!(
+                "dashboard --max-body-bytes must not exceed {}",
+                resources::HTTP_BODY_BYTES_MAX
+            ));
+            return parsed;
+        }
+        parsed.max_body_bytes = limit;
+    }
+    if let Some(ttl_ms) = cli.overview_cache_ms {
+        parsed.overview_cache_ttl = Duration::from_millis(ttl_ms);
+    }
+    if parsed
+        .auth_token_env
+        .as_deref()
+        .is_some_and(|value| value.trim().is_empty())
+    {
+        parsed.error = Some("dashboard --auth-token-env must not be empty".to_string());
     }
 
     parsed
 }
 
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace dashboard"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_arg(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_arg(arg: &str) -> String {
+    match arg {
+        "-root" => "--root".to_string(),
+        "-host" => "--host".to_string(),
+        "-port" => "--port".to_string(),
+        "-max-requests" => "--max-requests".to_string(),
+        "-max-connections" => "--max-connections".to_string(),
+        "-io-timeout-ms" => "--io-timeout-ms".to_string(),
+        "-max-body-bytes" => "--max-body-bytes".to_string(),
+        "-overview-cache-ms" => "--overview-cache-ms".to_string(),
+        "-allow-nonlocal-bind" => "--allow-nonlocal-bind".to_string(),
+        "-insecure-nonlocal-bind" => "--insecure-nonlocal-bind".to_string(),
+        "-auth-token-env" => "--auth-token-env".to_string(),
+        "-?" => "--help".to_string(),
+        _ => arg.to_string(),
+    }
+}
+
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace dashboard [--root <path>] [--host <addr>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--allow-nonlocal-bind] [--auth-token-env <NAME>] [--insecure-nonlocal-bind]"
+        "Usage: mcpace dashboard [--root <path>] [--host <loopback>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--auth-token-env <NAME>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -631,7 +666,7 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(
         stdout,
-        "Non-loopback bind hosts are rejected by default; --allow-nonlocal-bind also requires MCPACE_HTTP_AUTH_TOKEN, --auth-token-env <NAME>, or explicit --insecure-nonlocal-bind."
+        "The built-in HTTP server is loopback-only and does not terminate TLS. Use a trusted HTTPS reverse proxy or tunnel for remote access."
     );
     let _ = writeln!(
         stdout,
@@ -659,35 +694,10 @@ enum McpHttpResponse {
     Accepted,
 }
 
-fn new_upstream_session_pools() -> Vec<Mutex<upstream::UpstreamSessionPool>> {
-    let shard_count = resources::default_upstream_session_pool_shard_count();
-    let total_limit = resources::default_upstream_session_pool_limit().max(shard_count);
-    let base_limit = total_limit / shard_count;
-    let remainder = total_limit % shard_count;
-
-    (0..shard_count)
-        .map(|index| {
-            let shard_limit = base_limit + if index < remainder { 1 } else { 0 };
-            Mutex::new(upstream::UpstreamSessionPool::with_max_sessions(
-                shard_limit,
-            ))
-        })
-        .collect()
-}
-
-fn upstream_pool_for_context<'a>(
-    config: &'a DashboardConfig,
-    server: &str,
-    context: &upstream::UpstreamLeaseContext,
-) -> &'a Mutex<upstream::UpstreamSessionPool> {
-    let mut hasher = DefaultHasher::new();
-    server.hash(&mut hasher);
-    context.client_id.hash(&mut hasher);
-    context.session_id.hash(&mut hasher);
-    context.project_root.hash(&mut hasher);
-    context.transport.hash(&mut hasher);
-    let index = (hasher.finish() as usize) % config.upstream_session_pools.len().max(1);
-    &config.upstream_session_pools[index]
+fn new_upstream_session_pool() -> upstream::UpstreamSessionPool {
+    upstream::UpstreamSessionPool::with_max_sessions(
+        resources::default_upstream_session_pool_limit(),
+    )
 }
 
 fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut dyn Write) -> i32 {
@@ -733,10 +743,12 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
         match worker {
             Ok(handle) => handles.push(handle),
             Err(error) => {
-                let _ = writeln!(
+                stderr_diagnostics::stderr_line(
                     stderr,
-                    "dashboard failed to spawn HTTP worker {}: {}",
-                    worker_index, error
+                    format_args!(
+                        "dashboard failed to spawn HTTP worker {}: {}",
+                        worker_index, error
+                    ),
                 );
                 drop(request_tx);
                 join_request_workers(handles, stderr);
@@ -753,7 +765,10 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
         let stream = match incoming {
             Ok(value) => value,
             Err(error) => {
-                let _ = writeln!(stderr, "dashboard accept failed: {}", error);
+                stderr_diagnostics::stderr_line(
+                    stderr,
+                    format_args!("dashboard accept failed: {}", error),
+                );
                 drop(request_tx);
                 join_request_workers(handles, stderr);
                 drain_request_worker_logs(&log_rx, stderr);
@@ -763,7 +778,10 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
 
         accepted = accepted.saturating_add(1);
         if request_tx.send(stream).is_err() {
-            let _ = writeln!(stderr, "dashboard request worker pool stopped unexpectedly");
+            stderr_diagnostics::stderr_line(
+                stderr,
+                format_args!("dashboard request worker pool stopped unexpectedly"),
+            );
             break;
         }
         drain_request_worker_logs(&log_rx, stderr);
@@ -782,14 +800,17 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
 fn join_request_workers(handles: Vec<thread::JoinHandle<()>>, stderr: &mut dyn Write) {
     for handle in handles {
         if handle.join().is_err() {
-            let _ = writeln!(stderr, "dashboard request worker panicked");
+            stderr_diagnostics::stderr_line(
+                stderr,
+                format_args!("dashboard request worker panicked"),
+            );
         }
     }
 }
 
 fn drain_request_worker_logs(log_rx: &mpsc::Receiver<String>, stderr: &mut dyn Write) {
     while let Ok(message) = log_rx.try_recv() {
-        let _ = writeln!(stderr, "{}", message);
+        stderr_diagnostics::stderr_line(stderr, format_args!("{}", message));
     }
 }
 
@@ -803,11 +824,13 @@ fn read_limited_http_line(
     reader: &mut BufReader<TcpStream>,
     max_bytes: usize,
     label: &str,
+    deadline: Instant,
 ) -> Result<LimitedHttpLine, String> {
     let mut line = Vec::new();
     let max_with_sentinel = max_bytes.saturating_add(1);
 
     loop {
+        set_remaining_http_read_timeout(reader, deadline, label)?;
         let (take_len, newline_seen) = {
             let available = reader
                 .fill_buf()
@@ -849,15 +872,32 @@ fn read_limited_http_line(
     }
 }
 
+fn set_remaining_http_read_timeout(
+    reader: &mut BufReader<TcpStream>,
+    deadline: Instant,
+    label: &str,
+) -> Result<(), String> {
+    let remaining = deadline
+        .checked_duration_since(Instant::now())
+        .filter(|duration| !duration.is_zero())
+        .ok_or_else(|| format!("HTTP request deadline exceeded while reading {}", label))?;
+    reader
+        .get_mut()
+        .set_read_timeout(Some(remaining.max(Duration::from_millis(1))))
+        .map_err(|error| format!("set {} timeout: {}", label, error))
+}
+
 fn read_limited_http_body(
-    reader: &mut impl Read,
+    reader: &mut BufReader<TcpStream>,
     content_length: usize,
+    deadline: Instant,
 ) -> Result<Vec<u8>, String> {
     const BODY_READ_CHUNK_BYTES: usize = 8 * 1024;
     let mut body = Vec::with_capacity(content_length.min(BODY_READ_CHUNK_BYTES));
     let mut buffer = [0u8; BODY_READ_CHUNK_BYTES];
 
     while body.len() < content_length {
+        set_remaining_http_read_timeout(reader, deadline, "request body")?;
         let remaining = content_length.saturating_sub(body.len());
         let read_len = remaining.min(buffer.len());
         reader
@@ -1038,46 +1078,9 @@ fn enter_http_heavy_action_or_write_busy<'a>(
 fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<(), String> {
     let mut latency_probe = HttpLatencyProbe::new(config);
     let request_started_at = latency_probe.started_at;
+    let request_deadline = request_started_at + config.io_timeout;
     let _ = stream.set_read_timeout(Some(config.io_timeout));
     let _ = stream.set_write_timeout(Some(config.io_timeout));
-    let _resource_permit = match config.resource_governor.try_enter_request() {
-        Ok(permit) => permit,
-        Err(rejection) => {
-            latency_probe.mark_route("http.resource_governor_rejected");
-            let retry_after_secs = (rejection.retry_after_ms / 1000).max(1).to_string();
-            record_operation_trace(
-                config,
-                OperationTraceObservation {
-                    name: "http.resource_governor_rejected".to_string(),
-                    route: "http.resource_governor_rejected".to_string(),
-                    duration: Duration::from_millis(0),
-                    failed: true,
-                    attributes: vec![("reason".to_string(), rejection.reason.to_string())],
-                },
-            );
-            write_empty_response_with_headers(
-                &mut stream,
-                "503 Service Unavailable",
-                &[
-                    ("Retry-After", retry_after_secs.as_str()),
-                    ("X-MCPace-Resource-Rejection", rejection.reason),
-                ],
-            )?;
-            latency_probe.mark_ok();
-            return Ok(());
-        }
-    };
-    if let Some((_client_key, retry_after)) = check_http_rate_limit(&stream, config) {
-        latency_probe.mark_route("http.rate_limited");
-        let retry_after_secs = retry_after.as_secs().max(1).to_string();
-        write_empty_response_with_headers(
-            &mut stream,
-            "429 Too Many Requests",
-            &[("Retry-After", retry_after_secs.as_str())],
-        )?;
-        latency_probe.mark_ok();
-        return Ok(());
-    }
     let mut reader = BufReader::new(
         stream
             .try_clone()
@@ -1087,6 +1090,7 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
         &mut reader,
         resources::MAX_HTTP_REQUEST_LINE_BYTES,
         "request line",
+        request_deadline,
     )? {
         LimitedHttpLine::Empty => {
             latency_probe.mark_empty();
@@ -1148,6 +1152,7 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             &mut reader,
             resources::MAX_HTTP_HEADER_LINE_BYTES,
             "request header",
+            request_deadline,
         )? {
             LimitedHttpLine::Empty => break,
             LimitedHttpLine::Line(value) => value,
@@ -1309,8 +1314,74 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
         return Ok(());
     }
 
+    // Validate the local browser boundary, rate-limit every peer attempt, and
+    // then authenticate after bounded header parsing, before consuming a
+    // potentially slow request body. The absolute request deadline still
+    // applies to every read that follows.
+    let header_request = HttpRequest {
+        method: method.clone(),
+        path: path.to_string(),
+        query: query.to_string(),
+        headers: headers.clone(),
+        body: Vec::new(),
+    };
+    if reject_forbidden_origin(&mut stream, &header_request)? {
+        latency_probe.mark_route("http.forbidden_origin");
+        latency_probe.mark_ok();
+        return Ok(());
+    }
+    if let Some((_client_key, retry_after)) = check_http_rate_limit(&stream, config) {
+        latency_probe.mark_route("http.rate_limited");
+        let retry_after_secs = retry_after.as_secs().max(1).to_string();
+        write_empty_response_with_headers(
+            &mut stream,
+            "429 Too Many Requests",
+            &[("Retry-After", retry_after_secs.as_str())],
+        )?;
+        latency_probe.mark_ok();
+        return Ok(());
+    }
+    if !is_authorized_http_request(&header_request, config) {
+        latency_probe.mark_route("http.unauthorized");
+        write_empty_response_with_headers(
+            &mut stream,
+            "401 Unauthorized",
+            &[("WWW-Authenticate", "Bearer realm=\"mcpace\"")],
+        )?;
+        latency_probe.mark_ok();
+        return Ok(());
+    }
+
+    let _resource_permit = match config.resource_governor.try_enter_request() {
+        Ok(permit) => permit,
+        Err(rejection) => {
+            latency_probe.mark_route("http.resource_governor_rejected");
+            let retry_after_secs = (rejection.retry_after_ms / 1000).max(1).to_string();
+            record_operation_trace(
+                config,
+                OperationTraceObservation {
+                    name: "http.resource_governor_rejected".to_string(),
+                    route: "http.resource_governor_rejected".to_string(),
+                    duration: Duration::from_millis(0),
+                    failed: true,
+                    attributes: vec![("reason".to_string(), rejection.reason.to_string())],
+                },
+            );
+            write_empty_response_with_headers(
+                &mut stream,
+                "503 Service Unavailable",
+                &[
+                    ("Retry-After", retry_after_secs.as_str()),
+                    ("X-MCPace-Resource-Rejection", rejection.reason),
+                ],
+            )?;
+            latency_probe.mark_ok();
+            return Ok(());
+        }
+    };
+
     let body_read_started_at = Instant::now();
-    let body = read_limited_http_body(&mut reader, content_length)?;
+    let body = read_limited_http_body(&mut reader, content_length, request_deadline)?;
     let body_read_duration = body_read_started_at.elapsed();
     latency_probe.set_body(content_length, body_read_duration);
 
@@ -1336,7 +1407,7 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
             &mut stream,
             "500 Internal Server Error",
             "internal_error",
-            &error,
+            "Request failed; see local MCPace diagnostics.",
         )
         .map_err(|response_error| {
             format!(
@@ -1344,11 +1415,11 @@ fn handle_connection(mut stream: TcpStream, config: &DashboardConfig) -> Result<
                 error, response_error
             )
         })?;
-        let _ = stream.shutdown(Shutdown::Both);
+        let _ = stream.shutdown(Shutdown::Write);
         return Err(error);
     }
 
-    let _ = stream.shutdown(Shutdown::Both);
+    let _ = stream.shutdown(Shutdown::Write);
 
     Ok(())
 }
@@ -1358,15 +1429,15 @@ fn handle_http_request(
     request: &HttpRequest,
     config: &DashboardConfig,
 ) -> Result<(), String> {
+    if reject_forbidden_origin(stream, request)? {
+        return Ok(());
+    }
     if !is_authorized_http_request(request, config) {
         write_empty_response_with_headers(
             stream,
             "401 Unauthorized",
             &[("WWW-Authenticate", "Bearer realm=\"mcpace\"")],
         )?;
-        return Ok(());
-    }
-    if reject_forbidden_origin(stream, request, config)? {
         return Ok(());
     }
 
@@ -1399,11 +1470,59 @@ fn handle_http_request(
         ("GET", "/dashboard.css") => {
             write_text_response(stream, "200 OK", "text/css; charset=utf-8", DASHBOARD_CSS)?
         }
+        ("GET", "/dashboard.product.css") => write_text_response(
+            stream,
+            "200 OK",
+            "text/css; charset=utf-8",
+            DASHBOARD_PRODUCT_CSS,
+        )?,
         ("GET", "/dashboard.js") => write_text_response(
             stream,
             "200 OK",
             "application/javascript; charset=utf-8",
             DASHBOARD_JS,
+        )?,
+        ("GET", "/dashboard.runtime.js") => write_text_response(
+            stream,
+            "200 OK",
+            "application/javascript; charset=utf-8",
+            DASHBOARD_RUNTIME_JS,
+        )?,
+        ("GET", "/dashboard.model.js") => write_text_response(
+            stream,
+            "200 OK",
+            "application/javascript; charset=utf-8",
+            DASHBOARD_MODEL_JS,
+        )?,
+        ("GET", "/dashboard.render.js") => write_text_response(
+            stream,
+            "200 OK",
+            "application/javascript; charset=utf-8",
+            DASHBOARD_RENDER_JS,
+        )?,
+        ("GET", "/dashboard.render.details.js") => write_text_response(
+            stream,
+            "200 OK",
+            "application/javascript; charset=utf-8",
+            DASHBOARD_RENDER_DETAILS_JS,
+        )?,
+        ("GET", "/dashboard.actions.js") => write_text_response(
+            stream,
+            "200 OK",
+            "application/javascript; charset=utf-8",
+            DASHBOARD_ACTIONS_JS,
+        )?,
+        ("GET", "/dashboard.boot.js") => write_text_response(
+            stream,
+            "200 OK",
+            "application/javascript; charset=utf-8",
+            DASHBOARD_BOOT_JS,
+        )?,
+        ("GET", "/dashboard.product.js") => write_text_response(
+            stream,
+            "200 OK",
+            "application/javascript; charset=utf-8",
+            DASHBOARD_PRODUCT_JS,
         )?,
         ("GET", "/favicon.ico") => write_text_response(
             stream,
@@ -1451,6 +1570,16 @@ fn handle_http_request(
             )?;
             write_json_response(stream, "200 OK", &payload)?;
         }
+        ("GET", "/api/operations") => {
+            let limit = bounded_query_usize(
+                &request.query,
+                "limit",
+                DEFAULT_OPERATIONS_LIMIT,
+                MAX_OPERATIONS_LIMIT,
+            );
+            let payload = operations::retained_operations_response(&config.root_path, limit);
+            write_json_response(stream, "200 OK", &payload)?;
+        }
         ("POST", "/api/actions/hub-up") => {
             let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "hub-up")?
             else {
@@ -1484,6 +1613,16 @@ fn handle_http_request(
             );
             write_json_response(stream, "200 OK", &payload)?;
         }
+        ("POST", "/api/actions/update-check") => {
+            let Some(_permit) =
+                enter_http_heavy_action_or_write_busy(stream, config, "update-check")?
+            else {
+                return Ok(());
+            };
+            let payload =
+                action_response("update-check", crate::update::dashboard_update_check_json());
+            write_json_response(stream, "200 OK", &payload)?;
+        }
         ("POST", "/api/actions/ping") => {
             let payload = action_response(
                 "ping",
@@ -1514,6 +1653,9 @@ fn handle_http_request(
         }
         ("POST", "/api/actions/server-test") => {
             write_server_test_action(stream, request, config)?;
+        }
+        ("POST", "/api/actions/server-remove") => {
+            write_server_remove_action(stream, request, config)?;
         }
         ("POST", "/api/actions/server-discover") => {
             write_server_discover_action(stream, request, config)?;
@@ -1579,7 +1721,7 @@ fn write_client_install_action(
         "client-install",
         run_json_command_vec(&config.root_path, args)?,
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn write_client_restore_action(
@@ -1620,7 +1762,7 @@ fn write_client_restore_action(
         "client-restore",
         run_json_command_vec(&config.root_path, args)?,
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn action_client_target_id(body: &JsonValue) -> Result<String, String> {
@@ -1698,7 +1840,7 @@ fn write_server_toggle_action(
             ],
         )?,
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn write_server_policy_action(
@@ -1723,7 +1865,7 @@ fn write_server_policy_action(
         "server-policy",
         run_json_command_vec(&config.root_path, args)?,
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn write_server_autotune_action(
@@ -1776,7 +1918,7 @@ fn write_server_autotune_action(
             ("results", JsonValue::array(results)),
         ]),
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn write_server_test_action(
@@ -1814,7 +1956,57 @@ fn write_server_test_action(
         "server-test",
         run_json_command_vec(&config.root_path, args)?,
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
+}
+
+fn write_server_remove_action(
+    stream: &mut TcpStream,
+    request: &HttpRequest,
+    config: &DashboardConfig,
+) -> Result<(), String> {
+    let body = match parse_action_body(request) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let server = match action_server_name(&body) {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+    let dry_run = match action_bool(&body, "dryRun") {
+        Ok(value) => value,
+        Err(error) => return write_bad_action_request(stream, &error),
+    };
+
+    let mut args = vec![
+        "server".to_string(),
+        "remove".to_string(),
+        server,
+        "--json".to_string(),
+    ];
+    match optional_action_string(&body, "settingsPath") {
+        Ok(Some(settings_path)) => {
+            if let Err(error) = validate_action_path_field("settingsPath", &settings_path) {
+                return write_bad_action_request(stream, &error);
+            }
+            args.push("--settings".to_string());
+            args.push(settings_path);
+        }
+        Ok(None) => {}
+        Err(error) => return write_bad_action_request(stream, &error),
+    }
+    if dry_run {
+        args.push("--dry-run".to_string());
+    }
+
+    let Some(_permit) = enter_http_heavy_action_or_write_busy(stream, config, "server-remove")?
+    else {
+        return Ok(());
+    };
+    let payload = action_response(
+        "server-remove",
+        run_json_command_vec(&config.root_path, args)?,
+    );
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn write_server_import_config_action(
@@ -1883,7 +2075,7 @@ fn write_server_import_config_action(
         "server-import-config",
         run_json_command_vec(&config.root_path, args)?,
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn validate_action_path_field(label: &str, value: &str) -> Result<(), String> {
@@ -1899,12 +2091,42 @@ fn validate_action_path_field(label: &str, value: &str) -> Result<(), String> {
             label
         ));
     }
-    let trimmed = value.trim_start().to_ascii_lowercase();
-    if trimmed.starts_with("http://") || trimmed.starts_with("https://") {
-        return Err(format!(
-            "{} must be a local file path, not a remote URL",
-            label
-        ));
+    let trimmed = value.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.contains("://") {
+        return Err(format!("{} must be a local file path, not a URL", label));
+    }
+    if trimmed.starts_with("//") || trimmed.starts_with("\\\\") {
+        return Err(format!("{} cannot use a UNC or device-network path", label));
+    }
+    let bytes = trimmed.as_bytes();
+    if bytes.get(1) == Some(&b':') {
+        if !matches!(bytes.get(2), Some(b'/') | Some(b'\\')) {
+            return Err(format!("{} cannot use a drive-relative path", label));
+        }
+        if trimmed[2..].contains(':') {
+            return Err(format!("{} cannot use an alternate data stream", label));
+        }
+    } else if trimmed.contains(':') {
+        return Err(format!("{} contains an unsupported colon", label));
+    }
+    for component in trimmed.split(['/', '\\']) {
+        if component == ".." {
+            return Err(format!("{} cannot contain parent traversal", label));
+        }
+        let device_name = component
+            .trim_end_matches([' ', '.'])
+            .split('.')
+            .next()
+            .unwrap_or_default()
+            .to_ascii_uppercase();
+        let device_bytes = device_name.as_bytes();
+        let numbered_device = device_bytes.len() == 4
+            && (&device_bytes[..3] == b"COM" || &device_bytes[..3] == b"LPT")
+            && matches!(device_bytes[3], b'1'..=b'9');
+        if matches!(device_name.as_str(), "CON" | "PRN" | "AUX" | "NUL") || numbered_device {
+            return Err(format!("{} contains a reserved device name", label));
+        }
     }
     Ok(())
 }
@@ -2016,7 +2238,7 @@ fn write_server_discover_action(
         "server-discover",
         run_json_command_vec(&config.root_path, args)?,
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn write_server_install_command_action(
@@ -2109,7 +2331,7 @@ fn write_server_install_command_action(
         "server-install-command",
         run_json_command_vec(&config.root_path, args)?,
     );
-    write_json_response(stream, "200 OK", &payload)
+    Ok(write_json_response(stream, "200 OK", &payload)?)
 }
 
 fn command_line_uses_shell_composition(value: &str) -> bool {
@@ -2126,12 +2348,12 @@ fn write_admission_rejected(stream: &mut TcpStream, action: &str) -> Result<(), 
         ("action", JsonValue::string(action)),
         ("retryAfterMs", JsonValue::number(1000usize)),
     ]);
-    write_json_response_with_owned_headers(
+    Ok(write_json_response_with_owned_headers(
         stream,
         "429 Too Many Requests",
         &payload,
         &[("Retry-After".to_string(), "1".to_string())],
-    )
+    )?)
 }
 
 fn write_bad_action_request(stream: &mut TcpStream, error: &str) -> Result<(), String> {
@@ -2412,7 +2634,15 @@ fn latency_route_label(path: &str, query: &str, config: &DashboardConfig) -> Str
     match path {
         "/" => "dashboard.index".to_string(),
         "/dashboard.css" => "dashboard.css".to_string(),
+        "/dashboard.product.css" => "dashboard.product.css".to_string(),
         "/dashboard.js" => "dashboard.js".to_string(),
+        "/dashboard.runtime.js" => "dashboard.runtime.js".to_string(),
+        "/dashboard.model.js" => "dashboard.model.js".to_string(),
+        "/dashboard.render.js" => "dashboard.render.js".to_string(),
+        "/dashboard.render.details.js" => "dashboard.render.details.js".to_string(),
+        "/dashboard.actions.js" => "dashboard.actions.js".to_string(),
+        "/dashboard.boot.js" => "dashboard.boot.js".to_string(),
+        "/dashboard.product.js" => "dashboard.product.js".to_string(),
         "/favicon.ico" => "dashboard.favicon".to_string(),
         "/status" => "status".to_string(),
         "/api/overview" => {
@@ -2424,6 +2654,7 @@ fn latency_route_label(path: &str, query: &str, config: &DashboardConfig) -> Str
         }
         "/api/resources" => "api.resources".to_string(),
         "/api/logs" => "api.logs".to_string(),
+        "/api/operations" => "api.operations".to_string(),
         _ if path.starts_with("/api/actions/") => "api.actions".to_string(),
         _ if path.starts_with("/api/") => "api.other".to_string(),
         _ => "other".to_string(),
@@ -2454,13 +2685,8 @@ fn bounded_query_usize(query: &str, key: &str, default: usize, max: usize) -> us
         .unwrap_or(default)
 }
 
-fn reject_forbidden_origin(
-    stream: &mut TcpStream,
-    request: &HttpRequest,
-    config: &DashboardConfig,
-) -> Result<bool, String> {
-    let Err(error) = http_boundary::validate_origin_for_bind(request, config.allow_nonlocal_host)
-    else {
+fn reject_forbidden_origin(stream: &mut TcpStream, request: &HttpRequest) -> Result<bool, String> {
+    let Err(error) = http_boundary::validate_origin_for_bind(request) else {
         return Ok(false);
     };
     let payload = JsonValue::object([
@@ -2507,7 +2733,15 @@ pub(super) fn run_json_command_vec(
 
 const DASHBOARD_HTML: &str = include_str!("dashboard/index.html");
 const DASHBOARD_CSS: &str = include_str!("dashboard/frontend/styles.css");
+const DASHBOARD_PRODUCT_CSS: &str = include_str!("dashboard/frontend/product.css");
 const DASHBOARD_JS: &str = include_str!("dashboard/frontend/app.js");
+const DASHBOARD_RUNTIME_JS: &str = include_str!("dashboard/frontend/app.runtime.js");
+const DASHBOARD_MODEL_JS: &str = include_str!("dashboard/frontend/app.model.js");
+const DASHBOARD_RENDER_JS: &str = include_str!("dashboard/frontend/app.render.js");
+const DASHBOARD_RENDER_DETAILS_JS: &str = include_str!("dashboard/frontend/app.render.details.js");
+const DASHBOARD_ACTIONS_JS: &str = include_str!("dashboard/frontend/app.actions.js");
+const DASHBOARD_BOOT_JS: &str = include_str!("dashboard/frontend/app.boot.js");
+const DASHBOARD_PRODUCT_JS: &str = include_str!("dashboard/frontend/product.js");
 const DASHBOARD_FAVICON_SVG: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="14" fill="#111827"/><path d="M16 42V22h9l7 10 7-10h9v20h-8V30l-8 11-8-11v12h-8Z" fill="#7dd3fc"/><circle cx="51" cy="13" r="5" fill="#34d399"/></svg>"##;
 
 #[cfg(test)]

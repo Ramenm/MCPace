@@ -162,7 +162,7 @@ pub fn adapter_capabilities() -> JsonValue {
     ])
 }
 pub fn adapter_instructions() -> String {
-    "MCPace is a dynamic MCP adapter for many clients and many upstream servers. It infers client capabilities from initialize, keeps startup tools/list small by default, discovers configured upstream stdio/plain HTTP servers through live MCP methods when requested, and can opt into native projected upstream tools only when the catalog fits the token budget and projection safety allows them. Use adapter_profile for the current routing plan, upstream_search for concise discovery, projected u_<server>_<tool>_<hash> names when projection is enabled, and upstream_call/upstream_batch for brokered routing with known-tool and policy validation."
+    "MCPace is a dynamic MCP adapter for many clients and many upstream servers. It infers client capabilities from initialize, keeps startup tools/list small by default, discovers configured upstream stdio and Streamable HTTP/HTTPS servers through live MCP methods when requested, and can opt into native projected upstream tools only when the catalog fits the token budget and projection safety allows them. Use adapter_profile for the current routing plan, upstream_search for concise discovery, projected u_<server>_<tool>_<hash> names when projection is enabled, and upstream_call/upstream_batch for brokered routing with known-tool and policy validation."
         .to_string()
 }
 pub fn tool_surface_options_from_initialize(

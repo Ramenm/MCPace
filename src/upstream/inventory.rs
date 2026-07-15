@@ -5,10 +5,58 @@ use super::{
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::resources::env_usize;
+use std::fmt;
 use std::path::Path;
 use std::time::Instant;
 
-pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
+#[derive(Debug)]
+pub enum UpstreamInventoryError {
+    Message(String),
+}
+
+type UpstreamInventoryResult<T> = Result<T, UpstreamInventoryError>;
+
+impl UpstreamInventoryError {
+    fn message(message: impl Into<String>) -> Self {
+        Self::Message(message.into())
+    }
+}
+
+impl fmt::Display for UpstreamInventoryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Message(message) => formatter.write_str(message),
+        }
+    }
+}
+
+impl std::error::Error for UpstreamInventoryError {}
+
+impl From<String> for UpstreamInventoryError {
+    fn from(message: String) -> Self {
+        Self::Message(message)
+    }
+}
+
+impl From<&str> for UpstreamInventoryError {
+    fn from(message: &str) -> Self {
+        Self::Message(message.to_string())
+    }
+}
+
+impl From<super::server_config::UpstreamServerConfigError> for UpstreamInventoryError {
+    fn from(error: super::server_config::UpstreamServerConfigError) -> Self {
+        Self::Message(error.to_string())
+    }
+}
+
+impl From<UpstreamInventoryError> for String {
+    fn from(error: UpstreamInventoryError) -> Self {
+        error.to_string()
+    }
+}
+
+pub fn configured_inventory(root_path: &Path) -> UpstreamInventoryResult<JsonValue> {
     let servers = load_servers(root_path)?;
     let items = servers
         .values()
@@ -34,7 +82,7 @@ pub fn configured_inventory(root_path: &Path) -> Result<JsonValue, String> {
         (
             "summary",
             JsonValue::string(
-                "Use upstream_tools with a server name to list a configured stdio or plain HTTP upstream; use upstream_call with server/tool/arguments for one call or upstream_batch for stateful sequences. HTTPS remote MCP endpoints and legacy HTTP+SSE endpoints should be connected through a stdio adapter such as mcp-remote or migrated before direct forwarding.",
+                "Use upstream_tools with a server name to list a configured stdio or Streamable HTTP/HTTPS upstream; use upstream_call with server/tool/arguments for one call or upstream_batch for stateful sequences. HTTPS uses platform certificate verification and configured headers, plain HTTP is loopback-only, and legacy HTTP+SSE endpoints still require a compatibility adapter or migration.",
             ),
         ),
         ("stdioForwardingImplemented", JsonValue::bool(true)),
@@ -53,7 +101,7 @@ pub fn surface_manifest(
     include_live_catalog: bool,
     timeout_ms: Option<u64>,
     refresh: bool,
-) -> Result<JsonValue, String> {
+) -> UpstreamInventoryResult<JsonValue> {
     let upstream_inventory = configured_inventory(root_path)?;
     let configured_server_count = json_helpers::array_at_path(&upstream_inventory, &["servers"])
         .map_or(0, |items| items.len());
@@ -108,22 +156,23 @@ pub fn surface_manifest(
                     "packagedDefaults",
                     JsonValue::object([
                         ("upstreamServersEnabled", JsonValue::bool(false)),
-                        ("candidateRecommendations", JsonValue::bool(false)),
+                        ("candidateRecommendations", JsonValue::bool(true)),
                         ("requiresHardcodedServerNames", JsonValue::bool(false)),
                     ]),
                 ),
                 ("arbitraryServerNames", JsonValue::bool(true)),
                 ("requiresRecompileForNewServers", JsonValue::bool(false)),
                 ("installsUpstreamPackages", JsonValue::bool(false)),
+                ("cliAutoInstallAvailable", JsonValue::bool(true)),
                 (
                     "userInstallResponsibility",
                     JsonValue::string(
-                        "Users install any upstream MCP server package or binary they want, then reference its command/url in the merged MCP settings registry.",
+                        "The MCP tool surface never installs packages. Users may configure arbitrary upstreams explicitly, while the CLI auto command can install only trust-gated catalog candidates and verifies them with a live probe.",
                     ),
                 ),
                 ("stdioAutoDiscovery", JsonValue::bool(true)),
                 ("httpUpstreamForwardingImplemented", JsonValue::bool(true)),
-                ("httpsUpstreamForwardingImplemented", JsonValue::bool(false)),
+                ("httpsUpstreamForwardingImplemented", JsonValue::bool(true)),
             ]),
         ),
         (
@@ -229,7 +278,7 @@ pub fn probe_servers(
     server_name: Option<&str>,
     timeout_ms: Option<u64>,
     refresh: bool,
-) -> Result<JsonValue, String> {
+) -> UpstreamInventoryResult<JsonValue> {
     let servers = load_servers(root_path)?;
     let selected = server_name
         .map(str::trim)
@@ -239,7 +288,10 @@ pub fn probe_servers(
     let selected_servers = select_servers(&servers, selected.as_deref());
     if let Some(name) = selected.as_deref() {
         if selected_servers.is_empty() {
-            return Err(format!("upstream server '{}' is not configured", name));
+            return Err(UpstreamInventoryError::message(format!(
+                "upstream server '{}' is not configured",
+                name
+            )));
         }
     }
 
@@ -269,7 +321,7 @@ pub fn probe_servers(
         (
             "summary",
             JsonValue::string(
-                "Probed configured upstream MCP servers from the merged MCP settings registry without hardcoded server names. Callable stdio servers use the short successful tools/list cache unless refresh=true is supplied; fresh probes launch the helper, request tools/list, and clean it up.",
+                "Probed configured upstream MCP servers from the merged MCP settings registry without hardcoded server names. Callable servers use the short successful tools/list cache unless refresh=true is supplied; fresh stdio probes launch and clean up the configured process, while Streamable HTTP/HTTPS probes complete initialize, initialized, and tools/list over the remote session.",
             ),
         ),
         ("serverCount", JsonValue::number(results.len())),
@@ -287,7 +339,7 @@ pub fn catalog_tools(
     server_name: Option<&str>,
     timeout_ms: Option<u64>,
     refresh: bool,
-) -> Result<JsonValue, String> {
+) -> UpstreamInventoryResult<JsonValue> {
     let started = Instant::now();
     let servers = load_servers(root_path)?;
     let selected = server_name
@@ -297,7 +349,10 @@ pub fn catalog_tools(
     let selected_servers = select_servers(&servers, selected.as_deref());
     if let Some(name) = selected.as_deref() {
         if selected_servers.is_empty() {
-            return Err(format!("upstream server '{}' is not configured", name));
+            return Err(UpstreamInventoryError::message(format!(
+                "upstream server '{}' is not configured",
+                name
+            )));
         }
     }
 
@@ -368,7 +423,7 @@ pub fn audit_tool_policies(
     server_name: Option<&str>,
     timeout_ms: Option<u64>,
     refresh: bool,
-) -> Result<JsonValue, String> {
+) -> UpstreamInventoryResult<JsonValue> {
     let started = Instant::now();
     let servers = load_servers(root_path)?;
     let selected = server_name
@@ -378,7 +433,10 @@ pub fn audit_tool_policies(
     let selected_servers = select_servers(&servers, selected.as_deref());
     if let Some(name) = selected.as_deref() {
         if selected_servers.is_empty() {
-            return Err(format!("upstream server '{}' is not configured", name));
+            return Err(UpstreamInventoryError::message(format!(
+                "upstream server '{}' is not configured",
+                name
+            )));
         }
     }
 
@@ -477,7 +535,7 @@ pub fn suggest_tool_policies(
     server_name: Option<&str>,
     timeout_ms: Option<u64>,
     refresh: bool,
-) -> Result<JsonValue, String> {
+) -> UpstreamInventoryResult<JsonValue> {
     let started = Instant::now();
     let audit = audit_tool_policies(root_path, server_name, timeout_ms, refresh)?;
     let report = policy_suggestions::report(&audit);

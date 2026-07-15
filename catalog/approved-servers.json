@@ -14,7 +14,7 @@
       "notes": "Path-scoped filesystem servers are useful but can leak or mutate files; isolate by client/project/chat unless proven read-only.",
       "title": "Filesystem",
       "description": "Path-scoped local filesystem MCP server for reading and writing project files.",
-      "installSpec": "@modelcontextprotocol/server-filesystem",
+      "installSpec": "npm:@modelcontextprotocol/server-filesystem@2026.7.4",
       "type": "stdio",
       "paths": [
         "."
@@ -30,7 +30,7 @@
       "notes": "Usually stateless, but still review network egress and credential handling.",
       "title": "Fetch",
       "description": "Network fetch MCP server for retrieving web/API resources.",
-      "installSpec": "@modelcontextprotocol/server-fetch",
+      "installSpec": "pypi:mcp-server-fetch==2026.6.4",
       "type": "stdio",
       "approvalReason": "Curated starter entry: safe to auto-add to MCPace config, still probed and isolated before use; not a blanket guarantee about upstream package code."
     },
@@ -42,7 +42,7 @@
       "affinity": [
         "client"
       ],
-      "installSpec": "pypi:mcp-server-time",
+      "installSpec": "pypi:mcp-server-time==2026.6.4",
       "type": "stdio",
       "notes": "Usually stateless; review package/source before enabling automatic install.",
       "approvalReason": "Curated starter entry: safe to auto-add to MCPace config, still probed and isolated before use; not a blanket guarantee about upstream package code."
@@ -56,7 +56,7 @@
         "client",
         "chat"
       ],
-      "installSpec": "@modelcontextprotocol/server-sequential-thinking",
+      "installSpec": "npm:@modelcontextprotocol/server-sequential-thinking@2026.7.4",
       "type": "stdio",
       "notes": "Treat as stateful until live tools/list and usage evidence prove otherwise.",
       "approvalReason": "Curated starter entry: safe to auto-add to MCPace config, still probed and isolated before use; not a blanket guarantee about upstream package code."

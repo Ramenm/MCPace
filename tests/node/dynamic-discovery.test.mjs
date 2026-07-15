@@ -74,7 +74,10 @@ test('dynamic discovery config and schema expose safe auto-install controls', ()
   assert.equal(schema.properties.dynamicDiscovery.properties.maxAutoInstallsPerRun.type, 'integer');
 
   assert.equal(catalog.servers.filesystem.trustLevel, 'approved');
-  assert.equal(catalog.servers.filesystem.installSpec, '@modelcontextprotocol/server-filesystem');
+  assert.equal(
+    catalog.servers.filesystem.installSpec,
+    'npm:@modelcontextprotocol/server-filesystem@2026.7.4',
+  );
   assert.equal(catalog.servers.filesystem.type, 'stdio');
-  assert.equal(catalog.servers.fetch.installSpec, '@modelcontextprotocol/server-fetch');
+  assert.equal(catalog.servers.fetch.installSpec, 'pypi:mcp-server-fetch==2026.6.4');
 });

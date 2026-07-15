@@ -1,549 +1,1309 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>MCPace dashboard</title>
-    <meta name="theme-color" content="#050812">
-    <link rel="stylesheet" href="/dashboard.css">
+    <meta name="theme-color" content="#0b1020" />
+    <link rel="stylesheet" href="/dashboard.css" />
+    <link rel="stylesheet" href="/dashboard.product.css" />
   </head>
   <body>
-    <a class="skip-link" href="#dashboard-content">Skip to dashboard</a>
-    <main class="shell" id="dashboard-content" aria-busy="false">
-      <header class="command-bar" aria-label="Dashboard command bar">
-        <div class="command-title">
-          <h1 class="product">MCPace</h1>
-          <div class="command-summary">Base first: backend, client, source, tools, routing. Advanced settings stay folded until needed.</div>
-          <div class="command-badges" aria-label="System promises">
-            <span class="command-badge">Local</span>
-            <span class="command-badge">Preview first</span>
-            <span class="command-badge">Test before use</span>
-            <span class="command-badge">Secrets hidden</span>
-          </div>
-          <div class="command-nav" aria-label="Dashboard sections">
-            <a href="#base-setup">Basics</a>
-            <a href="#access-review">Access</a>
-            <a href="#servers-title">Servers</a>
-            <a href="#setup-tools">Setup tools</a>
-            <a href="#help-page">Help</a>
-            <a href="#deep-diagnostics">Diagnostics</a>
-            <button id="focus-add-server" type="button">Add server</button>
-          </div>
-        </div>
-        <nav class="actions" aria-label="Dashboard actions">
-          <button class="primary" id="refresh-button" type="button">Refresh</button>
-          <details class="action-menu">
-            <summary>Hub</summary>
-            <div class="action-menu-body">
-              <button id="hub-up-button" type="button">Start hub</button>
-              <button class="danger" id="hub-down-button" type="button">Stop hub</button>
-              <button id="repair-button" type="button">Repair</button>
+    <!-- Headless controller staging. product.js moves the required live controls into the sole five-section product shell. -->
+    <div
+      class="dashboard-controller"
+      id="main-view"
+      data-controller-root
+      hidden
+      inert
+      aria-hidden="true"
+    >
+      <div class="controller-actions">
+        <button id="refresh-button" type="button">Refresh</button>
+        <button id="update-check-button" type="button">Updates</button>
+        <button id="hub-up-button" type="button">Start hub</button>
+        <button id="hub-down-button" type="button">Stop hub</button>
+        <button id="repair-button" type="button">Repair</button>
+      </div>
+
+      <section
+        class="update-notice"
+        id="update-notice"
+        aria-live="polite"
+        hidden
+      ></section>
+
+      <section class="controller-panel" data-controller-panel="overview">
+        <section
+          class="base-setup"
+          id="base-setup"
+          aria-labelledby="base-title"
+        >
+          <div class="base-copy">
+            <div>
+              <div class="label">Next safe step</div>
+              <h2 id="base-title">Getting your sources ready</h2>
+              <p id="base-body">
+                Choose a source and run Test. MCPace lists its tools before you
+                rely on it.
+              </p>
             </div>
-          </details>
-        </nav>
-      </header>
-
-      <section class="base-setup" id="base-setup" aria-labelledby="base-title">
-        <div class="base-copy">
-          <div>
-            <div class="label">Base</div>
-            <h2 id="base-title">Make the simple path work first</h2>
-            <p id="base-body">MCPace should first answer: is the backend reachable, can a client use it, is there a saved source, are tools verified, and is routing safe?</p>
+            <span class="chip" id="base-state-chip"
+              ><span class="dot warn"></span>loading</span
+            >
           </div>
-          <span class="chip" id="base-state-chip"><span class="dot warn"></span>loading</span>
-        </div>
-        <div class="base-meter" aria-hidden="true"><span id="base-progress-fill" style="width: 0%"></span></div>
-        <div class="base-progress-label" id="base-progress-label" role="status" aria-live="polite">Waiting for live state.</div>
-        <div class="base-step-grid" id="base-step-grid" aria-label="Basic setup checklist">
-          <article class="base-step warn"><span>01</span><strong>Backend</strong><p>Waiting for /api/overview.</p></article>
-          <article class="base-step warn"><span>02</span><strong>Client</strong><p>Choose where MCPace will be used.</p></article>
-          <article class="base-step warn"><span>03</span><strong>Source</strong><p>Import, discover, or add one source disabled.</p></article>
-          <article class="base-step warn"><span>04</span><strong>Tools</strong><p>Run Test before trusting available tools.</p></article>
-          <article class="base-step warn"><span>05</span><strong>Routing</strong><p>Keep conservative policy until evidence is clear.</p></article>
-        </div>
-        <div class="base-rules" id="base-rules" aria-label="Base display rules">
-          <span><strong>Show first:</strong> status, clients, sources, tools, routing.</span>
-          <span><strong>Boundary:</strong> backend online is not the same as runtime ready.</span>
-          <span><strong>Fold by default:</strong> workers, raw headers, leases, process data.</span>
-          <span><strong>Safe flow:</strong> Preview → Save disabled → Review → Enable → Test.</span>
-        </div>
-        <div class="base-safety" id="base-safety" data-tone="warn" aria-label="Before enabling a server" role="status" aria-live="polite">
-          <div>
-            <div class="label">Before enabling</div>
-            <strong id="base-safety-title">Review source, evidence, and secrets.</strong>
-            <p id="base-safety-body">Keep new imports parked. Review first. Enable deliberately, then run Test.</p>
+          <div class="base-progress">
+            <div class="base-meter" aria-hidden="true">
+              <span id="base-progress-fill" style="width: 0%"></span>
+            </div>
+            <div
+              class="base-progress-label"
+              id="base-progress-label"
+              role="status"
+              aria-live="polite"
+            >
+              Waiting for live state.
+            </div>
           </div>
-          <div class="base-safety-grid" id="base-safety-grid">
-            <span class="chip"><span class="dot warn"></span>evidence first</span>
-            <span class="chip"><span class="dot warn"></span>remote auth check</span>
-            <span class="chip"><span class="dot good"></span>secret values hidden</span>
+          <div
+            class="base-action-row"
+            id="base-action-row"
+            aria-label="Suggested action"
+          >
+            <button class="primary" type="button" data-global-action="refresh">
+              Refresh
+            </button>
           </div>
-        </div>
-        <div class="base-action-row" id="base-action-row" aria-label="Basic setup actions">
-          <button class="primary" type="button" data-global-action="refresh">Refresh</button>
-          <button type="button" data-global-action="import-server">Import config</button>
-          <button type="button" data-global-action="clients">Connect client</button>
-          <button type="button" data-global-action="add-server">Add server</button>
-        </div>
-      </section>
+          <section
+            class="setup-checklist"
+            id="setup-checklist"
+            aria-labelledby="setup-checklist-title"
+          >
+            <header class="section-inline-head">
+              <div>
+                <div class="label">Progress</div>
+                <h3 id="setup-checklist-title">Setup checklist</h3>
+              </div>
+              <span>Backend, client, source, tools, routing</span>
+            </header>
+            <div
+              class="base-step-grid"
+              id="base-step-grid"
+              aria-label="Basic setup checklist"
+            >
+              <article class="base-step warn">
+                <span>01</span><strong>Backend</strong>
+                <p>Waiting for /api/overview.</p>
+              </article>
+              <article class="base-step warn">
+                <span>02</span><strong>Client</strong>
+                <p>Choose where MCPace will be used.</p>
+              </article>
+              <article class="base-step warn">
+                <span>03</span><strong>Source</strong>
+                <p>Import, discover, or add one source disabled.</p>
+              </article>
+              <article class="base-step warn">
+                <span>04</span><strong>Tools</strong>
+                <p>Run Test before trusting available tools.</p>
+              </article>
+              <article class="base-step warn">
+                <span>05</span><strong>Routing</strong>
+                <p>Keep conservative policy until evidence is clear.</p>
+              </article>
+            </div>
+            <div
+              class="base-safety"
+              id="base-safety"
+              data-tone="warn"
+              aria-label="Source checks"
+              role="status"
+              aria-live="polite"
+            >
+              <div>
+                <strong id="base-safety-title"
+                  >Review source, evidence, and secrets.</strong
+                >
+                <p id="base-safety-body">
+                  Keep new imports parked. Review first. Enable deliberately,
+                  then run Test.
+                </p>
+              </div>
+              <div class="base-safety-grid" id="base-safety-grid">
+                <span class="chip"
+                  ><span class="dot warn"></span>evidence first</span
+                >
+                <span class="chip"
+                  ><span class="dot warn"></span>remote auth check</span
+                >
+                <span class="chip"
+                  ><span class="dot good"></span>secret values hidden</span
+                >
+              </div>
+            </div>
+          </section>
+          <div
+            class="base-rules"
+            id="base-rules"
+            aria-label="Base display rules"
+            hidden
+          ></div>
+        </section>
 
-      <section class="signal-strip" aria-label="Runtime overview" role="status" aria-live="polite">
-        <article class="signal">
-          <div class="label">Status</div>
-          <div class="status-value" id="system-state">—</div>
-          <div class="note" id="system-note">Waiting for overview.</div>
-        </article>
-        <article class="signal">
-          <div class="label">Needs attention</div>
-          <div class="status-value" id="attention-count">—</div>
-          <div class="note" id="attention-note">Trust, blockers, or active locks.</div>
-        </article>
-        <article class="signal">
-          <div class="label">Servers</div>
-          <div class="status-value" id="server-count">—</div>
-          <div class="note" id="server-note">Enabled / total.</div>
-        </article>
-        <article class="signal">
-          <div class="label">Backend link</div>
-          <div class="status-value" id="load-state">—</div>
-          <div class="note" id="load-note">Overview/logs/action API.</div>
-        </article>
-      </section>
+        <section
+          class="signal-strip"
+          aria-label="Current status"
+          role="status"
+          aria-live="polite"
+        >
+          <article class="signal">
+            <div class="label">System</div>
+            <div class="status-value" id="system-state">—</div>
+            <div class="note" id="system-note">Waiting for overview.</div>
+          </article>
+          <article class="signal">
+            <div class="label">Needs attention</div>
+            <div class="status-value" id="attention-count">—</div>
+            <div class="note" id="attention-note">
+              Follow up before normal use.
+            </div>
+          </article>
+          <article class="signal">
+            <div class="label">Sources on</div>
+            <div class="status-value" id="server-count">—</div>
+            <div class="note" id="server-note">Enabled / total.</div>
+          </article>
+          <article class="signal">
+            <div class="label">Backend link</div>
+            <div class="status-value" id="load-state">—</div>
+            <div class="note" id="load-note">Local API response time.</div>
+          </article>
+        </section>
 
-
-
-
-
-
-
-
-
-
-      <section class="access-review" id="access-review" data-tone="warn" aria-labelledby="access-review-title">
-        <div class="panel-head">
-          <div>
-            <div class="label">Access review</div>
-            <h2 id="access-review-title">Trust boundary</h2>
-            <p class="section-note" id="access-review-body">Tools can read or act outside the chat. Review approval, secrets, remote access, and evidence before enabling sources.</p>
-          </div>
-          <span class="chip" id="access-review-chip"><span class="dot warn"></span>loading</span>
-        </div>
-        <div class="access-review-grid" id="access-review-list" aria-label="Access review summary">
-          <article class="access-review-card warn"><span>Approval</span><strong>—</strong><p>Loading access review.</p></article>
-          <article class="access-review-card warn"><span>Secrets</span><strong>—</strong><p>Secret values stay hidden.</p></article>
-          <article class="access-review-card warn"><span>Remote/Auth</span><strong>—</strong><p>Review origin and credentials.</p></article>
-          <article class="access-review-card warn"><span>Evidence</span><strong>—</strong><p>Test before normal routing.</p></article>
-        </div>
-      </section>
-
-      <section class="layout">
-        <div class="main-stack">
-          <article class="panel" aria-labelledby="attention-title">
+        <div class="overview-grid">
+          <article
+            class="panel attention-panel"
+            aria-labelledby="attention-title"
+          >
             <div class="panel-head">
               <div>
-                <h2 id="attention-title">Needs attention</h2>
-                <p class="section-note">Only real blockers appear here. Capability text comes from source state or live tools/list evidence.</p>
+                <div class="eyebrow">Priority queue</div>
+                <h2 id="attention-title">Needs your attention</h2>
+                <p class="section-note">
+                  Only blockers and evidence gaps appear here.
+                </p>
               </div>
-              <span class="chip" id="refresh-chip"><span class="dot warn"></span>initializing</span>
+              <span class="chip" id="refresh-chip"
+                ><span class="dot warn"></span>initializing</span
+              >
             </div>
             <div class="list" id="attention-list"></div>
           </article>
 
-          <article class="panel" aria-labelledby="servers-title">
-            <div class="panel-head">
+          <section
+            class="panel access-review"
+            id="access-review"
+            data-tone="warn"
+            aria-labelledby="access-review-title"
+          >
+            <div class="panel-head access-review-summary">
               <div>
-                <h2 id="servers-title">Servers</h2>
-                <p class="section-note">Server list first. Filter by group; use rows for Test, On/Off, policy fixes, and Details.</p>
+                <div class="eyebrow">Trust boundary</div>
+                <h2 id="access-review-title">Access review</h2>
+                <p class="section-note" id="access-review-body">
+                  Review approval, secrets, remote access, and evidence before
+                  enabling sources.
+                </p>
               </div>
-              <span class="chip" id="server-filter-chip"><span class="dot good"></span>enabled only</span>
+              <span class="chip" id="access-review-chip"
+                ><span class="dot warn"></span>loading</span
+              >
             </div>
-            <div class="server-command-center" id="server-command-center" data-tone="warn">
-              <div class="server-command-copy">
-                <div class="label">Server inventory</div>
-                <strong id="server-command-title">Waiting for server inventory.</strong>
-                <p id="server-command-body">Visible rows, blocked sources, live evidence, policy state, and capacity are summarized here.</p>
-              </div>
-              <div class="server-metric-row" id="server-metric-row" aria-label="Fleet metrics">
-                <div class="server-metric warn"><span>Visible</span><strong>—</strong><em>filter pending</em></div>
-                <div class="server-metric warn"><span>Evidence</span><strong>—</strong><em>tools/list pending</em></div>
-                <div class="server-metric warn"><span>Policy</span><strong>—</strong><em>auto plan pending</em></div>
-                <div class="server-metric warn"><span>Capacity</span><strong>—</strong><em>workers pending</em></div>
-              </div>
+            <div
+              class="access-review-grid"
+              id="access-review-list"
+              aria-label="Access review summary"
+            >
+              <article class="access-review-card warn">
+                <span>Approval</span><strong>—</strong>
+                <p>Loading access review.</p>
+              </article>
+              <article class="access-review-card warn">
+                <span>Secrets</span><strong>—</strong>
+                <p>Secret values stay hidden.</p>
+              </article>
+              <article class="access-review-card warn">
+                <span>Remote/Auth</span><strong>—</strong>
+                <p>Review origin and credentials.</p>
+              </article>
+              <article class="access-review-card warn">
+                <span>Evidence</span><strong>—</strong>
+                <p>Test before normal routing.</p>
+              </article>
             </div>
-            <div class="toolbar">
-              <label class="sr-only" for="server-search">Search servers</label>
-              <input id="server-search" name="server-search" type="search" placeholder="Search servers…" autocomplete="off">
-              <button class="quiet" id="clear-search" type="button">Clear</button>
-              <button id="toggle-enabled" type="button" aria-pressed="true">Show All</button>
-            </div>
-            <div class="server-workbench" id="server-workbench" aria-label="Current server lens"></div>
-            <div class="chips" id="server-chips"></div>
-            <div class="fleet-board" id="server-fleet-board"></div>
-            <div class="server-guide" id="server-guide">Read rows left to right: <strong>evidence</strong>, <strong>state</strong>, then actions. Open <strong>Details</strong> for routing and worker overrides.</div>
+          </section>
+        </div>
+      </section>
 
-            <div class="list" id="server-list"></div>
-            <div class="note" id="server-overflow-note"></div>
-            <details class="clean setup-tools" id="setup-tools">
-              <summary>
-                <div>
-                  <h2>Setup tools</h2>
-                  <p class="section-note">MCP lifecycle: import existing configs, discover candidates, add manually, wire local clients, and review automation. Routine server rows stay above.</p>
-                </div>
-                <span class="chip"><span class="dot warn"></span>safe defaults</span>
-              </summary>
-              <div class="details-body setup-tools-body">
-            <section class="discovery-panel import-panel" id="server-import-panel" aria-labelledby="server-import-title">
+      <section class="controller-panel" data-controller-panel="sources">
+        <article class="panel sources-panel">
+          <div class="panel-head">
+            <div>
+              <h3>Source fleet</h3>
+              <p class="section-note">
+                Evidence and state lead; actions and routing follow.
+              </p>
+            </div>
+            <span class="chip" id="server-filter-chip"
+              ><span class="dot good"></span>enabled only</span
+            >
+          </div>
+          <div
+            class="server-command-center"
+            id="server-command-center"
+            data-tone="warn"
+            hidden
+          >
+            <div class="server-command-copy">
+              <div class="label">Fleet summary</div>
+              <strong id="server-command-title"
+                >Waiting for server inventory.</strong
+              >
+              <p id="server-command-body">
+                Visible rows, blocked sources, live evidence, policy state, and
+                capacity are summarized here.
+              </p>
+            </div>
+            <div
+              class="server-metric-row"
+              id="server-metric-row"
+              aria-label="Fleet metrics"
+            >
+              <div class="server-metric warn">
+                <span>Visible</span><strong>—</strong><em>filter pending</em>
+              </div>
+              <div class="server-metric warn">
+                <span>Evidence</span><strong>—</strong
+                ><em>tools/list pending</em>
+              </div>
+              <div class="server-metric warn">
+                <span>Policy</span><strong>—</strong><em>auto plan pending</em>
+              </div>
+              <div class="server-metric warn">
+                <span>Capacity</span><strong>—</strong><em>workers pending</em>
+              </div>
+            </div>
+          </div>
+          <div class="toolbar source-toolbar">
+            <label class="search-field" for="server-search"
+              ><span class="sr-only">Search sources</span
+              ><input
+                id="server-search"
+                name="server-search"
+                type="search"
+                placeholder="Search name, transport, tool…"
+                autocomplete="off"
+            /></label>
+            <button class="quiet" id="clear-search" type="button">Clear</button>
+            <button id="toggle-enabled" type="button" aria-pressed="true">
+              Show all
+            </button>
+          </div>
+          <div
+            class="server-workbench"
+            id="server-workbench"
+            aria-label="Current source lens"
+            hidden
+          ></div>
+          <div class="chips" id="server-chips"></div>
+          <div class="fleet-board" id="server-fleet-board" hidden></div>
+          <div class="server-guide" id="server-guide" hidden>
+            Read each card in this order: <strong>state</strong>,
+            <strong>evidence</strong>, <strong>routing</strong>, then actions.
+            Use <strong>Open source</strong> for focused settings and metadata.
+          </div>
+          <div class="list server-list" id="server-list"></div>
+          <div class="note" id="server-overflow-note"></div>
+        </article>
+      </section>
+
+      <section class="controller-panel" data-controller-panel="setup">
+        <section
+          class="panel setup-tools"
+          id="setup-tools"
+          aria-labelledby="setup-title"
+        >
+          <div class="task-tabs" role="tablist" aria-label="Setup tasks">
+            <button
+              class="task-tab active"
+              id="setup-tab-import"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="server-import-panel"
+              tabindex="0"
+              data-setup-target="import"
+            >
+              Import
+            </button>
+            <button
+              class="task-tab"
+              id="setup-tab-discover"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="server-discovery-panel"
+              tabindex="-1"
+              data-setup-target="discover"
+            >
+              Discover
+            </button>
+            <button
+              class="task-tab"
+              id="setup-tab-add"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="server-install-panel"
+              tabindex="-1"
+              data-setup-target="add"
+            >
+              Add manually
+            </button>
+            <button
+              class="task-tab"
+              id="setup-tab-clients"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="client-setup-panel"
+              tabindex="-1"
+              data-setup-target="clients"
+            >
+              Clients
+            </button>
+            <button
+              class="task-tab"
+              id="setup-tab-automation"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="automation-panel"
+              tabindex="-1"
+              data-setup-target="automation"
+            >
+              Automation
+            </button>
+          </div>
+          <div class="setup-stage">
+            <section
+              aria-labelledby="setup-tab-import"
+              class="discovery-panel import-panel setup-tab-panel"
+              data-setup-panel="import"
+              id="server-import-panel"
+              role="tabpanel"
+            >
               <div class="discovery-copy">
                 <div>
                   <div class="label">Import</div>
-                  <strong id="server-import-title">Bring in an existing MCP config first.</strong>
-                  <p>Use this when Claude Desktop, Cursor, VS Code, or another client already has MCP servers. Preview reads the file and shows what would be copied; write mode keeps imported sources disabled until you test and intentionally enable them.</p>
+                  <strong id="server-import-title"
+                    >Bring in an existing MCP config first.</strong
+                  >
+                  <p>
+                    Use this when Claude Desktop, Cursor, VS Code, or another
+                    client already has MCP servers. Preview reads the file and
+                    shows what would be copied; write mode keeps imported
+                    sources disabled until you test and intentionally enable
+                    them.
+                  </p>
                 </div>
-                <div class="discovery-guardrail" aria-label="Import guardrail">Read file → Preview → Save disabled → Review → Enable → Test</div>
+                <div aria-label="Import guardrail" class="discovery-guardrail">
+                  Read file → Preview → Save disabled → Review → Enable → Test
+                </div>
               </div>
-              <form class="server-discover-form server-import-form" id="server-import-form" novalidate>
+              <form
+                class="server-discover-form server-import-form"
+                id="server-import-form"
+                novalidate=""
+              >
                 <div class="field">
                   <label for="server-import-path">Existing config path</label>
-                  <input id="server-import-path" name="sourcePath" type="text" spellcheck="false" autocomplete="off" placeholder="~/Library/Application Support/Claude/claude_desktop_config.json" aria-describedby="server-import-note server-import-error">
-                  <div class="path-hint">Local JSON only. Secret values are not rendered in dashboard output.</div>
-                  <div class="form-error" id="server-import-error" role="alert" hidden></div>
+                  <input
+                    aria-describedby="server-import-note server-import-error"
+                    autocomplete="off"
+                    id="server-import-path"
+                    name="sourcePath"
+                    placeholder="~/Library/Application Support/Claude/claude_desktop_config.json"
+                    spellcheck="false"
+                    type="text"
+                  />
+                  <div class="path-hint">
+                    Local JSON only. Secret values are not rendered in dashboard
+                    output.
+                  </div>
+                  <div
+                    class="form-error"
+                    hidden=""
+                    id="server-import-error"
+                    role="alert"
+                  ></div>
                 </div>
                 <div class="field">
-                  <label for="server-import-settings">Target settings path</label>
-                  <input id="server-import-settings" name="settingsPath" type="text" spellcheck="false" autocomplete="off" placeholder="mcp_settings.json">
+                  <label for="server-import-settings"
+                    >Target settings path</label
+                  >
+                  <input
+                    autocomplete="off"
+                    id="server-import-settings"
+                    name="settingsPath"
+                    placeholder="mcp_settings.json"
+                    spellcheck="false"
+                    type="text"
+                  />
                 </div>
-                <button class="primary" id="server-import-button" type="submit">Preview import</button>
+                <button class="primary" id="server-import-button" type="submit">
+                  Preview import
+                </button>
               </form>
-              <div class="server-discover-options server-import-options" aria-label="Import options">
-                <label class="checkbox-field"><input id="server-import-dry-run" type="checkbox" checked> Preview only</label>
-                <label class="checkbox-field"><input id="server-import-disabled" type="checkbox" checked> Save imported sources disabled</label>
-                <label class="checkbox-field"><input id="server-import-force" type="checkbox"> Replace duplicate names</label>
-                <span class="note" id="server-import-note"><span class="dot warn"></span>Preview first; keep imported sources parked unless you intentionally preserve their enabled state.</span>
+              <div
+                aria-label="Import options"
+                class="server-discover-options server-import-options"
+              >
+                <label class="checkbox-field"
+                  ><input
+                    checked=""
+                    id="server-import-dry-run"
+                    type="checkbox"
+                  />
+                  Preview only</label
+                >
+                <label class="checkbox-field"
+                  ><input
+                    checked=""
+                    id="server-import-disabled"
+                    type="checkbox"
+                  />
+                  Save imported sources disabled</label
+                >
+                <label class="checkbox-field"
+                  ><input id="server-import-force" type="checkbox" /> Replace
+                  duplicate names</label
+                >
+                <span class="note" id="server-import-note"
+                  ><span class="dot warn"></span>Preview first; keep imported
+                  sources parked unless you intentionally preserve their enabled
+                  state.</span
+                >
               </div>
-              <div class="discovery-results server-import-result" id="server-import-result" aria-live="polite">
+              <div
+                aria-live="polite"
+                class="discovery-results server-import-result"
+                id="server-import-result"
+              >
                 <article class="item">
-                  <div class="item-head"><div class="name">No import run yet</div><span class="chip"><span class="dot warn"></span>idle</span></div>
-                  <div class="meta">Recommended first move: import what you already use, then test one server at a time.</div>
+                  <div class="item-head">
+                    <div class="name">No import run yet</div>
+                    <span class="chip"><span class="dot warn"></span>idle</span>
+                  </div>
+                  <div class="meta">
+                    Recommended first move: import what you already use, then
+                    test one server at a time.
+                  </div>
                 </article>
               </div>
             </section>
-            <section class="discovery-panel" id="server-discovery-panel" aria-labelledby="discovery-title">
+            <section
+              aria-labelledby="setup-tab-discover"
+              class="discovery-panel setup-tab-panel"
+              data-setup-panel="discover"
+              hidden=""
+              id="server-discovery-panel"
+              role="tabpanel"
+            >
               <div class="discovery-copy">
                 <div>
                   <div class="label">Discovery</div>
-                  <strong id="discovery-title">Find candidates before saving a source.</strong>
-                  <p>Preview approved or registry-cached MCP servers first. Installing is explicit, and new sources stay disabled by default until you test them.</p>
+                  <strong id="discovery-title"
+                    >Find candidates before saving a source.</strong
+                  >
+                  <p>
+                    Preview approved or registry-cached MCP servers first.
+                    Installing is explicit, and new sources stay disabled by
+                    default until you test them.
+                  </p>
                 </div>
-                <div class="discovery-guardrail" aria-label="Discovery guardrail">Preview → Save disabled → Review → Enable → Test</div>
+                <div
+                  aria-label="Discovery guardrail"
+                  class="discovery-guardrail"
+                >
+                  Preview → Save disabled → Review → Enable → Test
+                </div>
               </div>
-              <form class="server-discover-form" id="server-discover-form" novalidate>
+              <form
+                class="server-discover-form"
+                id="server-discover-form"
+                novalidate=""
+              >
                 <div class="field">
                   <label for="server-discover-query">Search term</label>
-                  <input id="server-discover-query" name="query" type="search" spellcheck="false" autocomplete="off" placeholder="filesystem, git, browser, memory…" aria-describedby="server-discover-error">
-                  <div class="form-error" id="server-discover-error" role="alert" hidden></div>
+                  <input
+                    aria-describedby="server-discover-error"
+                    autocomplete="off"
+                    id="server-discover-query"
+                    name="query"
+                    placeholder="filesystem, git, browser, memory…"
+                    spellcheck="false"
+                    type="search"
+                  />
+                  <div
+                    class="form-error"
+                    hidden=""
+                    id="server-discover-error"
+                    role="alert"
+                  ></div>
                 </div>
                 <div class="field">
                   <label for="server-discover-mode">Discovery mode</label>
                   <select id="server-discover-mode">
                     <option value="preview">Preview candidates only</option>
-                    <option value="install">Install trusted match disabled</option>
+                    <option value="install">
+                      Install trusted match disabled
+                    </option>
                   </select>
                 </div>
-                <button class="primary" id="server-discover-button" type="submit">Find candidates</button>
+                <button
+                  class="primary"
+                  id="server-discover-button"
+                  type="submit"
+                >
+                  Find candidates
+                </button>
               </form>
-              <div class="server-discover-options" aria-label="Discovery options">
-                <label class="checkbox-field"><input id="server-discover-refresh" type="checkbox"> Refresh registry cache</label>
-                <label class="checkbox-field"><input id="server-discover-review" type="checkbox"> Allow review-level matches</label>
-                <span class="note">Safe default: preview only. Save mode parks new sources until you review, enable, and test them.</span>
+              <div
+                aria-label="Discovery options"
+                class="server-discover-options"
+              >
+                <label class="checkbox-field"
+                  ><input id="server-discover-refresh" type="checkbox" />
+                  Refresh registry cache</label
+                >
+                <label class="checkbox-field"
+                  ><input id="server-discover-review" type="checkbox" /> Allow
+                  review-level matches</label
+                >
+                <span class="note"
+                  >Safe default: preview only. Save mode parks new sources until
+                  you review, enable, and test them.</span
+                >
               </div>
-              <div class="discovery-results" id="server-discovery-results" aria-live="polite">
+              <div
+                aria-live="polite"
+                class="discovery-results"
+                id="server-discovery-results"
+              >
                 <article class="item">
-                  <div class="item-head"><div class="name">No discovery run yet</div><span class="chip"><span class="dot warn"></span>idle</span></div>
-                  <div class="meta">Use Preview first. MCPace should not install, enable, or expose a server without an explicit user action.</div>
+                  <div class="item-head">
+                    <div class="name">No discovery run yet</div>
+                    <span class="chip"><span class="dot warn"></span>idle</span>
+                  </div>
+                  <div class="meta">
+                    Use Preview first. MCPace should not install, enable, or
+                    expose a server without an explicit user action.
+                  </div>
                 </article>
               </div>
             </section>
-            <div class="server-install-panel" id="server-install-panel" aria-labelledby="server-install-title">
+            <div
+              aria-labelledby="setup-tab-add"
+              class="server-install-panel setup-tab-panel"
+              data-setup-panel="add"
+              hidden=""
+              id="server-install-panel"
+              role="tabpanel"
+            >
               <div class="server-install-copy">
                 <div class="label">Add server</div>
-                <strong id="server-install-title">Add by command or URL.</strong>
-                <p>The source is saved first. Run Test on the row before relying on its tools.</p>
+                <strong id="server-install-title"
+                  >Add by command or URL.</strong
+                >
+                <p>
+                  The source is saved first. Run Test on the row before relying
+                  on its tools.
+                </p>
               </div>
-              <form class="server-install-form" id="server-install-form" novalidate>
+              <form
+                class="server-install-form"
+                id="server-install-form"
+                novalidate=""
+              >
                 <div class="field">
-                  <label for="server-install-command">Launch command or URL</label>
-                  <input id="server-install-command" name="commandLine" type="text" spellcheck="false" autocomplete="off" placeholder="npx -y @modelcontextprotocol/server-filesystem ." aria-describedby="server-install-note server-install-error">
-                  <div class="form-error" id="server-install-error" role="alert" hidden></div>
+                  <label for="server-install-command"
+                    >Launch command or URL</label
+                  >
+                  <input
+                    aria-describedby="server-install-note server-install-error"
+                    autocomplete="off"
+                    id="server-install-command"
+                    name="commandLine"
+                    placeholder="npx -y @modelcontextprotocol/server-filesystem ."
+                    spellcheck="false"
+                    type="text"
+                  />
+                  <div
+                    class="form-error"
+                    hidden=""
+                    id="server-install-error"
+                    role="alert"
+                  ></div>
                 </div>
                 <div class="field">
                   <label for="server-install-name">Name optional</label>
-                  <input id="server-install-name" name="server" type="text" spellcheck="false" autocomplete="off" placeholder="filesystem">
+                  <input
+                    autocomplete="off"
+                    id="server-install-name"
+                    name="server"
+                    placeholder="filesystem"
+                    spellcheck="false"
+                    type="text"
+                  />
                 </div>
-                <button class="primary" id="server-install-button" type="submit">Save server</button>
+                <button
+                  class="primary"
+                  id="server-install-button"
+                  type="submit"
+                >
+                  Save server
+                </button>
               </form>
               <div class="server-install-options">
-                <label class="checkbox-field"><input id="server-install-disabled" type="checkbox" checked> Add disabled</label>
-                <label class="checkbox-field"><input id="server-install-force" type="checkbox"> Replace existing</label>
-                <label class="checkbox-field"><input id="server-install-dry-run" type="checkbox"> Preview only</label>
-                <span class="note" id="server-install-note">No command is executed by the dashboard while saving; source is written, then you test explicitly.</span>
+                <label class="checkbox-field"
+                  ><input
+                    checked=""
+                    id="server-install-disabled"
+                    type="checkbox"
+                  />
+                  Add disabled</label
+                >
+                <label class="checkbox-field"
+                  ><input id="server-install-force" type="checkbox" /> Replace
+                  existing</label
+                >
+                <label class="checkbox-field"
+                  ><input id="server-install-dry-run" type="checkbox" /> Preview
+                  only</label
+                >
+                <span class="note" id="server-install-note"
+                  >No command is executed by the dashboard while saving; source
+                  is written, then you test explicitly.</span
+                >
               </div>
             </div>
-            <section class="client-setup-panel" id="client-setup-panel" aria-labelledby="client-setup-title">
+            <section
+              aria-labelledby="setup-tab-clients"
+              class="client-setup-panel setup-tab-panel"
+              data-setup-panel="clients"
+              hidden=""
+              id="client-setup-panel"
+              role="tabpanel"
+            >
               <div class="client-setup-copy">
                 <div>
                   <div class="label">Clients</div>
-                  <strong id="client-setup-title">Wire local clients to MCPace deliberately.</strong>
-                  <p>Preview client patches before writing. Real writes add only the MCPace-managed entry and create rollback backups for restore.</p>
+                  <strong id="client-setup-title"
+                    >Wire local clients to MCPace deliberately.</strong
+                  >
+                  <p>
+                    Preview client patches before writing. Real writes add only
+                    the MCPace-managed entry and create rollback backups for
+                    restore.
+                  </p>
                 </div>
-                <div class="discovery-guardrail" aria-label="Client setup guardrail">Preview patch → Apply → Restore</div>
+                <div
+                  aria-label="Client setup guardrail"
+                  class="discovery-guardrail"
+                >
+                  Preview patch → Apply → Restore
+                </div>
               </div>
-              <div class="field-rules" aria-label="Client setup model">
+              <div aria-label="Client setup model" class="field-rules">
                 <span><strong>Endpoint:</strong> local /mcp</span>
                 <span><strong>Writes:</strong> client config only</span>
                 <span><strong>Rollback:</strong> latest backup</span>
                 <span><strong>Cloud:</strong> diagnostics only</span>
               </div>
-              <div class="client-setup-toolbar" aria-label="Client setup actions">
-                <button id="client-preview-all" type="button">Preview all local clients</button>
-                <button class="primary" id="client-apply-all" type="button">Apply all local clients</button>
-                <button id="client-restore-all" type="button">Restore latest backups</button>
+              <div
+                aria-label="Client setup actions"
+                class="client-setup-toolbar"
+              >
+                <button id="client-preview-all" type="button">
+                  Preview all local clients
+                </button>
+                <button class="primary" id="client-apply-all" type="button">
+                  Apply all local clients
+                </button>
+                <button id="client-restore-all" type="button">
+                  Restore latest backups
+                </button>
               </div>
-              <div class="client-setup-list" id="client-setup-list" aria-live="polite">
-                <article class="client-setup-card item warn"><div class="item-head"><div class="name">Client catalog not loaded yet</div><span class="chip"><span class="dot warn"></span>waiting</span></div><div class="meta">After overview loads, MCPace shows supported local clients and safe patch actions.</div></article>
+              <div
+                aria-live="polite"
+                class="client-setup-list"
+                id="client-setup-list"
+              >
+                <article class="client-setup-card item warn">
+                  <div class="item-head">
+                    <div class="name">Client catalog not loaded yet</div>
+                    <span class="chip"
+                      ><span class="dot warn"></span>waiting</span
+                    >
+                  </div>
+                  <div class="meta">
+                    After overview loads, MCPace shows supported local clients
+                    and safe patch actions.
+                  </div>
+                </article>
               </div>
-              <div class="client-setup-result" id="client-setup-result" aria-live="polite">
-                <article class="item"><div class="item-head"><div class="name">No client patch run yet</div><span class="chip"><span class="dot warn"></span>idle</span></div><div class="meta">Use Preview first. Apply writes are explicit and restorable.</div></article>
+              <div
+                aria-live="polite"
+                class="client-setup-result"
+                id="client-setup-result"
+              >
+                <article class="item">
+                  <div class="item-head">
+                    <div class="name">No client patch run yet</div>
+                    <span class="chip"><span class="dot warn"></span>idle</span>
+                  </div>
+                  <div class="meta">
+                    Use Preview first. Apply writes are explicit and restorable.
+                  </div>
+                </article>
               </div>
             </section>
-            <section class="automation-panel" id="automation-panel" aria-labelledby="automation-title">
+            <section
+              aria-labelledby="setup-tab-automation"
+              class="automation-panel setup-tab-panel"
+              data-setup-panel="automation"
+              hidden=""
+              id="automation-panel"
+              role="tabpanel"
+            >
               <div class="automation-copy">
                 <div class="label">Automation</div>
-                <strong id="automation-title">Automatic work is visible and reversible.</strong>
-                <p id="automation-body">The dashboard shows which fields are live, which are stored config, and which recommendations MCPace derived from policy/evidence.</p>
+                <strong id="automation-title"
+                  >Automatic work is visible and reversible.</strong
+                >
+                <p id="automation-body">
+                  The dashboard shows which fields are live, which are stored
+                  config, and which recommendations MCPace derived from
+                  policy/evidence.
+                </p>
               </div>
-              <div class="automation-grid" id="automation-grid" aria-label="Automation status">
-                <article class="automation-card warn"><span>Auto refresh</span><strong>—</strong><em>local view preference</em></article>
-                <article class="automation-card warn"><span>Overview cache</span><strong>—</strong><em>backend cache</em></article>
-                <article class="automation-card warn"><span>Tool cache</span><strong>—</strong><em>cached evidence</em></article>
-                <article class="automation-card warn"><span>Policy plan</span><strong>—</strong><em>derived recommendation</em></article>
+              <div
+                aria-label="Automation status"
+                class="automation-grid"
+                id="automation-grid"
+              >
+                <article class="automation-card warn">
+                  <span>Auto refresh</span><strong>—</strong
+                  ><em>local view preference</em>
+                </article>
+                <article class="automation-card warn">
+                  <span>Overview cache</span><strong>—</strong
+                  ><em>backend cache</em>
+                </article>
+                <article class="automation-card warn">
+                  <span>Tool cache</span><strong>—</strong
+                  ><em>cached evidence</em>
+                </article>
+                <article class="automation-card warn">
+                  <span>Policy plan</span><strong>—</strong
+                  ><em>derived recommendation</em>
+                </article>
               </div>
-              <div class="field-rules" aria-label="Field visibility rules">
-                <span><strong>Live</strong> link, runtime, tests, active locks</span>
-                <span><strong>Config</strong> source, enabled state, routing policy</span>
-                <span><strong>Derived</strong> next step, policy plan, server groups</span>
-                <span><strong>Hidden</strong> secret values and raw internals</span>
+              <div aria-label="Field visibility rules" class="field-rules">
+                <span
+                  ><strong>Live</strong> link, runtime, tests, active
+                  locks</span
+                >
+                <span
+                  ><strong>Config</strong> source, enabled state, routing
+                  policy</span
+                >
+                <span
+                  ><strong>Derived</strong> next step, policy plan, server
+                  groups</span
+                >
+                <span
+                  ><strong>Hidden</strong> secret values and raw internals</span
+                >
               </div>
             </section>
-              </div>
-            </details>
-            <details class="clean server-advanced" id="server-advanced">
-              <summary>
-                <h2>Advanced policy and plan</h2>
-                <p class="section-note">Folded by default. Open when you need bulk routing policy, lanes, or derived backend recommendations.</p>
-              </summary>
-              <div class="details-body server-advanced-body">
-                <div class="server-auto-panel" id="server-auto-panel">
-                  <div class="server-auto-copy">
-                    <div class="label">Recommended policy</div>
-                    <strong id="server-auto-title">MCPace can apply conservative routing.</strong>
-                    <p id="server-auto-body">Loading policy plan…</p>
-                    <div class="server-auto-stats" id="server-auto-stats"></div>
-                  </div>
-                  <div class="server-auto-actions">
-                    <button class="primary" id="auto-tune-visible" type="button">Apply policy plan</button>
-                  </div>
-                </div>
-                <div class="operator-plan-panel" id="operator-plan-panel" aria-labelledby="operator-plan-title">
-                  <div class="operator-plan-copy">
-                    <div class="label">Server plan</div>
-                    <strong id="operator-plan-title">Waiting for backend plan.</strong>
-                    <p id="operator-plan-body">Raw server metadata becomes lanes, blockers, safeguards, and commands.</p>
-                    <div class="operator-plan-stats" id="operator-plan-stats"></div>
-                  </div>
-                  <div class="operator-plan-lanes" id="operator-plan-lanes"></div>
-                  <div class="operator-plan-flow" id="operator-plan-flow" aria-label="Brokered request flow"></div>
-                </div>
-              </div>
-            </details>
-          </article>
-
-          <details class="clean" id="deep-diagnostics">
-            <summary>
-              <h2>Diagnostics</h2>
-              <p class="section-note">Routing, runtime internals, capacity, telemetry gaps, clients, audit, and raw logs.</p>
-            </summary>
-            <div class="details-body diagnostic-grid">
-              <section class="mini-panel">
-                <div class="mini-head"><h3>Routing Plan</h3><span class="chip" id="instance-chip"><span class="dot warn"></span>—</span></div>
-                <div class="list tight" id="instance-list"></div>
-              </section>
-              <section class="mini-panel">
-                <div class="mini-head"><h3>Runtime</h3><span class="chip" id="runtime-chip"><span class="dot warn"></span>—</span></div>
-                <div class="list tight" id="runtime-list"></div>
-              </section>
-              <section class="mini-panel">
-                <div class="mini-head"><h3>Trust & Routing</h3><span class="chip" id="policy-chip"><span class="dot warn"></span>—</span></div>
-                <div class="list tight" id="policy-list"></div>
-              </section>
-              <section class="mini-panel">
-                <div class="mini-head"><h3>Capacity</h3><span class="chip" id="capacity-chip"><span class="dot warn"></span>—</span></div>
-                <div class="list tight" id="capacity-list"></div>
-              </section>
-              <section class="mini-panel">
-                <div class="mini-head"><h3>Telemetry Gaps</h3><span class="chip" id="telemetry-chip"><span class="dot warn"></span>honest gaps</span></div>
-                <div class="list tight" id="telemetry-list"></div>
-              </section>
-              <section class="mini-panel">
-                <div class="mini-head"><h3>Activity & Locks</h3><span class="chip" id="activity-chip"><span class="dot warn"></span>—</span></div>
-                <div class="list tight" id="activity-list"></div>
-              </section>
-              <section class="mini-panel">
-                <div class="mini-head"><h3>Client surfaces</h3><span class="chip" id="client-chip"><span class="dot warn"></span>—</span></div>
-                <div class="list tight" id="client-list"></div>
-              </section>
-              <section class="mini-panel protocol-compat-panel" id="protocol-compat-panel">
-                <div class="mini-head"><h3>Protocol compatibility</h3><span class="chip" id="protocol-compat-chip"><span class="dot warn"></span>—</span></div>
-                <div class="protocol-compat-grid" id="protocol-compat-grid" aria-label="Protocol compatibility details"></div>
-              </section>
-              <section class="mini-panel">
-                <div class="mini-head"><h3>Audit & logs</h3><span class="chip" id="log-chip"><span class="dot warn"></span>—</span></div>
-                <div class="list tight" id="audit-list"></div>
-                <div class="list tight" id="log-list"></div>
-              </section>
-            </div>
-          </details>
-          <details class="clean" id="view-context">
-            <summary>
-              <h2>View settings</h2>
-              <p class="section-note">Local display preferences and workspace/runtime context.</p>
-            </summary>
-            <div class="details-body diagnostic-grid">
-              <section class="mini-panel">
-                <h3>View</h3>
-                <p class="section-note">Local-only preferences. These do not change server policy.</p>
-                <div class="control-grid" style="margin-top: 12px;">
-                  <div class="field">
-                    <label for="refresh-select">Auto refresh</label>
-                    <select id="refresh-select">
-                      <option value="30">30 seconds</option>
-                      <option value="60">60 seconds</option>
-                      <option value="15">15 seconds</option>
-                      <option value="paused">Paused</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="server-sort">Server sort</label>
-                    <select id="server-sort">
-                      <option value="risk">Risk first</option>
-                      <option value="name">Name</option>
-                      <option value="instances">Instances</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="server-scope">Server list</label>
-                    <select id="server-scope">
-                      <option value="normal">Normal</option>
-                      <option value="attention">Needs attention only</option>
-                    </select>
-                  </div>
-                  <div class="field">
-                    <label for="density-select">Density</label>
-                    <select id="density-select">
-                      <option value="comfortable">Comfortable</option>
-                      <option value="compact">Compact</option>
-                    </select>
-                  </div>
-                </div>
-              </section>
-              <section class="mini-panel">
-                <h3>Context</h3>
-                <div class="list tight" id="context-list"></div>
-              </section>
-            </div>
-          </details>
-
-          <details class="clean help-page" id="help-page">
-            <summary>
-              <h2>Help & setup guide</h2>
-              <p class="section-note">What to look at first, what is automatic, what is manual, and what should stay hidden until needed.</p>
-            </summary>
-            <div class="details-body help-grid">
-              <section class="mini-panel">
-                <h3>1. Reading order</h3>
-                <p class="section-note">Use the page in this order: Basics, runtime status, server rows. Setup tools and diagnostics are optional drawers.</p>
-                <div class="help-list">
-                  <span><strong>First</strong> the five base checks.</span>
-                  <span><strong>Second</strong> server rows: evidence, state, actions.</span>
-                  <span><strong>Third</strong> setup tools only when importing, discovering, or wiring clients.</span>
-                  <span><strong>Then</strong> details only when changing routing.</span>
-                </div>
-              </section>
-              <section class="mini-panel">
-                <h3>2. Dynamic fields</h3>
-                <p class="section-note">These change after refresh, Test, hub activity, or cache warmup.</p>
-                <div class="help-list">
-                  <span>Backend link, runtime readiness, active locks.</span>
-                  <span>tools/list evidence, test failures, cached tool counts.</span>
-                  <span>Recommended policy and server groups.</span>
-                </div>
-              </section>
-              <section class="mini-panel">
-                <h3>3. Stable fields</h3>
-                <p class="section-note">These are configuration and should not move around unexpectedly.</p>
-                <div class="help-list">
-                  <span>Server name, command, URL, source path.</span>
-                  <span>Env/header names are visible; values stay hidden.</span>
-                  <span>Enabled state and manual routing policy.</span>
-                </div>
-              </section>
-              <section class="mini-panel">
-                <h3>4. Setup options</h3>
-                <p class="section-note">Choose how much MCPace helps. The safe default is preview or save disabled, then test.</p>
-                <div class="help-list">
-                  <span><strong>Import</strong> reuse an existing client config first.</span>
-                  <span><strong>Manual</strong> paste a command or URL.</span>
-                  <span><strong>Discovery</strong> preview known candidates first.</span>
-                  <span><strong>Policy plan</strong> apply conservative routing after evidence.</span>
-                  <span><strong>Overrides</strong> stay inside Details so routine setup stays small.</span>
-                </div>
-              </section>
-            </div>
-          </details>
-        </div>
+          </div>
+        </section>
       </section>
 
-      <nav class="mobile-action-dock" id="mobile-action-dock" aria-label="Mobile quick actions">
-        <button class="primary" type="button" data-global-action="refresh">Refresh</button>
-        <button type="button" data-global-action="servers">Servers</button>
-        <button type="button" data-global-action="import-server">Import</button>
-      </nav>
-    </main>
-    <dialog class="server-dialog" id="server-dialog" aria-labelledby="server-dialog-title">
+      <section class="controller-panel" data-controller-panel="diagnostics">
+        <section
+          class="diagnostics-shell"
+          id="deep-diagnostics"
+          aria-labelledby="diagnostics-title"
+        >
+          <div
+            class="task-tabs diagnostics-tabs"
+            role="tablist"
+            aria-label="Diagnostic areas"
+          >
+            <button
+              class="task-tab active"
+              id="diagnostic-tab-runtime"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              aria-controls="diagnostic-runtime"
+              tabindex="0"
+              data-diagnostic-target="runtime"
+            >
+              Runtime
+            </button>
+            <button
+              class="task-tab"
+              id="diagnostic-tab-trust"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="diagnostic-trust"
+              tabindex="-1"
+              data-diagnostic-target="trust"
+            >
+              Trust & protocol
+            </button>
+            <button
+              class="task-tab"
+              id="diagnostic-tab-policy"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="server-advanced"
+              tabindex="-1"
+              data-diagnostic-target="policy"
+            >
+              Policy plan
+            </button>
+            <button
+              class="task-tab"
+              id="diagnostic-tab-logs"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="diagnostic-logs"
+              tabindex="-1"
+              data-diagnostic-target="logs"
+            >
+              Logs
+            </button>
+            <button
+              class="task-tab"
+              id="diagnostic-tab-preferences"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              aria-controls="diagnostic-preferences"
+              tabindex="-1"
+              data-diagnostic-target="preferences"
+            >
+              Preferences
+            </button>
+          </div>
+
+          <div
+            class="diagnostic-panel diagnostic-grid"
+            id="diagnostic-runtime"
+            role="tabpanel"
+            aria-labelledby="diagnostic-tab-runtime"
+            data-diagnostic-panel="runtime"
+          >
+            <section class="mini-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Routing</div>
+                  <h3>Planned instances</h3>
+                </div>
+                <span class="chip" id="instance-chip"
+                  ><span class="dot warn"></span>—</span
+                >
+              </div>
+              <div class="list tight" id="instance-list"></div>
+            </section>
+            <section class="mini-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Process</div>
+                  <h3>Runtime</h3>
+                </div>
+                <span class="chip" id="runtime-chip"
+                  ><span class="dot warn"></span>—</span
+                >
+              </div>
+              <div class="list tight" id="runtime-list"></div>
+            </section>
+            <section class="mini-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Limits</div>
+                  <h3>Capacity</h3>
+                </div>
+                <span class="chip" id="capacity-chip"
+                  ><span class="dot warn"></span>—</span
+                >
+              </div>
+              <div class="list tight" id="capacity-list"></div>
+            </section>
+            <section class="mini-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Live work</div>
+                  <h3>Activity & locks</h3>
+                </div>
+                <span class="chip" id="activity-chip"
+                  ><span class="dot warn"></span>—</span
+                >
+              </div>
+              <div class="list tight" id="activity-list"></div>
+            </section>
+            <section class="mini-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Ingress</div>
+                  <h3>Client surfaces</h3>
+                </div>
+                <span class="chip" id="client-chip"
+                  ><span class="dot warn"></span>—</span
+                >
+              </div>
+              <div class="list tight" id="client-list"></div>
+            </section>
+          </div>
+
+          <div
+            class="diagnostic-panel diagnostic-grid"
+            id="diagnostic-trust"
+            role="tabpanel"
+            aria-labelledby="diagnostic-tab-trust"
+            data-diagnostic-panel="trust"
+            hidden
+          >
+            <section class="mini-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Policy</div>
+                  <h3>Trust & routing</h3>
+                </div>
+                <span class="chip" id="policy-chip"
+                  ><span class="dot warn"></span>—</span
+                >
+              </div>
+              <div class="list tight" id="policy-list"></div>
+            </section>
+            <section class="mini-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Honesty</div>
+                  <h3>Telemetry gaps</h3>
+                </div>
+                <span class="chip" id="telemetry-chip"
+                  ><span class="dot warn"></span>honest gaps</span
+                >
+              </div>
+              <div class="list tight" id="telemetry-list"></div>
+            </section>
+            <section
+              class="mini-panel protocol-compat-panel"
+              id="protocol-compat-panel"
+            >
+              <div class="mini-head">
+                <div>
+                  <div class="label">Compatibility</div>
+                  <h3>Protocol surfaces</h3>
+                </div>
+                <span class="chip" id="protocol-compat-chip"
+                  ><span class="dot warn"></span>—</span
+                >
+              </div>
+              <div
+                class="protocol-compat-grid"
+                id="protocol-compat-grid"
+                aria-label="Protocol compatibility details"
+              ></div>
+            </section>
+          </div>
+
+          <section
+            class="diagnostic-panel panel"
+            id="server-advanced"
+            role="tabpanel"
+            aria-labelledby="diagnostic-tab-policy"
+            data-diagnostic-panel="policy"
+            hidden
+          >
+            <div class="panel-head">
+              <div>
+                <div class="eyebrow">Derived plan</div>
+                <h3>Conservative policy recommendations</h3>
+                <p class="section-note">
+                  Bulk changes stay separate from routine source actions and
+                  require an explicit apply.
+                </p>
+              </div>
+            </div>
+            <div class="server-auto-panel" id="server-auto-panel">
+              <div class="server-auto-copy">
+                <div class="label">Recommended policy</div>
+                <strong id="server-auto-title"
+                  >MCPace can apply conservative routing.</strong
+                >
+                <p id="server-auto-body">Loading policy plan…</p>
+                <div class="server-auto-stats" id="server-auto-stats"></div>
+              </div>
+              <div class="server-auto-actions">
+                <button class="primary" id="auto-tune-visible" type="button">
+                  Apply policy plan
+                </button>
+              </div>
+            </div>
+            <div
+              class="operator-plan-panel"
+              id="operator-plan-panel"
+              aria-labelledby="operator-plan-title"
+            >
+              <div class="operator-plan-copy">
+                <div class="label">Server plan</div>
+                <strong id="operator-plan-title"
+                  >Waiting for backend plan.</strong
+                >
+                <p id="operator-plan-body">
+                  Raw server metadata becomes lanes, blockers, safeguards, and
+                  commands.
+                </p>
+                <div class="operator-plan-stats" id="operator-plan-stats"></div>
+              </div>
+              <div class="operator-plan-lanes" id="operator-plan-lanes"></div>
+              <div
+                class="operator-plan-flow"
+                id="operator-plan-flow"
+                aria-label="Brokered request flow"
+              ></div>
+            </div>
+          </section>
+
+          <div
+            class="diagnostic-panel diagnostic-grid"
+            id="diagnostic-logs"
+            role="tabpanel"
+            aria-labelledby="diagnostic-tab-logs"
+            data-diagnostic-panel="logs"
+            hidden
+          >
+            <section class="mini-panel wide-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">History</div>
+                  <h3>Audit & logs</h3>
+                </div>
+                <span class="chip" id="log-chip"
+                  ><span class="dot warn"></span>—</span
+                >
+              </div>
+              <div class="list tight" id="audit-list"></div>
+              <div class="list tight log-list" id="log-list"></div>
+            </section>
+          </div>
+
+          <div
+            class="diagnostic-panel diagnostic-grid"
+            id="diagnostic-preferences"
+            role="tabpanel"
+            aria-labelledby="diagnostic-tab-preferences"
+            data-diagnostic-panel="preferences"
+            hidden
+          >
+            <section class="mini-panel" id="view-context">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Local view</div>
+                  <h3>Preferences</h3>
+                </div>
+              </div>
+              <p class="section-note">
+                These settings change only this dashboard, not source policy.
+              </p>
+              <div class="control-grid">
+                <div class="field">
+                  <label for="refresh-select">Auto refresh</label
+                  ><select id="refresh-select">
+                    <option value="30">30 seconds</option>
+                    <option value="60">60 seconds</option>
+                    <option value="15">15 seconds</option>
+                    <option value="paused">Paused</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="server-sort">Source sort</label
+                  ><select id="server-sort">
+                    <option value="risk">Risk first</option>
+                    <option value="name">Name</option>
+                    <option value="instances">Instances</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="server-scope">Source list</label
+                  ><select id="server-scope">
+                    <option value="normal">Normal</option>
+                    <option value="attention">Needs attention only</option>
+                  </select>
+                </div>
+                <div class="field">
+                  <label for="density-select">Density</label
+                  ><select id="density-select">
+                    <option value="comfortable">Comfortable</option>
+                    <option value="compact">Compact</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+            <section class="mini-panel">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Workspace</div>
+                  <h3>Context</h3>
+                </div>
+              </div>
+              <div class="list tight" id="context-list"></div>
+            </section>
+            <section class="mini-panel wide-panel help-page" id="help-page">
+              <div class="mini-head">
+                <div>
+                  <div class="label">Reading guide</div>
+                  <h3>Where each task lives</h3>
+                </div>
+              </div>
+              <div class="help-grid">
+                <div class="help-list">
+                  <span
+                    ><strong>Overview</strong> shows the next safe step and
+                    blockers.</span
+                  ><span
+                    ><strong>Sources</strong> shows evidence, tools, state, and
+                    routing.</span
+                  ><span
+                    ><strong>Setup</strong> imports, discovers, adds, and wires
+                    clients.</span
+                  ><span
+                    ><strong>Diagnostics</strong> contains runtime, protocol,
+                    logs, and policy plans.</span
+                  >
+                </div>
+                <div class="help-list">
+                  <span><strong>Live</strong> link, runtime, tests, locks.</span
+                  ><span
+                    ><strong>Config</strong> source, enabled state, routing
+                    policy.</span
+                  ><span
+                    ><strong>Derived</strong> recommendations and
+                    grouping.</span
+                  ><span
+                    ><strong>Hidden</strong> secret values and raw
+                    internals.</span
+                  >
+                </div>
+              </div>
+            </section>
+          </div>
+        </section>
+      </section>
+    </div>
+
+    <dialog
+      class="server-dialog"
+      id="server-dialog"
+      aria-labelledby="server-dialog-title"
+    >
       <section class="server-dialog-card">
         <header class="server-dialog-head">
-          <div>
-            <h2 class="server-dialog-title" id="server-dialog-title">Server settings</h2>
-            <p class="section-note" id="server-dialog-subtitle">Pick a server to change policy and review evidence.</p>
+          <div class="server-dialog-heading">
+            <div class="eyebrow">Source workspace</div>
+            <h2
+              class="server-dialog-title"
+              id="server-dialog-title"
+              tabindex="-1"
+            >
+              Source
+            </h2>
+            <p class="section-note" id="server-dialog-subtitle">
+              Evidence and controls for one source.
+            </p>
           </div>
-          <button class="quiet" id="server-dialog-close" type="button" aria-label="Close server settings">Close</button>
+          <button
+            class="icon-button"
+            id="server-dialog-close"
+            type="button"
+            aria-label="Close source panel"
+          >
+            Close
+          </button>
         </header>
+        <div
+          class="server-dialog-tabs"
+          role="tablist"
+          aria-label="Source details"
+        >
+          <button
+            class="task-tab active"
+            id="server-dialog-tab-overview"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="server-dialog-panel-overview"
+            tabindex="0"
+            data-server-dialog-tab="overview"
+          >
+            Overview
+          </button>
+          <button
+            class="task-tab"
+            id="server-dialog-tab-routing"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="server-dialog-panel-routing"
+            tabindex="-1"
+            data-server-dialog-tab="routing"
+          >
+            Routing
+          </button>
+          <button
+            class="task-tab"
+            id="server-dialog-tab-source"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="server-dialog-panel-source"
+            tabindex="-1"
+            data-server-dialog-tab="source"
+          >
+            Source
+          </button>
+        </div>
         <div class="server-dialog-body" id="server-dialog-body"></div>
       </section>
     </dialog>
 
-
-    <!-- MCPace browser lifecycle contract lives in /dashboard.js:
-      const LIFECYCLE_RESUME_MIN_INTERVAL_MS = 5000;
-      const MAX_REFRESH_FAILURE_BACKOFF_MS = 120000;
-      document.wasDiscarded;
-      if (state.refreshing && !options.forceAbort) { scheduleRefresh(); return; }
-      const backoff = Math.min(MAX_REFRESH_FAILURE_BACKOFF_MS, 1000 * Math.pow(2, Math.min(state.failureCount, 7)));
-      document.addEventListener("freeze", () => { if (state.controller) state.controller.abort(new DOMException("Page frozen", "AbortError")); state.lifecycle.frozen = true; });
-      document.addEventListener("resume", () => { refreshDashboard({ reason: "resume" }); });
-      window.addEventListener("pageshow", event => { document.wasDiscarded; refreshDashboard({ allowHidden: true, reason: "pageshow" }); });
-      state.lifecycle.frozen;
-      else refreshDashboard({ reason: "visible" });
-    -->
     <script src="/dashboard.js" defer></script>
+    <script src="/dashboard.runtime.js" defer></script>
+    <script src="/dashboard.model.js" defer></script>
+    <script src="/dashboard.render.js" defer></script>
+    <script src="/dashboard.render.details.js" defer></script>
+    <script src="/dashboard.actions.js" defer></script>
+    <script src="/dashboard.boot.js" defer></script>
+    <script src="/dashboard.product.js" defer></script>
   </body>
 </html>

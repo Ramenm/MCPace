@@ -1,5 +1,6 @@
 use super::args::ParsedArgs;
 use crate::client::{runtime_plan_json, RuntimePlanRequest};
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use std::collections::hash_map::DefaultHasher;
@@ -15,7 +16,10 @@ pub(super) fn run(
 ) -> i32 {
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
@@ -31,7 +35,7 @@ pub(super) fn run(
     ) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };

@@ -2,6 +2,8 @@
 
 This document describes the last mile between a green source bundle and releases that users can install on every supported platform.
 
+> **Current public lane: npm only.** Native `.msi`, `.deb`, and `.pkg` artifacts are private draft proofs. Do not publish or recommend them until Windows artifacts are Authenticode-signed and macOS artifacts are Developer ID signed, notarized, and stapled. Checksums, manifests, and attestations must be regenerated from those final bytes.
+
 ## Release lanes
 
 MCPace publishes two npm package classes:
@@ -11,17 +13,15 @@ MCPace publishes two npm package classes:
 
 The main launcher is intentionally not considered publishable until every enabled native package is present as either a verified source package containing the expected binary or a verified prebuilt npm tarball in `dist/npm`, `dist`, `.artifacts/npm`, or `.artifacts`.
 
-GitHub Releases publish a separate user-download lane. GitHub already exposes
-source-code archives for every release, so the uploaded MCPace assets stay
-installer-focused:
+The GitHub Release workflow prepares a separate **private draft proof** lane. It is not currently a supported user-download lane. GitHub already exposes source-code archives for every release, so any future signed MCPace assets remain installer-focused:
 
 1. One native **installer** per enabled target from `scripts/build-native-installer-asset.mjs`.
 2. `mcpace-v<version>-checksums.sha256`.
 3. `mcpace-v<version>-release-assets.json`, a machine-readable manifest that maps platforms, target keys, hashes, installer commands, and the package-manager update policy.
 
-Windows users install `mcpace-v<version>-win32-x64-msvc.msi` or `mcpace-v<version>-win32-arm64-msvc.msi`. The MSI installs `mcpace.exe` under Program Files and adds the install directory to the machine PATH.
+After the signing gate is implemented and proven, Windows users will install `mcpace-v<version>-win32-x64-msvc.msi` or `mcpace-v<version>-win32-arm64-msvc.msi`. The MSI installs `mcpace.exe` and `mcpace-agent-launcher.exe` under Program Files and adds the install directory to the machine PATH. The launcher is required for native Windows login-start because it starts the console CLI binary without opening a terminal window.
 
-Ubuntu users install `mcpace-v<version>-linux-x64-gnu.deb` or `mcpace-v<version>-linux-arm64-gnu.deb`:
+After the public installer lane is enabled, Ubuntu users will install `mcpace-v<version>-linux-x64-gnu.deb` or `mcpace-v<version>-linux-arm64-gnu.deb`:
 
 ```sh
 sudo apt install ./mcpace-v<version>-linux-x64-gnu.deb
@@ -29,7 +29,7 @@ sudo apt install ./mcpace-v<version>-linux-x64-gnu.deb
 
 Ubuntu is a glibc distribution, so the `*-gnu` `.deb` assets are the correct Ubuntu lane. Alpine/musl assets remain in `plannedTargets` until a dedicated musl build and install proof exists.
 
-macOS users install `mcpace-v<version>-darwin-x64.pkg` or `mcpace-v<version>-darwin-arm64.pkg` with Installer.app or:
+After signing, notarization, and stapling are implemented and proven, macOS users will install `mcpace-v<version>-darwin-x64.pkg` or `mcpace-v<version>-darwin-arm64.pkg` with Installer.app or:
 
 ```sh
 sudo installer -pkg mcpace-v<version>-darwin-arm64.pkg -target /
@@ -40,7 +40,7 @@ sudo installer -pkg mcpace-v<version>-darwin-arm64.pkg -target /
 Use this shape from a runner that has built the matching Rust target:
 
 ```sh
-cargo build --release --target x86_64-unknown-linux-gnu
+cargo build --release --locked --target x86_64-unknown-linux-gnu --bins
 node scripts/build-native-npm-package.mjs \
   --target linux-x64-gnu \
   --binary target/x86_64-unknown-linux-gnu/release/mcpace \
@@ -48,14 +48,14 @@ node scripts/build-native-npm-package.mjs \
   --json
 ```
 
-The builder refuses unknown targets, disabled targets, symlink binaries, non-regular files, non-executable Unix binaries, Windows binaries without `.exe`, and oversized binary inputs. It creates a minimal native npm package with target metadata under `package.json#mcpace`.
+The builder refuses unknown targets, disabled targets, symlink binaries, non-regular files, non-executable Unix binaries, Windows binaries without `.exe`, missing required Windows sidecars, and oversized binary inputs. It creates a minimal native npm package with target metadata under `package.json#mcpace`. For Windows targets the package must include `bin/mcpace-agent-launcher.exe` beside `bin/mcpace.exe`.
 
 ## Native installer builder
 
-Use this shape for GitHub Release installer assets:
+Use this shape only to produce private draft proof artifacts until the signing gates above are implemented:
 
 ```sh
-cargo build --release --target x86_64-unknown-linux-gnu
+cargo build --release --locked --target x86_64-unknown-linux-gnu --bins
 node scripts/build-native-installer-asset.mjs \
   --target linux-x64-gnu \
   --binary target/x86_64-unknown-linux-gnu/release/mcpace \
@@ -72,6 +72,14 @@ Installer formats are intentionally platform-native:
 A ZIP or tarball that merely contains the binary is not enough for the GitHub user-download lane.
 A tarball that merely has the right filename is not enough for the npm publish lane.
 
+## Installed-runtime verification
+
+Every release installer is tested after installation, not only unpacked or inspected. The workflow runs `scripts/installer-runtime-smoke.mjs` against the installed executable in an isolated temporary root. It requires a matching `--version` and configuration version, then verifies `init`, `up --client none` on a reserved loopback port, endpoint persistence, health, MCP `initialize`, `initialized`, `tools/list`, and clean `serve stop` teardown.
+
+macOS jobs add target-specific checks before and after PKG installation: `file`/`lipo -archs` must report the expected `x86_64` or `arm64` Mach-O architecture, `otool -L` records linked system libraries, and `pkgutil --pkg-info io.github.ramenm.mcpace` must find the installed package receipt. This is a native runner proof for both Darwin targets; it does not replace final Developer ID signing, notarization, and physical-device validation.
+
+The npm publish matrix also runs `scripts/native-npm-install-smoke.mjs` for every target before uploading its tarball. It installs the just-packed launcher and just-built native package into an empty temporary npm prefix with the registry deliberately unreachable, verifies that the launcher selected that exact optional dependency, runs `mcpace --version` through the launcher, and then executes the isolated runtime lifecycle. This is the standard user `npm install -g @mcpace/cli` resolution path without a globally installed MCPace masking an error.
+
 ## Publish contract
 
 `node scripts/verify-npm-publish-contract.mjs --enforce` checks:
@@ -81,15 +89,20 @@ A tarball that merely has the right filename is not enough for the npm publish l
 - platform packages do not advertise disabled targets;
 - package source metadata matches `release-targets.json`;
 - prebuilt tarballs are parseable `.tgz` archives with safe paths;
-- tarball `package/package.json` name, version, `mcpace.target`, `mcpace.binaryName`, `bin.mcpace`, `os`, `cpu`, and `libc` match the target;
+- tarball `package/package.json` name, version, immutable `mcpace.releaseSha`, `mcpace.target`, `mcpace.binaryName`, `bin.mcpace`, `os`, `cpu`, and `libc` match the release;
 - tarball `package/bin/<binary>` exists as a regular file and is executable for non-Windows targets;
+- Windows tarballs include `package/bin/mcpace-agent-launcher.exe` and `package.json#mcpace.sidecarBinaries`;
 - the publish workflow enforces the native package contract before publishing the launcher.
 
 A tarball that merely has the right filename is not enough.
 
 ## Trusted publishing workflow
 
-The `publish-npm` workflow builds all native target tarballs first, downloads them into `dist/npm`, enforces the publish contract, publishes the native tarballs, and only then publishes the main launcher. `dev` branch pushes publish unique prerelease versions like `0.7.8-dev.<run_number>` to the `dev` dist-tag. `main`/`master` pushes publish the stable package version to `latest` only when that exact version is not already present on npm. The workflow uses `id-token: write` for npm trusted publishing and intentionally does not set `NODE_AUTH_TOKEN`; an empty or stale token env var can prevent npm from using OIDC.
+The `publish-npm` workflow builds all native target tarballs first, downloads them into `dist/npm`, enforces the publish contract, publishes missing native tarballs, and publishes the launcher last. All Cargo, npm workspace, lock-file, configuration, launcher, and native-package versions must match.
+
+Real stable publication is **tag-only**: an exact `vX.Y.Z` tag must match package metadata and the checked-out immutable SHA. `main` and `master` do not publish. The `dev` branch publishes unique `<version>-dev.<run_number>` prereleases to the `dev` dist-tag. Manual dispatch is packaging dry-run only; `version_override` is accepted only in that dry-run.
+
+Every candidate package carries `package.json#mcpace.releaseSha`. A retry may skip an existing exact name/version only when registry metadata reports the same release SHA; missing or different SHA metadata fails closed so a partial package set cannot mix commits. Resume verifies package identity but deliberately does not mutate npm dist-tags. Before announcing completion, verify `npm view @mcpace/cli dist-tags --json`; repairing an externally changed tag is a separate, audited operator action. The protected publish job re-resolves stable tags immediately before mutation. It uses `id-token: write` for npm trusted publishing and intentionally does not set `NODE_AUTH_TOKEN`; an empty or stale token env var can prevent npm from using OIDC.
 
 If npm rejects trusted publishing with `E404` / "could not be found or you do not have permission", configure the package-side trusted publisher entries in bulk instead of clicking each package manually:
 
@@ -101,7 +114,9 @@ npm run npm:trust:configure
 
 The bulk helper uses `npm trust github` with npm 11.18, repository `Ramenm/MCPace`, workflow `publish-npm.yml`, environment `npm-publish`, and `--allow-publish` for `@mcpace/cli` plus each enabled native optional package. The first trust command may require 2FA; use npm's temporary "skip 2FA for the next 5 minutes" option so the remaining package entries can be created automatically.
 
-The `release-artifacts` workflow still builds and verifies the source bundle as an internal release proof, but only the native installer artifacts are composed into `github-release-assets` for upload. The workflow builds native GitHub installers with the same target matrix, smokes each built binary, verifies each installer by installing and running `mcpace help`, generates artifact attestations, writes checksums and the release manifest, and optionally creates a draft GitHub Release from that installer-focused asset set. Draft release creation stays manual so an operator can verify hashes and runner provenance before publishing.
+The `release-artifacts` workflow builds and verifies the source bundle as an internal release proof, while only native installer artifacts are composed into `github-release-assets`. It builds the target matrix and runs the full installed-runtime lifecycle described above, then generates attestations, checksums, and the release manifest. It can optionally create or reconcile a draft GitHub Release.
+
+**The current draft is unsigned pre-release proof only. Do not publish it.** The workflow does not yet Authenticode-sign Windows artifacts or Developer ID sign/notarize/staple macOS artifacts. Production signing must be inserted before the native attestation step; checksums, the release index, composed-set attestation, and draft upload must then run from those final signed/stapled bytes. A digest-mismatched draft is intentionally rejected rather than overwritten, so obsolete unsigned draft assets must be removed under an explicit human cleanup procedure before the signed workflow is rerun. The npm-first package lane may be evaluated separately, but unsigned MSI/PKG assets must remain private/draft and must not be recommended to users.
 
 ## Update model
 
@@ -116,6 +131,8 @@ npm install -g @mcpace/cli@latest
 `mcpace --version` reports the compiled binary/package version. Project configuration
 versions remain visible in `mcpace doctor` as `Config version`, so an installed npm
 binary is not masked by a local `mcpace.config.json` or a Windows autostart root.
+
+When the local dashboard is open, it checks this same npm metadata once and caches the result for six hours. If a newer version exists, the dashboard shows a copyable package-manager command. It never silently downloads, replaces, or restarts the running binary; set `MCPACE_UPDATE_SOURCE=none` to disable network update checks.
 
 GitHub installers support normal manual install/upgrade by downloading a newer MSI/DEB/PKG from the next release. They are not advertised as silent auto-updaters. The release asset manifest marks direct GitHub installers as `manual-upgrade-only` and names the future OS-native update channels that would be acceptable for automatic upgrades:
 
@@ -133,7 +150,7 @@ The generated installers are installable package formats, but production public 
 - GitHub Actions: the workflow policy currently warns on tag-pinned third-party actions. For stricter supply-chain posture, pin third-party actions to full-length commit SHAs after recording the update process.
 - Third-party notices: MCPace no longer ships local compatibility crates that shadow standard crates. Keep the generated third-party notice review aligned with the upstream crates resolved by Cargo.lock before public binary distribution.
 
-The detailed signing setup, required GitHub variables/secrets, and go/no-go checks live in `docs/signing-and-notarization.md`. The important release invariant is that checksums, release manifests, and attestations must be generated from the final signed/stapled assets, not from pre-signing files.
+The detailed signing setup, required GitHub variables/secrets, and go/no-go checks live in `docs/signing-and-notarization.md`. The important release invariant is that checksums, release manifests, and attestations must be generated from the final signed/stapled assets, not from pre-signing files. Until the workflow implements that ordering, GitHub installer release publication is blocked.
 
 ## License posture
 
@@ -152,9 +169,13 @@ Before a non-dry-run release, an operator still has to verify:
 - each runner label in `release-targets.json` is available for the repository or organization;
 - Docker is available on Linux runners for the `ubuntu:22.04` glibc baseline build;
 - WiX installs successfully on Windows runners and `pkgbuild` is available on macOS runners;
-- the Windows MSI is Authenticode-signed and timestamped when production signing secrets are available;
-- the macOS PKG is Developer ID signed, notarized, and stapled when Apple signing credentials are available;
+- the Windows executable and MSI are Authenticode-signed and timestamped before any public installer release;
+- the macOS binary and PKG are Developer ID signed, and the PKG is notarized and stapled before any public installer release;
 - Linux automatic updates are only advertised after a signed apt repository exists;
 - third-party license notices are complete for upstream crates and packaged native tooling;
 - `npm audit signatures` passes in CI with live registry access;
 - the Rust lane has completed on all supported operating systems.
+
+## Release readiness gate
+
+`npm run check:release-ready` emits a non-blocking `mcpace.releaseReadiness.v1` report. `npm run check:release-ready:enforce` is the fail-closed form used by the release-facing CI entrypoint. The release is not fully proven until `Cargo.lock` is synchronized and reviewed, the pinned locked Rust gates pass, `npm run check:ci` exits 0, required native artifacts exist, and every external trust/signing gate above is recorded.

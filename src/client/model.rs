@@ -1,3 +1,5 @@
+use crate::execution::ExecutionPolicy;
+
 #[derive(Debug, Default)]
 pub(super) struct MetadataEnvelope {
     pub(super) client_id: Option<String>,
@@ -91,6 +93,7 @@ pub(super) struct ServerCoordinationPlan {
     pub(super) worker_pool_key: String,
     pub(super) max_workers: usize,
     pub(super) max_in_flight_per_worker: usize,
+    pub(super) execution: ExecutionPolicy,
     pub(super) lock_domains: Vec<String>,
     pub(super) transport_status: String,
     pub(super) launcher_kind: String,
@@ -99,6 +102,8 @@ pub(super) struct ServerCoordinationPlan {
     pub(super) request_strategy: String,
     pub(super) request_mutex_key: Option<String>,
     pub(super) session_affinity_key: Option<String>,
+    pub(super) affinity_resolved: bool,
+    pub(super) affinity_fingerprint: String,
     pub(super) warnings: Vec<String>,
 }
 
@@ -127,6 +132,8 @@ pub(super) struct ScopeResolution {
     pub(super) scheduler_lane: String,
     pub(super) startup_strategy: String,
     pub(super) session_affinity_key: Option<String>,
+    pub(super) affinity_resolved: bool,
+    pub(super) affinity_fingerprint: String,
     pub(super) warnings: Vec<String>,
 }
 

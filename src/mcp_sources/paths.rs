@@ -7,6 +7,8 @@ use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
 
+const MAX_MCP_SETTINGS_FILES_PER_DIRECTORY: usize = 1_024;
+
 #[derive(Clone, Debug, Eq, PartialEq, Ord, PartialOrd)]
 pub(super) struct SourcePath {
     pub(super) path: PathBuf,
@@ -185,6 +187,14 @@ fn collect_directory_sources(
                         .map(|extension| extension.eq_ignore_ascii_case("json"))
                         .unwrap_or(false)
                 {
+                    if json_files.len() >= MAX_MCP_SETTINGS_FILES_PER_DIRECTORY {
+                        warnings.push(format!(
+                            "MCP settings directory '{}' exceeds the {}-file safety limit; remaining entries were skipped",
+                            directory.display(),
+                            MAX_MCP_SETTINGS_FILES_PER_DIRECTORY
+                        ));
+                        break;
+                    }
                     json_files.push(path);
                 }
             }

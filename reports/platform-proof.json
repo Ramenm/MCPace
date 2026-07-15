@@ -1,8 +1,11 @@
 {
   "schema": "mcpace.platformProof.v1",
-  "generatedAt": "2026-07-04T15:37:14.871Z",
+  "generatedAt": "2026-07-15T02:29:52.120Z",
   "root": ".",
-  "rootName": "mcpace_work",
+  "rootName": "mcpace",
+  "evidenceKind": "static-plan-contract",
+  "executionEvidence": false,
+  "scope": "Validates platform declarations, workflow shape, command inventory, and smoke coverage; it does not claim that the remote OS matrix executed.",
   "overall": "pass",
   "summary": {
     "pass": 8,
@@ -10,7 +13,7 @@
     "fail": 0,
     "publishedTargetCount": 6,
     "plannedTargetCount": 2,
-    "publicCommandCount": 24,
+    "publicCommandCount": 25,
     "smokeCommandCount": 17
   },
   "uiDecision": {
@@ -123,7 +126,6 @@
     {
       "name": "autostart",
       "aliases": [
-        "service",
         "startup"
       ],
       "implemented": true,
@@ -269,6 +271,12 @@
       "description": "Grouped server inspection and automatic MCP package/URL/command install command."
     },
     {
+      "name": "service",
+      "aliases": [],
+      "implemented": true,
+      "description": "Compatibility alias for user-level autostart; privileged system services are reserved for a future advanced mode."
+    },
+    {
       "name": "setup",
       "aliases": [
         "up",
@@ -280,12 +288,13 @@
       "description": "Home-first onboarding: create/repair MCPace home, start the endpoint, wire supported local clients, and smoke-test without adding upstream servers."
     },
     {
-      "name": "stdio-shim",
+      "name": "stdio",
       "aliases": [
+        "stdio-shim",
         "stdio_shim"
       ],
       "implemented": true,
-      "description": "Internal bootstrap-only stdio shim proof surface."
+      "description": "Live MCP stdio launch surface. This is the public launcher command; `stdio-shim` remains a compatibility alias for older client configs."
     },
     {
       "name": "update",
@@ -331,7 +340,6 @@
       "import",
       "install",
       "instances",
-      "leases",
       "list",
       "remove",
       "set-policy",
@@ -341,22 +349,10 @@
     "client": [
       "export",
       "install",
-      "list",
-      "plan",
-      "restore"
+      "plan"
     ],
-    "lab": [
-      "coverage",
-      "gaps",
-      "list",
-      "matrix",
-      "probe",
-      "report",
-      "run",
-      "show"
-    ],
+    "lab": [],
     "serve": [
-      "restart",
       "start",
       "status",
       "stop"
@@ -559,8 +555,9 @@
     "init",
     "mcp-server",
     "repair",
+    "service",
     "setup",
-    "stdio-shim",
+    "stdio",
     "update"
   ],
   "checks": [
@@ -592,7 +589,7 @@
     {
       "id": "all-public-commands-inventoried",
       "status": "pass",
-      "detail": "24 public command groups parsed from src/catalog.rs"
+      "detail": "25 public command groups parsed from src/catalog.rs"
     },
     {
       "id": "safe-binary-smoke-covers-operational-groups",

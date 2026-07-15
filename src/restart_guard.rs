@@ -7,8 +7,72 @@
 
 use crate::resources;
 use crate::runtimepaths;
+use std::fmt;
 use std::fs;
 use std::path::Path;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RestartGuardError {
+    LaunchBlocked {
+        label: String,
+        attempts: usize,
+        window_ms: u64,
+    },
+    WriteFailed {
+        path: String,
+        reason: String,
+    },
+}
+
+pub type RestartGuardResult<T> = std::result::Result<T, RestartGuardError>;
+
+impl RestartGuardError {
+    fn launch_blocked(label: &str, attempts: usize, window_ms: u64) -> Self {
+        Self::LaunchBlocked {
+            label: label.to_string(),
+            attempts,
+            window_ms,
+        }
+    }
+
+    fn write_failed(path: &Path, reason: impl Into<String>) -> Self {
+        Self::WriteFailed {
+            path: path.display().to_string(),
+            reason: reason.into(),
+        }
+    }
+
+    pub fn contains(&self, needle: &str) -> bool {
+        self.to_string().contains(needle)
+    }
+}
+
+impl fmt::Display for RestartGuardError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::LaunchBlocked {
+                label,
+                attempts,
+                window_ms,
+            } => write!(
+                formatter,
+                "{} restart guard blocked launch after {} starts within {} ms; inspect serve logs/status, then run 'mcpace serve stop' to clear the guard after fixing the cause",
+                label, attempts, window_ms
+            ),
+            Self::WriteFailed { path, reason } => {
+                write!(formatter, "failed to write restart guard '{}': {}", path, reason)
+            }
+        }
+    }
+}
+
+impl std::error::Error for RestartGuardError {}
+
+impl From<RestartGuardError> for String {
+    fn from(error: RestartGuardError) -> Self {
+        error.to_string()
+    }
+}
 
 pub const ENV_RESTART_WINDOW_MS: &str = "MCPACE_SERVE_RESTART_WINDOW_MS";
 pub const ENV_RESTART_MAX_ATTEMPTS: &str = "MCPACE_SERVE_RESTART_MAX_ATTEMPTS";
@@ -17,7 +81,7 @@ pub const DEFAULT_RESTART_MAX_ATTEMPTS: usize = 5;
 pub const RESTART_WINDOW_MS_MAX: u64 = 3_600_000;
 pub const RESTART_MAX_ATTEMPTS_MAX: usize = 100;
 
-pub fn check_and_record(path: &Path, label: &str) -> Result<(), String> {
+pub fn check_and_record(path: &Path, label: &str) -> RestartGuardResult<()> {
     let now = runtimepaths::unix_time_ms();
     let window_ms = restart_window_ms();
     let max_attempts = restart_max_attempts();
@@ -28,9 +92,10 @@ pub fn check_and_record(path: &Path, label: &str) -> Result<(), String> {
         .collect::<Vec<_>>();
 
     if attempts.len() >= max_attempts {
-        return Err(format!(
-            "{} restart guard blocked launch after {} starts within {} ms; inspect serve logs/status, then run 'mcpace serve stop' to clear the guard after fixing the cause",
-            label, attempts.len(), window_ms
+        return Err(RestartGuardError::launch_blocked(
+            label,
+            attempts.len(),
+            window_ms,
         ));
     }
 
@@ -66,10 +131,14 @@ fn read_attempts(path: &Path) -> Vec<u128> {
         .unwrap_or_default()
 }
 
-fn write_attempts(path: &Path, attempts: &[u128]) -> Result<(), String> {
+fn write_attempts(path: &Path, attempts: &[u128]) -> RestartGuardResult<()> {
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
+        fs::create_dir_all(parent).map_err(|error| {
+            RestartGuardError::write_failed(
+                path,
+                format!("failed to create {}: {}", parent.display(), error),
+            )
+        })?;
     }
     let mut payload = attempts
         .iter()
@@ -77,42 +146,9 @@ fn write_attempts(path: &Path, attempts: &[u128]) -> Result<(), String> {
         .collect::<Vec<_>>()
         .join("\n");
     payload.push('\n');
-    runtimepaths::write_text_atomic(path, &payload).map_err(|error| {
-        format!(
-            "failed to write restart guard '{}': {}",
-            path.display(),
-            error
-        )
-    })
+    runtimepaths::write_text_atomic(path, &payload)
+        .map_err(|error| RestartGuardError::write_failed(path, error))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::path::PathBuf;
-    use std::sync::atomic::{AtomicU64, Ordering};
-
-    static COUNTER: AtomicU64 = AtomicU64::new(0);
-
-    fn temp_path() -> PathBuf {
-        std::env::temp_dir().join(format!(
-            "mcpace-restart-guard-test-{}-{}-{}.log",
-            std::process::id(),
-            runtimepaths::unix_time_ms(),
-            COUNTER.fetch_add(1, Ordering::Relaxed)
-        ))
-    }
-
-    #[test]
-    fn restart_guard_blocks_tight_restart_loops_and_clear_recovers() {
-        let path = temp_path();
-        for _ in 0..DEFAULT_RESTART_MAX_ATTEMPTS {
-            check_and_record(&path, "serve").unwrap();
-        }
-        let error = check_and_record(&path, "serve").unwrap_err();
-        assert!(error.contains("restart guard blocked launch"));
-        clear(&path);
-        check_and_record(&path, "serve").unwrap();
-        clear(&path);
-    }
-}
+mod tests;

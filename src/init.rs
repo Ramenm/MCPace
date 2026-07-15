@@ -1,10 +1,15 @@
+use crate::diagnostics;
 use crate::doctor;
 use crate::json::JsonValue;
 use crate::profile;
 use crate::runtimepaths;
+use crate::setup;
 use crate::text_utils::yes_no;
 use crate::verify;
+use clap::{error::ErrorKind, Parser};
 use std::collections::BTreeMap;
+use std::ffi::OsString;
+use std::fmt;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -34,15 +39,86 @@ struct InitReport {
     existing_paths: Vec<String>,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum InitError {
+    RuntimePath(runtimepaths::RuntimePathError),
+    Io {
+        operation: &'static str,
+        path: PathBuf,
+        reason: String,
+    },
+    Upstream(String),
+}
+
+type InitResult<T> = Result<T, InitError>;
+
+impl InitError {
+    fn io(operation: &'static str, path: &Path, error: impl fmt::Display) -> Self {
+        Self::Io {
+            operation,
+            path: path.to_path_buf(),
+            reason: error.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for InitError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::RuntimePath(error) => write!(formatter, "{}", error),
+            Self::Io {
+                operation,
+                path,
+                reason,
+            } => {
+                write!(
+                    formatter,
+                    "failed to {} {}: {}",
+                    operation,
+                    path.display(),
+                    reason
+                )
+            }
+            Self::Upstream(error) => write!(formatter, "{}", error),
+        }
+    }
+}
+
+impl std::error::Error for InitError {}
+
+impl From<runtimepaths::RuntimePathError> for InitError {
+    fn from(error: runtimepaths::RuntimePathError) -> Self {
+        Self::RuntimePath(error)
+    }
+}
+
+impl From<String> for InitError {
+    fn from(error: String) -> Self {
+        Self::Upstream(error)
+    }
+}
+
+impl From<verify::ReadinessError> for InitError {
+    fn from(error: verify::ReadinessError) -> Self {
+        Self::Upstream(error.to_string())
+    }
+}
+
+impl From<InitError> for String {
+    fn from(error: InitError) -> Self {
+        error.to_string()
+    }
+}
+
 pub fn run(
     args: &[String],
     default_root: Option<PathBuf>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help {
@@ -52,14 +128,17 @@ pub fn run(
 
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
     let report = match initialize_layout(&root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -114,42 +193,67 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "init creates the runtime state layout, seeds empty state stores, and reports current readiness.");
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace init",
+    disable_version_flag = true,
+    about = "Initialize the MCPace state layout"
+)]
+struct InitCli {
+    #[arg(long = "json")]
+    json_output: bool,
 
-    while index < args.len() {
-        match args[index].as_str() {
-            "--json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("init requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            other => {
-                parsed.error = Some(format!(
-                    "unsupported init argument in the Rust-only repo: {}",
-                    other
-                ));
-                return parsed;
-            }
-        }
-    }
-
-    parsed
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
 }
 
-fn initialize_layout(root_path: &Path) -> Result<InitReport, String> {
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match InitCli::try_parse_from(argv(args)) {
+        Ok(cli) => ParsedArgs {
+            json_output: cli.json_output,
+            help: false,
+            root_override: cli.root_override,
+            error: None,
+        },
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
+            }
+        }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace init"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_arg(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_arg(arg: &str) -> String {
+    match arg {
+        "-json" => "--json".to_string(),
+        "-root" => "--root".to_string(),
+        "-?" => "--help".to_string(),
+        _ => arg.to_string(),
+    }
+}
+
+fn initialize_layout(root_path: &Path) -> InitResult<InitReport> {
+    setup::bootstrap_root_layout(root_path).map_err(InitError::Upstream)?;
     let state_root = runtimepaths::resolve_state_root(root_path);
     let runtime_dir = runtimepaths::runtime_dir(&state_root);
     let runtime_dir_existed = runtime_dir.exists();
@@ -198,7 +302,8 @@ fn initialize_layout(root_path: &Path) -> Result<InitReport, String> {
         &mut existing_paths,
     )?;
 
-    let runtime_profile = profile::load_runtime_profile_selection(root_path)?;
+    let runtime_profile = profile::load_runtime_profile_selection(root_path)
+        .map_err(|error| InitError::Upstream(error.to_string()))?;
     let readiness = verify::collect_readiness(root_path)?;
 
     Ok(InitReport {
@@ -236,21 +341,22 @@ fn seed_json_if_missing(
     value: JsonValue,
     created_paths: &mut Vec<String>,
     existing_paths: &mut Vec<String>,
-) -> Result<(), String> {
+) -> InitResult<()> {
     if path.is_file() {
         existing_paths.push(path.display().to_string());
         return Ok(());
     }
 
     if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
+        fs::create_dir_all(parent).map_err(|error| InitError::io("create", parent, error))?;
     }
-    runtimepaths::write_text_atomic(path, &value.to_pretty_string())
-        .map_err(|error| format!("failed to write {}: {}", path.display(), error))?;
+    runtimepaths::write_text_atomic(path, &value.to_pretty_string())?;
     created_paths.push(path.display().to_string());
     Ok(())
 }
+
+#[cfg(test)]
+mod tests;
 
 impl InitReport {
     fn to_json_value(&self) -> JsonValue {

@@ -106,3 +106,20 @@ Run two chats at once. Without MCPace, state can interleave. With MCPace, `seria
 ## Runtime classification guardrails
 
 Unknown stdio servers become lease/session/project-bound until live evidence proves they are safe to share. Classification uses token and boundary matching instead of naive substring matching, so GitHub-style APIs are not treated as local `git` workers and short destructive tokens such as `rm` only count as standalone command/tool tokens.
+
+## Protocol and diagnostics boundaries
+
+Protocol transports keep their output channels strict. The MCP stdio surface writes only JSON-RPC messages to stdout, one message per line, while operator diagnostics go through a shared stderr helper. This prevents human-readable warnings from corrupting stdio clients that parse stdout as protocol frames.
+
+
+## Client configuration editing boundary
+
+Client install, export, and restore flows centralize MCP server config mutation in `src/config_edit.rs`. That module is the typed edit boundary for JSON, TOML, and YAML client settings: it detects newlines, builds MCPace-managed TOML blocks, updates JSON server entries, updates YAML `mcpServers` entries, and reports `ConfigEditError` variants back to CLI actions.
+
+`src/client/actions/config_update.rs` is intentionally limited to diff rendering and sensitive-value redaction. New client config mutation must go through `src/config_edit.rs` rather than reintroducing format-specific patchers in action modules. Once the Rust lockfile can be refreshed with Cargo, the TOML internals should move behind the same boundary to `toml_edit` for format-preserving edits.
+
+Local setup and serve health checks share `src/http_probe.rs` for bounded HTTP reads, chunked-body decoding, SSE JSON extraction, connect-timeout handling, and wildcard-host normalization. New probe call sites should use this module instead of adding ad-hoc `TcpStream` readers in feature modules. Long-term outbound HTTP should move to a maintained HTTP client, but the current shared probe gives the existing raw-socket path one audited boundary.
+
+HTTP response serialization for the dashboard is also isolated behind `src/dashboard/response.rs`. That module now exposes `ResponseWriteError`/`ResponseWriteResult`, so write failures and header-validation failures stay typed until the outer dashboard boundary renders them for callers. The same boundary pattern now covers runtime paths, client metadata/restore backups, server loading, MCP source write validation, restart guards, tool-result options, lab loading, upstream server config, and update checks. These local enums keep subsystem causes structured until a CLI/API edge renders them, which makes the later `thiserror` migration mechanical instead of another project-wide string rewrite.
+
+The modernization inventory also parses `Result<Ok, Err>` signatures with nested generic depth instead of shallow `Result<[^>]+, String>` matching. That keeps the budget honest: nested return types such as `Result<BTreeMap<String, SourceServerRecord>, String>` now count when they should, while successful values like `Result<BTreeMap<String, String>, E>` do not count as stringly errors.

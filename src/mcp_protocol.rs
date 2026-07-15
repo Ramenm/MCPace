@@ -1,5 +1,6 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
+use std::fmt;
 
 pub const CURRENT_PROTOCOL_VERSION: &str = "2025-11-25";
 pub const STREAMABLE_HTTP_DEFAULT_PROTOCOL_VERSION: &str = "2025-03-26";
@@ -15,6 +16,110 @@ pub const ERROR_INVALID_PARAMS: i64 = -32602;
 pub const ERROR_INTERNAL: i64 = -32603;
 pub const ERROR_HEADER_MISMATCH: i64 = -32001;
 pub const ERROR_NOT_INITIALIZED: i64 = -32002;
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum McpProtocolError {
+    MessageNotObject,
+    JsonRpcVersionMismatch { actual: Option<String> },
+    MethodMissing,
+    MethodNotString,
+    MethodEmpty,
+    ParamsNotObject,
+    IdMustBeIntegerNumber,
+    IdMustNotBeNull,
+    IdMustBeStringOrInteger,
+    ArgumentsNotObject { method_label: String },
+    ResponseJsonRpcVersionMismatch { actual: Option<String> },
+    ResponseIdMismatch { expected: i64 },
+    ResponseHasBothResultAndError,
+    ResponseMissingResultOrError,
+    ResponseErrorNotObject,
+}
+
+impl McpProtocolError {
+    #[cfg(test)]
+    pub fn contains(&self, needle: &str) -> bool {
+        self.to_string().contains(needle)
+    }
+}
+
+impl fmt::Display for McpProtocolError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            McpProtocolError::MessageNotObject => {
+                formatter.write_str("JSON-RPC message must be an object")
+            }
+            McpProtocolError::JsonRpcVersionMismatch {
+                actual: Some(actual),
+            } => write!(
+                formatter,
+                "JSON-RPC request must declare jsonrpc \"2.0\"; got '{}'",
+                actual
+            ),
+            McpProtocolError::JsonRpcVersionMismatch { actual: None } => {
+                formatter.write_str("JSON-RPC request must declare jsonrpc \"2.0\"")
+            }
+            McpProtocolError::MethodMissing => {
+                formatter.write_str("JSON-RPC request requires a method")
+            }
+            McpProtocolError::MethodNotString => {
+                formatter.write_str("JSON-RPC method must be a string")
+            }
+            McpProtocolError::MethodEmpty => {
+                formatter.write_str("JSON-RPC method must be non-empty")
+            }
+            McpProtocolError::ParamsNotObject => {
+                formatter.write_str("MCP params must be a JSON object when present")
+            }
+            McpProtocolError::IdMustBeIntegerNumber => {
+                formatter.write_str("JSON-RPC request id must be an integer number when numeric")
+            }
+            McpProtocolError::IdMustNotBeNull => {
+                formatter.write_str("JSON-RPC request id must not be null")
+            }
+            McpProtocolError::IdMustBeStringOrInteger => {
+                formatter.write_str("JSON-RPC id must be a string or integer number when present")
+            }
+            McpProtocolError::ArgumentsNotObject { method_label } => write!(
+                formatter,
+                "{} arguments must be a JSON object when present",
+                method_label
+            ),
+            McpProtocolError::ResponseJsonRpcVersionMismatch {
+                actual: Some(actual),
+            } => write!(
+                formatter,
+                "JSON-RPC response must declare jsonrpc \"2.0\"; got '{}'",
+                actual
+            ),
+            McpProtocolError::ResponseJsonRpcVersionMismatch { actual: None } => {
+                formatter.write_str("JSON-RPC response must declare jsonrpc \"2.0\"")
+            }
+            McpProtocolError::ResponseIdMismatch { expected } => write!(
+                formatter,
+                "JSON-RPC response id does not match request id {}",
+                expected
+            ),
+            McpProtocolError::ResponseHasBothResultAndError => {
+                formatter.write_str("JSON-RPC response cannot contain both result and error")
+            }
+            McpProtocolError::ResponseMissingResultOrError => {
+                formatter.write_str("JSON-RPC response must contain exactly one of result or error")
+            }
+            McpProtocolError::ResponseErrorNotObject => {
+                formatter.write_str("JSON-RPC response error must be an object")
+            }
+        }
+    }
+}
+
+impl std::error::Error for McpProtocolError {}
+
+impl From<McpProtocolError> for String {
+    fn from(error: McpProtocolError) -> Self {
+        error.to_string()
+    }
+}
 
 pub fn is_supported_protocol_version(requested: &str) -> bool {
     SUPPORTED_PROTOCOL_VERSIONS.contains(&requested)
@@ -32,16 +137,30 @@ pub fn negotiate_protocol_version(requested: &str) -> &'static str {
         .unwrap_or(CURRENT_PROTOCOL_VERSION)
 }
 
+pub const MAX_REQUEST_ID_BYTES: usize = 256;
+
 pub fn request_id(message: &JsonValue) -> Option<JsonValue> {
     json_helpers::value_at_path(message, &["id"]).cloned()
 }
 
 pub fn request_id_key(id: &JsonValue) -> Option<String> {
     match id {
-        JsonValue::String(_) => Some(id.to_compact_string()),
-        JsonValue::Number(value) if is_integer_number_text(value) => Some(value.clone()),
+        JsonValue::String(value) => Some(format!("s:{}", value)),
+        JsonValue::Number(value) if is_integer_number_text(value) => Some(format!("n:{}", value)),
         _ => None,
     }
+}
+
+pub fn request_id_byte_len(id: &JsonValue) -> Option<usize> {
+    match id {
+        JsonValue::String(value) => Some(value.len()),
+        JsonValue::Number(value) if is_integer_number_text(value) => Some(value.len()),
+        _ => None,
+    }
+}
+
+pub fn request_id_is_within_limit(id: &JsonValue) -> bool {
+    request_id_byte_len(id).is_some_and(|length| length <= MAX_REQUEST_ID_BYTES)
 }
 
 pub fn is_request_id_value(id: &JsonValue) -> bool {
@@ -93,34 +212,33 @@ pub fn empty_object() -> JsonValue {
     json_helpers::empty_object()
 }
 
-pub fn validate_request_envelope(message: &JsonValue) -> Result<(), String> {
+pub fn validate_request_envelope(message: &JsonValue) -> Result<(), McpProtocolError> {
     let object = message
         .as_object()
-        .ok_or_else(|| "JSON-RPC message must be an object".to_string())?;
+        .ok_or(McpProtocolError::MessageNotObject)?;
 
     match object.get("jsonrpc").and_then(JsonValue::as_str) {
         Some(JSONRPC_VERSION) => {}
         Some(value) => {
-            return Err(format!(
-                "JSON-RPC request must declare jsonrpc \"2.0\"; got '{}'",
-                value
-            ));
+            return Err(McpProtocolError::JsonRpcVersionMismatch {
+                actual: Some(value.to_string()),
+            });
         }
         None => {
-            return Err("JSON-RPC request must declare jsonrpc \"2.0\"".to_string());
+            return Err(McpProtocolError::JsonRpcVersionMismatch { actual: None });
         }
     }
 
     match object.get("method") {
         Some(JsonValue::String(value)) if !value.trim().is_empty() => {}
-        Some(JsonValue::String(_)) => return Err("JSON-RPC method must be non-empty".to_string()),
-        Some(_) => return Err("JSON-RPC method must be a string".to_string()),
-        None => return Err("JSON-RPC request requires a method".to_string()),
+        Some(JsonValue::String(_)) => return Err(McpProtocolError::MethodEmpty),
+        Some(_) => return Err(McpProtocolError::MethodNotString),
+        None => return Err(McpProtocolError::MethodMissing),
     }
 
     if let Some(params) = object.get("params") {
         if !matches!(params, JsonValue::Object(_)) {
-            return Err("MCP params must be a JSON object when present".to_string());
+            return Err(McpProtocolError::ParamsNotObject);
         }
     }
 
@@ -128,122 +246,70 @@ pub fn validate_request_envelope(message: &JsonValue) -> Result<(), String> {
         match id {
             JsonValue::String(_) => {}
             JsonValue::Number(value) if is_integer_number_text(value) => {}
-            JsonValue::Number(_) => {
-                return Err("JSON-RPC request id must be an integer number when numeric".to_string())
-            }
-            JsonValue::Null => return Err("JSON-RPC request id must not be null".to_string()),
-            _ => {
-                return Err(
-                    "JSON-RPC id must be a string or integer number when present".to_string(),
-                )
-            }
+            JsonValue::Number(_) => return Err(McpProtocolError::IdMustBeIntegerNumber),
+            JsonValue::Null => return Err(McpProtocolError::IdMustNotBeNull),
+            _ => return Err(McpProtocolError::IdMustBeStringOrInteger),
         }
     }
 
     Ok(())
 }
 
-pub fn params_arguments_object_or_empty(
+pub fn validate_response_envelope(
     message: &JsonValue,
-    method_label: &str,
-) -> Result<JsonValue, String> {
-    match json_helpers::value_at_path(message, &["params", "arguments"]) {
-        Some(value @ JsonValue::Object(_)) => Ok(value.clone()),
-        Some(JsonValue::Null) | None => Ok(empty_object()),
-        Some(_) => Err(format!(
-            "{} arguments must be a JSON object when present",
-            method_label
-        )),
+    expected_id: i64,
+) -> Result<(), McpProtocolError> {
+    let object = message
+        .as_object()
+        .ok_or(McpProtocolError::MessageNotObject)?;
+
+    match object.get("jsonrpc").and_then(JsonValue::as_str) {
+        Some(JSONRPC_VERSION) => {}
+        Some(value) => {
+            return Err(McpProtocolError::ResponseJsonRpcVersionMismatch {
+                actual: Some(value.to_string()),
+            });
+        }
+        None => {
+            return Err(McpProtocolError::ResponseJsonRpcVersionMismatch { actual: None });
+        }
+    }
+
+    let id_matches = object
+        .get("id")
+        .and_then(JsonValue::as_i64)
+        .map(|id| id == expected_id)
+        .unwrap_or(false);
+    if !id_matches {
+        return Err(McpProtocolError::ResponseIdMismatch {
+            expected: expected_id,
+        });
+    }
+
+    match (object.contains_key("result"), object.get("error")) {
+        (true, Some(_)) => Err(McpProtocolError::ResponseHasBothResultAndError),
+        (false, None) => Err(McpProtocolError::ResponseMissingResultOrError),
+        (false, Some(JsonValue::Object(_))) | (true, None) => Ok(()),
+        (false, Some(_)) => Err(McpProtocolError::ResponseErrorNotObject),
     }
 }
 
-pub fn tool_call_arguments_or_empty(message: &JsonValue) -> Result<JsonValue, String> {
+pub fn params_arguments_object_or_empty(
+    message: &JsonValue,
+    method_label: &str,
+) -> Result<JsonValue, McpProtocolError> {
+    match json_helpers::value_at_path(message, &["params", "arguments"]) {
+        Some(value @ JsonValue::Object(_)) => Ok(value.clone()),
+        Some(JsonValue::Null) | None => Ok(empty_object()),
+        Some(_) => Err(McpProtocolError::ArgumentsNotObject {
+            method_label: method_label.to_string(),
+        }),
+    }
+}
+
+pub fn tool_call_arguments_or_empty(message: &JsonValue) -> Result<JsonValue, McpProtocolError> {
     params_arguments_object_or_empty(message, "tools/call")
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn negotiate_protocol_version_preserves_supported_versions_and_falls_back() {
-        assert_eq!(negotiate_protocol_version("2025-06-18"), "2025-06-18");
-        assert_eq!(
-            negotiate_protocol_version("2099-01-01"),
-            CURRENT_PROTOCOL_VERSION
-        );
-    }
-
-    #[test]
-    fn request_id_distinguishes_requests_from_notifications() {
-        let request = JsonValue::object([
-            ("jsonrpc", JsonValue::string(JSONRPC_VERSION)),
-            ("id", JsonValue::number(7)),
-            ("method", JsonValue::string("ping")),
-        ]);
-        let notification = JsonValue::object([
-            ("jsonrpc", JsonValue::string(JSONRPC_VERSION)),
-            ("method", JsonValue::string("notifications/initialized")),
-        ]);
-
-        assert_eq!(request_id(&request), Some(JsonValue::number(7)));
-        assert_eq!(request_id(&notification), None);
-        assert_eq!(request_id_or_null(&notification), JsonValue::Null);
-    }
-
-    #[test]
-    fn validate_request_envelope_rejects_null_ids() {
-        let request = JsonValue::object([
-            ("jsonrpc", JsonValue::string(JSONRPC_VERSION)),
-            ("id", JsonValue::Null),
-            ("method", JsonValue::string("tools/list")),
-        ]);
-
-        assert!(validate_request_envelope(&request)
-            .expect_err("null request IDs must be rejected")
-            .contains("must not be null"));
-    }
-
-    #[test]
-    fn request_id_key_preserves_string_number_distinction() {
-        assert_eq!(request_id_key(&JsonValue::number(1)).as_deref(), Some("1"));
-        assert_eq!(
-            request_id_key(&JsonValue::string("1")).as_deref(),
-            Some("\"1\"")
-        );
-        assert_eq!(request_id_key(&JsonValue::Null), None);
-        assert_eq!(
-            request_id_key(&JsonValue::number("9007199254740993123456789")).as_deref(),
-            Some("9007199254740993123456789")
-        );
-        assert_eq!(request_id_key(&JsonValue::number("1.5")), None);
-        assert_eq!(request_id_key(&JsonValue::number("6e+23")), None);
-    }
-
-    #[test]
-    fn validate_request_envelope_rejects_decimal_numeric_ids() {
-        let request = JsonValue::object([
-            ("jsonrpc", JsonValue::string(JSONRPC_VERSION)),
-            ("id", JsonValue::number("1.5")),
-            ("method", JsonValue::string("tools/list")),
-        ]);
-
-        assert!(validate_request_envelope(&request)
-            .expect_err("numeric request IDs must be integers")
-            .contains("integer"));
-    }
-
-    #[test]
-    fn validate_request_envelope_rejects_array_params() {
-        let request = JsonValue::object([
-            ("jsonrpc", JsonValue::string(JSONRPC_VERSION)),
-            ("id", JsonValue::number(7)),
-            ("method", JsonValue::string("tools/list")),
-            ("params", JsonValue::array([JsonValue::string("cursor")])),
-        ]);
-
-        assert!(validate_request_envelope(&request)
-            .expect_err("MCP params must use object form")
-            .contains("params"));
-    }
-}
+mod tests;

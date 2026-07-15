@@ -3,9 +3,10 @@ mod args;
 mod loader;
 mod model;
 mod render;
+use crate::diagnostics;
 
 use self::analysis::assess_scenarios;
-use self::args::{parse_args, write_help};
+use self::args::{parse_cli, write_help};
 use self::loader::{load_runtime_capabilities, load_runtime_scenarios};
 use self::render::{
     render_coverage, render_gaps, render_list, render_matrix, render_probe, render_report,
@@ -21,9 +22,9 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help {
@@ -33,21 +34,24 @@ pub fn run(
 
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
 
     let scenarios = match load_runtime_scenarios(&root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
     let capabilities = match load_runtime_capabilities(&root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -75,15 +79,14 @@ pub fn run(
         ) {
             Ok(value) => render_probe(&value, parsed.json_output, stdout),
             Err(error) => {
-                let _ = writeln!(stderr, "{}", error);
+                diagnostics::stderr_line(stderr, format_args!("{}", error));
                 1
             }
         },
         other => {
-            let _ = writeln!(
+            diagnostics::stderr_line(
                 stderr,
-                "unsupported lab action in the Rust-only repo: {}",
-                other
+                format_args!("unsupported lab action in the Rust-only repo: {}", other),
             );
             2
         }

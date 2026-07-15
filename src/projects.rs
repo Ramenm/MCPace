@@ -1,8 +1,11 @@
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::runtimepaths;
-use crate::text_utils::normalize_flag;
+use clap::{error::ErrorKind, Parser};
 use std::collections::{hash_map::DefaultHasher, BTreeMap};
+use std::ffi::OsString;
+use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -28,15 +31,72 @@ pub struct ProjectSummary {
     state: String,
 }
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+enum ProjectRegistryError {
+    Json(json_helpers::JsonFileError),
+    RuntimePath(runtimepaths::RuntimePathError),
+    InvalidRegistry { path: PathBuf, detail: String },
+    InvalidProjectPath { path: PathBuf },
+    Upstream(String),
+}
+
+type ProjectRegistryResult<T> = Result<T, ProjectRegistryError>;
+
+impl fmt::Display for ProjectRegistryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Json(error) => write!(formatter, "{}", error),
+            Self::RuntimePath(error) => write!(formatter, "{}", error),
+            Self::InvalidRegistry { path, detail } => {
+                write!(formatter, "project registry {} {}", path.display(), detail)
+            }
+            Self::InvalidProjectPath { path } => {
+                write!(
+                    formatter,
+                    "project scan path is not a directory: {}",
+                    path.display()
+                )
+            }
+            Self::Upstream(error) => write!(formatter, "{}", error),
+        }
+    }
+}
+
+impl std::error::Error for ProjectRegistryError {}
+
+impl From<json_helpers::JsonFileError> for ProjectRegistryError {
+    fn from(error: json_helpers::JsonFileError) -> Self {
+        Self::Json(error)
+    }
+}
+
+impl From<runtimepaths::RuntimePathError> for ProjectRegistryError {
+    fn from(error: runtimepaths::RuntimePathError) -> Self {
+        Self::RuntimePath(error)
+    }
+}
+
+impl From<String> for ProjectRegistryError {
+    fn from(error: String) -> Self {
+        Self::Upstream(error)
+    }
+}
+
+impl From<ProjectRegistryError> for String {
+    fn from(error: ProjectRegistryError) -> Self {
+        error.to_string()
+    }
+}
+
 pub fn run(
     args: &[String],
     default_root: Option<PathBuf>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
 
@@ -47,9 +107,9 @@ pub fn run(
 
     let root_path = parsed.root_override.or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(
+        diagnostics::stderr_line(
             stderr,
-            "mcpace root not found; expected mcpace.config.json for state discovery"
+            format_args!("mcpace root not found; expected mcpace.config.json for state discovery"),
         );
         return 1;
     };
@@ -62,12 +122,12 @@ pub fn run(
         let summary = match scan_project(&project_path) {
             Ok(value) => value,
             Err(error) => {
-                let _ = writeln!(stderr, "{}", error);
+                diagnostics::stderr_line(stderr, format_args!("{}", error));
                 return 1;
             }
         };
         if let Err(error) = upsert_project(&registry_path, &summary) {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
         if parsed.json_output {
@@ -87,7 +147,7 @@ pub fn run(
     let projects = match read_projects(&registry_path) {
         Ok(items) => items,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -129,56 +189,116 @@ fn write_help(stdout: &mut dyn Write) {
     );
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace projects",
+    disable_version_flag = true,
+    about = "Inspect and update the MCPace project registry"
+)]
+struct ProjectsCli {
+    #[arg(value_name = "list|scan")]
+    action: Option<String>,
 
-    while index < args.len() {
-        let token = normalize_flag(&args[index]);
-        match token.as_str() {
-            "list" => {
-                index += 1;
-            }
-            "scan" | "--scan" | "-scan" => {
-                parsed.scan = true;
-                index += 1;
-                if let Some(value) = args.get(index) {
-                    if !value.starts_with('-') {
-                        parsed.scan_path = Some(PathBuf::from(value));
-                        index += 1;
-                    }
-                }
-            }
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("projects requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            _ => {
-                parsed.error = Some(format!(
-                    "unsupported projects arguments in the Rust-only repo: {}",
-                    args[index]
-                ));
-                return parsed;
+    #[arg(value_name = "PROJECT_PATH")]
+    scan_path: Option<PathBuf>,
+
+    #[arg(value_name = "EXTRA")]
+    extra: Vec<String>,
+
+    #[arg(long = "scan", hide = true)]
+    scan_flag: bool,
+
+    #[arg(long = "json")]
+    json_output: bool,
+
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+}
+
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match ProjectsCli::try_parse_from(argv(args)) {
+        Ok(cli) => parsed_from_cli(cli),
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
             }
         }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn parsed_from_cli(cli: ProjectsCli) -> ParsedArgs {
+    let mut action = cli.action.as_deref().map(str::to_ascii_lowercase);
+    let mut scan_path = cli.scan_path;
+    if cli.scan_flag
+        && scan_path.is_none()
+        && action
+            .as_deref()
+            .is_some_and(|value| !matches!(value, "list" | "scan"))
+    {
+        scan_path = cli.action.clone().map(PathBuf::from);
+        action = None;
+    }
+
+    let mut parsed = ParsedArgs {
+        json_output: cli.json_output,
+        help: false,
+        scan: cli.scan_flag || action.as_deref() == Some("scan"),
+        scan_path,
+        root_override: cli.root_override,
+        error: None,
+    };
+
+    if !cli.extra.is_empty() {
+        parsed.error = Some(format!(
+            "unsupported projects arguments in the Rust-only repo: {}",
+            cli.extra.join(" ")
+        ));
+        return parsed;
+    }
+    if !matches!(action.as_deref(), None | Some("list" | "scan")) {
+        parsed.error = Some(format!(
+            "unsupported projects arguments in the Rust-only repo: {}",
+            cli.action.unwrap_or_default()
+        ));
+    }
+    if action.as_deref() == Some("list") && parsed.scan_path.is_some() {
+        parsed.error = Some("projects list does not accept a project path".to_string());
     }
 
     parsed
 }
 
-fn read_projects(path: &Path) -> Result<Vec<ProjectSummary>, String> {
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace projects"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_arg(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_arg(arg: &str) -> String {
+    match arg {
+        "-json" => "--json".to_string(),
+        "-root" => "--root".to_string(),
+        "-scan" => "--scan".to_string(),
+        "-?" => "--help".to_string(),
+        _ => arg.to_string(),
+    }
+}
+
+fn read_projects(path: &Path) -> ProjectRegistryResult<Vec<ProjectSummary>> {
     if !path.is_file() {
         return Ok(Vec::new());
     }
@@ -220,13 +340,10 @@ fn resolve_scan_project_path(root_path: &Path, scan_path: Option<&Path>) -> Path
     }
 }
 
-fn scan_project(path: &Path) -> Result<ProjectSummary, String> {
+fn scan_project(path: &Path) -> ProjectRegistryResult<ProjectSummary> {
     let canonical = runtimepaths::canonicalize_or_original(path);
     if !canonical.is_dir() {
-        return Err(format!(
-            "project scan path is not a directory: {}",
-            canonical.display()
-        ));
+        return Err(ProjectRegistryError::InvalidProjectPath { path: canonical });
     }
     let markers = detect_project_markers(&canonical);
     let detected_type = detected_type_for_markers(&markers).to_string();
@@ -297,7 +414,7 @@ fn project_id_for_path(path: &str) -> String {
     format!("proj-{:016x}", hasher.finish())
 }
 
-fn upsert_project(path: &Path, summary: &ProjectSummary) -> Result<(), String> {
+fn upsert_project(path: &Path, summary: &ProjectSummary) -> ProjectRegistryResult<()> {
     let _registry_lock =
         runtimepaths::acquire_exclusive_file_lock(path, "project registry update")?;
     let mut root = if path.is_file() {
@@ -310,10 +427,10 @@ fn upsert_project(path: &Path, summary: &ProjectSummary) -> Result<(), String> {
     };
 
     let Some(root_map) = root.as_object_mut() else {
-        return Err(format!(
-            "project registry {} must be a JSON object",
-            path.display()
-        ));
+        return Err(ProjectRegistryError::InvalidRegistry {
+            path: path.to_path_buf(),
+            detail: "must be a JSON object".to_string(),
+        });
     };
     root_map
         .entry("version".to_string())
@@ -325,13 +442,14 @@ fn upsert_project(path: &Path, summary: &ProjectSummary) -> Result<(), String> {
         .get_mut("projects")
         .and_then(JsonValue::as_object_mut)
     else {
-        return Err(format!(
-            "project registry {} has invalid projects object",
-            path.display()
-        ));
+        return Err(ProjectRegistryError::InvalidRegistry {
+            path: path.to_path_buf(),
+            detail: "has invalid projects object".to_string(),
+        });
     };
     projects.insert(summary.project_id.clone(), summary.to_json_value());
-    runtimepaths::write_text_atomic(path, &root.to_pretty_string())
+    runtimepaths::write_text_atomic(path, &root.to_pretty_string())?;
+    Ok(())
 }
 
 fn normalize_project_record(key: &str, record: &JsonValue) -> Option<ProjectSummary> {

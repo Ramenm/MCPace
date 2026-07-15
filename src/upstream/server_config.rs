@@ -2,6 +2,7 @@ use super::{
     expand_template, infer_source_type, ToolRiskPolicy, UpstreamServerConfig, UpstreamServerPolicy,
     DEFAULT_TIMEOUT_MS,
 };
+use crate::execution::ExecutionPolicy;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::mcp_sources;
@@ -11,9 +12,57 @@ use crate::resources;
 use crate::text_utils;
 use std::collections::{BTreeMap, BTreeSet};
 use std::env;
+use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum UpstreamServerConfigError {
+    Registry { reason: String },
+    Policy { reason: String },
+}
+
+pub(super) type UpstreamServerConfigResult<T> = std::result::Result<T, UpstreamServerConfigError>;
+
+impl UpstreamServerConfigError {
+    fn registry(reason: impl Into<String>) -> Self {
+        Self::Registry {
+            reason: reason.into(),
+        }
+    }
+
+    fn policy(reason: impl Into<String>) -> Self {
+        Self::Policy {
+            reason: reason.into(),
+        }
+    }
+}
+
+impl fmt::Display for UpstreamServerConfigError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Registry { reason } => write!(
+                formatter,
+                "failed to load upstream server registry: {}",
+                reason
+            ),
+            Self::Policy { reason } => write!(
+                formatter,
+                "failed to load upstream server policy: {}",
+                reason
+            ),
+        }
+    }
+}
+
+impl std::error::Error for UpstreamServerConfigError {}
+
+impl From<UpstreamServerConfigError> for String {
+    fn from(error: UpstreamServerConfigError) -> Self {
+        error.to_string()
+    }
+}
 
 pub(super) fn context_string(value: Option<&String>) -> Option<String> {
     text_utils::trimmed_non_empty_owned(value)
@@ -73,9 +122,10 @@ fn insert_env_var_name(names: &mut Vec<String>, seen: &mut BTreeSet<String>, val
 
 pub(super) fn load_servers(
     root_path: &Path,
-) -> Result<BTreeMap<String, UpstreamServerConfig>, String> {
-    let registry = mcp_sources::load_mcp_server_registry(root_path)?;
-    let server_policies = load_upstream_server_policies(root_path)?;
+) -> UpstreamServerConfigResult<BTreeMap<String, UpstreamServerConfig>> {
+    let registry = mcp_sources::load_mcp_server_registry(root_path)
+        .map_err(UpstreamServerConfigError::registry)?;
+    let (execution_defaults, server_policies) = load_upstream_server_policies(root_path)?;
 
     let mut parsed = BTreeMap::new();
     for entry in registry.servers.values() {
@@ -138,6 +188,18 @@ pub(super) fn load_servers(
                 env_values.insert(key, value);
             }
         }
+        let headers = json_helpers::object_at_path(raw, &["headers"])
+            .map(|object| {
+                object
+                    .iter()
+                    .filter_map(|(key, value)| {
+                        value
+                            .as_str()
+                            .map(|text| (key.clone(), expand_template(text, root_path)))
+                    })
+                    .collect::<BTreeMap<_, _>>()
+            })
+            .unwrap_or_default();
         let cwd = json_helpers::string_at_path(raw, &["cwd"])
             .map(|value| expand_template(value, root_path))
             .filter(|value| !value.trim().is_empty())
@@ -161,9 +223,13 @@ pub(super) fn load_servers(
                 command,
                 args,
                 env: env_values,
+                headers,
                 cwd,
                 url,
                 timeout_ms,
+                execution: policy
+                    .map(|policy| policy.execution.clone())
+                    .unwrap_or_else(|| execution_defaults.clone()),
                 tool_policies: policy
                     .map(|policy| policy.tool_policies.clone())
                     .unwrap_or_default(),
@@ -175,17 +241,20 @@ pub(super) fn load_servers(
 
 fn load_upstream_server_policies(
     root_path: &Path,
-) -> Result<BTreeMap<String, UpstreamServerPolicy>, String> {
+) -> UpstreamServerConfigResult<(ExecutionPolicy, BTreeMap<String, UpstreamServerPolicy>)> {
     let config_path = root_path.join("mcpace.config.json");
     if !config_path.is_file() {
-        return Ok(BTreeMap::new());
+        return Ok((ExecutionPolicy::conservative(), BTreeMap::new()));
     }
 
-    let value = json_helpers::read_json_file(&config_path)?;
-    let runtime_profile = profile::load_runtime_profile_selection(root_path)?;
+    let value =
+        json_helpers::read_json_file(&config_path).map_err(UpstreamServerConfigError::policy)?;
+    let runtime_profile = profile::load_runtime_profile_selection(root_path)
+        .map_err(UpstreamServerConfigError::policy)?;
+    let execution_defaults = ExecutionPolicy::from_config_root(&value);
     let mut policies = BTreeMap::new();
     let Some(servers) = json_helpers::object_at_path(&value, &["servers"]) else {
-        return Ok(policies);
+        return Ok((execution_defaults, policies));
     };
 
     for (server_name, raw_server) in servers {
@@ -209,7 +278,8 @@ fn load_upstream_server_policies(
             platform_utils::supports_current_platform(&json_helpers::strings_from_array(
                 json_helpers::array_at_path(raw_server, &["platforms"]),
             ));
-        let runtime_enabled = !server_policy_is_disabled(raw_server);
+        let execution = ExecutionPolicy::for_server(&execution_defaults, raw_server);
+        let runtime_enabled = !execution.is_disabled() && !server_policy_is_disabled(raw_server);
         let mut tool_policies = Vec::new();
         if let Some(raw_policies) = json_helpers::array_at_path(raw_server, &["toolPolicies"]) {
             for raw_policy in raw_policies {
@@ -224,12 +294,13 @@ fn load_upstream_server_policies(
                 profile_enabled,
                 platform_supported,
                 runtime_enabled,
+                execution,
                 tool_policies,
             },
         );
     }
 
-    Ok(policies)
+    Ok((execution_defaults, policies))
 }
 
 fn source_enabled_from_mcp_settings(raw: &JsonValue) -> bool {
@@ -358,11 +429,38 @@ where
     let (tx, rx) = mpsc::channel();
     let mut handles = Vec::with_capacity(worker_limit);
 
-    for _ in 0..worker_limit {
+    for worker_index in 0..worker_limit {
         let root_path = root_path.to_path_buf();
         let pending = Arc::clone(&pending);
         let tx = tx.clone();
-        handles.push(thread::spawn(move || loop {
+        let spawned = thread::Builder::new()
+            .name(format!("mcpace-upstream-catalog-{worker_index}"))
+            .spawn(move || loop {
+                let next = {
+                    let mut guard = pending
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner());
+                    guard.next()
+                };
+                let Some((index, server)) = next else {
+                    break;
+                };
+                let name = server.name.clone();
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    task(&root_path, &server, timeout_ms)
+                }))
+                .unwrap_or_else(|_| upstream_worker_panic_result(name));
+                if tx.send((index, result)).is_err() {
+                    break;
+                }
+            });
+        match spawned {
+            Ok(handle) => handles.push(handle),
+            Err(_) => break,
+        }
+    }
+    if handles.is_empty() {
+        loop {
             let next = {
                 let mut guard = pending
                     .lock()
@@ -374,13 +472,13 @@ where
             };
             let name = server.name.clone();
             let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                task(&root_path, &server, timeout_ms)
+                task(root_path, &server, timeout_ms)
             }))
             .unwrap_or_else(|_| upstream_worker_panic_result(name));
             if tx.send((index, result)).is_err() {
                 break;
             }
-        }));
+        }
     }
     drop(tx);
 

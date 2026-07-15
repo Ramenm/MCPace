@@ -21,9 +21,12 @@ merged user/project MCP settings registry.
 Clients should point at MCPace itself, not at each upstream server. For example,
 Codex and Cursor only need `http://127.0.0.1:39022/mcp`; MCPace then loads
 upstreams from the merged settings sources. On Windows, the generated user-level
-autostart launcher reads persistent MCPace environment settings such as
+autostart entry is visible as `MCPace Agent` but points at
+`mcpace-agent-launcher.exe`, a tiny GUI-subsystem sidecar next to `mcpace.exe`.
+That launcher reads persistent MCPace environment settings such as
 `MCPACE_MCP_SETTINGS` from the user/machine registry before starting `serve`, so
-login startup does not depend on a stale Explorer or WScript environment. CLI
+login startup does not open a terminal window and does not depend on a stale
+Explorer or WScript environment. CLI
 commands also fall back to the installed autostart root when no `--root`,
 `MCPACE_ROOT`, or current-directory root is available, so commands such as
 `mcpace serve restart` can work from a normal home-directory shell after service
@@ -59,7 +62,13 @@ Normalization rules:
 | `disabled: true` | `enabled: false` |
 | MCPace self-entry | skipped to avoid loops |
 
-Direct callable upstreams are stdio or plain/local Streamable HTTP. Keep HTTPS remote MCP endpoints behind a stdio adapter such as `mcp-remote` or a local gateway until the TLS bridge is implemented.
+Direct callable upstreams are stdio and Streamable HTTP. Remote HTTPS endpoints use TLS with the operating system certificate verifier and support configured headers such as `Authorization`; redirects are not followed so credentials cannot cross origins. Header values may use existing `${ENV_NAME}` expansion (quote them in the shell when adding a server). MCPace does not run upstream OAuth/PKCE authorization flows yet, so OAuth-only endpoints require an OAuth-capable stdio adapter. Plain HTTP remains restricted to exact loopback IP addresses or `localhost`.
+
+## Detecting newly added servers
+
+MCPace re-enumerates `mcp_settings.json`, sorted `mcp_settings.d/*.json` fragments, configured include paths/directories, and explicit environment sources whenever it builds the server registry. Adding, changing, disabling, or removing a fragment therefore does not require an MCPace restart; the content fingerprint also invalidates stale upstream tool caches. Broker tools such as `upstream_search`, `upstream_tools`, and `upstream_call` see the new registry on the next request.
+
+MCPace deliberately advertises `tools.listChanged: false` because its HTTP transport does not maintain an unsolicited notification stream. The default broker tool surface stays stable. Clients using optional native/hybrid projected tools must request `tools/list` again or reconnect before those projected names appear.
 
 ## Install examples
 
@@ -135,7 +144,7 @@ Config block:
 }
 ```
 
-`mcpace auto --dry-run` does not launch external packages. Package download/execution happens through the configured launcher only after the trust gate passes.
+`mcpace auto --dry-run` does not launch external packages. Package download/execution happens through the configured launcher only after the trust gate passes. The embedded starter entries use exact package versions; automatic discovery skips candidates whose launcher is unavailable, and a completed install returns failure when its mandatory live probe fails instead of reporting a broken server as ready.
 
 Advanced/debug commands:
 
@@ -200,7 +209,9 @@ Keep the dashboard as the primary surface while MCPace is local-first. A desktop
 }
 ```
 
-Use the catalog for review decisions, recommended execution modes, permission hints, and notes. Personal use can stay permissive; teams can require approval for unknown servers.
+Use the catalog for review decisions, recommended execution modes, permission hints, and notes. The binary embeds the small curated starter catalog so a fresh npm/native installation can resolve common names without repository files. Any configured local catalog has higher precedence and can replace or block an embedded/registry candidate. Unknown official-registry entries remain review-only, regardless of publisher-supplied trust fields or a custom cache filename.
+
+Official Registry package versions, fixed runtime/package arguments, and required environment/argument/header metadata are preserved. Unknown package managers and custom package registry bases are not silently reinterpreted as public npm packages. Live `tools/list` follows bounded pagination in one MCP session, rejects repeated cursors and malformed/duplicate tools, and caches only a complete validated catalog.
 
 ## Options
 

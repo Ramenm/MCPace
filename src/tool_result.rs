@@ -1,6 +1,88 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
 use std::collections::BTreeMap;
+use std::fmt;
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ToolResultError {
+    InvalidArgument {
+        field: &'static str,
+        reason: String,
+    },
+    UnsupportedMode {
+        field: &'static str,
+        value: String,
+        expected: &'static str,
+    },
+    UnknownPlugin {
+        plugin: String,
+        supported: String,
+    },
+}
+
+pub type ToolResultResult<T> = std::result::Result<T, ToolResultError>;
+
+impl ToolResultError {
+    fn invalid_argument(field: &'static str, reason: impl Into<String>) -> Self {
+        Self::InvalidArgument {
+            field,
+            reason: reason.into(),
+        }
+    }
+
+    fn unsupported_mode(
+        field: &'static str,
+        value: impl Into<String>,
+        expected: &'static str,
+    ) -> Self {
+        Self::UnsupportedMode {
+            field,
+            value: value.into(),
+            expected,
+        }
+    }
+
+    fn unknown_plugin(plugin: impl Into<String>, supported: impl Into<String>) -> Self {
+        Self::UnknownPlugin {
+            plugin: plugin.into(),
+            supported: supported.into(),
+        }
+    }
+
+    pub fn contains(&self, needle: &str) -> bool {
+        self.to_string().contains(needle)
+    }
+}
+
+impl fmt::Display for ToolResultError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidArgument { reason, .. } => formatter.write_str(reason),
+            Self::UnsupportedMode {
+                field,
+                value,
+                expected,
+            } => write!(
+                formatter,
+                "unsupported {} '{}'; use {}",
+                field, value, expected
+            ),
+            Self::UnknownPlugin { plugin, supported } => write!(
+                formatter,
+                "unknown tokenReducerPlugins entry '{}'; supported built-ins are {}",
+                plugin, supported
+            ),
+        }
+    }
+}
+
+impl std::error::Error for ToolResultError {}
+
+impl From<ToolResultError> for String {
+    fn from(error: ToolResultError) -> Self {
+        error.to_string()
+    }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ToolResultMode {
@@ -65,7 +147,7 @@ impl Default for ToolResultOptions {
     }
 }
 
-pub fn options_from_arguments(arguments: &JsonValue) -> Result<ToolResultOptions, String> {
+pub fn options_from_arguments(arguments: &JsonValue) -> ToolResultResult<ToolResultOptions> {
     let mut options = ToolResultOptions::default();
 
     if let Some(mode) = first_string_argument(arguments, &["resultMode", "toolResultMode"]) {
@@ -96,7 +178,10 @@ pub fn options_from_arguments(arguments: &JsonValue) -> Result<ToolResultOptions
     {
         for plugin in plugins {
             let Some(plugin_name) = plugin.as_str() else {
-                return Err("tokenReducerPlugins must be an array of strings".to_string());
+                return Err(ToolResultError::invalid_argument(
+                    "tokenReducerPlugins",
+                    "tokenReducerPlugins must be an array of strings",
+                ));
             };
             apply_builtin_token_reducer(plugin_name, &mut options, strict_plugins)?;
         }
@@ -194,40 +279,43 @@ fn first_string_argument<'a>(arguments: &'a JsonValue, keys: &[&str]) -> Option<
         .find_map(|key| json_helpers::string_at_path(arguments, &[*key]))
 }
 
-fn parse_result_mode(value: &str) -> Result<ToolResultMode, String> {
+fn parse_result_mode(value: &str) -> ToolResultResult<ToolResultMode> {
     match normalized_token(value).as_str() {
         "native" | "passthrough" | "direct" | "auto" => Ok(ToolResultMode::Native),
         "compat" | "compatible" | "pretty" | "full" => Ok(ToolResultMode::Compat),
         "compact" | "json" => Ok(ToolResultMode::Compact),
         "summary" | "summarized" | "brief" => Ok(ToolResultMode::Summary),
-        other => Err(format!(
-            "unsupported resultMode '{}'; use native, compat, compact, or summary",
-            other
+        other => Err(ToolResultError::unsupported_mode(
+            "resultMode",
+            other,
+            "native, compat, compact, or summary",
         )),
     }
 }
 
-fn parse_diagnostics_mode(value: &str) -> Result<UpstreamDiagnosticsMode, String> {
+fn parse_diagnostics_mode(value: &str) -> ToolResultResult<UpstreamDiagnosticsMode> {
     match normalized_token(value).as_str() {
         "full" | "all" | "compat" => Ok(UpstreamDiagnosticsMode::Full),
         "summary" | "summarized" | "brief" => Ok(UpstreamDiagnosticsMode::Summary),
         "none" | "off" | "minimal" | "native" | "false" => Ok(UpstreamDiagnosticsMode::None),
-        other => Err(format!(
-            "unsupported diagnostics mode '{}'; use full, summary, or none",
-            other
+        other => Err(ToolResultError::unsupported_mode(
+            "diagnostics mode",
+            other,
+            "full, summary, or none",
         )),
     }
 }
 
-fn parse_nested_content_mode(value: &str) -> Result<NestedUpstreamContentMode, String> {
+fn parse_nested_content_mode(value: &str) -> ToolResultResult<NestedUpstreamContentMode> {
     match normalized_token(value).as_str() {
         "full" | "all" | "compat" => Ok(NestedUpstreamContentMode::Full),
         "compact" | "summary" | "summarized" | "dedupe" | "deduplicated" | "native" => {
             Ok(NestedUpstreamContentMode::Compact)
         }
-        other => Err(format!(
-            "unsupported nestedContent mode '{}'; use full or compact",
-            other
+        other => Err(ToolResultError::unsupported_mode(
+            "nestedContent mode",
+            other,
+            "full or compact",
         )),
     }
 }
@@ -240,7 +328,7 @@ fn apply_builtin_token_reducer(
     plugin_name: &str,
     options: &mut ToolResultOptions,
     strict: bool,
-) -> Result<(), String> {
+) -> ToolResultResult<()> {
     match normalized_token(plugin_name).as_str() {
         "mcpace.native-content.v1" | "native-content" | "native" => {
             options.result_mode = ToolResultMode::Native;
@@ -265,10 +353,9 @@ fn apply_builtin_token_reducer(
         }
         other => {
             if strict {
-                return Err(format!(
-                    "unknown tokenReducerPlugins entry '{}'; supported built-ins are {}",
+                return Err(ToolResultError::unknown_plugin(
                     other,
-                    SUPPORTED_TOKEN_REDUCER_PLUGINS.join(", ")
+                    SUPPORTED_TOKEN_REDUCER_PLUGINS.join(", "),
                 ));
             }
         }
@@ -531,201 +618,4 @@ fn compact_one_upstream_result(value: JsonValue, compact_plain_content: bool) ->
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::json_helpers;
-
-    #[test]
-    fn native_mode_defaults_to_short_content_for_non_upstream_tools() {
-        let value = JsonValue::object([
-            ("ok", JsonValue::bool(true)),
-            ("server", JsonValue::string("demo")),
-            ("tool", JsonValue::string("demo_status")),
-        ]);
-        let payload = tool_result_payload(
-            value,
-            false,
-            ToolResultOptions {
-                result_mode: ToolResultMode::Native,
-                ..ToolResultOptions::default()
-            },
-        );
-        let items = payload
-            .get("content")
-            .and_then(JsonValue::as_array)
-            .unwrap();
-        assert!(items[0]
-            .get("text")
-            .and_then(JsonValue::as_str)
-            .unwrap()
-            .contains("server=demo"));
-    }
-
-    #[test]
-    fn native_upstream_mode_preserves_upstream_content_at_top_level() {
-        let value = JsonValue::object([
-            ("ok", JsonValue::bool(true)),
-            ("upstreamOk", JsonValue::bool(true)),
-            (
-                "upstreamResult",
-                JsonValue::object([
-                    (
-                        "content",
-                        JsonValue::array([JsonValue::object([
-                            ("type", JsonValue::string("text")),
-                            ("text", JsonValue::string("hello from upstream")),
-                        ])]),
-                    ),
-                    (
-                        "structuredContent",
-                        JsonValue::object([("value", JsonValue::number(7))]),
-                    ),
-                ]),
-            ),
-        ]);
-        let payload = upstream_tool_result_payload(
-            value,
-            false,
-            ToolResultOptions {
-                result_mode: ToolResultMode::Native,
-                ..ToolResultOptions::default()
-            },
-        );
-        let content = payload
-            .get("content")
-            .and_then(JsonValue::as_array)
-            .unwrap();
-        assert_eq!(
-            content[0].get("text").and_then(JsonValue::as_str),
-            Some("hello from upstream")
-        );
-        assert_eq!(
-            json_helpers::value_at_path(&payload, &["structuredContent", "value"])
-                .and_then(JsonValue::as_i64),
-            Some(7)
-        );
-        assert_eq!(
-            payload.get("isError").and_then(JsonValue::as_bool),
-            Some(false)
-        );
-    }
-
-    #[test]
-    fn native_upstream_mode_propagates_upstream_errors() {
-        let value = JsonValue::object([
-            ("ok", JsonValue::bool(false)),
-            ("upstreamOk", JsonValue::bool(false)),
-            ("upstreamIsError", JsonValue::bool(true)),
-            (
-                "upstreamResult",
-                JsonValue::object([("content", JsonValue::array([]))]),
-            ),
-        ]);
-        let payload = upstream_tool_result_payload(
-            value,
-            false,
-            ToolResultOptions {
-                result_mode: ToolResultMode::Native,
-                ..ToolResultOptions::default()
-            },
-        );
-        assert_eq!(
-            payload.get("isError").and_then(JsonValue::as_bool),
-            Some(true)
-        );
-    }
-
-    #[test]
-    fn diagnostics_none_drops_lease_and_session_fields() {
-        let value = JsonValue::object([
-            ("ok", JsonValue::bool(true)),
-            ("bridgeOk", JsonValue::bool(true)),
-            (
-                "lease",
-                JsonValue::object([("id", JsonValue::string("lease:1"))]),
-            ),
-            ("leaseReleased", JsonValue::bool(true)),
-            ("sessionPoolHit", JsonValue::bool(true)),
-            (
-                "upstreamResult",
-                JsonValue::object([("content", JsonValue::array([]))]),
-            ),
-        ]);
-        let shaped = shape_upstream_diagnostics(value, UpstreamDiagnosticsMode::None);
-        assert!(shaped.get("ok").is_some());
-        assert!(shaped.get("upstreamResult").is_some());
-        assert!(shaped.get("bridgeOk").is_none());
-        assert!(shaped.get("lease").is_none());
-        assert!(shaped.get("leaseReleased").is_none());
-        assert!(shaped.get("sessionPoolHit").is_none());
-    }
-
-    #[test]
-    fn nested_content_compaction_keeps_structured_content() {
-        let value = JsonValue::object([(
-            "upstreamResult",
-            JsonValue::object([
-                (
-                    "content",
-                    JsonValue::array([JsonValue::object([
-                        ("type", JsonValue::string("text")),
-                        ("text", JsonValue::string("{\"large\":true}")),
-                    ])]),
-                ),
-                (
-                    "structuredContent",
-                    JsonValue::object([("large", JsonValue::bool(true))]),
-                ),
-            ]),
-        )]);
-        let shaped = shape_nested_upstream_content(value, NestedUpstreamContentMode::Compact);
-        assert_eq!(
-            json_helpers::bool_at_path(&shaped, &["upstreamResult", "structuredContent", "large"]),
-            Some(true)
-        );
-        let result = shaped.get("upstreamResult").unwrap();
-        let content = result.get("content").and_then(JsonValue::as_array).unwrap();
-        assert!(content[0]
-            .get("text")
-            .and_then(JsonValue::as_str)
-            .unwrap()
-            .contains("compacted"));
-    }
-
-    #[test]
-    fn supported_token_reducer_plugins_are_valid_in_strict_mode() {
-        for plugin in supported_token_reducer_plugins() {
-            let args = JsonValue::object([
-                (
-                    "tokenReducerPlugins",
-                    JsonValue::array([JsonValue::string(*plugin)]),
-                ),
-                ("pluginPolicy", JsonValue::string("strict")),
-            ]);
-            options_from_arguments(&args).unwrap_or_else(|error| {
-                panic!("advertised token reducer plugin {plugin} was rejected: {error}")
-            });
-        }
-    }
-
-    #[test]
-    fn unknown_token_reducer_plugin_is_rejected_only_in_strict_mode() {
-        let args = JsonValue::object([(
-            "tokenReducerPlugins",
-            JsonValue::array([JsonValue::string("mcpace.schema-compact.v1")]),
-        )]);
-        assert!(options_from_arguments(&args).is_ok());
-
-        let strict_args = JsonValue::object([
-            (
-                "tokenReducerPlugins",
-                JsonValue::array([JsonValue::string("mcpace.schema-compact.v1")]),
-            ),
-            ("pluginPolicy", JsonValue::string("strict")),
-        ]);
-        let error =
-            options_from_arguments(&strict_args).expect_err("strict rejects unknown plugin");
-        assert!(error.contains("unknown tokenReducerPlugins entry"));
-        assert!(error.contains("mcpace.native-content.v1"));
-    }
-}
+mod tests;

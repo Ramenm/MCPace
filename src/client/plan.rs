@@ -1,4 +1,6 @@
 use crate::client_catalog::ClientTargetRecord;
+use crate::execution::{ExecutionAffinityContext, ExecutionMode};
+use crate::json::JsonValue;
 use crate::platform_utils;
 use crate::runtimepaths;
 use crate::server::ServerRecord;
@@ -94,12 +96,19 @@ pub(super) fn build_plan(
             requires_hub_owned_stdio = true;
         }
         if route_is_routable {
-            if plan.request_strategy == "parallel-safe" {
+            if matches!(
+                plan.execution.mode,
+                ExecutionMode::Shared | ExecutionMode::Pool
+            ) && plan.parallelism_limit > 1
+            {
                 parallel_safe_servers += 1;
             } else {
                 serialized_servers += 1;
             }
-            if plan.request_strategy.starts_with("exclusive") {
+            if matches!(
+                plan.execution.mode,
+                ExecutionMode::SessionIsolated | ExecutionMode::ProjectIsolated
+            ) {
                 exclusive_servers += 1;
             }
         }
@@ -204,6 +213,7 @@ pub(super) fn build_plan(
 }
 
 fn build_server_plan(record: &ServerRecord, context: &ResolvedContext) -> ServerCoordinationPlan {
+    let upstream_transport = resolve_upstream_transport(record);
     let scope = resolve_scope(record, context);
     let request = resolve_request_strategy(record, &scope, context);
     let mut warnings = scope.warnings.clone();
@@ -235,7 +245,7 @@ fn build_server_plan(record: &ServerRecord, context: &ResolvedContext) -> Server
         admission_state: admission_state(record),
         scope_class: record.scope_class.clone(),
         concurrency_policy: record.concurrency_policy.clone(),
-        upstream_transport: resolve_upstream_transport(record),
+        upstream_transport: upstream_transport.clone(),
         process_partition: scope.process_partition,
         process_scope_key: scope.process_scope_key,
         project_binding_key: scope.project_binding_key,
@@ -250,8 +260,11 @@ fn build_server_plan(record: &ServerRecord, context: &ResolvedContext) -> Server
         effect_class: record.effect_class.clone(),
         default_pool_model: record.default_pool_model.clone(),
         worker_pool_key: scope.worker_pool_key,
-        max_workers: record.max_workers,
-        max_in_flight_per_worker: record.max_in_flight_per_worker,
+        max_workers: record.execution.worker_limit(),
+        max_in_flight_per_worker: record
+            .execution
+            .effective_max_in_flight_per_worker(&upstream_transport),
+        execution: record.execution.clone(),
         lock_domains: record.lock_domains.clone(),
         transport_status: record.transport_status.clone(),
         launcher_kind: record.launcher_kind.clone(),
@@ -260,6 +273,8 @@ fn build_server_plan(record: &ServerRecord, context: &ResolvedContext) -> Server
         request_strategy: request.name,
         request_mutex_key: request.mutex_key,
         session_affinity_key: scope.session_affinity_key,
+        affinity_resolved: scope.affinity_resolved,
+        affinity_fingerprint: scope.affinity_fingerprint,
         warnings,
     }
 }
@@ -315,72 +330,126 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         None
     };
 
-    let process_partition = if let Some(key) = &state_profile_key {
-        key.clone()
-    } else if let Some(key) = &host_lock_key {
-        key.clone()
-    } else if let Some(key) = &project_binding_key {
-        key.clone()
-    } else if record.scope_class == "credential-scoped" {
-        credential_partition(record, context, &mut warnings)
-    } else if record.scope_class == "shared-global" {
-        format!("shared:{}", sanitize_key(&conflict_domain))
-    } else if record.scope_class == "shared-exclusive" {
-        format!("exclusive:{}", sanitize_key(&conflict_domain))
-    } else {
-        warnings.push(format!(
-            "{} has unknown scopeClass '{}'; treating it as lease-local until the policy is tightened.",
-            record.name, record.scope_class
-        ));
-        format!("lease:{}", sanitize_key(&context.session_lease_id))
+    let upstream_transport = resolve_upstream_transport(record);
+    let affinity_metadata = JsonValue::object([(
+        "mcpace",
+        JsonValue::object([
+            (
+                "applicationSessionId",
+                context
+                    .conversation_id
+                    .as_ref()
+                    .or(context.session_id.as_ref())
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "chatId",
+                context
+                    .conversation_id
+                    .as_ref()
+                    .or(context.session_id.as_ref())
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "clientInstanceId",
+                context
+                    .client_instance_id
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "transportSessionId",
+                context
+                    .transport_session_id
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+            (
+                "credentialId",
+                context
+                    .credential_profile_id
+                    .as_ref()
+                    .map(|value| JsonValue::string(value.clone()))
+                    .unwrap_or(JsonValue::Null),
+            ),
+        ]),
+    )]);
+    let affinity_context = ExecutionAffinityContext {
+        client_id: Some(context.client_id.clone()),
+        session_id: context
+            .conversation_id
+            .clone()
+            .or_else(|| context.session_id.clone()),
+        project_root: context.project_root.clone(),
+        transport: Some(upstream_transport.clone()),
+        metadata: Some(affinity_metadata),
+    };
+    let (affinity_resolved, affinity_fingerprint) = match record
+        .execution
+        .affinity_key(&affinity_context)
+    {
+        Ok(key) => (true, key.fingerprint),
+        Err(error) => {
+            warnings.push(format!(
+                    "{} cannot resolve its execution affinity: {}. Routing is fail-closed until the client supplies the missing identity.",
+                    record.name, error
+                ));
+            (false, "missing-affinity".to_string())
+        }
     };
 
+    let process_partition = format!(
+        "execution:{}|affinity:{}",
+        record.execution.mode.as_str(),
+        affinity_fingerprint
+    );
     let process_scope_key = format!(
-        "server:{}|kind:{}|scope:{}|partition:{}",
+        "server:{}|kind:{}|execution:{}|partition:{}",
         sanitize_key(&record.name),
         sanitize_key(if record.kind.trim().is_empty() {
             "unknown"
         } else {
             &record.kind
         }),
-        sanitize_key(if record.scope_class.trim().is_empty() {
-            "unspecified"
-        } else {
-            &record.scope_class
-        }),
+        record.execution.mode.as_str(),
         sanitize_key(&process_partition)
     );
 
-    let session_affinity_key = Some(if let Some(key) = &state_profile_key {
-        format!("session-affinity:{}", sanitize_key(key))
-    } else if let Some(key) = &host_lock_key {
-        format!("session-affinity:{}", sanitize_key(key))
+    let session_affinity_key = if affinity_resolved
+        && record.execution.affinity.iter().any(|value| {
+            matches!(
+                value.as_str(),
+                "chat" | "session" | "application" | "transport-session"
+            )
+        }) {
+        Some(format!(
+            "session-affinity:{}",
+            sanitize_key(&affinity_fingerprint)
+        ))
     } else {
-        format!("session:{}", sanitize_key(&context.session_lease_id))
-    });
+        None
+    };
 
     let worker_pool_key = format!(
-        "pool:{}|model:{}|{}",
+        "worker-group:{}|mode:{}|affinity:{}",
         sanitize_key(&record.name),
-        sanitize_key(&record.default_pool_model),
-        sanitize_key(&process_partition)
+        record.execution.mode.as_str(),
+        sanitize_key(&affinity_fingerprint)
     );
 
-    let scheduler_lane = if record.transport_status == "legacy-compat" {
-        "legacy-disabled".to_string()
-    } else if state_profile_key.is_some() {
-        "state-profile-queue".to_string()
-    } else if host_lock_key.is_some() {
-        "host-lock-queue".to_string()
-    } else if record.routing_group == "settings-only" || record.routing_group == "unknown-source" {
-        "settings-only-conservative".to_string()
-    } else if project_binding_key.is_some() {
-        "project-queue".to_string()
-    } else if record.concurrency_policy == "multi-reader" && record.parallelism_limit != 1 {
-        "parallel-pool".to_string()
-    } else {
-        "shared-queue".to_string()
-    };
+    let scheduler_lane = match record.execution.mode {
+        ExecutionMode::Disabled => "disabled",
+        ExecutionMode::Shared => "shared-capacity",
+        ExecutionMode::Serialized => "serialized-fifo",
+        ExecutionMode::SessionIsolated => "session-affinity-fifo",
+        ExecutionMode::ProjectIsolated => "project-affinity-fifo",
+        ExecutionMode::Pool => "worker-pool",
+    }
+    .to_string();
 
     ScopeResolution {
         process_partition,
@@ -390,21 +459,25 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
         conflict_domain,
         host_lock_key,
         state_profile_key,
-        parallelism_limit: record.parallelism_limit,
+        parallelism_limit: record.execution.effective_capacity(&upstream_transport),
         parallel_safety_class: record.parallel_safety_class.clone(),
         runtime_type: record.runtime_type.clone(),
         state_class: record.state_class.clone(),
         effect_class: record.effect_class.clone(),
         default_pool_model: record.default_pool_model.clone(),
         worker_pool_key,
-        max_workers: record.max_workers,
-        max_in_flight_per_worker: record.max_in_flight_per_worker,
+        max_workers: record.execution.worker_limit(),
+        max_in_flight_per_worker: record
+            .execution
+            .effective_max_in_flight_per_worker(&upstream_transport),
         lock_domains: record.lock_domains.clone(),
         transport_status: record.transport_status.clone(),
         launcher_kind: record.launcher_kind.clone(),
         scheduler_lane,
         startup_strategy: record.startup_strategy.clone(),
         session_affinity_key,
+        affinity_resolved,
+        affinity_fingerprint,
         warnings,
     }
 }
@@ -412,9 +485,9 @@ fn resolve_scope(record: &ServerRecord, context: &ResolvedContext) -> ScopeResol
 fn resolve_request_strategy(
     record: &ServerRecord,
     scope: &ScopeResolution,
-    context: &ResolvedContext,
+    _context: &ResolvedContext,
 ) -> RequestStrategy {
-    if server_is_not_routable(record) {
+    if server_is_not_routable(record) || record.execution.is_disabled() {
         return RequestStrategy {
             name: "disabled-no-route".to_string(),
             mutex_key: None,
@@ -430,151 +503,109 @@ fn resolve_request_strategy(
     if record.transport_status == "legacy-compat" {
         return RequestStrategy {
             name: "legacy-compat-disabled".to_string(),
-            mutex_key: Some(format!(
-                "server:{}|legacy-transport-mutex",
-                sanitize_key(&record.name)
-            )),
+            mutex_key: None,
             scheduler_lane: "legacy-disabled".to_string(),
             parallelism_limit: 0,
             warnings: vec![format!(
-                "{} is on a legacy SSE compatibility transport; do not auto-parallelize or auto-probe it without an explicit compatibility override.",
+                "{} uses legacy SSE compatibility; MCPace does not auto-route it without an explicit compatibility override.",
                 record.name
             )],
         };
     }
 
-    match record.concurrency_policy.as_str() {
-        "multi-reader" => {
-            if let Some(host_lock_key) = &scope.host_lock_key {
-                return RequestStrategy {
-                    name: "serialize-per-host-lock".to_string(),
-                    mutex_key: Some(host_lock_key.clone()),
-                    scheduler_lane: scope.scheduler_lane.clone(),
-                    parallelism_limit: 1,
-                    warnings: Vec::new(),
-                };
-            }
-            if scope.parallelism_limit == 1 {
-                RequestStrategy {
-                    name: "serialize-per-instance".to_string(),
-                    mutex_key: Some(format!(
-                        "server:{}|instance-mutex:{}",
-                        sanitize_key(&record.name),
-                        sanitize_key(&scope.process_scope_key)
-                    )),
-                    scheduler_lane: scope.scheduler_lane.clone(),
-                    parallelism_limit: 1,
-                    warnings: Vec::new(),
-                }
-            } else if record.parallel_safety_class.starts_with("P0_") {
-                RequestStrategy {
-                    name: "bounded-worker-pool-pending-probe".to_string(),
-                    mutex_key: Some(format!(
-                        "server:{}|worker-inflight:{}",
-                        sanitize_key(&record.name),
-                        sanitize_key(&scope.worker_pool_key)
-                    )),
-                    scheduler_lane: "adaptive-probe-gated-pool".to_string(),
-                    parallelism_limit: record.max_workers.max(1),
-                    warnings: vec![format!(
-                        "{} requested multi-reader behavior but has no positive parallel-safety evidence; MCPace may use multiple isolated workers but must keep maxInFlightPerWorker=1 until probes pass.",
-                        record.name
-                    )],
-                }
-            } else {
-                RequestStrategy {
-                    name: "parallel-safe".to_string(),
-                    mutex_key: None,
-                    scheduler_lane: "parallel-pool".to_string(),
-                    parallelism_limit: record.max_workers.max(scope.parallelism_limit),
-                    warnings: Vec::new(),
-                }
-            }
-        }
-        "isolated-per-project" => {
-            let mut warnings = Vec::new();
-            if context.project_root.is_none() {
+    if !scope.affinity_resolved {
+        return RequestStrategy {
+            name: "blocked-missing-affinity".to_string(),
+            mutex_key: None,
+            scheduler_lane: "identity-required".to_string(),
+            parallelism_limit: 0,
+            warnings: vec![format!(
+                "{} requires execution affinity that is absent from the current client context.",
+                record.name
+            )],
+        };
+    }
+
+    let capacity = scope.parallelism_limit;
+    let mutex_key = || {
+        format!(
+            "server:{}|execution-mutex:{}",
+            sanitize_key(&record.name),
+            sanitize_key(&scope.worker_pool_key)
+        )
+    };
+    let mut warnings = record.execution.warnings.clone();
+    if record.execution.reuse_policy == "never" {
+        warnings.push(format!(
+            "{} disables process reuse; startup cost and process churn will be paid for every call.",
+            record.name
+        ));
+    }
+
+    match record.execution.mode {
+        ExecutionMode::Disabled => RequestStrategy {
+            name: "disabled-no-route".to_string(),
+            mutex_key: None,
+            scheduler_lane: "disabled".to_string(),
+            parallelism_limit: 0,
+            warnings,
+        },
+        ExecutionMode::Serialized => RequestStrategy {
+            name: "serialize-per-instance".to_string(),
+            mutex_key: Some(mutex_key()),
+            scheduler_lane: "serialized-fifo".to_string(),
+            parallelism_limit: 1,
+            warnings,
+        },
+        ExecutionMode::SessionIsolated => RequestStrategy {
+            name: "serialize-per-session-instance".to_string(),
+            mutex_key: Some(mutex_key()),
+            scheduler_lane: "session-affinity-fifo".to_string(),
+            parallelism_limit: capacity.max(1),
+            warnings,
+        },
+        ExecutionMode::ProjectIsolated => RequestStrategy {
+            name: "serialize-per-project-instance".to_string(),
+            mutex_key: Some(mutex_key()),
+            scheduler_lane: "project-affinity-fifo".to_string(),
+            parallelism_limit: capacity.max(1),
+            warnings,
+        },
+        ExecutionMode::Shared if capacity <= 1 => RequestStrategy {
+            name: "serialize-shared-worker".to_string(),
+            mutex_key: Some(mutex_key()),
+            scheduler_lane: "shared-capacity".to_string(),
+            parallelism_limit: 1,
+            warnings,
+        },
+        ExecutionMode::Shared => RequestStrategy {
+            name: "parallel-safe".to_string(),
+            mutex_key: None,
+            scheduler_lane: "shared-capacity".to_string(),
+            parallelism_limit: capacity,
+            warnings,
+        },
+        ExecutionMode::Pool => {
+            if record.parallel_safety_class.starts_with("P0_") {
                 warnings.push(format!(
-                    "{} declares isolated-per-project but the current plan has no project root; the hub should refuse shared routing until a project is resolved.",
+                    "{} has no positive parallel-safety evidence; MCPace keeps one in-flight call per isolated worker until probes justify a higher value.",
                     record.name
                 ));
             }
-            let mutex_source = scope
-                .project_binding_key
-                .as_ref()
-                .unwrap_or(&scope.process_partition);
             RequestStrategy {
-                name: "serialize-per-project-instance".to_string(),
-                mutex_key: Some(format!(
-                    "server:{}|project-mutex:{}",
-                    sanitize_key(&record.name),
-                    sanitize_key(mutex_source)
-                )),
-                scheduler_lane: scope.scheduler_lane.clone(),
-                parallelism_limit: 1,
+                name: if record.parallel_safety_class.starts_with("P0_") {
+                    "bounded-worker-pool-pending-probe".to_string()
+                } else {
+                    "bounded-worker-pool".to_string()
+                },
+                // Capacity, not a group-wide mutex, limits a pool. A mutex here
+                // would silently collapse maxWorkers > 1 back to one call.
+                mutex_key: None,
+                scheduler_lane: "worker-pool".to_string(),
+                parallelism_limit: capacity.max(1),
                 warnings,
             }
         }
-        "single-writer" => {
-            let (name, mutex_key) = if let Some(key) = &scope.state_profile_key {
-                ("serialize-per-state-profile", key.clone())
-            } else if let Some(key) = &scope.host_lock_key {
-                ("serialize-per-host-lock", key.clone())
-            } else {
-                (
-                    "serialize-per-instance",
-                    format!(
-                        "server:{}|instance-mutex:{}",
-                        sanitize_key(&record.name),
-                        sanitize_key(&scope.process_scope_key)
-                    ),
-                )
-            };
-            RequestStrategy {
-                name: name.to_string(),
-                mutex_key: Some(mutex_key),
-                scheduler_lane: scope.scheduler_lane.clone(),
-                parallelism_limit: 1,
-                warnings: Vec::new(),
-            }
-        }
-        "single-session" => {
-            let (name, mutex_key) = if let Some(key) = &scope.state_profile_key {
-                ("exclusive-state-profile", key.clone())
-            } else if let Some(key) = &scope.host_lock_key {
-                ("exclusive-host-lock", key.clone())
-            } else {
-                (
-                    "exclusive-lease",
-                    format!(
-                        "server:{}|exclusive-lease:{}",
-                        sanitize_key(&record.name),
-                        sanitize_key(&context.session_lease_id)
-                    ),
-                )
-            };
-            RequestStrategy {
-                name: name.to_string(),
-                mutex_key: Some(mutex_key),
-                scheduler_lane: scope.scheduler_lane.clone(),
-                parallelism_limit: 1,
-                warnings: Vec::new(),
-            }
-        }
-        other => RequestStrategy {
-            name: "serialize-conservatively".to_string(),
-            mutex_key: Some(format!(
-                "server:{}|fallback-mutex:{}",
-                sanitize_key(&record.name),
-                sanitize_key(&scope.process_scope_key)
-            )),
-            scheduler_lane: scope.scheduler_lane.clone(),
-            parallelism_limit: 1,
-            warnings: vec![format!(
-                "{} has unknown concurrencyPolicy '{}'; the plan falls back to conservative serialization.",
-                record.name, other
-            )],
-        },
     }
 }
 
@@ -647,28 +678,6 @@ fn state_session_partition(record: &ServerRecord, context: &ResolvedContext) -> 
         "project" | "project-shared" => "project-shared".to_string(),
         "host" | "global" => "host-shared".to_string(),
         _ => sanitize_key(&context.session_lease_id),
-    }
-}
-
-fn credential_partition(
-    record: &ServerRecord,
-    context: &ResolvedContext,
-    warnings: &mut Vec<String>,
-) -> String {
-    if let Some(profile_id) = &context.credential_profile_id {
-        format!("credential-profile:{}", sanitize_key(profile_id))
-    } else if record.credential_binding.trim().is_empty() || record.credential_binding == "none" {
-        warnings.push(format!(
-            "{} is credential-scoped but no credential profile id was resolved; the plan falls back to an opaque credential partition.",
-            record.name
-        ));
-        "credential:opaque".to_string()
-    } else {
-        warnings.push(format!(
-            "{} is credential-scoped but no credential profile id was resolved; the plan falls back to the coarse credential binding '{}'.",
-            record.name, record.credential_binding
-        ));
-        format!("credential:{}", sanitize_key(&record.credential_binding))
     }
 }
 

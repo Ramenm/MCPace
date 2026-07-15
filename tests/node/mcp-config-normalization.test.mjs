@@ -38,18 +38,20 @@ test('public help stays compact and install type inference remains documented', 
 
 test('HTTP path normalization rejects request-line injection primitives', () => {
   const runtimePaths = readText('src/runtimepaths.rs');
+  const runtimePathTests = readText('src/runtimepaths/tests.rs');
   assert.match(runtimePaths, /trimmed\s*\.chars\(\)\s*\.any\(\|ch\| ch\.is_control\(\) \|\| ch\.is_whitespace\(\)\)/s, 'normalized HTTP paths must reject all whitespace/control characters, not only CRLF');
-  assert.match(runtimePaths, /normalize_http_path_rejects_request_line_injection_primitives/, 'Rust regression test must cover HTTP request-line injection primitives');
-  assert.match(runtimePaths, /"\/mcp with-space"/, 'space-containing request paths must be covered');
-  assert.match(runtimePaths, /"\/mcp\\twith-tab"/, 'tab-containing request paths must be covered');
+  assert.match(runtimePathTests, /normalize_http_path_rejects_request_line_injection_primitives/, 'Rust regression test must cover HTTP request-line injection primitives');
+  assert.match(runtimePathTests, /"\/mcp with-space"/, 'space-containing request paths must be covered');
+  assert.match(runtimePathTests, /"\/mcp\\twith-tab"/, 'tab-containing request paths must be covered');
 });
 
 
 test('public MCP URL normalization rejects invalid URL text before export', () => {
   const runtimePaths = readText('src/runtimepaths.rs');
+  const runtimePathTests = readText('src/runtimepaths/tests.rs');
   assert.match(runtimePaths, /fn normalize_public_url\(value: &str\) -> Option<String>/);
   assert.match(runtimePaths, /trimmed\s*\.chars\(\)\s*\.any\(\|ch\| ch\.is_control\(\) \|\| ch\.is_whitespace\(\)\)/s, 'public URL normalization must reject all whitespace/control characters');
-  assert.match(runtimePaths, /normalize_public_url_rejects_ambiguous_or_unsafe_authorities/, 'Rust regression test must cover invalid public URL text and unsafe authorities');
+  assert.match(runtimePathTests, /normalize_public_url_rejects_ambiguous_or_unsafe_authorities/, 'Rust regression test must cover invalid public URL text and unsafe authorities');
   assert.match(runtimePaths, /valid_public_url_authority/, 'public URL export must validate authority, not only scheme');
   assert.match(runtimePaths, /authority\.contains\('@'\)/, 'public URL export must reject userinfo authority confusion');
   assert.match(runtimePaths, /authority\.matches\(':'\)\.count\(\) > 1/, 'public URL export must reject raw IPv6 authorities');
@@ -81,4 +83,19 @@ test('MCPace self-loop import detection requires an endpoint path boundary', () 
   assert.doesNotMatch(selfEntry, /url\.starts_with\("http:\/\/127\.0\.0\.1:39022\/mcp"\)/);
   assert.match(matcher, /strip_prefix\(endpoint\)/);
   assert.match(matcher, /matches!\(suffix\.as_bytes\(\)\.first\(\), Some\(b'\/' \| b'\?' \| b'#'\)\)/);
+});
+
+test('client install config patching is centralized behind a typed edit boundary', () => {
+  const configEdit = readText('src/config_edit.rs');
+  const updater = readText('src/client/actions/config_update.rs');
+  const actions = readText('src/client/actions.rs');
+
+  assert.match(configEdit, /enum ConfigEditError/);
+  assert.match(configEdit, /impl std::error::Error for ConfigEditError/);
+  assert.match(configEdit, /pub\(crate\) fn apply_json_mcp_server_entry/);
+  assert.match(configEdit, /pub\(crate\) fn apply_toml_mcp_server_block/);
+  assert.match(configEdit, /pub\(crate\) fn apply_yaml_mcp_server_entry/);
+  assert.equal([...configEdit.matchAll(/"enabled = true"\.to_string\(\)/g)].length, 1, 'TOML managed block must not duplicate enabled=true');
+  assert.doesNotMatch(updater, /upsert_toml|upsert_yaml|parse_yaml|find_toml/, 'config_update.rs should only own diff rendering now');
+  assert.match(actions, /\.map_err\(\|error\| error\.to_string\(\)\)\?/, 'client boundary should render typed edit errors at the CLI layer');
 });

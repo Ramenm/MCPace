@@ -1,5 +1,8 @@
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::runtimepaths;
+use clap::{error::ErrorKind, Parser, ValueEnum};
+use std::ffi::OsString;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -44,9 +47,9 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error.clone() {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help {
@@ -55,7 +58,10 @@ pub fn run(
     }
 
     let Some(root_path) = parsed.root_override.clone().or(default_root) else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
     let root_path = runtimepaths::canonicalize_or_original(&root_path);
@@ -78,44 +84,99 @@ pub fn run(
     }
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs::default();
-    let mut index = 0usize;
-    if let Some(first) = args.first() {
-        if !first.starts_with('-') {
-            parsed.scope = first.to_ascii_lowercase();
-            index = 1;
+#[derive(Clone, Debug, ValueEnum)]
+enum CleanupScope {
+    Status,
+    Cache,
+    Runtime,
+    Logs,
+    #[value(name = "all-safe")]
+    AllSafe,
+}
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace cleanup",
+    disable_version_flag = true,
+    about = "Inspect or remove MCPace runtime artifacts"
+)]
+struct CleanupCli {
+    /// Cleanup scope. Defaults to status.
+    #[arg(value_enum)]
+    scope: Option<CleanupScope>,
+
+    /// Emit machine-readable JSON.
+    #[arg(long = "json", short = 'j')]
+    json_output: bool,
+
+    /// MCPace project/root directory.
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+
+    /// Preview cleanup without deleting files.
+    #[arg(long = "dry-run")]
+    dry_run: bool,
+}
+
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match CleanupCli::try_parse_from(cleanup_argv(args)) {
+        Ok(cli) => ParsedArgs {
+            scope: cli
+                .scope
+                .map(cleanup_scope_name)
+                .unwrap_or_else(|| "status".to_string()),
+            json_output: cli.json_output,
+            root_override: cli.root_override,
+            dry_run: cli.dry_run,
+            help: false,
+            error: None,
+        },
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
+            }
         }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
     }
-    while index < args.len() {
-        match args[index].as_str() {
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--root" | "-root" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("cleanup requires a path after --root".to_string());
-                    return parsed;
-                };
-                parsed.root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "--dry-run" => {
-                parsed.dry_run = true;
-                index += 1;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            other => {
-                parsed.error = Some(format!("unsupported cleanup argument: {}", other));
-                return parsed;
-            }
-        }
+}
+
+fn cleanup_scope_name(scope: CleanupScope) -> String {
+    match scope {
+        CleanupScope::Status => "status",
+        CleanupScope::Cache => "cache",
+        CleanupScope::Runtime => "runtime",
+        CleanupScope::Logs => "logs",
+        CleanupScope::AllSafe => "all-safe",
     }
-    parsed
+    .to_string()
+}
+
+fn cleanup_argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace cleanup"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_cleanup_flag(arg))),
+    );
+    argv
+}
+
+fn normalize_cleanup_flag(arg: &str) -> &str {
+    match arg {
+        "-json" => "--json",
+        "-root" => "--root",
+        "-?" => "--help",
+        other => other,
+    }
 }
 
 fn cleanup_report(root_path: &Path, scope: &str, dry_run: bool) -> JsonValue {

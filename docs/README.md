@@ -5,7 +5,7 @@ MCPace is a local home for MCP servers: one endpoint for clients, safe concurren
 ## Requirements
 
 | Tool | Use |
-|---|---|
+| --- | --- |
 | Rust/Cargo | Build and test the native `mcpace` binary. |
 | Node.js 22+ and npm 10+ | Run Node checks and npm-based MCP servers. |
 | `uvx` | Optional PyPI MCP server launcher. |
@@ -17,7 +17,7 @@ MCPace is a local home for MCP servers: one endpoint for clients, safe concurren
 - [frontend.md](frontend.md) — dashboard frontend shell/assets, rendering ownership, and accessibility rules.
 
 | File | Keep here | Do not duplicate here |
-|---|---|---|
+| --- | --- | --- |
 | `README.md` | Short landing page and first commands. | Full runbook details. |
 | `docs/README.md` | Operator flow and doc navigation. | Deep classifier history. |
 | `docs/architecture.md` | Scheduler model, modes, state classes. | CLI option reference. |
@@ -66,15 +66,14 @@ It imports existing local MCP servers when safe, skips MCPace self-references, s
 }
 ```
 
-
-Direct upstream forwarding currently supports stdio and plain/local Streamable HTTP. HTTPS remote endpoints should be connected through a stdio adapter such as `mcp-remote` or a local HTTP gateway until native TLS upstream forwarding is added.
+Direct upstream forwarding supports stdio and Streamable HTTP. Remote HTTPS endpoints use platform certificate verification and configured authentication headers; redirects are disabled to prevent credential forwarding. Plain HTTP upstreams are restricted to exact loopback hosts.
 
 Normalization rules are intentionally small: command entries become stdio servers; URL aliases become Streamable HTTP servers; `disabled: true` becomes `enabled: false`; MCPace's own endpoint is skipped to avoid loops.
 
 ## Common workflows
 
 | Need | Command |
-|---|---|
+| --- | --- |
 | Start/repair home | `mcpace up` |
 | Avoid client patching | `mcpace up --client none` |
 | Preview an install | `mcpace install npm:@modelcontextprotocol/server-memory --as memory --dry-run` |
@@ -104,7 +103,7 @@ mcpace auto
 mcpace auto filesystem --json
 ```
 
-Auto mode refreshes stale registry metadata, chooses approved or trusted candidates, writes reviewable server fragments, and probes `initialize` plus `tools/list` before relaxing runtime policy. Unknown public packages stay plan-only until local trust policy or explicit review allows them.
+No-query auto mode uses the pinned embedded/local curated catalog; named searches refresh a bounded query-specific Registry cache. It writes reviewable server fragments and requires a successful, bounded `initialize` plus paginated `tools/list` probe before reporting readiness. Unknown/deprecated public packages, unsupported package managers, custom registry bases, missing required configuration, and malformed responses stay plan-only or fail closed.
 
 ## Source verification
 
@@ -112,12 +111,14 @@ Auto mode refreshes stale registry metadata, chooses approved or trusted candida
 npm run lint:npm
 npm run test:npm
 npm run check
+npm run check:rust-boundaries
 npm run check:rust
-cargo build --release
-npm run load:local -- --binary ./target/release/mcpace --duration-ms 5000 --concurrency 64
+npm run check:ci
+cargo build --release --locked --bins
+npm run load:local -- --duration-ms 5000 --concurrency 64
 ```
 
-`npm run check` covers Node syntax, npm launcher tests, docs/package hygiene, release-artifact dry runs, and static MCP import-normalization guards. Run Rust checks on a host with the pinned Rust toolchain.
+`npm run check` is the quick local source gate. `npm run check:ci` is the fail-closed release-facing entrypoint; its endgame step owns the single live Rust check/test/format/Clippy proof. Run it on a host with the pinned Rust toolchain.
 
 ## Archive policy
 
@@ -140,4 +141,11 @@ The first screen should answer five questions before exposing advanced controls:
 
 ## Final source bundle
 
-This bundle is named `mcpace-v0.7.5-250626-133355` and is source-only. Use the root `README.md` for the short start path, this runbook for operational details, `docs/frontend.md` for dashboard frontend rules, and `reports/summary.md` for the final packaging and validation summary.
+Source bundles use the generated name `mcpace-v<version>-<build-id>`. Read the adjacent artifact manifest for the exact name and hashes. Use the root `README.md` for the short start path, this runbook for operational details, `docs/frontend.md` for dashboard frontend rules, and `reports/summary.md` for the packaging and validation summary.
+
+- [MCP transport contract](mcp-transport-contract.md)
+- [Release readiness gate](release-readiness.md)
+
+- [Rust live proof](rust-live-proof.md)
+- [Endgame readiness](endgame-readiness.md)
+- [Rust boundary contract](rust-boundary-contract.md)

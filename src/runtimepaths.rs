@@ -1,6 +1,7 @@
 use crate::json::JsonValue;
 use crate::json_helpers;
 use std::env;
+use std::fmt;
 use std::fs;
 use std::io::Write;
 #[cfg(unix)]
@@ -11,11 +12,100 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 static ATOMIC_WRITE_COUNTER: AtomicU64 = AtomicU64::new(0);
 
-pub fn write_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum RuntimePathError {
+    Io {
+        operation: &'static str,
+        path: PathBuf,
+        reason: String,
+    },
+    NotRealDirectory {
+        path: PathBuf,
+    },
+    MissingFileName {
+        purpose: String,
+        path: PathBuf,
+    },
+    Locked {
+        purpose: String,
+        target: PathBuf,
+        lock_path: PathBuf,
+    },
+    TemporaryFileExhausted {
+        target: PathBuf,
+        last_error: Option<String>,
+    },
+    AtomicReplaceFailed {
+        temp_path: PathBuf,
+        target: PathBuf,
+        reason: String,
+    },
+}
+
+pub type RuntimePathResult<T> = Result<T, RuntimePathError>;
+
+impl RuntimePathError {
+    fn io(operation: &'static str, path: &Path, error: impl fmt::Display) -> Self {
+        Self::Io {
+            operation,
+            path: path.to_path_buf(),
+            reason: error.to_string(),
+        }
+    }
+}
+
+impl fmt::Display for RuntimePathError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io { operation, path, reason } => {
+                write!(formatter, "failed to {} {}: {}", operation, path.display(), reason)
+            }
+            Self::NotRealDirectory { path } => {
+                write!(formatter, "runtime path is not a real directory: {}", path.display())
+            }
+            Self::MissingFileName { purpose, path } => {
+                write!(formatter, "{} lock target '{}' has no file name", purpose, path.display())
+            }
+            Self::Locked { purpose, target, lock_path } => write!(
+                formatter,
+                "{} target '{}' is locked by another MCPace process; retry after that operation finishes or remove stale lock '{}' only after verifying no MCPace process is active",
+                purpose,
+                target.display(),
+                lock_path.display()
+            ),
+            Self::TemporaryFileExhausted { target, last_error } => write!(
+                formatter,
+                "failed to create a unique temporary file next to {}{}",
+                target.display(),
+                last_error
+                    .as_ref()
+                    .map(|error| format!(": {}", error))
+                    .unwrap_or_default()
+            ),
+            Self::AtomicReplaceFailed { temp_path, target, reason } => write!(
+                formatter,
+                "failed to move {} to {}: {}",
+                temp_path.display(),
+                target.display(),
+                reason
+            ),
+        }
+    }
+}
+
+impl std::error::Error for RuntimePathError {}
+
+impl From<RuntimePathError> for String {
+    fn from(error: RuntimePathError) -> Self {
+        error.to_string()
+    }
+}
+
+pub fn write_text_atomic(path: &Path, contents: &str) -> RuntimePathResult<()> {
     write_text_atomic_with_mode(path, contents, None)
 }
 
-pub fn write_private_text_atomic(path: &Path, contents: &str) -> Result<(), String> {
+pub fn write_private_text_atomic(path: &Path, contents: &str) -> RuntimePathResult<()> {
     write_text_atomic_with_mode(path, contents, Some(0o600))
 }
 
@@ -23,10 +113,9 @@ fn write_text_atomic_with_mode(
     path: &Path,
     contents: &str,
     requested_unix_mode: Option<u32>,
-) -> Result<(), String> {
+) -> RuntimePathResult<()> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)
-        .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
+    fs::create_dir_all(parent).map_err(|error| RuntimePathError::io("create", parent, error))?;
 
     #[cfg(unix)]
     let target_mode = requested_unix_mode
@@ -50,19 +139,19 @@ fn write_text_atomic_with_mode(
                 continue;
             }
             Err(error) => {
-                return Err(format!(
-                    "failed to create temporary file {}: {}",
-                    temp_path.display(),
-                    error
+                return Err(RuntimePathError::io(
+                    "create temporary file",
+                    &temp_path,
+                    error,
                 ));
             }
         };
 
-        let write_result = (|| -> Result<(), String> {
+        let write_result = (|| -> RuntimePathResult<()> {
             file.write_all(contents.as_bytes())
-                .map_err(|error| format!("failed to write {}: {}", temp_path.display(), error))?;
+                .map_err(|error| RuntimePathError::io("write", &temp_path, error))?;
             file.sync_all()
-                .map_err(|error| format!("failed to fsync {}: {}", temp_path.display(), error))?;
+                .map_err(|error| RuntimePathError::io("fsync", &temp_path, error))?;
             Ok(())
         })();
         drop(file);
@@ -76,11 +165,8 @@ fn write_text_atomic_with_mode(
             Ok(()) => {
                 #[cfg(unix)]
                 {
-                    fs::set_permissions(path, fs::Permissions::from_mode(target_mode)).map_err(
-                        |error| {
-                            format!("failed to set permissions on {}: {}", path.display(), error)
-                        },
-                    )?;
+                    fs::set_permissions(path, fs::Permissions::from_mode(target_mode))
+                        .map_err(|error| RuntimePathError::io("set permissions on", path, error))?;
                     if let Ok(file) = fs::File::open(path) {
                         let _ = file.sync_all();
                     }
@@ -90,23 +176,19 @@ fn write_text_atomic_with_mode(
             }
             Err(error) => {
                 let _ = fs::remove_file(&temp_path);
-                return Err(format!(
-                    "failed to move {} to {}: {}",
-                    temp_path.display(),
-                    path.display(),
-                    error
-                ));
+                return Err(RuntimePathError::AtomicReplaceFailed {
+                    temp_path: temp_path.to_path_buf(),
+                    target: path.to_path_buf(),
+                    reason: error.to_string(),
+                });
             }
         }
     }
 
-    Err(format!(
-        "failed to create a unique temporary file next to {}{}",
-        path.display(),
-        last_temp_error
-            .map(|error| format!(": {}", error))
-            .unwrap_or_default()
-    ))
+    Err(RuntimePathError::TemporaryFileExhausted {
+        target: path.to_path_buf(),
+        last_error: last_temp_error.map(|error| error.to_string()),
+    })
 }
 
 pub struct ExclusiveFileLockGuard {
@@ -123,38 +205,23 @@ impl Drop for ExclusiveFileLockGuard {
 pub fn acquire_exclusive_file_lock(
     target_path: &Path,
     purpose: &str,
-) -> Result<ExclusiveFileLockGuard, String> {
+) -> RuntimePathResult<ExclusiveFileLockGuard> {
     let parent = target_path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent).map_err(|error| {
-        format!(
-            "failed to create lock directory '{}': {}",
-            parent.display(),
-            error
-        )
-    })?;
-    let parent_metadata = fs::symlink_metadata(parent).map_err(|error| {
-        format!(
-            "failed to inspect lock directory '{}': {}",
-            parent.display(),
-            error
-        )
-    })?;
+    fs::create_dir_all(parent)
+        .map_err(|error| RuntimePathError::io("create lock directory", parent, error))?;
+    let parent_metadata = fs::symlink_metadata(parent)
+        .map_err(|error| RuntimePathError::io("inspect lock directory", parent, error))?;
     if parent_metadata.file_type().is_symlink() || !parent_metadata.is_dir() {
-        return Err(format!(
-            "{} lock parent '{}' must be a real directory",
-            purpose,
-            parent.display()
-        ));
+        return Err(RuntimePathError::NotRealDirectory {
+            path: parent.to_path_buf(),
+        });
     }
 
     let file_name = target_path
         .file_name()
-        .ok_or_else(|| {
-            format!(
-                "{} lock target '{}' has no file name",
-                purpose,
-                target_path.display()
-            )
+        .ok_or_else(|| RuntimePathError::MissingFileName {
+            purpose: purpose.to_string(),
+            path: target_path.to_path_buf(),
         })?
         .to_string_lossy();
     let lock_path = parent.join(format!(".{}.mcpace.lock", file_name));
@@ -166,21 +233,14 @@ pub fn acquire_exclusive_file_lock(
     let mut file = match options.open(&lock_path) {
         Ok(value) => value,
         Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
-            return Err(format!(
-                "{} target '{}' is locked by another MCPace process; retry after that operation finishes or remove stale lock '{}' only after verifying no MCPace process is active",
-                purpose,
-                target_path.display(),
-                lock_path.display()
-            ));
+            return Err(RuntimePathError::Locked {
+                purpose: purpose.to_string(),
+                target: target_path.to_path_buf(),
+                lock_path: lock_path.clone(),
+            });
         }
         Err(error) => {
-            return Err(format!(
-                "failed to acquire {} lock '{}' for '{}': {}",
-                purpose,
-                lock_path.display(),
-                target_path.display(),
-                error
-            ));
+            return Err(RuntimePathError::io("acquire lock", &lock_path, error));
         }
     };
 
@@ -204,7 +264,7 @@ pub fn acquire_exclusive_file_lock(
 pub fn acquire_exclusive_file_locks(
     target_paths: &[PathBuf],
     purpose: &str,
-) -> Result<Vec<ExclusiveFileLockGuard>, String> {
+) -> RuntimePathResult<Vec<ExclusiveFileLockGuard>> {
     let mut paths = target_paths.to_vec();
     paths.sort();
     paths.dedup();
@@ -343,6 +403,62 @@ pub fn canonicalize_or_original(path: &Path) -> PathBuf {
 
 pub fn user_home_dir() -> Option<PathBuf> {
     platform_user_home_dir().map(PathBuf::from)
+}
+
+pub(crate) fn resolve_user_config_path_expression(expression: &str) -> Option<PathBuf> {
+    let normalized = expression.trim().replace('\\', "/");
+    if normalized.is_empty()
+        || normalized.contains('*')
+        || normalized.contains('<')
+        || normalized.contains('>')
+    {
+        return None;
+    }
+
+    let (base, relative) = if cfg!(windows) {
+        if let Some(relative) = normalized.strip_prefix("~/AppData/Roaming/") {
+            let app_data = env::var_os("APPDATA").map(PathBuf::from);
+            let base = match app_data.filter(|path| path.is_absolute()) {
+                Some(path) => path,
+                None => user_home_dir()?.join("AppData").join("Roaming"),
+            };
+            (base, relative)
+        } else if let Some(relative) = normalized.strip_prefix("~/") {
+            (user_home_dir()?, relative)
+        } else {
+            let absolute = PathBuf::from(expression.trim());
+            return absolute.is_absolute().then_some(absolute);
+        }
+    } else if let Some(relative) = normalized.strip_prefix("~/.config/") {
+        let xdg = env::var_os("XDG_CONFIG_HOME")
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute());
+        let base = match xdg {
+            Some(path) => path,
+            None => user_home_dir()?.join(".config"),
+        };
+        (base, relative)
+    } else if let Some(relative) = normalized.strip_prefix("~/") {
+        (user_home_dir()?, relative)
+    } else {
+        let absolute = PathBuf::from(expression.trim());
+        return absolute.is_absolute().then_some(absolute);
+    };
+
+    join_safe_relative_path(base, relative)
+}
+
+fn join_safe_relative_path(mut base: PathBuf, relative: &str) -> Option<PathBuf> {
+    for segment in relative.split('/') {
+        if segment.is_empty() || segment == "." {
+            continue;
+        }
+        if segment == ".." {
+            return None;
+        }
+        base.push(segment);
+    }
+    Some(base)
 }
 
 #[cfg(windows)]
@@ -525,33 +641,30 @@ pub fn absolutize_or_root(root_path: &Path, candidate: Option<PathBuf>) -> PathB
     }
 }
 
-fn ensure_private_dir(path: &Path) -> Result<PathBuf, String> {
+fn ensure_private_dir(path: &Path) -> RuntimePathResult<PathBuf> {
     let parent = path.parent().unwrap_or_else(|| Path::new("."));
-    fs::create_dir_all(parent)
-        .map_err(|error| format!("failed to create {}: {}", parent.display(), error))?;
+    fs::create_dir_all(parent).map_err(|error| RuntimePathError::io("create", parent, error))?;
 
     match fs::symlink_metadata(path) {
         Ok(metadata) => {
             if metadata.file_type().is_symlink() || !metadata.is_dir() {
-                return Err(format!(
-                    "runtime path is not a real directory: {}",
-                    path.display()
-                ));
+                return Err(RuntimePathError::NotRealDirectory {
+                    path: path.to_path_buf(),
+                });
             }
         }
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
             create_private_dir(path)?;
             let metadata = fs::symlink_metadata(path)
-                .map_err(|error| format!("failed to inspect {}: {}", path.display(), error))?;
+                .map_err(|error| RuntimePathError::io("inspect", path, error))?;
             if metadata.file_type().is_symlink() || !metadata.is_dir() {
-                return Err(format!(
-                    "runtime path is not a real directory: {}",
-                    path.display()
-                ));
+                return Err(RuntimePathError::NotRealDirectory {
+                    path: path.to_path_buf(),
+                });
             }
         }
         Err(error) => {
-            return Err(format!("failed to inspect {}: {}", path.display(), error));
+            return Err(RuntimePathError::io("inspect", path, error));
         }
     }
 
@@ -559,33 +672,33 @@ fn ensure_private_dir(path: &Path) -> Result<PathBuf, String> {
     Ok(path.to_path_buf())
 }
 
-fn create_private_dir(path: &Path) -> Result<(), String> {
+fn create_private_dir(path: &Path) -> RuntimePathResult<()> {
     #[cfg(unix)]
     {
         let mut builder = fs::DirBuilder::new();
         builder.mode(0o700);
-        builder
-            .create(path)
-            .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
+        if let Err(error) = builder.create(path) {
+            if error.kind() != std::io::ErrorKind::AlreadyExists {
+                return Err(RuntimePathError::io("create", path, error));
+            }
+        }
     }
     #[cfg(not(unix))]
     {
-        fs::create_dir(path)
-            .map_err(|error| format!("failed to create {}: {}", path.display(), error))?;
+        if let Err(error) = fs::create_dir(path) {
+            if error.kind() != std::io::ErrorKind::AlreadyExists {
+                return Err(RuntimePathError::io("create", path, error));
+            }
+        }
     }
     Ok(())
 }
 
-fn restrict_private_dir_permissions(path: &Path) -> Result<(), String> {
+fn restrict_private_dir_permissions(path: &Path) -> RuntimePathResult<()> {
     #[cfg(unix)]
     {
-        fs::set_permissions(path, fs::Permissions::from_mode(0o700)).map_err(|error| {
-            format!(
-                "failed to restrict permissions on {}: {}",
-                path.display(),
-                error
-            )
-        })?;
+        fs::set_permissions(path, fs::Permissions::from_mode(0o700))
+            .map_err(|error| RuntimePathError::io("restrict permissions on", path, error))?;
     }
     #[cfg(not(unix))]
     {
@@ -598,7 +711,7 @@ pub fn runtime_dir(state_root: &Path) -> PathBuf {
     state_root.join("data").join("runtime")
 }
 
-pub fn ensure_runtime_dir(state_root: &Path) -> Result<PathBuf, String> {
+pub fn ensure_runtime_dir(state_root: &Path) -> RuntimePathResult<PathBuf> {
     ensure_private_dir(&runtime_dir(state_root))
 }
 
@@ -606,7 +719,7 @@ pub fn tool_list_cache_dir(state_root: &Path) -> PathBuf {
     runtime_dir(state_root).join("tool-list-cache")
 }
 
-pub fn ensure_tool_list_cache_dir(state_root: &Path) -> Result<PathBuf, String> {
+pub fn ensure_tool_list_cache_dir(state_root: &Path) -> RuntimePathResult<PathBuf> {
     ensure_private_dir(&tool_list_cache_dir(state_root))
 }
 
@@ -618,7 +731,7 @@ pub fn hub_dir(state_root: &Path) -> PathBuf {
     runtime_dir(state_root).join("hub")
 }
 
-pub fn ensure_hub_dir(state_root: &Path) -> Result<PathBuf, String> {
+pub fn ensure_hub_dir(state_root: &Path) -> RuntimePathResult<PathBuf> {
     ensure_private_dir(&hub_dir(state_root))
 }
 
@@ -654,7 +767,7 @@ pub fn serve_dir(state_root: &Path) -> PathBuf {
     runtime_dir(state_root).join("serve")
 }
 
-pub fn ensure_serve_dir(state_root: &Path) -> Result<PathBuf, String> {
+pub fn ensure_serve_dir(state_root: &Path) -> RuntimePathResult<PathBuf> {
     ensure_private_dir(&serve_dir(state_root))
 }
 
@@ -682,7 +795,7 @@ pub fn runtime_bin_dir(state_root: &Path) -> PathBuf {
     runtime_dir(state_root).join("bin")
 }
 
-pub fn ensure_runtime_bin_dir(state_root: &Path) -> Result<PathBuf, String> {
+pub fn ensure_runtime_bin_dir(state_root: &Path) -> RuntimePathResult<PathBuf> {
     ensure_private_dir(&runtime_bin_dir(state_root))
 }
 
@@ -828,54 +941,4 @@ fn normalize_url_host(host: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::{normalize_http_path, normalize_public_url, DEFAULT_LOCAL_MCP_PATH};
-
-    #[test]
-    fn normalize_http_path_rejects_request_line_injection_primitives() {
-        for candidate in [
-            "",
-            "relative",
-            "/mcp?debug=1",
-            "/mcp#frag",
-            "/mcp with-space",
-            "/mcp\twith-tab",
-            "/mcp\r\nInjected: bad",
-        ] {
-            assert_eq!(
-                normalize_http_path(candidate, DEFAULT_LOCAL_MCP_PATH),
-                DEFAULT_LOCAL_MCP_PATH
-            );
-        }
-        assert_eq!(
-            normalize_http_path("/custom/path", DEFAULT_LOCAL_MCP_PATH),
-            "/custom/path"
-        );
-    }
-
-    #[test]
-    fn normalize_public_url_rejects_ambiguous_or_unsafe_authorities() {
-        assert_eq!(
-            normalize_public_url("https://relay.example/mcp"),
-            Some("https://relay.example/mcp".to_string())
-        );
-        assert_eq!(
-            normalize_public_url("https://[::1]:39022/mcp"),
-            Some("https://[::1]:39022/mcp".to_string())
-        );
-        for candidate in [
-            "https://relay.example/mcp with-space",
-            "https://relay.example/mcp\twith-tab",
-            "https://relay.example/mcp\r\nInjected: bad",
-            "https://user:pass@relay.example/mcp",
-            "https://relay.example:0/mcp",
-            "https://relay.example:99999/mcp",
-            "https://2001:db8::1/mcp",
-            "https://[::1]bad/mcp",
-            "https://relay.example/mcp#fragment",
-            "ftp://relay.example/mcp",
-        ] {
-            assert_eq!(normalize_public_url(candidate), None);
-        }
-    }
-}
+mod tests;

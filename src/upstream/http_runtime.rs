@@ -1,13 +1,21 @@
-use super::{empty_object, UpstreamServerConfig, INITIALIZE_ID, METHOD_ID};
+use super::diagnostics::sanitize_upstream_diagnostic;
+use super::{
+    batch_tool_call_error, empty_object, negotiated_protocol_version, validate_tool_call_result,
+    ToolListPagination, UpstreamServerConfig, UpstreamToolCall, INITIALIZE_ID, METHOD_ID,
+};
+use crate::http_probe;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
 use crate::text_utils;
-use std::io::{ErrorKind, Read, Write};
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
-use std::time::Duration;
+use std::collections::{BTreeMap, BTreeSet};
+use std::fmt;
+use std::io::Read;
+use std::time::{Duration, Instant};
 
 struct ParsedHttpUrl {
+    url: String,
+    secure: bool,
     host: String,
     port: u16,
     path: String,
@@ -21,23 +29,217 @@ struct HttpResponse {
     body: String,
 }
 
-struct ParsedHttpResponse<'a> {
-    status: u16,
-    content_type: String,
-    session_id: Option<String>,
-    content_length: Option<usize>,
-    transfer_encoding: String,
-    body: &'a str,
+struct HttpsPostOptions<'a> {
+    session_id: Option<&'a str>,
+    protocol_version: &'a str,
+    expected_id: Option<i64>,
+    timeout: Duration,
+    headers: &'a BTreeMap<String, String>,
 }
 
-const MAX_HTTP_UPSTREAM_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) struct HttpUpstreamError {
+    message: String,
+}
+
+pub(super) type HttpUpstreamResult<T> = std::result::Result<T, HttpUpstreamError>;
+
+impl HttpUpstreamError {
+    fn new(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for HttpUpstreamError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for HttpUpstreamError {}
+
+impl From<String> for HttpUpstreamError {
+    fn from(message: String) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<&str> for HttpUpstreamError {
+    fn from(message: &str) -> Self {
+        Self::new(message)
+    }
+}
+
+impl From<HttpUpstreamError> for String {
+    fn from(error: HttpUpstreamError) -> Self {
+        error.message
+    }
+}
 
 pub(super) fn run_http_request(
     server: &UpstreamServerConfig,
     method: &str,
     params: Option<JsonValue>,
     timeout: Duration,
-) -> Result<JsonValue, String> {
+) -> HttpUpstreamResult<JsonValue> {
+    let deadline = Instant::now() + timeout;
+    let (target, agent, session_id, protocol_version) = initialize_http_session(server, deadline)?;
+    let result = (|| {
+        let remaining = remaining_http_timeout(deadline, &server.name, method)?;
+        let response = post_json(
+            &target,
+            jsonrpc_request(METHOD_ID, method, params),
+            session_id.as_deref(),
+            &protocol_version,
+            remaining,
+            &server.headers,
+            agent.as_ref(),
+        )?;
+        jsonrpc_result(&server.name, method, METHOD_ID, &response)
+    })();
+    terminate_http_session_before_deadline(
+        &target,
+        session_id.as_deref(),
+        &protocol_version,
+        deadline,
+        &server.headers,
+    );
+    result
+}
+
+pub(super) fn run_http_tools_list(
+    server: &UpstreamServerConfig,
+    timeout: Duration,
+) -> HttpUpstreamResult<JsonValue> {
+    let deadline = Instant::now() + timeout;
+    let (target, agent, session_id, protocol_version) = initialize_http_session(server, deadline)?;
+    let result = (|| {
+        let mut pagination = ToolListPagination::new();
+        let mut cursor: Option<String> = None;
+        let mut page = 0usize;
+        loop {
+            let request_id = METHOD_ID.saturating_add(page as i64);
+            let params = cursor
+                .as_ref()
+                .map(|cursor| JsonValue::object([("cursor", JsonValue::string(cursor.clone()))]));
+            let response = post_json(
+                &target,
+                jsonrpc_request(request_id, "tools/list", params),
+                session_id.as_deref(),
+                &protocol_version,
+                remaining_http_timeout(deadline, &server.name, "tools/list pagination")?,
+                &server.headers,
+                agent.as_ref(),
+            )?;
+            let page_result = jsonrpc_result(&server.name, "tools/list", request_id, &response)?;
+            cursor = pagination
+                .add_page(&server.name, &page_result)
+                .map_err(HttpUpstreamError::new)?;
+            page = page.saturating_add(1);
+            if cursor.is_none() {
+                return Ok(pagination.finish());
+            }
+        }
+    })();
+    terminate_http_session_before_deadline(
+        &target,
+        session_id.as_deref(),
+        &protocol_version,
+        deadline,
+        &server.headers,
+    );
+    result
+}
+
+pub(super) fn run_http_tool_calls(
+    server: &UpstreamServerConfig,
+    calls: &[UpstreamToolCall],
+    timeout: Duration,
+) -> HttpUpstreamResult<Vec<JsonValue>> {
+    let deadline = Instant::now() + timeout;
+    let (target, agent, session_id, protocol_version) = initialize_http_session(server, deadline)?;
+    let mut results = Vec::new();
+    let calls_result = (|| {
+        for (index, call) in calls.iter().enumerate() {
+            let request_id = METHOD_ID.saturating_add(index as i64);
+            let remaining = remaining_http_timeout(deadline, &server.name, "tools/call batch")
+                .map_err(|error| {
+                    HttpUpstreamError::new(batch_tool_call_error(
+                        &server.name,
+                        index,
+                        calls.len(),
+                        error,
+                    ))
+                })?;
+            let response = post_json(
+                &target,
+                jsonrpc_request(
+                    request_id,
+                    "tools/call",
+                    Some(JsonValue::object([
+                        ("name", JsonValue::string(&call.tool)),
+                        ("arguments", call.arguments.clone()),
+                    ])),
+                ),
+                session_id.as_deref(),
+                &protocol_version,
+                remaining,
+                &server.headers,
+                agent.as_ref(),
+            )
+            .map_err(|error| {
+                HttpUpstreamError::new(batch_tool_call_error(
+                    &server.name,
+                    index,
+                    calls.len(),
+                    error,
+                ))
+            })?;
+            let result = jsonrpc_result(&server.name, "tools/call", request_id, &response)
+                .map_err(|error| {
+                    HttpUpstreamError::new(batch_tool_call_error(
+                        &server.name,
+                        index,
+                        calls.len(),
+                        error,
+                    ))
+                })?;
+            let upstream_is_error = validate_tool_call_result(&server.name, &call.tool, &result)
+                .map_err(|error| {
+                    HttpUpstreamError::new(batch_tool_call_error(
+                        &server.name,
+                        index,
+                        calls.len(),
+                        error,
+                    ))
+                })?;
+            results.push(JsonValue::object([
+                ("index", JsonValue::number(index)),
+                ("ok", JsonValue::bool(!upstream_is_error)),
+                ("upstreamOk", JsonValue::bool(!upstream_is_error)),
+                ("upstreamIsError", JsonValue::bool(upstream_is_error)),
+                ("tool", JsonValue::string(&call.tool)),
+                ("upstreamResult", result),
+            ]));
+        }
+        Ok(())
+    })();
+    terminate_http_session_before_deadline(
+        &target,
+        session_id.as_deref(),
+        &protocol_version,
+        deadline,
+        &server.headers,
+    );
+    calls_result.map(|()| results)
+}
+
+fn initialize_http_session(
+    server: &UpstreamServerConfig,
+    deadline: Instant,
+) -> HttpUpstreamResult<(ParsedHttpUrl, Option<ureq::Agent>, Option<String>, String)> {
     let url = server.url.as_deref().ok_or_else(|| {
         format!(
             "HTTP upstream server '{}' has no url configured",
@@ -45,7 +247,10 @@ pub(super) fn run_http_request(
         )
     })?;
     let target = parse_http_url(url)?;
-
+    let initial_timeout = remaining_http_timeout(deadline, &server.name, "initialize")?;
+    let agent = target
+        .secure
+        .then(|| crate::http_client::bounded_agent(initial_timeout));
     let initialize = jsonrpc_request(
         INITIALIZE_ID,
         "initialize",
@@ -64,28 +269,156 @@ pub(super) fn run_http_request(
             ),
         ])),
     );
-    let initialize_response = post_json(&target, initialize, None, timeout)?;
-    let _initialize_result = jsonrpc_result(
+    let initialize_response = post_json(
+        &target,
+        initialize,
+        None,
+        mcp::CURRENT_PROTOCOL_VERSION,
+        initial_timeout,
+        &server.headers,
+        agent.as_ref(),
+    )?;
+    let session_id = initialize_response.session_id.clone();
+    let initialize_result = match jsonrpc_result(
         &server.name,
         "initialize",
         INITIALIZE_ID,
         &initialize_response,
-    )?;
-    let session_id = initialize_response.session_id;
-
+    ) {
+        Ok(result) => result,
+        Err(error) => {
+            terminate_http_session_before_deadline(
+                &target,
+                session_id.as_deref(),
+                mcp::CURRENT_PROTOCOL_VERSION,
+                deadline,
+                &server.headers,
+            );
+            return Err(error);
+        }
+    };
+    let protocol_version = match negotiated_protocol_version(&server.name, &initialize_result) {
+        Ok(version) => version,
+        Err(error) => {
+            terminate_http_session_before_deadline(
+                &target,
+                session_id.as_deref(),
+                mcp::CURRENT_PROTOCOL_VERSION,
+                deadline,
+                &server.headers,
+            );
+            return Err(error.into());
+        }
+    };
     let initialized = JsonValue::object([
         ("jsonrpc", JsonValue::string("2.0")),
         ("method", JsonValue::string("notifications/initialized")),
     ]);
-    let _ = post_json(&target, initialized, session_id.as_deref(), timeout)?;
-
-    let response = post_json(
+    let initialized_response = post_json(
         &target,
-        jsonrpc_request(METHOD_ID, method, params),
+        initialized,
         session_id.as_deref(),
-        timeout,
-    )?;
-    jsonrpc_result(&server.name, method, METHOD_ID, &response)
+        &protocol_version,
+        remaining_http_timeout(deadline, &server.name, "notifications/initialized")?,
+        &server.headers,
+        agent.as_ref(),
+    );
+    match initialized_response {
+        Ok(response) if (200..300).contains(&response.status) => {}
+        Ok(response) => {
+            terminate_http_session_before_deadline(
+                &target,
+                session_id.as_deref(),
+                &protocol_version,
+                deadline,
+                &server.headers,
+            );
+            return Err(HttpUpstreamError::new(format!(
+                "HTTP upstream server '{}' returned status {} for notifications/initialized",
+                server.name, response.status
+            )));
+        }
+        Err(error) => {
+            terminate_http_session_before_deadline(
+                &target,
+                session_id.as_deref(),
+                &protocol_version,
+                deadline,
+                &server.headers,
+            );
+            return Err(error);
+        }
+    }
+    Ok((target, agent, session_id, protocol_version))
+}
+
+fn remaining_http_timeout(
+    deadline: Instant,
+    server_name: &str,
+    phase: &str,
+) -> HttpUpstreamResult<Duration> {
+    deadline
+        .checked_duration_since(Instant::now())
+        .filter(|remaining| !remaining.is_zero())
+        .ok_or_else(|| {
+            HttpUpstreamError::new(format!(
+                "timed out waiting for HTTP upstream server '{}' during {}",
+                server_name, phase
+            ))
+        })
+}
+
+fn terminate_http_session_before_deadline(
+    target: &ParsedHttpUrl,
+    session_id: Option<&str>,
+    protocol_version: &str,
+    deadline: Instant,
+    headers: &BTreeMap<String, String>,
+) {
+    let Some(timeout) = deadline.checked_duration_since(Instant::now()) else {
+        return;
+    };
+    terminate_http_session(target, session_id, protocol_version, timeout, headers);
+}
+
+fn terminate_http_session(
+    target: &ParsedHttpUrl,
+    session_id: Option<&str>,
+    protocol_version: &str,
+    timeout: Duration,
+    headers: &BTreeMap<String, String>,
+) {
+    let Some(session_id) = session_id.filter(|value| text_utils::valid_http_header_value(value))
+    else {
+        return;
+    };
+    let cleanup_timeout = timeout.min(Duration::from_secs(2));
+    if target.secure {
+        let agent = crate::http_client::bounded_agent(cleanup_timeout);
+        let mut request = agent
+            .delete(&target.url)
+            .header("MCP-Protocol-Version", protocol_version)
+            .header("Mcp-Session-Id", session_id);
+        for (name, value) in headers {
+            request = request.header(name, value);
+        }
+        let _ = request.call();
+        return;
+    }
+
+    let mut request = format!(
+        "DELETE {} HTTP/1.1\r\nHost: {}\r\nMCP-Protocol-Version: {}\r\nMcp-Session-Id: {}\r\nContent-Length: 0\r\nConnection: close\r\n",
+        target.path, target.host_header, protocol_version, session_id
+    );
+    append_configured_headers(&mut request, headers);
+    request.push_str("\r\n");
+    let _ = http_probe::raw_response(
+        &target.host,
+        target.port,
+        &request,
+        cleanup_timeout,
+        http_probe::DEFAULT_MAX_RESPONSE_BYTES,
+    );
 }
 
 fn jsonrpc_request(id: i64, method: &str, params: Option<JsonValue>) -> JsonValue {
@@ -104,239 +437,196 @@ fn post_json(
     target: &ParsedHttpUrl,
     payload: JsonValue,
     session_id: Option<&str>,
+    protocol_version: &str,
     timeout: Duration,
-) -> Result<HttpResponse, String> {
+    headers: &BTreeMap<String, String>,
+    agent: Option<&ureq::Agent>,
+) -> HttpUpstreamResult<HttpResponse> {
     let expected_id = json_helpers::value_at_path(&payload, &["id"]).and_then(JsonValue::as_i64);
     let body = payload.to_compact_string();
-    let mut stream = connect_http_upstream(target, timeout)?;
-
+    validate_configured_headers(headers)?;
+    if target.secure {
+        let agent = agent.ok_or_else(|| HttpUpstreamError::new("HTTPS agent is unavailable"))?;
+        return post_json_https(
+            target,
+            &body,
+            HttpsPostOptions {
+                session_id,
+                protocol_version,
+                expected_id,
+                timeout,
+                headers,
+            },
+            agent,
+        );
+    }
     let mut request = format!(
         "POST {} HTTP/1.1\r\nHost: {}\r\nAccept: application/json, text/event-stream\r\nContent-Type: application/json\r\nMCP-Protocol-Version: {}\r\nContent-Length: {}\r\nConnection: close\r\n",
         target.path,
         target.host_header,
-        mcp::CURRENT_PROTOCOL_VERSION,
+        protocol_version,
         body.len()
     );
+    append_configured_headers(&mut request, headers);
     if let Some(session_id) = session_id {
         if !text_utils::valid_http_header_value(session_id) {
-            return Err("HTTP upstream returned an invalid MCP session id header".to_string());
+            return Err(HttpUpstreamError::new(
+                "HTTP upstream returned an invalid MCP session id header",
+            ));
         }
         request.push_str(&format!("Mcp-Session-Id: {}\r\n", session_id));
     }
     request.push_str("\r\n");
     request.push_str(&body);
-    stream
-        .write_all(request.as_bytes())
-        .map_err(|error| format!("failed to write HTTP upstream request: {}", error))?;
-    let _ = stream.shutdown(Shutdown::Write);
-    let raw_response = read_http_response(&mut stream, expected_id)?;
+
+    let raw_response = http_probe::raw_jsonrpc_response(
+        &target.host,
+        target.port,
+        &request,
+        timeout,
+        http_probe::DEFAULT_MAX_RESPONSE_BYTES,
+        expected_id,
+    )
+    .map_err(|error| format!("HTTP upstream request failed: {}", error))?;
     parse_http_response(&raw_response)
 }
 
-fn connect_http_upstream(target: &ParsedHttpUrl, timeout: Duration) -> Result<TcpStream, String> {
-    let addrs = (target.host.as_str(), target.port)
-        .to_socket_addrs()
-        .map_err(|error| format!("failed to resolve HTTP upstream {}: {}", target.host, error))?
-        .collect::<Vec<_>>();
-    if addrs.is_empty() {
-        return Err(format!(
-            "HTTP upstream {} resolved to no addresses",
-            target.host
-        ));
-    }
-
-    let mut last_error = None;
-    for addr in addrs {
-        match TcpStream::connect_timeout(&addr, timeout) {
-            Ok(stream) => {
-                let _ = stream.set_read_timeout(Some(timeout));
-                let _ = stream.set_write_timeout(Some(timeout));
-                return Ok(stream);
-            }
-            Err(error) => last_error = Some(error),
+fn validate_configured_headers(headers: &BTreeMap<String, String>) -> HttpUpstreamResult<()> {
+    let mut normalized_names = BTreeSet::new();
+    for (name, value) in headers {
+        if !normalized_names.insert(name.to_ascii_lowercase()) {
+            return Err(HttpUpstreamError::new(format!(
+                "HTTP upstream configured duplicate header name '{}' with different casing",
+                name
+            )));
+        }
+        if !text_utils::valid_http_header_name(name) {
+            return Err(HttpUpstreamError::new(format!(
+                "HTTP upstream configured an invalid header name '{}'",
+                name
+            )));
+        }
+        if text_utils::reserved_mcp_http_header_name(name) {
+            return Err(HttpUpstreamError::new(format!(
+                "HTTP upstream header '{}' is managed by MCPace and cannot be overridden",
+                name
+            )));
+        }
+        if !text_utils::valid_http_field_value(value) {
+            return Err(HttpUpstreamError::new(format!(
+                "HTTP upstream configured an invalid value for header '{}'",
+                name
+            )));
         }
     }
-    Err(format!(
-        "failed to connect HTTP upstream {}: {}",
-        target.host,
-        last_error
-            .map(|error| error.to_string())
-            .unwrap_or_else(|| "no resolved address accepted the connection".to_string())
-    ))
+    Ok(())
 }
 
-fn read_http_response(stream: &mut TcpStream, expected_id: Option<i64>) -> Result<String, String> {
-    let mut raw = Vec::new();
-    let mut buffer = [0u8; 8192];
+fn append_configured_headers(request: &mut String, headers: &BTreeMap<String, String>) {
+    for (name, value) in headers {
+        request.push_str(name);
+        request.push_str(": ");
+        request.push_str(value);
+        request.push_str("\r\n");
+    }
+}
 
-    loop {
-        match stream.read(&mut buffer) {
-            Ok(0) => break,
-            Ok(count) => {
-                raw.extend_from_slice(&buffer[..count]);
-                if raw.len() > MAX_HTTP_UPSTREAM_RESPONSE_BYTES {
-                    return Err(
-                        "HTTP upstream response exceeded the maximum supported size".to_string()
-                    );
-                }
-                if let Ok(text) = std::str::from_utf8(&raw) {
-                    if http_response_ready(text, expected_id) {
-                        return Ok(text.to_string());
-                    }
-                }
-            }
-            Err(error) if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {
-                if let Ok(text) = std::str::from_utf8(&raw) {
-                    if http_response_ready(text, expected_id) {
-                        return Ok(text.to_string());
-                    }
-                }
-                return Err("timed out while reading HTTP upstream response".to_string());
-            }
-            Err(error) => return Err(format!("failed to read HTTP upstream response: {}", error)),
+fn post_json_https(
+    target: &ParsedHttpUrl,
+    body: &str,
+    options: HttpsPostOptions<'_>,
+    agent: &ureq::Agent,
+) -> HttpUpstreamResult<HttpResponse> {
+    let mut request = agent
+        .post(&target.url)
+        .header("Accept", "application/json, text/event-stream")
+        .header("Content-Type", "application/json")
+        .header("MCP-Protocol-Version", options.protocol_version);
+    for (name, value) in options.headers {
+        request = request.header(name, value);
+    }
+    if let Some(session_id) = options.session_id {
+        if !text_utils::valid_http_header_value(session_id) {
+            return Err(HttpUpstreamError::new(
+                "HTTPS upstream returned an invalid MCP session id header",
+            ));
         }
+        request = request.header("Mcp-Session-Id", session_id);
     }
 
-    String::from_utf8(raw).map_err(|_| "HTTP upstream returned a non-UTF-8 response".to_string())
-}
-
-fn http_response_ready(raw: &str, expected_id: Option<i64>) -> bool {
-    let Ok(parsed) = parse_http_headers(raw) else {
-        return false;
-    };
-    if matches!(parsed.status, 202 | 204 | 304) {
-        return true;
-    }
-
-    let transfer_encoding = parsed.transfer_encoding.to_ascii_lowercase();
-    let content_type = parsed.content_type.to_ascii_lowercase();
-    if content_type.contains("text/event-stream") {
-        if transfer_encoding.contains("chunked") {
-            if let Ok(body) = decode_chunked_body(parsed.body.as_bytes()) {
-                return std::str::from_utf8(&body)
-                    .map(|body| sse_body_has_json_response(body, expected_id))
-                    .unwrap_or(false);
-            }
-        }
-        return sse_body_has_json_response(parsed.body, expected_id);
-    }
-
-    if transfer_encoding.contains("chunked") {
-        return decode_chunked_body(parsed.body.as_bytes()).is_ok();
-    }
-
-    if let Some(content_length) = parsed.content_length {
-        return parsed.body.len() >= content_length;
-    }
-
-    parse_str(parsed.body.trim())
-        .ok()
-        .map(|value| json_response_id_matches(&value, expected_id))
-        .unwrap_or(false)
-}
-
-fn parse_http_response(raw: &str) -> Result<HttpResponse, String> {
-    let parsed = parse_http_headers(raw)?;
-    let body_bytes = if parsed
-        .transfer_encoding
+    let mut response = request
+        .config()
+        .timeout_global(Some(options.timeout))
+        .build()
+        .send(body.as_bytes())
+        .map_err(|error| format!("HTTPS upstream request failed: {}", error))?;
+    let status = response.status().as_u16();
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("")
+        .to_string();
+    let session_id = response
+        .headers()
+        .get("mcp-session-id")
+        .and_then(|value| value.to_str().ok())
+        .map(str::to_string);
+    let is_sse = content_type
         .to_ascii_lowercase()
-        .contains("chunked")
-    {
-        decode_chunked_body(parsed.body.as_bytes())
-            .unwrap_or_else(|_| parsed.body.as_bytes().to_vec())
-    } else if let Some(content_length) = parsed.content_length {
-        parsed
-            .body
-            .as_bytes()
-            .get(..content_length.min(parsed.body.len()))
-            .unwrap_or(parsed.body.as_bytes())
-            .to_vec()
-    } else {
-        parsed.body.as_bytes().to_vec()
-    };
-    let body = String::from_utf8(body_bytes)
-        .map_err(|_| "HTTP upstream returned a non-UTF-8 body".to_string())?;
-    Ok(HttpResponse {
-        status: parsed.status,
-        content_type: parsed.content_type,
-        session_id: parsed.session_id,
-        body,
-    })
-}
-
-fn parse_http_headers(raw: &str) -> Result<ParsedHttpResponse<'_>, String> {
-    let (headers, body) = raw
-        .split_once("\r\n\r\n")
-        .ok_or_else(|| "HTTP upstream returned a malformed response".to_string())?;
-    let mut lines = headers.lines();
-    let status_line = lines.next().unwrap_or_default();
-    let status = status_line
-        .split_whitespace()
-        .nth(1)
-        .and_then(|value| value.parse::<u16>().ok())
-        .ok_or_else(|| format!("HTTP upstream returned malformed status '{}'", status_line))?;
-    let mut content_type = String::new();
-    let mut session_id = None;
-    let mut content_length = None;
-    let mut transfer_encoding = String::new();
-    for line in lines {
-        let Some((name, value)) = line.split_once(':') else {
-            continue;
-        };
-        let name = name.trim().to_ascii_lowercase();
-        let value = value.trim();
-        match name.as_str() {
-            "content-type" => content_type = value.to_string(),
-            "mcp-session-id" => session_id = Some(value.to_string()),
-            "content-length" => content_length = value.parse::<usize>().ok(),
-            "transfer-encoding" => transfer_encoding = value.to_string(),
-            _ => {}
+        .contains("text/event-stream");
+    let mut bytes = Vec::new();
+    let mut chunk = [0u8; 8192];
+    let mut reader = response.body_mut().as_reader();
+    loop {
+        let count = reader
+            .read(&mut chunk)
+            .map_err(|error| format!("failed to read HTTPS upstream response: {}", error))?;
+        if count == 0 {
+            break;
+        }
+        if bytes.len().saturating_add(count) > http_probe::DEFAULT_MAX_RESPONSE_BYTES {
+            return Err(HttpUpstreamError::new(format!(
+                "HTTPS upstream response exceeds {} bytes",
+                http_probe::DEFAULT_MAX_RESPONSE_BYTES
+            )));
+        }
+        bytes.extend_from_slice(&chunk[..count]);
+        if is_sse {
+            if let Ok(partial) = std::str::from_utf8(&bytes) {
+                if http_probe::sse_json_rpc_body(partial, options.expected_id).is_some() {
+                    break;
+                }
+            }
         }
     }
-    Ok(ParsedHttpResponse {
+    let body = String::from_utf8(bytes)
+        .map_err(|_| HttpUpstreamError::new("HTTPS upstream returned a non-UTF-8 body"))?;
+    Ok(HttpResponse {
         status,
         content_type,
         session_id,
-        content_length,
-        transfer_encoding,
         body,
     })
 }
 
-fn decode_chunked_body(body: &[u8]) -> Result<Vec<u8>, String> {
-    let mut decoded = Vec::new();
-    let mut offset = 0usize;
-    loop {
-        let Some(line_end) = find_crlf(body, offset) else {
-            return Err("chunked HTTP body is incomplete".to_string());
-        };
-        let size_line = std::str::from_utf8(&body[offset..line_end])
-            .map_err(|_| "chunked HTTP body has a non-UTF-8 size line".to_string())?;
-        let size_hex = size_line.split(';').next().unwrap_or_default().trim();
-        let size = usize::from_str_radix(size_hex, 16)
-            .map_err(|_| "chunked HTTP body has an invalid chunk size".to_string())?;
-        offset = line_end + 2;
-        if size == 0 {
-            return Ok(decoded);
-        }
-        if body.len() < offset + size {
-            return Err("chunked HTTP body is incomplete".to_string());
-        }
-        decoded.extend_from_slice(&body[offset..offset + size]);
-        offset += size;
-        if body.get(offset..offset + 2) == Some(b"\r\n") {
-            offset += 2;
-        } else if offset < body.len() {
-            return Err("chunked HTTP body is missing a chunk terminator".to_string());
-        }
-    }
-}
-
-fn find_crlf(body: &[u8], start: usize) -> Option<usize> {
-    body.get(start..)?
-        .windows(2)
-        .position(|window| window == b"\r\n")
-        .map(|index| start + index)
+fn parse_http_response(raw: &str) -> HttpUpstreamResult<HttpResponse> {
+    let parsed = http_probe::parse_response(raw)
+        .map_err(|error| format!("HTTP upstream returned a malformed response: {}", error))?;
+    let session_id = parsed.header("mcp-session-id").map(ToString::to_string);
+    let content_type = parsed.content_type.clone();
+    let body = String::from_utf8(
+        parsed
+            .body_bytes()
+            .map_err(|error| format!("failed to decode HTTP upstream response body: {}", error))?,
+    )
+    .map_err(|_| "HTTP upstream returned a non-UTF-8 body".to_string())?;
+    Ok(HttpResponse {
+        status: parsed.status,
+        content_type,
+        session_id,
+        body,
+    })
 }
 
 fn jsonrpc_result(
@@ -344,18 +634,21 @@ fn jsonrpc_result(
     method: &str,
     expected_id: i64,
     response: &HttpResponse,
-) -> Result<JsonValue, String> {
-    if response.status == 202 {
-        return Ok(JsonValue::Null);
-    }
+) -> HttpUpstreamResult<JsonValue> {
     if !(200..300).contains(&response.status) {
-        return Err(format!(
-            "HTTP upstream server '{}' returned status {} for {}: {}",
+        let auth_hint = if matches!(response.status, 401 | 403) {
+            " Authentication is required; configure an explicit --header NAME=VALUE (environment placeholders are supported) or use an OAuth-capable stdio adapter. MCPace does not perform upstream OAuth authorization flows."
+        } else {
+            ""
+        };
+        return Err(HttpUpstreamError::new(format!(
+            "HTTP upstream server '{}' returned status {} for {}: {}{}",
             server_name,
             response.status,
             method,
-            response.body.trim()
-        ));
+            sanitize_upstream_diagnostic(response.body.trim()),
+            auth_hint
+        )));
     }
     let body = json_body_from_response(response, Some(expected_id))?;
     let value = parse_str(&body).map_err(|error| {
@@ -364,112 +657,86 @@ fn jsonrpc_result(
             server_name, method, error
         )
     })?;
+    mcp::validate_response_envelope(&value, expected_id).map_err(|error| {
+        HttpUpstreamError::new(format!(
+            "HTTP upstream server '{}' returned a malformed JSON-RPC response for {}: {}",
+            server_name, method, error
+        ))
+    })?;
     if let Some(error) = json_helpers::value_at_path(&value, &["error"]) {
-        return Err(format!(
+        return Err(HttpUpstreamError::new(format!(
             "HTTP upstream server '{}' returned JSON-RPC error for {}: {}",
             server_name,
             method,
-            error.to_compact_string()
-        ));
+            sanitize_upstream_diagnostic(&error.to_compact_string())
+        )));
     }
-    let id_ok = json_helpers::value_at_path(&value, &["id"])
-        .and_then(JsonValue::as_i64)
-        .map(|id| id == expected_id)
-        .unwrap_or(false);
-    if !id_ok {
-        return Err(format!(
-            "HTTP upstream server '{}' returned an unexpected response id for {}",
-            server_name, method
-        ));
-    }
-    json_helpers::value_at_path(&value, &["result"])
+    Ok(json_helpers::value_at_path(&value, &["result"])
         .cloned()
-        .ok_or_else(|| {
-            format!(
-                "HTTP upstream server '{}' returned no result for {}",
-                server_name, method
-            )
-        })
+        .expect("validated JSON-RPC result"))
 }
 
 fn json_body_from_response(
     response: &HttpResponse,
     expected_id: Option<i64>,
-) -> Result<String, String> {
+) -> HttpUpstreamResult<String> {
     if response
         .content_type
         .to_ascii_lowercase()
         .contains("text/event-stream")
     {
-        return sse_json_body(&response.body, expected_id).ok_or_else(|| {
-            "HTTP upstream SSE response did not contain a matching JSON-RPC response".to_string()
+        return http_probe::sse_json_rpc_body(&response.body, expected_id).ok_or_else(|| {
+            HttpUpstreamError::new(
+                "HTTP upstream SSE response did not contain a matching JSON-RPC response",
+            )
         });
     }
     Ok(response.body.trim().to_string())
 }
 
-fn sse_body_has_json_response(body: &str, expected_id: Option<i64>) -> bool {
-    sse_json_body(body, expected_id).is_some()
+pub(super) fn http_upstream_configuration_error(
+    url: &str,
+    headers: &BTreeMap<String, String>,
+) -> Option<String> {
+    parse_http_url(url)
+        .and_then(|_| validate_configured_headers(headers))
+        .err()
+        .map(|error| error.to_string())
 }
 
-fn sse_json_body(body: &str, expected_id: Option<i64>) -> Option<String> {
-    let normalized = body.replace("\r\n", "\n");
-    for event in normalized.split("\n\n") {
-        let data = event
-            .lines()
-            .filter_map(|line| line.strip_prefix("data:"))
-            .map(str::trim)
-            .collect::<Vec<_>>()
-            .join("\n");
-        let data = data.trim();
-        if data.is_empty() {
-            continue;
-        }
-        let Ok(value) = parse_str(data) else {
-            continue;
-        };
-        if json_response_id_matches(&value, expected_id) {
-            return Some(data.to_string());
-        }
-    }
-    None
-}
-
-fn json_response_id_matches(value: &JsonValue, expected_id: Option<i64>) -> bool {
-    match expected_id {
-        Some(expected_id) => json_helpers::value_at_path(value, &["id"])
-            .and_then(JsonValue::as_i64)
-            .map(|id| id == expected_id)
-            .unwrap_or(false),
-        None => true,
-    }
-}
-
-fn parse_http_url(url: &str) -> Result<ParsedHttpUrl, String> {
+fn parse_http_url(url: &str) -> HttpUpstreamResult<ParsedHttpUrl> {
     if url.is_empty() || url.chars().any(|ch| ch.is_control() || ch.is_whitespace()) {
-        return Err(
-            "HTTP upstream URL cannot be empty or contain whitespace/control characters"
-                .to_string(),
-        );
-    }
-    if url.to_ascii_lowercase().starts_with("https://") {
-        return Err(
-            "direct HTTPS upstream forwarding is not available without a TLS adapter; use a stdio bridge such as mcp-remote or a local HTTP gateway"
-                .to_string(),
-        );
-    }
-    let rest = url
-        .strip_prefix("http://")
-        .ok_or_else(|| format!("HTTP upstream URL must start with http://: {}", url))?;
-    let (authority, path) = split_http_authority_and_path(rest)?;
-    let (host, port, host_header) = parse_http_authority(authority)?;
-    if !plain_http_upstream_host_is_loopback(&host) {
-        return Err(format!(
-            "direct plain-HTTP MCP upstreams are limited to loopback hosts; '{}' must be fronted by a local gateway or stdio/TLS adapter",
-            host
+        return Err(HttpUpstreamError::new(
+            "HTTP upstream URL cannot be empty or contain whitespace/control characters",
         ));
     }
+    if url.contains('#') || url.contains('\\') {
+        return Err(HttpUpstreamError::new(
+            "HTTP upstream URL cannot contain fragments or backslashes",
+        ));
+    }
+    let normalized_url = url.to_ascii_lowercase();
+    let (secure, rest, default_port) = if normalized_url.starts_with("https://") {
+        (true, &url["https://".len()..], 443)
+    } else if normalized_url.starts_with("http://") {
+        (false, &url["http://".len()..], 80)
+    } else {
+        return Err(HttpUpstreamError::new(format!(
+            "HTTP upstream URL must start with http:// or https://: {}",
+            url
+        )));
+    };
+    let (authority, path) = split_http_authority_and_path(rest)?;
+    let (host, port, host_header) = parse_http_authority(authority, default_port)?;
+    if !secure && !plain_http_upstream_host_is_loopback(&host) {
+        return Err(HttpUpstreamError::new(format!(
+            "direct plain-HTTP MCP upstreams are limited to loopback hosts; '{}' must use HTTPS or a local gateway",
+            host
+        )));
+    }
     Ok(ParsedHttpUrl {
+        url: url.to_string(),
+        secure,
         host,
         port,
         path,
@@ -477,16 +744,20 @@ fn parse_http_url(url: &str) -> Result<ParsedHttpUrl, String> {
     })
 }
 
-fn split_http_authority_and_path(rest: &str) -> Result<(&str, String), String> {
+fn split_http_authority_and_path(rest: &str) -> HttpUpstreamResult<(&str, String)> {
     let Some(split_index) = rest.find(['/', '?']) else {
         if rest.is_empty() {
-            return Err("HTTP upstream URL has an empty authority".to_string());
+            return Err(HttpUpstreamError::new(
+                "HTTP upstream URL has an empty authority",
+            ));
         }
         return Ok((rest, "/".to_string()));
     };
     let authority = &rest[..split_index];
     if authority.is_empty() {
-        return Err("HTTP upstream URL has an empty authority".to_string());
+        return Err(HttpUpstreamError::new(
+            "HTTP upstream URL has an empty authority",
+        ));
     }
     let suffix = &rest[split_index..];
     let path = if suffix.starts_with('/') {
@@ -495,12 +766,17 @@ fn split_http_authority_and_path(rest: &str) -> Result<(&str, String), String> {
         format!("/{}", suffix)
     };
     if path.chars().any(|ch| ch.is_control()) {
-        return Err("HTTP upstream URL path cannot contain control characters".to_string());
+        return Err(HttpUpstreamError::new(
+            "HTTP upstream URL path cannot contain control characters",
+        ));
     }
     Ok((authority, path))
 }
 
-fn parse_http_authority(authority: &str) -> Result<(String, u16, String), String> {
+fn parse_http_authority(
+    authority: &str,
+    default_port: u16,
+) -> HttpUpstreamResult<(String, u16, String)> {
     if authority.is_empty()
         || authority.contains('/')
         || authority.contains('@')
@@ -508,7 +784,10 @@ fn parse_http_authority(authority: &str) -> Result<(String, u16, String), String
             .chars()
             .any(|ch| ch.is_control() || ch.is_whitespace())
     {
-        return Err(format!("invalid HTTP upstream authority '{}'", authority));
+        return Err(HttpUpstreamError::new(format!(
+            "invalid HTTP upstream authority '{}'",
+            authority
+        )));
     }
 
     if authority.starts_with('[') {
@@ -517,10 +796,13 @@ fn parse_http_authority(authority: &str) -> Result<(String, u16, String), String
             .ok_or_else(|| format!("invalid IPv6 HTTP upstream authority '{}'", authority))?;
         let host = authority[1..end].to_string();
         if host.trim().is_empty() || host.chars().any(|ch| ch.is_control() || ch.is_whitespace()) {
-            return Err(format!("invalid IPv6 HTTP upstream host '{}'", authority));
+            return Err(HttpUpstreamError::new(format!(
+                "invalid IPv6 HTTP upstream host '{}'",
+                authority
+            )));
         }
         let suffix = &authority[end + 1..];
-        let port = parse_optional_http_port(suffix, authority)?;
+        let port = parse_optional_http_port(suffix, authority, default_port)?;
         let host_header = if suffix.is_empty() {
             format!("[{}]", host)
         } else {
@@ -530,23 +812,28 @@ fn parse_http_authority(authority: &str) -> Result<(String, u16, String), String
     }
 
     if authority.matches(':').count() > 1 {
-        return Err(format!(
+        return Err(HttpUpstreamError::new(format!(
             "IPv6 HTTP upstream authorities must be bracketed: '{}'",
             authority
-        ));
+        )));
     }
     let (host, port, explicit_port) = match authority.rsplit_once(':') {
         Some((host, port)) if !host.is_empty() => {
             (host, parse_required_http_port(port, authority)?, true)
         }
-        Some(_) => return Err(format!("invalid HTTP upstream authority '{}'", authority)),
-        None => (authority, 80, false),
+        Some(_) => {
+            return Err(HttpUpstreamError::new(format!(
+                "invalid HTTP upstream authority '{}'",
+                authority
+            )))
+        }
+        None => (authority, default_port, false),
     };
     if host.trim().is_empty() || host.chars().any(|ch| ch.is_control() || ch.is_whitespace()) {
-        return Err(format!(
+        return Err(HttpUpstreamError::new(format!(
             "HTTP upstream URL has an invalid host: {}",
             authority
-        ));
+        )));
     }
     let host_header = if explicit_port {
         format!("{}:{}", host, port)
@@ -557,104 +844,54 @@ fn parse_http_authority(authority: &str) -> Result<(String, u16, String), String
 }
 
 fn plain_http_upstream_host_is_loopback(host: &str) -> bool {
-    let normalized = host.trim().trim_matches(['[', ']']).to_ascii_lowercase();
-    normalized == "localhost"
-        || normalized == "::1"
-        || normalized == "0:0:0:0:0:0:0:1"
-        || normalized.starts_with("127.")
+    let normalized = host.trim().trim_matches(['[', ']'].as_ref());
+    normalized.eq_ignore_ascii_case("localhost")
+        || normalized
+            .parse::<std::net::IpAddr>()
+            .map(|address| match address {
+                std::net::IpAddr::V4(address) => address.is_loopback(),
+                std::net::IpAddr::V6(address) => {
+                    address.is_loopback()
+                        || address
+                            .to_ipv4_mapped()
+                            .map(|mapped| mapped.is_loopback())
+                            .unwrap_or(false)
+                }
+            })
+            .unwrap_or(false)
 }
 
-fn parse_optional_http_port(suffix: &str, authority: &str) -> Result<u16, String> {
+fn parse_optional_http_port(
+    suffix: &str,
+    authority: &str,
+    default_port: u16,
+) -> HttpUpstreamResult<u16> {
     if suffix.is_empty() {
-        return Ok(80);
+        return Ok(default_port);
     }
     let Some(port) = suffix.strip_prefix(':') else {
-        return Err(format!("invalid HTTP upstream authority '{}'", authority));
+        return Err(HttpUpstreamError::new(format!(
+            "invalid HTTP upstream authority '{}'",
+            authority
+        )));
     };
     parse_required_http_port(port, authority)
 }
 
-fn parse_required_http_port(port: &str, authority: &str) -> Result<u16, String> {
+fn parse_required_http_port(port: &str, authority: &str) -> HttpUpstreamResult<u16> {
     if port.is_empty() {
-        return Err(format!("invalid HTTP upstream port in '{}'", authority));
+        return Err(HttpUpstreamError::new(format!(
+            "invalid HTTP upstream port in '{}'",
+            authority
+        )));
     }
     port.parse::<u16>()
-        .map_err(|_| format!("invalid HTTP upstream port in '{}'", authority))
+        .ok()
+        .filter(|value| *value != 0)
+        .ok_or_else(|| {
+            HttpUpstreamError::new(format!("invalid HTTP upstream port in '{}'", authority))
+        })
 }
 
 #[cfg(test)]
-mod tests {
-    use super::parse_http_url;
-    use crate::text_utils;
-
-    #[test]
-    fn parse_http_url_preserves_explicit_host_port_for_host_header() {
-        let parsed = parse_http_url("http://127.0.0.1:39022/mcp").expect("parse localhost URL");
-        assert_eq!(parsed.host, "127.0.0.1");
-        assert_eq!(parsed.port, 39022);
-        assert_eq!(parsed.path, "/mcp");
-        assert_eq!(parsed.host_header, "127.0.0.1:39022");
-    }
-
-    #[test]
-    fn parse_http_url_brackets_ipv6_host_header_and_keeps_query_path() {
-        let parsed = parse_http_url("http://[::1]:39022/mcp?x=1").expect("parse IPv6 URL");
-        assert_eq!(parsed.host, "::1");
-        assert_eq!(parsed.port, 39022);
-        assert_eq!(parsed.path, "/mcp?x=1");
-        assert_eq!(parsed.host_header, "[::1]:39022");
-    }
-
-    #[test]
-    fn parse_http_url_turns_query_only_suffix_into_root_query_path() {
-        let parsed = parse_http_url("http://127.0.0.1?x=1").expect("parse query-only URL");
-        assert_eq!(parsed.host, "127.0.0.1");
-        assert_eq!(parsed.port, 80);
-        assert_eq!(parsed.path, "/?x=1");
-        assert_eq!(parsed.host_header, "127.0.0.1");
-    }
-
-    #[test]
-    fn parse_http_url_rejects_non_loopback_plain_http_upstreams() {
-        for url in [
-            "http://example.com/mcp",
-            "http://10.0.0.10/mcp",
-            "http://172.16.0.10/mcp",
-            "http://192.168.1.10/mcp",
-        ] {
-            assert!(
-                parse_http_url(url).is_err(),
-                "plain HTTP upstream should be loopback-only: {url:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn parse_http_url_rejects_header_injection_and_ambiguous_authorities() {
-        let rejected = [
-            " http://127.0.0.1:39022/mcp",
-            "http://127.0.0.1:39022/mcp ",
-            "http://127.0.0.1\r\nInjected: bad/mcp",
-            "http://[::1]:not-a-port/mcp",
-            "http://::1:39022/mcp",
-            "http://user@127.0.0.1/mcp",
-            "http://127.0.0.1:65536/mcp",
-        ];
-        for url in rejected {
-            assert!(
-                parse_http_url(url).is_err(),
-                "URL should be rejected: {url:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn mcp_session_id_forwarding_rejects_control_characters() {
-        assert!(text_utils::valid_http_header_value("session-123"));
-        assert!(!text_utils::valid_http_header_value(""));
-        assert!(!text_utils::valid_http_header_value(
-            "session\r\nInjected: bad"
-        ));
-        assert!(!text_utils::valid_http_header_value("session with spaces"));
-    }
-}
+mod tests;

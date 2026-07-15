@@ -4,33 +4,115 @@ use super::process_config::{
     child_process_path, manager_data_path, resolve_command_for_cwd, spawn_program_for_command,
     validate_stdio_cwd,
 };
-use super::{empty_object, UpstreamServerConfig, UpstreamToolCall, INITIALIZE_ID, METHOD_ID};
+use super::{
+    batch_tool_call_error, empty_object, negotiated_protocol_version, validate_tool_call_result,
+    ToolListPagination, UpstreamServerConfig, UpstreamToolCall, INITIALIZE_ID, METHOD_ID,
+};
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
 use std::collections::BTreeMap;
 use std::env;
+use std::fmt;
 use std::io::{BufRead, BufReader, Write};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    mpsc::{self, Receiver},
+    mpsc::{self, Receiver, SyncSender},
 };
 use std::thread;
 use std::time::{Duration, Instant};
 
+const MAX_STDIO_RESPONSE_LINE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_STDERR_LINE_BYTES: usize = 16 * 1024;
+const STDOUT_CHANNEL_CAPACITY: usize = 8;
+const STDERR_CHANNEL_CAPACITY: usize = 64;
+const STDIN_CHANNEL_CAPACITY: usize = 1;
+const STDIN_WAIT_SLICE: Duration = Duration::from_millis(25);
+
+#[derive(Debug)]
+pub(super) enum StdioOutput {
+    Line(String),
+    Error(String),
+}
+
+struct StdioWriteRequest {
+    payload: Vec<u8>,
+    result_tx: SyncSender<StdioRuntimeResult<()>>,
+}
+
 pub(super) struct RunningServer {
     pub(super) child: Child,
-    pub(super) stdin: Box<dyn Write + Send>,
-    pub(super) stdout_rx: Receiver<String>,
+    stdin_tx: Option<SyncSender<StdioWriteRequest>>,
+    pub(super) stdout_rx: Receiver<StdioOutput>,
     pub(super) stderr_rx: Receiver<String>,
+}
+
+struct PendingChild {
+    child: Option<Child>,
+}
+
+impl PendingChild {
+    fn new(child: Child) -> Self {
+        Self { child: Some(child) }
+    }
+
+    fn child_mut(&mut self) -> Option<&mut Child> {
+        self.child.as_mut()
+    }
+
+    fn disarm(mut self) -> Option<Child> {
+        self.child.take()
+    }
+}
+
+impl Drop for PendingChild {
+    fn drop(&mut self) {
+        if let Some(child) = self.child.as_mut() {
+            terminate_child_process(child);
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(super) enum StdioRuntimeError {
+    Message(String),
+}
+
+pub(super) type StdioRuntimeResult<T> = Result<T, StdioRuntimeError>;
+
+impl fmt::Display for StdioRuntimeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Message(error) => write!(formatter, "{}", error),
+        }
+    }
+}
+
+impl std::error::Error for StdioRuntimeError {}
+
+impl From<String> for StdioRuntimeError {
+    fn from(error: String) -> Self {
+        Self::Message(error)
+    }
+}
+
+impl From<&str> for StdioRuntimeError {
+    fn from(error: &str) -> Self {
+        Self::Message(error.to_string())
+    }
+}
+
+impl From<StdioRuntimeError> for String {
+    fn from(error: StdioRuntimeError) -> Self {
+        error.to_string()
+    }
 }
 
 impl Drop for RunningServer {
     fn drop(&mut self) {
-        let _ = self.stdin.flush();
-        let _ = std::mem::replace(&mut self.stdin, Box::new(std::io::sink()));
+        self.stdin_tx.take();
         terminate_child_process(&mut self.child);
     }
 }
@@ -51,7 +133,7 @@ pub(super) fn run_stdio_request(
     params: Option<JsonValue>,
     timeout: Duration,
     lease_lost: Option<&AtomicBool>,
-) -> Result<JsonValue, String> {
+) -> StdioRuntimeResult<JsonValue> {
     let mut running = spawn_stdio_server(root_path, server)?;
     let deadline = Instant::now() + timeout;
 
@@ -65,7 +147,14 @@ pub(super) fn run_stdio_request(
     if let Some(params) = params {
         request_entries.push(("params", params));
     }
-    write_jsonrpc(&mut running.stdin, JsonValue::object(request_entries))?;
+    write_jsonrpc(
+        &running,
+        JsonValue::object(request_entries),
+        deadline,
+        &server.name,
+        method,
+        lease_lost,
+    )?;
     read_response(
         &running.stdout_rx,
         &running.stderr_rx,
@@ -77,13 +166,66 @@ pub(super) fn run_stdio_request(
     )
 }
 
+pub(super) fn run_stdio_tools_list(
+    root_path: &Path,
+    server: &UpstreamServerConfig,
+    timeout: Duration,
+    lease_lost: Option<&AtomicBool>,
+) -> StdioRuntimeResult<JsonValue> {
+    let mut running = spawn_stdio_server(root_path, server)?;
+    let deadline = Instant::now() + timeout;
+    initialize_running_server(&mut running, server, deadline, lease_lost)?;
+
+    let mut pagination = ToolListPagination::new();
+    let mut cursor: Option<String> = None;
+    let mut page = 0usize;
+    loop {
+        let request_id = METHOD_ID.saturating_add(page as i64);
+        let mut entries = vec![
+            ("jsonrpc", JsonValue::string("2.0")),
+            ("id", JsonValue::number(request_id)),
+            ("method", JsonValue::string("tools/list")),
+        ];
+        if let Some(cursor) = cursor.as_ref() {
+            entries.push((
+                "params",
+                JsonValue::object([("cursor", JsonValue::string(cursor.clone()))]),
+            ));
+        }
+        write_jsonrpc(
+            &running,
+            JsonValue::object(entries),
+            deadline,
+            &server.name,
+            "tools/list",
+            lease_lost,
+        )?;
+        let page_result = read_response(
+            &running.stdout_rx,
+            &running.stderr_rx,
+            request_id,
+            deadline,
+            &server.name,
+            "tools/list",
+            lease_lost,
+        )?;
+        cursor = pagination
+            .add_page(&server.name, &page_result)
+            .map_err(StdioRuntimeError::from)?;
+        page = page.saturating_add(1);
+        if cursor.is_none() {
+            return Ok(pagination.finish());
+        }
+    }
+}
+
 pub(super) fn run_stdio_tool_calls(
     root_path: &Path,
     server: &UpstreamServerConfig,
     calls: &[UpstreamToolCall],
     timeout: Duration,
     lease_lost: Option<&AtomicBool>,
-) -> Result<Vec<JsonValue>, String> {
+) -> StdioRuntimeResult<Vec<JsonValue>> {
     let mut running = spawn_stdio_server(root_path, server)?;
     let deadline = Instant::now() + timeout;
 
@@ -93,7 +235,7 @@ pub(super) fn run_stdio_tool_calls(
     for (index, call) in calls.iter().enumerate() {
         let request_id = METHOD_ID + index as i64;
         write_jsonrpc(
-            &mut running.stdin,
+            &running,
             JsonValue::object([
                 ("jsonrpc", JsonValue::string("2.0")),
                 ("id", JsonValue::number(request_id)),
@@ -106,7 +248,19 @@ pub(super) fn run_stdio_tool_calls(
                     ]),
                 ),
             ]),
-        )?;
+            deadline,
+            &server.name,
+            "tools/call",
+            lease_lost,
+        )
+        .map_err(|error| {
+            StdioRuntimeError::from(batch_tool_call_error(
+                &server.name,
+                index,
+                calls.len(),
+                error,
+            ))
+        })?;
         let result = read_response(
             &running.stdout_rx,
             &running.stderr_rx,
@@ -115,8 +269,24 @@ pub(super) fn run_stdio_tool_calls(
             &server.name,
             "tools/call",
             lease_lost,
-        )?;
-        let upstream_is_error = json_helpers::bool_at_path(&result, &["isError"]).unwrap_or(false);
+        )
+        .map_err(|error| {
+            StdioRuntimeError::from(batch_tool_call_error(
+                &server.name,
+                index,
+                calls.len(),
+                error,
+            ))
+        })?;
+        let upstream_is_error = validate_tool_call_result(&server.name, &call.tool, &result)
+            .map_err(|error| {
+                StdioRuntimeError::from(batch_tool_call_error(
+                    &server.name,
+                    index,
+                    calls.len(),
+                    error,
+                ))
+            })?;
         let upstream_ok = !upstream_is_error;
         results.push(JsonValue::object([
             ("index", JsonValue::number(index)),
@@ -136,9 +306,9 @@ pub(super) fn initialize_running_server(
     server: &UpstreamServerConfig,
     deadline: Instant,
     lease_lost: Option<&AtomicBool>,
-) -> Result<(), String> {
+) -> StdioRuntimeResult<()> {
     write_jsonrpc(
-        &mut running.stdin,
+        running,
         JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("id", JsonValue::number(INITIALIZE_ID)),
@@ -161,8 +331,12 @@ pub(super) fn initialize_running_server(
                 ]),
             ),
         ]),
+        deadline,
+        &server.name,
+        "initialize",
+        lease_lost,
     )?;
-    let _initialize_result = read_response(
+    let initialize_result = read_response(
         &running.stdout_rx,
         &running.stderr_rx,
         INITIALIZE_ID,
@@ -171,24 +345,29 @@ pub(super) fn initialize_running_server(
         "initialize",
         lease_lost,
     )?;
+    negotiated_protocol_version(&server.name, &initialize_result)?;
 
     write_jsonrpc(
-        &mut running.stdin,
+        running,
         JsonValue::object([
             ("jsonrpc", JsonValue::string("2.0")),
             ("method", JsonValue::string("notifications/initialized")),
         ]),
+        deadline,
+        &server.name,
+        "notifications/initialized",
+        lease_lost,
     )
 }
 
 pub(super) fn spawn_stdio_server(
     root_path: &Path,
     server: &UpstreamServerConfig,
-) -> Result<RunningServer, String> {
+) -> StdioRuntimeResult<RunningServer> {
     let command_name = server.command.as_deref().unwrap_or_default();
     let cwd = server.cwd.as_deref().unwrap_or(root_path);
     if let Some(cwd_error) = validate_stdio_cwd(cwd, &server.name) {
-        return Err(cwd_error);
+        return Err(cwd_error.into());
     }
     let program = resolve_command_for_cwd(command_name, cwd).map_err(|error| {
         format!(
@@ -222,7 +401,7 @@ pub(super) fn spawn_stdio_server(
     #[cfg(windows)]
     crate::windows_process::configure_no_window(&mut command);
 
-    let mut child = command.spawn().map_err(|error| {
+    let child = command.spawn().map_err(|error| {
         format!(
             "failed to start upstream server '{}' with '{}': {}",
             server.name,
@@ -230,63 +409,261 @@ pub(super) fn spawn_stdio_server(
             error
         )
     })?;
-    let stdin = child
+    let mut pending_child = PendingChild::new(child);
+    let stdin = pending_child
+        .child_mut()
+        .ok_or_else(|| format!("upstream server '{}' child was unavailable", server.name))?
         .stdin
         .take()
         .ok_or_else(|| format!("upstream server '{}' stdin was unavailable", server.name))?;
-    let stdout = child
+    let stdout = pending_child
+        .child_mut()
+        .ok_or_else(|| format!("upstream server '{}' child was unavailable", server.name))?
         .stdout
         .take()
         .ok_or_else(|| format!("upstream server '{}' stdout was unavailable", server.name))?;
-    let stderr = child
+    let stderr = pending_child
+        .child_mut()
+        .ok_or_else(|| format!("upstream server '{}' child was unavailable", server.name))?
         .stderr
         .take()
         .ok_or_else(|| format!("upstream server '{}' stderr was unavailable", server.name))?;
 
-    let (stdout_tx, stdout_rx) = mpsc::channel();
-    thread::spawn(move || {
-        let reader = BufReader::new(stdout);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
-                    if stdout_tx.send(line).is_err() {
+    let (stdin_tx, stdin_rx) = mpsc::sync_channel(STDIN_CHANNEL_CAPACITY);
+    thread::Builder::new()
+        .name("mcpace-upstream-stdin".to_string())
+        .spawn(move || run_stdin_writer(stdin, stdin_rx))
+        .map_err(|error| {
+            format!(
+                "failed to start stdin writer for upstream server '{}': {}",
+                server.name, error
+            )
+        })?;
+
+    let (stdout_tx, stdout_rx) = mpsc::sync_channel(STDOUT_CHANNEL_CAPACITY);
+    thread::Builder::new()
+        .name("mcpace-upstream-stdout".to_string())
+        .spawn(move || {
+            let mut reader = BufReader::new(stdout);
+            loop {
+                match read_bounded_line(&mut reader, MAX_STDIO_RESPONSE_LINE_BYTES) {
+                    Ok(Some(line)) => {
+                        if stdout_tx.send(StdioOutput::Line(line)).is_err() {
+                            break;
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        let _ = stdout_tx.send(StdioOutput::Error(error.to_string()));
                         break;
                     }
                 }
-                Err(_) => break,
             }
-        }
-    });
+        })
+        .map_err(|error| {
+            format!(
+                "failed to start stdout reader for upstream server '{}': {}",
+                server.name, error
+            )
+        })?;
 
-    let (stderr_tx, stderr_rx) = mpsc::channel();
-    thread::spawn(move || {
-        let reader = BufReader::new(stderr);
-        for line in reader.lines() {
-            match line {
-                Ok(line) => {
-                    if stderr_tx.send(line).is_err() {
+    let (stderr_tx, stderr_rx) = mpsc::sync_channel(STDERR_CHANNEL_CAPACITY);
+    thread::Builder::new()
+        .name("mcpace-upstream-stderr".to_string())
+        .spawn(move || {
+            let mut reader = BufReader::new(stderr);
+            loop {
+                match read_bounded_line(&mut reader, MAX_STDERR_LINE_BYTES) {
+                    Ok(Some(line)) => {
+                        // Diagnostics must never backpressure or deadlock a noisy server.
+                        if matches!(
+                            stderr_tx.try_send(line),
+                            Err(mpsc::TrySendError::Disconnected(_))
+                        ) {
+                            break;
+                        }
+                    }
+                    Ok(None) => break,
+                    Err(error) => {
+                        let _ = stderr_tx.try_send(error.to_string());
                         break;
                     }
                 }
-                Err(_) => break,
             }
-        }
-    });
+        })
+        .map_err(|error| {
+            format!(
+                "failed to start stderr reader for upstream server '{}': {}",
+                server.name, error
+            )
+        })?;
 
+    let child = pending_child
+        .disarm()
+        .ok_or_else(|| format!("upstream server '{}' child was unavailable", server.name))?;
     Ok(RunningServer {
         child,
-        stdin: Box::new(stdin),
+        stdin_tx: Some(stdin_tx),
         stdout_rx,
         stderr_rx,
     })
 }
 
-pub(super) fn write_jsonrpc(stdin: &mut dyn Write, message: JsonValue) -> Result<(), String> {
-    writeln!(stdin, "{}", message.to_compact_string())
-        .map_err(|error| format!("failed to write upstream JSON-RPC message: {}", error))?;
-    stdin
-        .flush()
-        .map_err(|error| format!("failed to flush upstream JSON-RPC message: {}", error))
+pub(super) fn read_bounded_line(
+    reader: &mut impl BufRead,
+    max_bytes: usize,
+) -> StdioRuntimeResult<Option<String>> {
+    let mut bytes = Vec::new();
+    loop {
+        let available = reader.fill_buf().map_err(|error| {
+            StdioRuntimeError::from(format!("failed to read upstream process output: {}", error))
+        })?;
+        if available.is_empty() {
+            if bytes.is_empty() {
+                return Ok(None);
+            }
+            break;
+        }
+        let take = available
+            .iter()
+            .position(|byte| *byte == b'\n')
+            .map(|index| index + 1)
+            .unwrap_or(available.len());
+        if bytes.len().saturating_add(take) > max_bytes {
+            return Err(StdioRuntimeError::from(format!(
+                "upstream process output line exceeds {} bytes",
+                max_bytes
+            )));
+        }
+        bytes.extend_from_slice(&available[..take]);
+        reader.consume(take);
+        if bytes.last() == Some(&b'\n') {
+            break;
+        }
+    }
+    if bytes.last() == Some(&b'\n') {
+        bytes.pop();
+        if bytes.last() == Some(&b'\r') {
+            bytes.pop();
+        }
+    }
+    String::from_utf8(bytes)
+        .map(Some)
+        .map_err(|_| StdioRuntimeError::from("upstream process output is not valid UTF-8"))
+}
+
+fn run_stdin_writer(mut stdin: impl Write, requests: Receiver<StdioWriteRequest>) {
+    while let Ok(request) = requests.recv() {
+        let result = stdin
+            .write_all(&request.payload)
+            .and_then(|_| stdin.flush())
+            .map_err(|error| {
+                StdioRuntimeError::from(format!(
+                    "failed to write upstream JSON-RPC message: {}",
+                    error
+                ))
+            });
+        let failed = result.is_err();
+        let _ = request.result_tx.send(result);
+        if failed {
+            break;
+        }
+    }
+}
+
+fn write_jsonrpc_interruption(
+    running: &RunningServer,
+    deadline: Instant,
+    server_name: &str,
+    method: &str,
+    lease_lost: Option<&AtomicBool>,
+) -> Option<StdioRuntimeError> {
+    if lease_lost
+        .map(|value| value.load(Ordering::SeqCst))
+        .unwrap_or(false)
+    {
+        return Some(runtime_lease_lost_error(server_name, method, &running.stderr_rx).into());
+    }
+    if Instant::now() >= deadline {
+        return Some(
+            format!(
+                "timed out writing upstream server '{}' request for {}{}",
+                server_name,
+                method,
+                stderr_suffix(&running.stderr_rx)
+            )
+            .into(),
+        );
+    }
+    None
+}
+
+pub(super) fn write_jsonrpc(
+    running: &RunningServer,
+    message: JsonValue,
+    deadline: Instant,
+    server_name: &str,
+    method: &str,
+    lease_lost: Option<&AtomicBool>,
+) -> StdioRuntimeResult<()> {
+    let sender = running.stdin_tx.as_ref().ok_or_else(|| {
+        StdioRuntimeError::from(format!(
+            "upstream server '{}' stdin writer is unavailable",
+            server_name
+        ))
+    })?;
+    let mut payload = message.to_compact_string().into_bytes();
+    payload.push(b'\n');
+    let (result_tx, result_rx) = mpsc::sync_channel(1);
+    let mut pending = StdioWriteRequest { payload, result_tx };
+
+    loop {
+        if let Some(error) =
+            write_jsonrpc_interruption(running, deadline, server_name, method, lease_lost)
+        {
+            return Err(error);
+        }
+        match sender.try_send(pending) {
+            Ok(()) => break,
+            Err(mpsc::TrySendError::Full(request)) => {
+                pending = request;
+                let remaining = deadline.saturating_duration_since(Instant::now());
+                thread::sleep(remaining.min(STDIN_WAIT_SLICE));
+            }
+            Err(mpsc::TrySendError::Disconnected(_)) => {
+                return Err(format!(
+                    "upstream server '{}' stdin writer closed before {}{}",
+                    server_name,
+                    method,
+                    stderr_suffix(&running.stderr_rx)
+                )
+                .into());
+            }
+        }
+    }
+
+    loop {
+        if let Some(error) =
+            write_jsonrpc_interruption(running, deadline, server_name, method, lease_lost)
+        {
+            return Err(error);
+        }
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        match result_rx.recv_timeout(remaining.min(STDIN_WAIT_SLICE)) {
+            Ok(Ok(())) => return Ok(()),
+            Ok(Err(error)) => return Err(error),
+            Err(mpsc::RecvTimeoutError::Timeout) => continue,
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                return Err(format!(
+                    "upstream server '{}' stdin writer stopped before {}{}",
+                    server_name,
+                    method,
+                    stderr_suffix(&running.stderr_rx)
+                )
+                .into());
+            }
+        }
+    }
 }
 
 fn default_child_process_environment() -> BTreeMap<String, String> {
@@ -329,20 +706,20 @@ fn default_child_process_environment() -> BTreeMap<String, String> {
 }
 
 pub(super) fn read_response(
-    stdout_rx: &Receiver<String>,
+    stdout_rx: &Receiver<StdioOutput>,
     stderr_rx: &Receiver<String>,
     expected_id: i64,
     deadline: Instant,
     server_name: &str,
     method: &str,
     lease_lost: Option<&AtomicBool>,
-) -> Result<JsonValue, String> {
+) -> StdioRuntimeResult<JsonValue> {
     loop {
         if lease_lost
             .map(|value| value.load(Ordering::SeqCst))
             .unwrap_or(false)
         {
-            return Err(runtime_lease_lost_error(server_name, method, stderr_rx));
+            return Err(runtime_lease_lost_error(server_name, method, stderr_rx).into());
         }
         let now = Instant::now();
         if now >= deadline {
@@ -352,16 +729,27 @@ pub(super) fn read_response(
                 method,
                 format_expected_id(expected_id),
                 stderr_suffix(stderr_rx)
-            ));
+            )
+            .into());
         }
         let remaining = deadline.saturating_duration_since(now);
         match stdout_rx.recv_timeout(remaining.min(Duration::from_millis(250))) {
-            Ok(line) => {
+            Ok(StdioOutput::Error(error)) => {
+                return Err(format!(
+                    "upstream server '{}' produced invalid output while responding to {}: {}{}",
+                    server_name,
+                    method,
+                    error,
+                    stderr_suffix(stderr_rx)
+                )
+                .into());
+            }
+            Ok(StdioOutput::Line(line)) => {
                 if lease_lost
                     .map(|value| value.load(Ordering::SeqCst))
                     .unwrap_or(false)
                 {
-                    return Err(runtime_lease_lost_error(server_name, method, stderr_rx));
+                    return Err(runtime_lease_lost_error(server_name, method, stderr_rx).into());
                 }
                 let trimmed = line.trim();
                 if trimmed.is_empty() || !trimmed.starts_with('{') {
@@ -382,7 +770,17 @@ pub(super) fn read_response(
                     .map(|value| value.load(Ordering::SeqCst))
                     .unwrap_or(false)
                 {
-                    return Err(runtime_lease_lost_error(server_name, method, stderr_rx));
+                    return Err(runtime_lease_lost_error(server_name, method, stderr_rx).into());
+                }
+                if let Err(error) = mcp::validate_response_envelope(&message, expected_id) {
+                    return Err(format!(
+                        "upstream server '{}' returned a malformed JSON-RPC response for {}: {}{}",
+                        server_name,
+                        method,
+                        error,
+                        stderr_suffix(stderr_rx)
+                    )
+                    .into());
                 }
                 if let Some(error) = json_helpers::value_at_path(&message, &["error"]) {
                     return Err(format!(
@@ -391,18 +789,12 @@ pub(super) fn read_response(
                         method,
                         error.to_compact_string(),
                         stderr_suffix(stderr_rx)
-                    ));
+                    )
+                    .into());
                 }
-                return json_helpers::value_at_path(&message, &["result"])
+                return Ok(json_helpers::value_at_path(&message, &["result"])
                     .cloned()
-                    .ok_or_else(|| {
-                        format!(
-                            "upstream server '{}' response to {} did not contain result{}",
-                            server_name,
-                            method,
-                            stderr_suffix(stderr_rx)
-                        )
-                    });
+                    .expect("validated JSON-RPC result"));
             }
             Err(mpsc::RecvTimeoutError::Timeout) => continue,
             Err(mpsc::RecvTimeoutError::Disconnected) => {
@@ -411,7 +803,8 @@ pub(super) fn read_response(
                     server_name,
                     method,
                     stderr_suffix(stderr_rx)
-                ));
+                )
+                .into());
             }
         }
     }
@@ -471,5 +864,23 @@ fn kill_windows_process_tree(pid: u32) {
         .stdout(Stdio::null())
         .stderr(Stdio::null());
     crate::windows_process::configure_no_window(&mut command);
-    let _ = command.status();
+    let Ok(mut taskkill_child) = command.spawn() else {
+        return;
+    };
+    let deadline = Instant::now() + Duration::from_secs(2);
+    loop {
+        match taskkill_child.try_wait() {
+            Ok(Some(_)) | Err(_) => return,
+            Ok(None) if Instant::now() >= deadline => break,
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+        }
+    }
+    let _ = taskkill_child.kill();
+    let force_deadline = Instant::now() + Duration::from_millis(500);
+    while Instant::now() < force_deadline {
+        match taskkill_child.try_wait() {
+            Ok(Some(_)) | Err(_) => return,
+            Ok(None) => thread::sleep(Duration::from_millis(25)),
+        }
+    }
 }

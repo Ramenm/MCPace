@@ -1,63 +1,87 @@
 # Changelog
 
-## 0.7.8
-
-- Fixed Windows npm-installed autostart so MCPace registers as a current-user `Run` entry named `MCPace` and removes the legacy Startup-folder `MCPace.cmd` launcher.
-- Added npm publish automation: `dev` publishes unique `-dev.<run_number>` prereleases to the `dev` dist-tag, while `main`/`master` publishes stable versions to `latest` only when the version is not already on npm.
-
-## 0.7.7
-
-- Fixed npm install command creation by ensuring native optional packages no longer declare a competing `mcpace` bin entry; the launcher package is now the sole owner of the user-facing command.
-
-All notable user-facing changes should be recorded here. Keep this file human-readable: focus on behavior, install/release impact, compatibility, security, and migration notes rather than every internal refactor.
+All notable user-facing changes are recorded here. Keep entries focused on behavior, installation/release impact, compatibility, security, and migration rather than every internal refactor.
 
 ## Unreleased
 
-## 0.7.6
+No unreleased changes.
+
+## 0.8.0 - 2026-07-14
+
+### Added
+
+- Added one canonical dashboard shell with **Home**, **Integrations**, **Applications**, **Activity**, and **Settings**, plus bounded retained-operation views and reusable upstream-session visibility.
+- Added explicit execution policy, lease-queue, HTTP session, and release-readiness contracts with focused regression tests.
+
+### Changed
+
+- Split the framework-free dashboard into bounded runtime/model/render/details/actions/boot/product chunks while preserving explicit load order and Rust embedding.
+- Reworked pooled stdio execution around per-worker checkout, failure invalidation, capacity eviction, configured idle TTLs, and real `maxWorkers` concurrency.
+- Made stable npm publication tag-only and immutable-SHA aware; kept GitHub installer publication draft-only; and made both lanes provenance/attestation gated and fail-closed around incomplete native package sets.
+
+### Security
+
+- Hardened HTTP framing and absolute deadlines, rejected requests before reading unauthorized bodies, bounded JSON-RPC replay state by count and bytes, and made stdio invalid UTF-8 fail closed.
+- Tightened dashboard HTML/URL sanitization, modal keyboard handling, CSV formula neutralization, source-archive hygiene, and generated-agent transcript exclusion.
 
 ### Fixed
 
-- Restored executable mode for the npm launcher bin shim so fresh installs of `@mcpace/cli` create the `mcpace` command without requiring `npm rebuild`.
+- Preserved launcher arguments such as `npx -y`, corrected MCP HTTP method/envelope errors, coalesced overview refreshes, and bounded retained operation lines/events.
+- Fixed clean-root setup, endpoint flag persistence, cross-platform autostart endpoint reuse, positional server-spec parsing, and release/workflow policy parsing.
 
-## 0.7.5
+### Migration
+
+- `mcpace stdio` is canonical. Existing `stdio-shim` client entries remain compatible for now; follow `docs/supported-clients.md` to preview and apply the replacement before a future major release.
+
+## 0.7.9 - 2026-07-06
 
 ### Fixed
 
-- Ran the real Rust 1.95.0 rustfmt/clippy toolchain and applied required formatting plus Clippy cleanups for the hardened dashboard/service code paths.
+- Bumped the immutable npm version so the Windows hidden-autostart repair from `0.7.8` reached npm `latest`; aligned Cargo, launcher, optional native dependency pins, lockfiles, and project config.
+
+## 0.7.8 - 2026-07-03
+
+### Added
+
+- Added npm publish automation for unique `dev` prereleases and stable releases.
+
+### Fixed
+
+- Fixed Windows npm-installed autostart so MCPace registers the current-user `MCPace` entry and removes the legacy Startup-folder `MCPace.cmd` launcher.
+
+## 0.7.7 - 2026-06-25
+
+### Fixed
+
+- Ensured native optional packages no longer declare a competing `mcpace` bin entry; the launcher package is the sole owner of the user-facing command.
+
+## 0.7.6 - 2026-06-25
+
+### Fixed
+
+- Restored executable mode for the npm launcher shim so fresh `@mcpace/cli` installs create the `mcpace` command without `npm rebuild`.
+
+## 0.7.5 - 2026-06-25
+
+### Fixed
+
+- Applied Rust 1.95.0 formatting and Clippy cleanups for hardened dashboard/service paths.
 
 ### Verification
 
-- Added final verification evidence for rustfmt, Clippy, Rust tests/build, Node checks, external tooling, load proof, and source-bundle packaging.
+- Added verification evidence for formatting, Clippy, Rust tests/build, Node checks, external tooling, load proof, and source-bundle packaging.
 
-## 0.7.4
-
-### Changed
-
-- Bumped the verified source bundle to `0.7.4` after the deep toolchain and logic recheck.
-- Made the load harness admission-aware for intentionally rate-limited dashboard refresh paths and preserved per-scenario server runtime snapshots for complete latency reports.
-- Hardened external tooling preflight for explicit workflow-file linting, local Gitleaks false-positive handling, and degraded OSV network behavior.
-
-### Fixed
-
-- Restored Rust dashboard tests after the hardened dashboard config gained latency, tracing, rate-limit, admission, and resource-governor fields.
-- Updated stale dashboard UI/HTTP contract assertions to match the split dashboard assets and current serve-mode error text.
-- Cleaned release/source reports so final bundle metadata matches the `0.7.4` artifact.
-
+## 0.7.4 - 2026-06-25
 
 ### Changed
 
-- Normalized the documentation set into a compact landing README, focused docs under `docs/`, and a condensed source-bundle summary.
-- Removed stale report paths from the release manifest so source artifact verification matches the files that actually ship.
-- Aligned GitHub issue-template labels with the declared repository label taxonomy and removed stale documentation placeholders.
-- Rechecked every shipped documentation/governance surface and aligned GitHub artifact download and security workflow metadata with the current workflow contract.
-- Tightened npm package-file metadata so the thin CLI package only declares source paths that exist in the release bundle.
+- Bumped the verified source bundle after the deep toolchain and logic recheck.
+- Made the load harness admission-aware and preserved per-scenario runtime snapshots.
+- Hardened external tooling preflight, normalized the documentation set, removed stale release-manifest paths, aligned repository labels/workflow metadata, and tightened npm package-file metadata.
 
 ### Fixed
 
-- Restored the npm CLI executable shim expected by `@mcpace/cli` package metadata and release artifact tests.
-- Extended repository hygiene coverage so every issue template is checked for undeclared labels.
-- Added hygiene coverage for security workflow trigger reachability and artifact upload/download action-major alignment.
-- Normalized final newlines in the large evaluation ledgers so text-file audits are clean.
+- Restored dashboard and npm launcher tests, updated stale dashboard/UI contracts, aligned release reports, expanded repository hygiene coverage, and normalized evaluation-ledger newlines.
 
 ## 0.7.0
 

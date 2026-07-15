@@ -1,5 +1,6 @@
 use super::model::{HubStatus, RepairReport};
 use super::{launcher, runtime, status};
+use crate::diagnostics;
 use crate::json::JsonValue;
 use crate::runtimepaths;
 use crate::text_utils::join_or_none;
@@ -18,14 +19,14 @@ pub(super) fn run_up(
     stderr: &mut dyn Write,
 ) -> i32 {
     if let Err(error) = runtime::ensure_runtime_layout(root_path) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
     let current_status = match status::collect_status(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -34,15 +35,12 @@ pub(super) fn run_up(
     }
     if current_status.status == "stale" {
         if let Err(error) = runtime::mark_stopped(root_path) {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     }
     if current_status.status == "corrupt" {
-        let _ = writeln!(
-            stderr,
-            "hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"
-        );
+        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"));
         return 1;
     }
 
@@ -57,18 +55,21 @@ pub(super) fn run_up(
     let exe = match std::env::current_exe() {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "failed to resolve mcpace binary path: {}", error);
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("failed to resolve mcpace binary path: {}", error),
+            );
             return 1;
         }
     };
     let log_path = runtimepaths::hub_log_path(&state_root);
     if let Err(error) = runtime::rotate_logs_if_needed(&log_path) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
     if let Err(error) = launcher::spawn_background(&exe, root_path) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
@@ -86,7 +87,7 @@ pub(super) fn run_up(
     let fallback_status = match status::collect_status(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -94,7 +95,10 @@ pub(super) fn run_up(
         return status::write_status_response(&fallback_status, json_output, stdout);
     }
 
-    let _ = writeln!(stderr, "hub runtime did not become healthy in time");
+    diagnostics::stderr_line(
+        stderr,
+        format_args!("hub runtime did not become healthy in time"),
+    );
     1
 }
 
@@ -105,27 +109,27 @@ pub(super) fn run_down(
     stderr: &mut dyn Write,
 ) -> i32 {
     if let Err(error) = runtime::ensure_runtime_layout(root_path) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
     let current_status = match status::collect_status(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
 
     if current_status.status == "stale" {
         if let Err(error) = runtime::mark_stopped(root_path) {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
         let final_status = match status::collect_status(root_path) {
             Ok(value) => value,
             Err(error) => {
-                let _ = writeln!(stderr, "{}", error);
+                diagnostics::stderr_line(stderr, format_args!("{}", error));
                 return 1;
             }
         };
@@ -133,10 +137,7 @@ pub(super) fn run_down(
     }
 
     if current_status.status == "corrupt" {
-        let _ = writeln!(
-            stderr,
-            "hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"
-        );
+        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"));
         return 1;
     }
 
@@ -147,7 +148,7 @@ pub(super) fn run_down(
     let state_root = runtimepaths::resolve_state_root(root_path);
     let stop_path = runtimepaths::hub_stop_path(&state_root);
     if let Err(error) = runtime::write_atomic(&stop_path, runtime::now_ms().to_string()) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
@@ -165,7 +166,7 @@ pub(super) fn run_down(
     let final_status = match status::collect_status(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -173,7 +174,7 @@ pub(super) fn run_down(
         return status::write_status_response(&final_status, json_output, stdout);
     }
 
-    let _ = writeln!(stderr, "hub runtime did not stop in time");
+    diagnostics::stderr_line(stderr, format_args!("hub runtime did not stop in time"));
     1
 }
 
@@ -184,36 +185,33 @@ pub(super) fn run_repair(
     stderr: &mut dyn Write,
 ) -> i32 {
     if let Err(error) = runtime::ensure_runtime_layout(root_path) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
     let current_status = match status::collect_status(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
     if status::is_live_status(&current_status.status) {
-        let _ = writeln!(
-            stderr,
-            "hub repair refuses to run while the runtime is active; stop it first with 'mcpace hub down'"
-        );
+        diagnostics::stderr_line(stderr, format_args!("hub repair refuses to run while the runtime is active; stop it first with 'mcpace hub down'"));
         return 1;
     }
 
     let repair_report = match runtime::repair_runtime_files(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
     let final_status = match status::collect_status(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -229,7 +227,7 @@ pub(super) fn run_status(
     let status_value = match status::collect_status(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -244,7 +242,7 @@ pub(super) fn run_logs(
     stderr: &mut dyn Write,
 ) -> i32 {
     if let Err(error) = runtime::ensure_runtime_layout(root_path) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
 
@@ -262,7 +260,10 @@ pub(super) fn run_logs(
     let raw = match fs::read_to_string(&log_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "failed to read {}: {}", log_path.display(), error);
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("failed to read {}: {}", log_path.display(), error),
+            );
             return 1;
         }
     };
@@ -290,7 +291,7 @@ pub(super) fn run_logs(
 
 pub(super) fn run_loop_command(root_path: &Path, stderr: &mut dyn Write) -> i32 {
     if let Err(error) = runtime::ensure_runtime_layout(root_path) {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
     run_loop(root_path, stderr)
@@ -303,28 +304,25 @@ fn run_loop(root_path: &Path, stderr: &mut dyn Write) -> i32 {
     let existing_status = match status::collect_status(root_path) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
     if status::is_live_status(&existing_status.status)
         && existing_status.pid != Some(std::process::id())
     {
-        let _ = writeln!(stderr, "hub runtime is already active for this root");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("hub runtime is already active for this root"),
+        );
         return 1;
     }
     if existing_status.status == "stale" {
-        let _ = writeln!(
-            stderr,
-            "hub runtime state is stale; run 'mcpace hub down' to clean it up before starting again"
-        );
+        diagnostics::stderr_line(stderr, format_args!("hub runtime state is stale; run 'mcpace hub down' to clean it up before starting again"));
         return 1;
     }
     if existing_status.status == "corrupt" {
-        let _ = writeln!(
-            stderr,
-            "hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"
-        );
+        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"));
         return 1;
     }
 
@@ -333,7 +331,7 @@ fn run_loop(root_path: &Path, stderr: &mut dyn Write) -> i32 {
     let runtime_lock = match runtime::acquire_runtime_lock(root_path, pid, start_ms) {
         Ok(value) => value,
         Err(error) => {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
     };
@@ -341,13 +339,13 @@ fn run_loop(root_path: &Path, stderr: &mut dyn Write) -> i32 {
     if let Err(error) =
         runtime::write_state_metadata(root_path, "starting", Some(pid), Some(start_ms), None)
     {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
     if let Err(error) =
         runtime::write_health_metadata(root_path, "starting", pid, start_ms, start_ms)
     {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
     let _ = runtime::append_log(
@@ -370,14 +368,14 @@ fn run_loop(root_path: &Path, stderr: &mut dyn Write) -> i32 {
         if let Err(error) =
             runtime::write_health_metadata(root_path, lifecycle_status, pid, start_ms, now)
         {
-            let _ = writeln!(stderr, "{}", error);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
             return 1;
         }
         if !started_logged {
             if let Err(error) =
                 runtime::write_state_metadata(root_path, "running", Some(pid), Some(start_ms), None)
             {
-                let _ = writeln!(stderr, "{}", error);
+                diagnostics::stderr_line(stderr, format_args!("{}", error));
                 return 1;
             }
             let _ = runtime::append_log(
@@ -408,7 +406,7 @@ fn run_loop(root_path: &Path, stderr: &mut dyn Write) -> i32 {
     if let Err(error) =
         runtime::write_state_metadata(root_path, "stopped", None, None, Some(stop_ms))
     {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
     drop(runtime_lock);

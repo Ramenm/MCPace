@@ -4,9 +4,39 @@ use super::DashboardConfig;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use crate::upstream;
+use std::fmt;
 use std::thread;
 
-pub(super) fn runtime_diagnostics(config: &DashboardConfig) -> Result<JsonValue, String> {
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(super) struct DashboardDiagnosticsError {
+    message: String,
+}
+
+impl fmt::Display for DashboardDiagnosticsError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for DashboardDiagnosticsError {}
+
+impl From<String> for DashboardDiagnosticsError {
+    fn from(message: String) -> Self {
+        Self { message }
+    }
+}
+
+impl From<DashboardDiagnosticsError> for String {
+    fn from(error: DashboardDiagnosticsError) -> Self {
+        error.to_string()
+    }
+}
+
+type DashboardDiagnosticsResult<T> = Result<T, DashboardDiagnosticsError>;
+
+pub(super) fn runtime_diagnostics(
+    config: &DashboardConfig,
+) -> DashboardDiagnosticsResult<JsonValue> {
     let root_path = &config.root_path;
     let inventory_root = root_path.to_path_buf();
     let inventory_handle = thread::spawn(move || upstream::configured_inventory(&inventory_root));
@@ -83,7 +113,7 @@ pub(super) fn runtime_diagnostics(config: &DashboardConfig) -> Result<JsonValue,
                 (
                     "reason",
                     JsonValue::string(
-                        "MCPace forwards resolvable configured stdio and plain local Streamable HTTP upstreams through upstream_tools/upstream_call and uses upstream_batch for same-server stateful sequences. upstream_catalog lists concise tool descriptions, upstream_probe checks configured servers, upstream_policy_audit compares MCP annotations with declarative toolPolicies, and upstream_policy_suggest generates reviewable policy candidates without hardcoded server names. HTTPS, legacy HTTP+SSE, and custom transports remain explicit blocked diagnostics until bridged or upgraded.",
+                        "MCPace forwards resolvable configured stdio and Streamable HTTP/HTTPS upstreams through upstream_tools/upstream_call and uses upstream_batch for same-server stateful sequences. HTTPS uses platform certificate verification and configured authentication headers; plain HTTP is loopback-only. upstream_catalog lists concise tool descriptions, upstream_probe checks configured servers, upstream_policy_audit compares MCP annotations with declarative toolPolicies, and upstream_policy_suggest generates reviewable policy candidates without hardcoded server names. Legacy HTTP+SSE and custom transports remain explicit blocked diagnostics until bridged or upgraded.",
                     ),
                 ),
             ]),
@@ -142,7 +172,14 @@ fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
         json_helpers::bool_at_path(server, &["effectiveEnabled"]).unwrap_or(false);
     let required = json_helpers::bool_at_path(server, &["required"]).unwrap_or(false);
     let auto_start = json_helpers::bool_at_path(server, &["autoStart"]).unwrap_or(false);
-    let runtime_callable = effective_enabled && matches!(source_type, "stdio" | "http");
+    let source_url = json_helpers::string_at_path(server, &["sourceUrl"]).unwrap_or("");
+    let source_command = json_helpers::string_at_path(server, &["sourceCommand"])
+        .unwrap_or("")
+        .trim();
+    let runtime_callable = effective_enabled
+        && ((source_type == "stdio" && !source_command.is_empty())
+            || (source_type == "http"
+                && crate::upstream::http_upstream_url_is_callable(source_url)));
     let (status, reason) = if !effective_enabled {
         (
             "disabled",
@@ -151,7 +188,7 @@ fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
     } else if source_type == "http" && runtime_callable {
         (
             "callable-http-bridge",
-            "enabled plain Streamable HTTP upstream can be listed with upstream_tools and called with upstream_call",
+            "enabled Streamable HTTP/HTTPS upstream can be listed with upstream_tools and called with upstream_call; HTTPS uses platform certificate verification and plain HTTP is loopback-only",
         )
     } else if source_type == "stdio" && runtime_callable {
         (
@@ -171,12 +208,12 @@ fn server_runtime_diagnostic(server: &JsonValue) -> JsonValue {
     } else if source_type == "http" {
         (
             "blocked-http-upstream",
-            "HTTP upstream is configured but not callable; plain http:// Streamable HTTP is supported, while HTTPS needs a stdio adapter or local gateway",
+            "HTTP upstream is configured but not callable; verify the URL, required headers, and loopback-only rule for plain HTTP",
         )
     } else if kind == "external-http" || kind == "remote-http" {
         (
             "blocked-preview-http-upstream",
-            "external/remote HTTP server policy is configured, but direct HTTPS/custom HTTP fan-out is not implemented in this HTTP adapter",
+            "external/remote HTTP policy metadata has no callable source URL; add a Streamable HTTPS endpoint or a stdio adapter",
         )
     } else {
         (

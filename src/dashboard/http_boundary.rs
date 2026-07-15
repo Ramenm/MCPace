@@ -1,43 +1,101 @@
 use super::HttpRequest;
+use std::fmt;
 use std::net::IpAddr;
 
-#[allow(dead_code)]
-pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), String> {
-    validate_origin_for_bind(request, false)
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum HttpBoundaryError {
+    MissingHost,
+    MultipleHost,
+    HostNotAllowed { host: String },
+    MultipleOrigin,
+    OriginNotAllowed { origin: String },
+    DuplicateHeader { key: String },
 }
 
-pub(super) fn validate_origin_for_bind(
-    request: &HttpRequest,
-    allow_nonlocal_host: bool,
-) -> Result<(), String> {
+impl HttpBoundaryError {
+    #[cfg(test)]
+    #[allow(dead_code)]
+    pub(super) fn contains(&self, needle: &str) -> bool {
+        self.to_string().contains(needle)
+    }
+}
+
+impl fmt::Display for HttpBoundaryError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            HttpBoundaryError::MissingHost => {
+                formatter.write_str("missing required Host header for MCPace serve mode")
+            }
+            HttpBoundaryError::MultipleHost => {
+                formatter.write_str("multiple Host headers are not allowed for MCPace serve mode")
+            }
+            HttpBoundaryError::HostNotAllowed { host } => {
+                write!(
+                    formatter,
+                    "host '{}' is not allowed for MCPace serve mode",
+                    host
+                )
+            }
+            HttpBoundaryError::MultipleOrigin => {
+                formatter.write_str("multiple Origin headers are not allowed for MCPace serve mode")
+            }
+            HttpBoundaryError::OriginNotAllowed { origin } => write!(
+                formatter,
+                "origin '{}' is not allowed for MCPace serve mode",
+                origin
+            ),
+            HttpBoundaryError::DuplicateHeader { key } => write!(
+                formatter,
+                "multiple {} headers are not allowed for MCP HTTP requests",
+                key
+            ),
+        }
+    }
+}
+
+impl std::error::Error for HttpBoundaryError {}
+
+impl From<HttpBoundaryError> for String {
+    fn from(error: HttpBoundaryError) -> Self {
+        error.to_string()
+    }
+}
+
+#[allow(dead_code)]
+pub(super) fn validate_origin(request: &HttpRequest) -> Result<(), HttpBoundaryError> {
+    validate_origin_for_bind(request)
+}
+
+pub(super) fn validate_origin_for_bind(request: &HttpRequest) -> Result<(), HttpBoundaryError> {
     let mut hosts = request.headers.iter().filter(|(key, _)| key == "host");
     let Some((_, host)) = hosts.next() else {
-        return Err("missing required Host header for MCPace serve mode".to_string());
+        return Err(HttpBoundaryError::MissingHost);
     };
     if hosts.next().is_some() {
-        return Err("multiple Host headers are not allowed for MCPace serve mode".to_string());
+        return Err(HttpBoundaryError::MultipleHost);
     }
     let host = host.trim();
-    if !host_allowed_for_bind(host, allow_nonlocal_host) {
-        return Err(format!(
-            "host '{}' is not allowed for MCPace serve mode",
-            host
-        ));
+    if !is_allowed_local_authority(host) {
+        return Err(HttpBoundaryError::HostNotAllowed {
+            host: host.to_string(),
+        });
     }
 
     let mut origins = request.headers.iter().filter(|(key, _)| key == "origin");
     if let Some((_, origin)) = origins.next() {
         if origins.next().is_some() {
-            return Err(
-                "multiple Origin headers are not allowed for MCPace serve mode".to_string(),
-            );
+            return Err(HttpBoundaryError::MultipleOrigin);
         }
         let origin = origin.trim();
-        if !origin_allowed_for_bind(origin, host, allow_nonlocal_host) {
-            return Err(format!(
-                "origin '{}' is not allowed for MCPace serve mode",
-                origin
-            ));
+        let origin_authority = origin_authority(origin);
+        if !is_allowed_local_origin(origin)
+            || !origin_authority
+                .map(|authority| authority.eq_ignore_ascii_case(host))
+                .unwrap_or(false)
+        {
+            return Err(HttpBoundaryError::OriginNotAllowed {
+                origin: origin.to_string(),
+            });
         }
     }
     Ok(())
@@ -87,28 +145,6 @@ pub(crate) fn is_allowed_local_host(host_header: &str) -> bool {
     is_allowed_local_authority(host_header)
 }
 
-fn host_allowed_for_bind(host_header: &str, allow_nonlocal_host: bool) -> bool {
-    if allow_nonlocal_host {
-        is_valid_http_authority(host_header)
-    } else {
-        is_allowed_local_authority(host_header)
-    }
-}
-
-fn origin_allowed_for_bind(origin: &str, host_header: &str, allow_nonlocal_host: bool) -> bool {
-    if is_allowed_local_origin(origin) {
-        return true;
-    }
-    if !allow_nonlocal_host {
-        return false;
-    }
-    let Some(origin_authority) = origin_authority(origin) else {
-        return false;
-    };
-    is_valid_http_authority(origin_authority)
-        && normalized_authority(origin_authority) == normalized_authority(host_header)
-}
-
 fn is_allowed_local_authority(authority: &str) -> bool {
     if !is_valid_http_authority(authority) {
         return false;
@@ -152,10 +188,6 @@ fn origin_authority(origin: &str) -> Option<&str> {
         .strip_prefix("http://")
         .or_else(|| origin.strip_prefix("https://"))
         .filter(|authority| is_valid_http_authority(authority))
-}
-
-fn normalized_authority(authority: &str) -> String {
-    authority.trim().to_ascii_lowercase()
 }
 
 pub(crate) fn is_loopback_host(host: &str) -> bool {
@@ -250,7 +282,7 @@ pub(super) fn request_header_string(request: Option<&HttpRequest>, key: &str) ->
 pub(super) fn request_header_string_unique(
     request: Option<&HttpRequest>,
     key: &str,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, HttpBoundaryError> {
     let Some(request) = request else {
         return Ok(None);
     };
@@ -263,10 +295,9 @@ pub(super) fn request_header_string_unique(
         return Ok(None);
     };
     if matches.next().is_some() {
-        return Err(format!(
-            "multiple {} headers are not allowed for MCP HTTP requests",
-            key
-        ));
+        return Err(HttpBoundaryError::DuplicateHeader {
+            key: key.to_string(),
+        });
     }
     let trimmed = value.trim();
     if trimmed.is_empty() {

@@ -1,4 +1,7 @@
+use crate::diagnostics;
+use clap::{error::ErrorKind, Parser};
 use serde_json::json;
+use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::Command;
@@ -7,57 +10,50 @@ const RELEASE_SCRIPT: &str = "scripts/build-release-artifacts.mjs";
 const LOCAL_ONLY_CLAIM: &str =
     "local release artifact build only; npm/GitHub publication is not performed";
 
+#[derive(Debug, Default)]
+struct ParsedArgs {
+    help: bool,
+    json_output: bool,
+    root_override: Option<PathBuf>,
+    error: Option<String>,
+}
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace release",
+    disable_version_flag = true,
+    about = "Build local release artifacts without publishing"
+)]
+struct ReleaseCli {
+    #[arg(value_name = "build")]
+    action: Option<String>,
+
+    #[arg(long = "json")]
+    json_output: bool,
+
+    #[arg(long = "root", value_name = "PATH")]
+    root_override: Option<PathBuf>,
+}
+
 pub fn run(
     args: &[String],
     default_root: Option<PathBuf>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let mut json_output = false;
-    let mut root_override = default_root;
-    let mut index = 0usize;
-
-    if let Some(action) = args.first() {
-        match action.as_str() {
-            "build" | "artifacts" => index = 1,
-            "-h" | "--help" | "help" => {
-                write_help(stdout);
-                return 0;
-            }
-            value if value.starts_with('-') => {}
-            other => {
-                let _ = writeln!(stderr, "unsupported release command: {}", other);
-                write_usage(stderr);
-                return 2;
-            }
-        }
+    let parsed = parse_cli(args);
+    if parsed.help {
+        write_help(stdout);
+        return 0;
+    }
+    if let Some(error) = parsed.error {
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        write_usage(stderr);
+        return 2;
     }
 
-    while index < args.len() {
-        match args[index].as_str() {
-            "--json" => {
-                json_output = true;
-                index += 1;
-            }
-            "--root" => {
-                let Some(value) = args.get(index + 1) else {
-                    let _ = writeln!(stderr, "release build requires a path after --root");
-                    return 2;
-                };
-                root_override = Some(PathBuf::from(value));
-                index += 2;
-            }
-            "-h" | "--help" => {
-                write_help(stdout);
-                return 0;
-            }
-            other => {
-                let _ = writeln!(stderr, "unsupported release build argument: {}", other);
-                write_usage(stderr);
-                return 2;
-            }
-        }
-    }
+    let json_output = parsed.json_output;
+    let root_override = parsed.root_override.or(default_root);
 
     let Some(root_path) = root_override else {
         return write_failure(
@@ -145,6 +141,69 @@ pub fn run(
     0
 }
 
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    match ReleaseCli::try_parse_from(argv(args)) {
+        Ok(cli) => {
+            let action = cli.action.as_deref().map(str::to_ascii_lowercase);
+            if matches!(action.as_deref(), None | Some("build" | "artifacts")) {
+                ParsedArgs {
+                    help: false,
+                    json_output: cli.json_output,
+                    root_override: cli.root_override,
+                    error: None,
+                }
+            } else if action.as_deref() == Some("help") {
+                ParsedArgs {
+                    help: true,
+                    ..ParsedArgs::default()
+                }
+            } else {
+                ParsedArgs {
+                    error: Some(format!(
+                        "unsupported release command: {}",
+                        cli.action.unwrap_or_default()
+                    )),
+                    ..ParsedArgs::default()
+                }
+            }
+        }
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            ParsedArgs {
+                help: true,
+                ..ParsedArgs::default()
+            }
+        }
+        Err(error) => ParsedArgs {
+            error: Some(error.to_string()),
+            ..ParsedArgs::default()
+        },
+    }
+}
+
+fn argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace release"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_compat_arg(arg))),
+    );
+    argv
+}
+
+fn normalize_compat_arg(arg: &str) -> String {
+    match arg {
+        "-json" => "--json".to_string(),
+        "-root" => "--root".to_string(),
+        "-?" => "--help".to_string(),
+        _ => arg.to_string(),
+    }
+}
+
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
@@ -163,9 +222,9 @@ fn write_help(stdout: &mut dyn Write) {
 }
 
 fn write_usage(stderr: &mut dyn Write) {
-    let _ = writeln!(
+    diagnostics::stderr_line(
         stderr,
-        "Usage: mcpace release [build] [--json] [--root <path>]"
+        format_args!("Usage: mcpace release [build] [--json] [--root <path>]"),
     );
 }
 
@@ -190,12 +249,12 @@ fn write_failure(
         });
         write_json(stdout, &payload);
     } else {
-        let _ = writeln!(stderr, "{}", message);
+        diagnostics::stderr_line(stderr, format_args!("{}", message));
         if !script_stderr.trim().is_empty() {
-            let _ = writeln!(stderr, "{}", script_stderr.trim());
+            diagnostics::stderr_line(stderr, format_args!("{}", script_stderr.trim()));
         }
         if !script_stdout.trim().is_empty() {
-            let _ = writeln!(stderr, "stdout:\n{}", script_stdout.trim());
+            diagnostics::stderr_line(stderr, format_args!("stdout:\n{}", script_stdout.trim()));
         }
     }
     exit_code.filter(|code| *code != 0).unwrap_or(1)

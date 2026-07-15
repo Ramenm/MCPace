@@ -1,3 +1,4 @@
+use crate::diagnostics;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
 use crate::mcp_protocol as mcp;
@@ -6,10 +7,49 @@ use crate::{adapter, app, upstream};
 use std::collections::BTreeSet;
 use std::io::{self, BufRead, Write};
 use std::path::PathBuf;
-use std::sync::Mutex;
+
+const MAX_MCP_STDIO_MESSAGE_BYTES: usize = 8 * 1024 * 1024;
+const MAX_MCP_STDIO_REQUEST_IDS: usize = 4096;
+
+#[derive(Debug, PartialEq, Eq)]
+enum RequestIdReplayError {
+    Invalid,
+    TooLong,
+    Duplicate,
+    Full,
+}
+
+fn track_stdio_request_id(
+    seen_request_ids: &mut BTreeSet<String>,
+    id: &JsonValue,
+) -> Result<(), RequestIdReplayError> {
+    if !mcp::is_request_id_value(id) {
+        return Err(RequestIdReplayError::Invalid);
+    }
+    if !mcp::request_id_is_within_limit(id) {
+        return Err(RequestIdReplayError::TooLong);
+    }
+    let id_key = mcp::request_id_key(id).ok_or(RequestIdReplayError::Invalid)?;
+    if seen_request_ids.contains(&id_key) {
+        return Err(RequestIdReplayError::Duplicate);
+    }
+    if seen_request_ids.len() >= MAX_MCP_STDIO_REQUEST_IDS {
+        return Err(RequestIdReplayError::Full);
+    }
+    seen_request_ids.insert(id_key);
+    Ok(())
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum BoundedStdioLine {
+    Eof,
+    Line,
+    TooLong,
+}
+
 mod args;
 mod tool_surface;
-use self::args::{parse_args, write_help};
+use self::args::{parse_cli, write_help};
 use self::tool_surface::{mcp_tool_names, tool_definition, TOOL_SPECS};
 #[derive(Clone, Debug)]
 struct ServerConfig {
@@ -25,9 +65,9 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help {
@@ -36,7 +76,10 @@ pub fn run(
     }
     let root_path = parsed.root_override.clone().or(default_root);
     let Some(root_path) = root_path else {
-        let _ = writeln!(stderr, "mcpace root not found; expected mcpace.config.json");
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("mcpace root not found; expected mcpace.config.json"),
+        );
         return 1;
     };
     let config = ServerConfig {
@@ -55,25 +98,47 @@ pub fn run(
 fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
     let stdin = io::stdin();
     let mut input = stdin.lock();
-    let mut line = String::new();
+    let mut line = Vec::new();
     let mut initialize_seen = false;
     let mut initialized_notification_seen = false;
     let mut initialize_params: Option<JsonValue> = None;
     let mut seen_request_ids = BTreeSet::new();
-    let upstream_session_pool = Mutex::new(upstream::UpstreamSessionPool::default());
+    let upstream_session_pool = upstream::UpstreamSessionPool::default();
 
     loop {
-        line.clear();
-        match input.read_line(&mut line) {
-            Ok(0) => return 0,
-            Ok(_) => {}
+        match read_bounded_stdio_line(&mut input, &mut line, MAX_MCP_STDIO_MESSAGE_BYTES) {
+            Ok(BoundedStdioLine::Eof) => return 0,
+            Ok(BoundedStdioLine::Line) => {}
+            Ok(BoundedStdioLine::TooLong) => {
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!(
+                        "MCP stdin message exceeds the {} byte limit",
+                        MAX_MCP_STDIO_MESSAGE_BYTES
+                    ),
+                );
+                return 1;
+            }
             Err(error) => {
-                let _ = writeln!(stderr, "failed to read MCP stdin: {}", error);
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("failed to read MCP stdin: {}", error),
+                );
                 return 1;
             }
         }
 
-        let trimmed = line.trim();
+        let line_text = match std::str::from_utf8(&line) {
+            Ok(value) => value,
+            Err(error) => {
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("failed to read MCP stdin as UTF-8: {}", error),
+                );
+                return 1;
+            }
+        };
+        let trimmed = line_text.trim();
         if trimmed.is_empty() {
             continue;
         }
@@ -99,7 +164,7 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
             let response = mcp::error(
                 mcp::request_id_or_null(&message),
                 mcp::ERROR_INVALID_REQUEST,
-                &error,
+                &error.to_string(),
                 None,
             );
             if write_message(stdout, &response).is_err() {
@@ -132,23 +197,11 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                 }
                 continue;
             }
-            let Some(id_key) = mcp::request_id_key(id) else {
+            if !mcp::request_id_is_within_limit(id) {
                 let response = mcp::error(
                     id.clone(),
                     mcp::ERROR_INVALID_REQUEST,
-                    "JSON-RPC request id must be a string or integer number",
-                    None,
-                );
-                if write_message(stdout, &response).is_err() {
-                    return 1;
-                }
-                continue;
-            };
-            if !seen_request_ids.insert(id_key) {
-                let response = mcp::error(
-                    id.clone(),
-                    mcp::ERROR_INVALID_REQUEST,
-                    "JSON-RPC request id was already used in this MCP session",
+                    "JSON-RPC request id exceeds the 256 byte limit",
                     None,
                 );
                 if write_message(stdout, &response).is_err() {
@@ -189,6 +242,48 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                 }
             }
             continue;
+        }
+
+        if let Some(id) = request_id.as_ref() {
+            match track_stdio_request_id(&mut seen_request_ids, id) {
+                Ok(()) => {}
+                Err(RequestIdReplayError::Duplicate) => {
+                    let response = mcp::error(
+                        id.clone(),
+                        mcp::ERROR_INVALID_REQUEST,
+                        "JSON-RPC request id was already used in this MCP session",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    continue;
+                }
+                Err(RequestIdReplayError::Full) => {
+                    let response = mcp::error(
+                        id.clone(),
+                        mcp::ERROR_INVALID_REQUEST,
+                        "MCP stdio request-id replay window is full; restart the session",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    return 1;
+                }
+                Err(RequestIdReplayError::Invalid | RequestIdReplayError::TooLong) => {
+                    let response = mcp::error(
+                        id.clone(),
+                        mcp::ERROR_INVALID_REQUEST,
+                        "JSON-RPC request id must be a bounded string or integer number",
+                        None,
+                    );
+                    if write_message(stdout, &response).is_err() {
+                        return 1;
+                    }
+                    continue;
+                }
+            }
         }
 
         match method {
@@ -463,7 +558,8 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
                 let arguments = match mcp::tool_call_arguments_or_empty(&message) {
                     Ok(value) => value,
                     Err(error) => {
-                        let response = mcp::error(id, mcp::ERROR_INVALID_PARAMS, &error, None);
+                        let response =
+                            mcp::error(id, mcp::ERROR_INVALID_PARAMS, &error.to_string(), None);
                         if write_message(stdout, &response).is_err() {
                             return 1;
                         }
@@ -514,8 +610,55 @@ fn serve(config: ServerConfig, stdout: &mut dyn Write, stderr: &mut dyn Write) -
     }
 }
 
+fn read_bounded_stdio_line(
+    reader: &mut impl BufRead,
+    line: &mut Vec<u8>,
+    max_bytes: usize,
+) -> io::Result<BoundedStdioLine> {
+    line.clear();
+    let max_with_sentinel = max_bytes.saturating_add(1);
+
+    loop {
+        let (take_len, newline_seen) = {
+            let available = reader.fill_buf()?;
+            if available.is_empty() {
+                return Ok(if line.is_empty() {
+                    BoundedStdioLine::Eof
+                } else {
+                    BoundedStdioLine::Line
+                });
+            }
+
+            let until_newline = available
+                .iter()
+                .position(|byte| *byte == b'\n')
+                .map(|position| position + 1)
+                .unwrap_or(available.len());
+            let remaining = max_with_sentinel.saturating_sub(line.len());
+            let take_len = until_newline.min(remaining);
+            line.extend_from_slice(&available[..take_len]);
+            (
+                take_len,
+                take_len == until_newline && available[..take_len].contains(&b'\n'),
+            )
+        };
+
+        reader.consume(take_len);
+        if line.len() > max_bytes {
+            return Ok(BoundedStdioLine::TooLong);
+        }
+        if newline_seen {
+            return Ok(BoundedStdioLine::Line);
+        }
+        if take_len == 0 {
+            return Ok(BoundedStdioLine::TooLong);
+        }
+    }
+}
+
 fn write_message(stdout: &mut dyn Write, message: &JsonValue) -> io::Result<()> {
-    writeln!(stdout, "{}", message.to_compact_string())?;
+    stdout.write_all(message.to_compact_string().as_bytes())?;
+    stdout.write_all(b"\n")?;
     stdout.flush()
 }
 
@@ -530,7 +673,7 @@ fn execute_tool(
     tool_name: &str,
     arguments: &JsonValue,
     initialize_params: Option<&JsonValue>,
-    upstream_session_pool: &Mutex<upstream::UpstreamSessionPool>,
+    upstream_session_pool: &upstream::UpstreamSessionPool,
 ) -> Result<JsonValue, ToolCallError> {
     if tool_name.starts_with("u_") {
         let reserved = mcp_tool_names().into_iter().collect::<BTreeSet<_>>();
@@ -540,7 +683,7 @@ fn execute_tool(
             &reserved,
             &adapter::ToolExposureOptions::for_call_resolution(),
         )
-        .map_err(ToolCallError::Execution)?;
+        .map_err(|error| ToolCallError::Execution(error.to_string()))?;
         if let Some(target) = target {
             let control_arguments = adapter::projected_adapter_control_arguments(arguments);
             let context = ForwardedContext::from_tool_arguments(
@@ -560,7 +703,7 @@ fn execute_tool(
                 Some(&context.upstream_lease_context(ttl_ms)),
                 upstream_session_pool,
             )
-            .map_err(ToolCallError::Execution)?;
+            .map_err(|error| ToolCallError::Execution(error.to_string()))?;
             return Ok(tool_result::upstream_tool_result_payload(
                 result,
                 false,
@@ -659,7 +802,7 @@ fn execute_tool(
                 timeout_ms,
                 refresh,
             )
-            .map_err(ToolCallError::Execution)?
+            .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "adapter_route" => {
             let include_live_catalog =
@@ -674,7 +817,7 @@ fn execute_tool(
                 timeout_ms,
                 refresh,
             )
-            .map_err(ToolCallError::Execution)?
+            .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "upstream_search" => {
             let query = optional_string_argument(arguments, "query")?;
@@ -695,7 +838,7 @@ fn execute_tool(
                 timeout_ms,
                 refresh,
             )
-            .map_err(ToolCallError::Execution)?
+            .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "surface_manifest" => {
             let include_live_catalog =
@@ -710,35 +853,35 @@ fn execute_tool(
                 timeout_ms,
                 refresh,
             )
-            .map_err(ToolCallError::Execution)?
+            .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "upstream_tools" => {
             let server = optional_string_argument(arguments, "server")?;
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
             let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
             upstream::list_tools(&config.root_path, server.as_deref(), timeout_ms, refresh)
-                .map_err(ToolCallError::Execution)?
+                .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "upstream_catalog" => {
             let server = optional_string_argument(arguments, "server")?;
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
             let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
             upstream::catalog_tools(&config.root_path, server.as_deref(), timeout_ms, refresh)
-                .map_err(ToolCallError::Execution)?
+                .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "upstream_probe" => {
             let server = optional_string_argument(arguments, "server")?;
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
             let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
             upstream::probe_servers(&config.root_path, server.as_deref(), timeout_ms, refresh)
-                .map_err(ToolCallError::Execution)?
+                .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "upstream_policy_audit" => {
             let server = optional_string_argument(arguments, "server")?;
             let timeout_ms = timeout_argument(arguments, "timeoutMs")?;
             let refresh = bool_argument(arguments, "refresh")?.unwrap_or(false);
             upstream::audit_tool_policies(&config.root_path, server.as_deref(), timeout_ms, refresh)
-                .map_err(ToolCallError::Execution)?
+                .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "upstream_policy_suggest" => {
             let server = optional_string_argument(arguments, "server")?;
@@ -750,7 +893,7 @@ fn execute_tool(
                 timeout_ms,
                 refresh,
             )
-            .map_err(ToolCallError::Execution)?
+            .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "upstream_call" => {
             let server = required_string_argument(arguments, "server")?;
@@ -768,7 +911,7 @@ fn execute_tool(
                 Some(&context.upstream_lease_context(integer_argument(arguments, "ttlMs")?)),
                 upstream_session_pool,
             )
-            .map_err(ToolCallError::Execution)?
+            .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         "upstream_batch" => {
             let server = required_string_argument(arguments, "server")?;
@@ -791,7 +934,7 @@ fn execute_tool(
                 Some(&context.upstream_lease_context(integer_argument(arguments, "ttlMs")?)),
                 upstream_session_pool,
             )
-            .map_err(ToolCallError::Execution)?
+            .map_err(|error| ToolCallError::Execution(error.to_string()))?
         }
         _ => {
             return Err(ToolCallError::UnknownTool(format!(
@@ -1143,7 +1286,8 @@ fn tool_success_result(value: JsonValue, options: ToolResultOptions) -> JsonValu
 fn result_options_from_arguments(
     arguments: &JsonValue,
 ) -> Result<ToolResultOptions, ToolCallError> {
-    tool_result::options_from_arguments(arguments).map_err(ToolCallError::InvalidParams)
+    tool_result::options_from_arguments(arguments)
+        .map_err(|error| ToolCallError::InvalidParams(error.to_string()))
 }
 
 fn tool_error_result(message: String) -> JsonValue {
@@ -1233,7 +1377,10 @@ fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<S
                     "failed to clean stale hub state automatically: {}",
                     tool_error_text(&error)
                 ));
-                let _ = writeln!(stderr, "{}", notes.last().unwrap_or(&String::new()));
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("{}", notes.last().unwrap_or(&String::new())),
+                );
                 return notes;
             }
         }
@@ -1249,7 +1396,10 @@ fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<S
                     "hub status refresh failed after stale cleanup: {}",
                     tool_error_text(&error)
                 ));
-                let _ = writeln!(stderr, "{}", notes.last().unwrap_or(&String::new()));
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("{}", notes.last().unwrap_or(&String::new())),
+                );
                 return notes;
             }
         }
@@ -1263,7 +1413,10 @@ fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<S
                     "failed to repair corrupt hub state automatically: {}",
                     tool_error_text(&error)
                 ));
-                let _ = writeln!(stderr, "{}", notes.last().unwrap_or(&String::new()));
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("{}", notes.last().unwrap_or(&String::new())),
+                );
                 return notes;
             }
         }
@@ -1279,7 +1432,10 @@ fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<S
                     "hub status refresh failed after repair: {}",
                     tool_error_text(&error)
                 ));
-                let _ = writeln!(stderr, "{}", notes.last().unwrap_or(&String::new()));
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("{}", notes.last().unwrap_or(&String::new())),
+                );
                 return notes;
             }
         }
@@ -1293,7 +1449,10 @@ fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<S
                     "failed to start hub automatically: {}",
                     tool_error_text(&error)
                 ));
-                let _ = writeln!(stderr, "{}", notes.last().unwrap_or(&String::new()));
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("{}", notes.last().unwrap_or(&String::new())),
+                );
                 return notes;
             }
         }
@@ -1309,7 +1468,10 @@ fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<S
                     "hub status refresh failed after startup: {}",
                     tool_error_text(&error)
                 ));
-                let _ = writeln!(stderr, "{}", notes.last().unwrap_or(&String::new()));
+                diagnostics::stderr_line(
+                    stderr,
+                    format_args!("{}", notes.last().unwrap_or(&String::new())),
+                );
                 return notes;
             }
         }
@@ -1327,7 +1489,7 @@ fn bootstrap_hub_runtime(config: &ServerConfig, stderr: &mut dyn Write) -> Vec<S
     }
 
     for note in &notes {
-        let _ = writeln!(stderr, "{}", note);
+        diagnostics::stderr_line(stderr, format_args!("{}", note));
     }
     notes
 }

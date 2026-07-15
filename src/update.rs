@@ -1,12 +1,100 @@
+use crate::diagnostics;
 use crate::json::JsonValue;
+use clap::{error::ErrorKind, Parser, ValueEnum};
 use std::cmp::Ordering;
+use std::ffi::OsString;
+use std::fmt;
 use std::io::Write;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
-use std::time::{Duration, Instant};
+use std::sync::{Mutex, OnceLock};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum UpdateSourceError {
+    UnsupportedEnvValue { value: String },
+}
+
+impl fmt::Display for UpdateSourceError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnsupportedEnvValue { value } => write!(
+                formatter,
+                "unsupported MCPACE_UPDATE_SOURCE '{}'; expected none, env, or npm",
+                value
+            ),
+        }
+    }
+}
+
+impl std::error::Error for UpdateSourceError {}
+
+impl From<UpdateSourceError> for String {
+    fn from(error: UpdateSourceError) -> Self {
+        error.to_string()
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+enum UpdateCheckError {
+    SpawnFailed { reason: String },
+    Timeout { timeout_ms: u128 },
+    WaitFailed { reason: String },
+    OutputReadFailed { reason: String },
+    CommandFailed { detail: Option<String> },
+}
+
+impl fmt::Display for UpdateCheckError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::SpawnFailed { reason } => {
+                write!(formatter, "failed to run npm update check: {}", reason)
+            }
+            Self::Timeout { timeout_ms } => write!(
+                formatter,
+                "npm update check timed out after {}ms",
+                timeout_ms
+            ),
+            Self::WaitFailed { reason } => {
+                write!(formatter, "failed to wait for npm update check: {}", reason)
+            }
+            Self::OutputReadFailed { reason } => write!(
+                formatter,
+                "failed to read npm update check output: {}",
+                reason
+            ),
+            Self::CommandFailed { detail } => {
+                match detail.as_deref().filter(|value| !value.is_empty()) {
+                    Some(detail) => write!(formatter, "npm update check failed: {}", detail),
+                    None => write!(formatter, "npm update check failed"),
+                }
+            }
+        }
+    }
+}
+
+impl std::error::Error for UpdateCheckError {}
+
+impl From<UpdateCheckError> for String {
+    fn from(error: UpdateCheckError) -> Self {
+        error.to_string()
+    }
+}
 
 const DEFAULT_PACKAGE_NAME: &str = "@mcpace/cli";
 const UPDATE_TIMEOUT_ENV: &str = "MCPACE_UPDATE_CHECK_TIMEOUT_MS";
 const DEFAULT_UPDATE_TIMEOUT_MS: u64 = 10_000;
+const DASHBOARD_UPDATE_CACHE_TTL: Duration = Duration::from_secs(6 * 60 * 60);
+const DASHBOARD_UPDATE_FAILURE_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+
+#[derive(Clone, Debug)]
+struct CachedDashboardUpdate {
+    checked_at: Instant,
+    ttl: Duration,
+    report: UpdateReport,
+}
+
+static DASHBOARD_UPDATE_CACHE: OnceLock<Mutex<Option<CachedDashboardUpdate>>> = OnceLock::new();
 
 #[derive(Debug)]
 struct ParsedArgs {
@@ -38,7 +126,7 @@ impl UpdateSource {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct UpdateReport {
     current_version: String,
     latest_version: Option<String>,
@@ -49,12 +137,14 @@ struct UpdateReport {
     package_name: String,
     reason: Option<String>,
     recommended_commands: Vec<String>,
+    checked_at_ms: u128,
+    cached: bool,
 }
 
 pub fn run(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
-    let parsed = parse_args(args);
+    let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
-        let _ = writeln!(stderr, "{}", error);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 2;
     }
     if parsed.help {
@@ -62,7 +152,10 @@ pub fn run(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) -> i
         return 0;
     }
     if parsed.action != "check" {
-        let _ = writeln!(stderr, "unsupported update action: {}", parsed.action);
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("unsupported update action: {}", parsed.action),
+        );
         return 2;
     }
 
@@ -76,124 +169,164 @@ pub fn run(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) -> i
     0
 }
 
-fn parse_args(args: &[String]) -> ParsedArgs {
-    let mut parsed = ParsedArgs {
-        action: "check".to_string(),
-        json_output: false,
-        latest_version: None,
-        source: UpdateSource::None,
-        package_name: DEFAULT_PACKAGE_NAME.to_string(),
+#[derive(Clone, Debug, ValueEnum)]
+enum UpdateSourceArg {
+    #[value(name = "none")]
+    Disabled,
+    Env,
+    Npm,
+}
+
+#[derive(Debug, Parser)]
+#[command(
+    name = "mcpace update",
+    disable_version_flag = true,
+    about = "Check whether a newer MCPace npm package is available"
+)]
+struct UpdateCli {
+    /// Update action. Defaults to check.
+    action: Option<String>,
+
+    /// Emit machine-readable JSON.
+    #[arg(long = "json", short = 'j')]
+    json_output: bool,
+
+    /// Explicit latest version used by offline checks and tests.
+    #[arg(long = "latest-version", value_name = "SEMVER")]
+    latest_version: Option<String>,
+
+    /// Version source to use for the latest-version check.
+    #[arg(long = "source", value_enum, value_name = "none|env|npm")]
+    source: Option<UpdateSourceArg>,
+
+    /// npm package name to query when --source npm is selected.
+    #[arg(long = "package", value_name = "NAME")]
+    package_name: Option<String>,
+
+    /// Accepted for command-shape compatibility; update checks do not need a project root.
+    #[arg(long = "root", value_name = "PATH", hide = true)]
+    _root_compat: Option<PathBuf>,
+}
+
+fn parse_cli(args: &[String]) -> ParsedArgs {
+    let cli = match UpdateCli::try_parse_from(update_argv(args)) {
+        Ok(cli) => cli,
+        Err(error)
+            if matches!(
+                error.kind(),
+                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
+            ) =>
+        {
+            return ParsedArgs {
+                action: "check".to_string(),
+                json_output: false,
+                latest_version: None,
+                source: UpdateSource::None,
+                package_name: DEFAULT_PACKAGE_NAME.to_string(),
+                help: true,
+                error: None,
+            };
+        }
+        Err(error) => {
+            return ParsedArgs {
+                action: "check".to_string(),
+                json_output: false,
+                latest_version: None,
+                source: UpdateSource::None,
+                package_name: DEFAULT_PACKAGE_NAME.to_string(),
+                help: false,
+                error: Some(error.to_string()),
+            };
+        }
+    };
+
+    let source = match derive_update_source(cli.source, cli.latest_version.as_ref()) {
+        Ok(source) => source,
+        Err(error) => {
+            return ParsedArgs {
+                action: cli.action.unwrap_or_else(|| "check".to_string()),
+                json_output: cli.json_output,
+                latest_version: cli.latest_version,
+                source: UpdateSource::None,
+                package_name: cli
+                    .package_name
+                    .unwrap_or_else(|| DEFAULT_PACKAGE_NAME.to_string()),
+                help: false,
+                error: Some(error.to_string()),
+            };
+        }
+    };
+
+    ParsedArgs {
+        action: cli.action.unwrap_or_else(|| "check".to_string()),
+        json_output: cli.json_output,
+        latest_version: cli.latest_version,
+        source,
+        package_name: cli
+            .package_name
+            .unwrap_or_else(|| DEFAULT_PACKAGE_NAME.to_string()),
         help: false,
         error: None,
-    };
-    let mut source_explicit = false;
-    let mut index = 0usize;
+    }
+}
 
-    while index < args.len() {
-        match args[index].as_str() {
-            "check" => {
-                parsed.action = "check".to_string();
-                index += 1;
-            }
-            "--json" | "-json" => {
-                parsed.json_output = true;
-                index += 1;
-            }
-            "--latest-version" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("update check requires a value after --latest-version".to_string());
-                    return parsed;
-                };
-                parsed.latest_version = Some(value.to_string());
-                parsed.source = UpdateSource::Argument;
-                source_explicit = true;
-                index += 2;
-            }
-            "--source" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error = Some("update check requires a value after --source".to_string());
-                    return parsed;
-                };
-                match value.as_str() {
-                    "none" => parsed.source = UpdateSource::None,
-                    "env" => parsed.source = UpdateSource::Env,
-                    "npm" => parsed.source = UpdateSource::Npm,
-                    other => {
-                        parsed.error = Some(format!(
-                            "unsupported update source '{}'; expected none, env, or npm",
-                            other
-                        ));
-                        return parsed;
-                    }
-                }
-                source_explicit = true;
-                index += 2;
-            }
-            "--package" => {
-                let Some(value) = args.get(index + 1) else {
-                    parsed.error =
-                        Some("update check requires a value after --package".to_string());
-                    return parsed;
-                };
-                parsed.package_name = value.to_string();
-                index += 2;
-            }
-            "--root" => {
-                if args.get(index + 1).is_none() {
-                    parsed.error = Some("update check requires a path after --root".to_string());
-                    return parsed;
-                }
-                index += 2;
-            }
-            "-h" | "--help" | "-?" => {
-                parsed.help = true;
-                return parsed;
-            }
-            other if other.starts_with('-') => {
-                parsed.error = Some(format!("unsupported update argument: {}", other));
-                return parsed;
-            }
-            other => {
-                if parsed.action != "check" {
-                    parsed.error = Some("update accepts only one action".to_string());
-                    return parsed;
-                }
-                parsed.action = other.to_string();
-                index += 1;
-            }
-        }
+fn derive_update_source(
+    explicit: Option<UpdateSourceArg>,
+    latest_version: Option<&String>,
+) -> Result<UpdateSource, UpdateSourceError> {
+    if let Some(source) = explicit {
+        return Ok(match source {
+            UpdateSourceArg::Disabled => UpdateSource::None,
+            UpdateSourceArg::Env => UpdateSource::Env,
+            UpdateSourceArg::Npm => UpdateSource::Npm,
+        });
     }
 
-    if !source_explicit {
-        if parsed.latest_version.is_some() {
-            parsed.source = UpdateSource::Argument;
-        } else if std::env::var("MCPACE_LATEST_VERSION")
-            .ok()
-            .filter(|value| !value.trim().is_empty())
-            .is_some()
-        {
-            parsed.source = UpdateSource::Env;
-        } else {
-            match std::env::var("MCPACE_UPDATE_SOURCE").ok() {
-                Some(value) => match value.to_ascii_lowercase().as_str() {
-                    "none" => parsed.source = UpdateSource::None,
-                    "env" => parsed.source = UpdateSource::Env,
-                    "npm" => parsed.source = UpdateSource::Npm,
-                    other => {
-                        parsed.error = Some(format!(
-                            "unsupported MCPACE_UPDATE_SOURCE '{}'; expected none, env, or npm",
-                            other
-                        ));
-                        return parsed;
-                    }
-                },
-                None => parsed.source = UpdateSource::Npm,
-            }
-        }
+    if latest_version.is_some() {
+        return Ok(UpdateSource::Argument);
     }
 
-    parsed
+    if std::env::var("MCPACE_LATEST_VERSION")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .is_some()
+    {
+        return Ok(UpdateSource::Env);
+    }
+
+    match std::env::var("MCPACE_UPDATE_SOURCE").ok() {
+        Some(value) => match value.to_ascii_lowercase().as_str() {
+            "none" => Ok(UpdateSource::None),
+            "env" => Ok(UpdateSource::Env),
+            "npm" => Ok(UpdateSource::Npm),
+            other => Err(UpdateSourceError::UnsupportedEnvValue {
+                value: other.to_string(),
+            }),
+        },
+        None => Ok(UpdateSource::Npm),
+    }
+}
+
+fn update_argv(args: &[String]) -> Vec<OsString> {
+    let mut argv = Vec::with_capacity(args.len() + 1);
+    argv.push(OsString::from("mcpace update"));
+    argv.extend(
+        args.iter()
+            .map(|arg| OsString::from(normalize_update_flag(arg))),
+    );
+    argv
+}
+
+fn normalize_update_flag(arg: &str) -> &str {
+    match arg {
+        "-json" => "--json",
+        "-latest-version" => "--latest-version",
+        "-source" => "--source",
+        "-package" => "--package",
+        "-root" => "--root",
+        "-?" => "--help",
+        other => other,
+    }
 }
 
 fn write_help(stdout: &mut dyn Write) {
@@ -220,7 +353,7 @@ fn check_update(parsed: &ParsedArgs) -> UpdateReport {
         Some(value) => Ok(Some(value.to_string())),
         None => match parsed.source {
             UpdateSource::Argument => Ok(None),
-            UpdateSource::Env => read_env_latest_version(),
+            UpdateSource::Env => Ok(read_env_latest_version()),
             UpdateSource::Npm => read_npm_latest_version(&parsed.package_name),
             UpdateSource::None => Ok(None),
         },
@@ -234,7 +367,7 @@ fn check_update(parsed: &ParsedArgs) -> UpdateReport {
     let latest_version = match latest {
         Ok(value) => value.and_then(|value| normalize_semver_text(&value)),
         Err(error) => {
-            reason = Some(error);
+            reason = Some(error.to_string());
             None
         }
     };
@@ -269,14 +402,84 @@ fn check_update(parsed: &ParsedArgs) -> UpdateReport {
         package_name: parsed.package_name.clone(),
         reason,
         recommended_commands: recommended_commands(&parsed.package_name),
+        checked_at_ms: current_epoch_ms(),
+        cached: false,
     }
 }
 
-fn read_env_latest_version() -> Result<Option<String>, String> {
-    Ok(std::env::var("MCPACE_LATEST_VERSION")
+/// Returns a bounded, cached update report for the local dashboard.
+///
+/// The dashboard only asks while it is open. This never installs or rewrites a
+/// binary: it can only report the package-manager command the user may choose
+/// to run in a terminal.
+pub(crate) fn dashboard_update_check_json() -> JsonValue {
+    let cache = DASHBOARD_UPDATE_CACHE.get_or_init(|| Mutex::new(None));
+    let now = Instant::now();
+    if let Some(cached) = cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+        .as_ref()
+        .filter(|entry| now.duration_since(entry.checked_at) < entry.ttl)
+    {
+        let mut report = cached.report.clone();
+        report.cached = true;
+        return report.to_json_value();
+    }
+
+    let parsed = parse_cli(&[]);
+    let report = match parsed.error.as_ref() {
+        Some(reason) => {
+            unavailable_update_report(reason.clone(), parsed.source, parsed.package_name.clone())
+        }
+        None => check_update(&parsed),
+    };
+    let ttl = if report.checked {
+        DASHBOARD_UPDATE_CACHE_TTL
+    } else {
+        DASHBOARD_UPDATE_FAILURE_CACHE_TTL
+    };
+    *cache
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner()) = Some(CachedDashboardUpdate {
+        checked_at: now,
+        ttl,
+        report: report.clone(),
+    });
+    report.to_json_value()
+}
+
+fn unavailable_update_report(
+    reason: String,
+    source: UpdateSource,
+    package_name: String,
+) -> UpdateReport {
+    UpdateReport {
+        current_version: env!("CARGO_PKG_VERSION").to_string(),
+        latest_version: None,
+        status: "unknown".to_string(),
+        update_available: false,
+        checked: false,
+        source,
+        recommended_commands: recommended_commands(&package_name),
+        package_name,
+        reason: Some(reason),
+        checked_at_ms: current_epoch_ms(),
+        cached: false,
+    }
+}
+
+fn current_epoch_ms() -> u128 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO)
+        .as_millis()
+}
+
+fn read_env_latest_version() -> Option<String> {
+    std::env::var("MCPACE_LATEST_VERSION")
         .ok()
         .map(|value| value.trim().to_string())
-        .filter(|value| !value.is_empty()))
+        .filter(|value| !value.is_empty())
 }
 
 fn npm_command_name() -> &'static str {
@@ -287,7 +490,7 @@ fn npm_command_name() -> &'static str {
     }
 }
 
-fn read_npm_latest_version(package_name: &str) -> Result<Option<String>, String> {
+fn read_npm_latest_version(package_name: &str) -> Result<Option<String>, UpdateCheckError> {
     let timeout = update_timeout();
     let mut command = Command::new(npm_command_name());
     command
@@ -299,7 +502,9 @@ fn read_npm_latest_version(package_name: &str) -> Result<Option<String>, String>
     crate::windows_process::configure_no_window(&mut command);
     let mut child = command
         .spawn()
-        .map_err(|error| format!("failed to run npm update check: {}", error))?;
+        .map_err(|error| UpdateCheckError::SpawnFailed {
+            reason: error.to_string(),
+        })?;
 
     let started = Instant::now();
     loop {
@@ -308,27 +513,34 @@ fn read_npm_latest_version(package_name: &str) -> Result<Option<String>, String>
             Ok(None) if started.elapsed() >= timeout => {
                 let _ = child.kill();
                 let _ = child.wait();
-                return Err(format!(
-                    "npm update check timed out after {}ms",
-                    timeout.as_millis()
-                ));
+                return Err(UpdateCheckError::Timeout {
+                    timeout_ms: timeout.as_millis(),
+                });
             }
             Ok(None) => std::thread::sleep(Duration::from_millis(25)),
-            Err(error) => return Err(format!("failed to wait for npm update check: {}", error)),
+            Err(error) => {
+                return Err(UpdateCheckError::WaitFailed {
+                    reason: error.to_string(),
+                });
+            }
         }
     }
 
     let output = child
         .wait_with_output()
-        .map_err(|error| format!("failed to read npm update check output: {}", error))?;
+        .map_err(|error| UpdateCheckError::OutputReadFailed {
+            reason: error.to_string(),
+        })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
         let detail = if !stderr.is_empty() { stderr } else { stdout };
-        return Err(if detail.is_empty() {
-            "npm update check failed".to_string()
-        } else {
-            format!("npm update check failed: {}", detail)
+        return Err(UpdateCheckError::CommandFailed {
+            detail: if detail.is_empty() {
+                None
+            } else {
+                Some(detail)
+            },
         });
     }
 
@@ -428,6 +640,11 @@ impl UpdateReport {
             ("status", JsonValue::string(self.status.clone())),
             ("updateAvailable", JsonValue::bool(self.update_available)),
             ("checked", JsonValue::bool(self.checked)),
+            (
+                "checkedAtMs",
+                JsonValue::number(self.checked_at_ms.to_string()),
+            ),
+            ("cached", JsonValue::bool(self.cached)),
             ("source", JsonValue::string(self.source.label())),
             ("packageName", JsonValue::string(self.package_name.clone())),
             ("selfUpdateEnabled", JsonValue::bool(false)),
@@ -456,42 +673,4 @@ impl UpdateReport {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn semver_compare_handles_current_and_outdated_cases() {
-        assert_eq!(compare_semver("0.3.5", "0.3.5"), Some(Ordering::Equal));
-        assert_eq!(compare_semver("0.3.5", "0.3.6"), Some(Ordering::Less));
-        assert_eq!(compare_semver("0.4.1", "0.3.6"), Some(Ordering::Greater));
-    }
-
-    #[test]
-    fn update_check_with_explicit_latest_reports_outdated() {
-        let parsed = ParsedArgs {
-            action: "check".to_string(),
-            json_output: true,
-            latest_version: Some("99.0.0".to_string()),
-            source: UpdateSource::Argument,
-            package_name: DEFAULT_PACKAGE_NAME.to_string(),
-            help: false,
-            error: None,
-        };
-        let report = check_update(&parsed);
-        assert_eq!(report.status, "outdated");
-        assert!(report.update_available);
-        assert_eq!(report.latest_version.as_deref(), Some("99.0.0"));
-    }
-
-    #[test]
-    fn update_source_env_rejects_unknown_values() {
-        std::env::set_var("MCPACE_UPDATE_SOURCE", "surprise-network");
-        std::env::remove_var("MCPACE_LATEST_VERSION");
-        let parsed = parse_args(&[]);
-        std::env::remove_var("MCPACE_UPDATE_SOURCE");
-        assert_eq!(
-            parsed.error.as_deref(),
-            Some("unsupported MCPACE_UPDATE_SOURCE 'surprise-network'; expected none, env, or npm")
-        );
-    }
-}
+mod tests;
