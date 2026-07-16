@@ -75,6 +75,14 @@ test("installed runtime smoke requires an explicit binary and fails closed", () 
 	assert.match(report.error, /--binary is required/);
 });
 
+test("installed runtime smoke retains bounded detached-start diagnostics", () => {
+	const script = read("scripts/installer-runtime-smoke.mjs");
+	assert.match(script, /function readBoundedTail/);
+	assert.match(script, /serve stderr tail/);
+	assert.match(script, /serve stdout tail/);
+	assert.match(script, /serveLogDiagnostics\(root\)/);
+});
+
 test("native npm install smoke requires all standard-install inputs and fails closed", () => {
 	const result = spawnSync(
 		process.execPath,

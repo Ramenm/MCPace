@@ -90,6 +90,43 @@ function requireCondition(condition, message) {
 	if (!condition) throw new Error(message);
 }
 
+function readBoundedTail(filePath, maxBytes = 8 * 1024) {
+	try {
+		const stat = fs.lstatSync(filePath);
+		if (!stat.isFile() || stat.isSymbolicLink() || stat.size === 0) return null;
+		const length = Math.min(stat.size, maxBytes);
+		const buffer = Buffer.alloc(length);
+		const descriptor = fs.openSync(filePath, "r");
+		try {
+			const bytesRead = fs.readSync(
+				descriptor,
+				buffer,
+				0,
+				length,
+				stat.size - length,
+			);
+			return buffer.subarray(0, bytesRead).toString("utf8").trim() || null;
+		} finally {
+			fs.closeSync(descriptor);
+		}
+	} catch {
+		return null;
+	}
+}
+
+function serveLogDiagnostics(root) {
+	const serveDir = path.join(root, "data", "runtime", "serve");
+	const logs = [
+		["serve stderr tail", path.join(serveDir, "stderr.log")],
+		["serve stdout tail", path.join(serveDir, "stdout.log")],
+	]
+		.map(([label, filePath]) => [label, readBoundedTail(filePath)])
+		.filter(([, contents]) => contents);
+	return logs.length === 0
+		? ""
+		: `\n${logs.map(([label, contents]) => `${label}:\n${contents}`).join("\n")}`;
+}
+
 async function reserveLoopbackPort() {
 	const server = net.createServer();
 	await new Promise((resolve, reject) => {
@@ -179,9 +216,9 @@ async function smoke(parsed) {
 		);
 
 		port = await reserveLoopbackPort();
-		up = parseJson(
-			"up",
-			run(
+		let upOutput;
+		try {
+			upOutput = run(
 				command,
 				[
 					"up",
@@ -197,8 +234,14 @@ async function smoke(parsed) {
 					String(port),
 				],
 				parsed.timeoutMs,
-			).stdout,
-		);
+			).stdout;
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			throw new Error(`${message}${serveLogDiagnostics(root)}`, {
+				cause: error,
+			});
+		}
+		up = parseJson("up", upOutput);
 		requireCondition(
 			up.status === "ready",
 			`up status was ${up.status}, expected ready`,

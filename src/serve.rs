@@ -615,7 +615,7 @@ fn run_start_impl(
         }
     };
     let runner_path = runtimepaths::serve_runner_path_for_start(&state_root);
-    if let Err(error) = fs::copy(&current_exe, &runner_path) {
+    if let Err(error) = copy_serve_runner(&current_exe, &runner_path) {
         diagnostics::stderr_line(
             stderr,
             format_args!(
@@ -1555,6 +1555,38 @@ fn files_have_same_contents(left: &Path, right: &Path) -> Result<bool, std::io::
         return Ok(false);
     }
     Ok(fs::read(left)? == fs::read(right)?)
+}
+
+fn copy_serve_runner(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        // A fresh data-only file avoids cloning macOS quarantine/provenance
+        // metadata while retaining the upgrade-isolated runner lifecycle.
+        let mut source_file = File::open(source)?;
+        let mut destination_file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(destination)?;
+        let result = (|| {
+            std::io::copy(&mut source_file, &mut destination_file)?;
+            destination_file.sync_all()?;
+            let mut permissions = destination_file.metadata()?.permissions();
+            permissions.set_mode(0o700);
+            fs::set_permissions(destination, permissions)?;
+            Ok(())
+        })();
+        if result.is_err() {
+            let _ = fs::remove_file(destination);
+        }
+        result
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        fs::copy(source, destination).map(|_| ())
+    }
 }
 
 fn resolve_runner_source() -> Result<PathBuf, std::io::Error> {

@@ -24,6 +24,43 @@ fn free_port() -> u16 {
 }
 
 #[test]
+fn serve_runner_copy_preserves_executable_bytes() {
+    let root = temp_root();
+    let source = root.join("source-runner");
+    let destination = root.join("copied-runner");
+    fs::write(&source, b"mcpace runner fixture\n").unwrap();
+
+    copy_serve_runner(&source, &destination).unwrap();
+
+    assert_eq!(fs::read(&destination).unwrap(), b"mcpace runner fixture\n");
+    #[cfg(target_os = "macos")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(
+            fs::metadata(&destination).unwrap().permissions().mode() & 0o777,
+            0o700
+        );
+    }
+    let _ = fs::remove_dir_all(root);
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn macos_serve_runner_copy_preserves_preexisting_destination() {
+    let root = temp_root();
+    let source = root.join("source-runner");
+    let destination = root.join("existing-runner");
+    fs::write(&source, b"new runner\n").unwrap();
+    fs::write(&destination, b"existing runner\n").unwrap();
+
+    let error = copy_serve_runner(&source, &destination).unwrap_err();
+
+    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
+    assert_eq!(fs::read(&destination).unwrap(), b"existing runner\n");
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
 fn serve_url_and_probe_hosts_handle_ipv6_and_wildcards() {
     assert_eq!(
         http_url("127.0.0.1", 39022, "/mcp"),
