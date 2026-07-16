@@ -1,6 +1,31 @@
 use super::*;
 
 #[test]
+fn setup_enables_user_autostart_by_default() {
+    let parsed = parse_cli(&[]);
+
+    assert!(parsed.install_service);
+    assert_eq!(parsed.error, None);
+}
+
+#[test]
+fn setup_supports_an_explicit_session_only_opt_out() {
+    let parsed = parse_cli(&["--no-autostart".to_string()]);
+
+    assert!(!parsed.install_service);
+    assert_eq!(parsed.error, None);
+}
+
+#[test]
+fn setup_keeps_legacy_autostart_opt_in_flags_compatible() {
+    for flag in ["--autostart", "--install-autostart", "--install-service"] {
+        let parsed = parse_cli(&[flag.to_string()]);
+        assert!(parsed.install_service, "{}", flag);
+        assert_eq!(parsed.error, None, "{}", flag);
+    }
+}
+
+#[test]
 fn setup_flags_after_a_positional_server_spec_are_not_consumed_as_server_arguments() {
     let args = [
         "pypi:mcp-server-fetch==2026.6.4",

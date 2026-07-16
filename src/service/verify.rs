@@ -71,14 +71,18 @@ pub(super) fn verification_check(name: &str, ok: bool, detail: &str) -> JsonValu
 
 pub(super) fn service_applied_state_json(config: &ServiceConfig) -> JsonValue {
     let (manager, visible_in, supervised_by_os) = if cfg!(target_os = "linux") {
-        ("XDG Autostart", "desktop session autostart settings", false)
+        (
+            "systemd user service",
+            "systemctl --user status mcpace-agent.service",
+            true,
+        )
     } else if cfg!(target_os = "macos") {
         ("launchd LaunchAgent", "Login Items / LaunchAgents", true)
     } else if cfg!(windows) {
         (
-            "Windows current-user Run registry + hidden MCPace launcher",
+            "Windows current-user Run registry + supervised hidden MCPace launcher",
             "Settings > Apps > Startup / Task Manager Startup apps",
-            false,
+            true,
         )
     } else {
         ("unsupported", "unsupported", false)
@@ -90,6 +94,10 @@ pub(super) fn service_applied_state_json(config: &ServiceConfig) -> JsonValue {
         ("visibleAs", JsonValue::string(APP_NAME)),
         ("visibleIn", JsonValue::string(visible_in)),
         ("supervisedByOs", JsonValue::bool(supervised_by_os)),
+        (
+            "activatedImmediately",
+            JsonValue::bool(cfg!(any(windows, target_os = "linux"))),
+        ),
         ("supervisedByMcpaceAgent", JsonValue::bool(true)),
         ("environment", service_environment_json()),
         ("command", command_json(config)),

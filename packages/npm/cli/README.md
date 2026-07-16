@@ -21,7 +21,7 @@ After the native binary is available:
 mcpace up
 ```
 
-`mcpace up` creates/repairs MCPace home, imports existing MCP servers from detected configs when safe, starts the endpoint, and wires detected clients. It does not add a new upstream server by default.
+`mcpace up` creates/repairs MCPace home, imports existing MCP servers from detected configs when safe, starts the endpoint, wires detected clients, and installs or repairs user-level autostart. Windows restores MCPace through its hidden login supervisor; Linux uses a `systemd --user` service. Use `mcpace up --no-autostart` for a session-only runtime. On WSL, systemd must be enabled and Windows must start the distribution before its Linux user service can run. It does not add a new upstream server by default.
 
 Node floor: 22+.
 

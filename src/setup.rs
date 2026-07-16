@@ -175,9 +175,17 @@ struct SetupCli {
     #[arg(
         long = "install-service",
         alias = "install-autostart",
-        alias = "autostart"
+        alias = "autostart",
+        conflicts_with = "no_autostart"
     )]
     install_service: bool,
+
+    #[arg(
+        long = "no-autostart",
+        alias = "no-persist",
+        conflicts_with = "install_service"
+    )]
+    no_autostart: bool,
 
     #[arg(long = "no-enable")]
     no_enable_service: bool,
@@ -218,7 +226,7 @@ fn parsed_from_cli(cli: SetupCli) -> ParsedArgs {
         overview_cache_ms: cli.overview_cache_ms,
         skip_client_install: cli.skip_client_install || skip_client_selector,
         client_selector,
-        install_service: cli.install_service,
+        install_service: cli.install_service || !cli.no_autostart,
         no_enable_service: cli.no_enable_service,
         server_spec: cli.server_spec,
         server_name: cli.server_name,
@@ -328,6 +336,8 @@ fn normalize_compat_arg(arg: &str) -> String {
         "-install-service" => "--install-service".to_string(),
         "-install-autostart" => "--install-autostart".to_string(),
         "-autostart" => "--autostart".to_string(),
+        "-no-autostart" => "--no-autostart".to_string(),
+        "-no-persist" => "--no-persist".to_string(),
         "-no-enable" => "--no-enable".to_string(),
         "-?" => "--help".to_string(),
         _ => arg.to_string(),
@@ -337,12 +347,12 @@ fn normalize_compat_arg(arg: &str) -> String {
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace up [server-spec] [--as <name>] [--path <path>...] [--client auto|all|<id>|none] [--json] [--root <path>] [--host <addr>] [--port <n>] [--autostart]"
+        "Usage: mcpace up [server-spec] [--as <name>] [--path <path>...] [--client auto|all|<id>|none] [--json] [--root <path>] [--host <addr>] [--port <n>] [--no-autostart]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "Home-first onboarding: creates a user-level MCPace home when needed, starts the local endpoint, upserts only the MCPace entry into detected local clients, preserves existing client MCP servers, and verifies health plus MCP routes. It does not invent or install a default upstream server."
+        "Home-first onboarding: creates a user-level MCPace home when needed, starts the local endpoint, installs or repairs user-level autostart, upserts only the MCPace entry into detected local clients, preserves existing client MCP servers, and verifies health plus MCP routes. It does not invent or install a default upstream server. Use --no-autostart for a session-only runtime."
     );
     let _ = writeln!(stdout, "Examples:");
     let _ = writeln!(stdout, "  mcpace up                              # start endpoint, wire detected clients, keep existing client servers");
@@ -667,6 +677,37 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         );
     }
 
+    let service_install = if parsed.install_service {
+        let mut args = vec![
+            "autostart".to_string(),
+            "enable".to_string(),
+            "--json".to_string(),
+            "--host".to_string(),
+            host.clone(),
+            "--port".to_string(),
+            port.to_string(),
+            "--root".to_string(),
+            root_text.clone(),
+        ];
+        resources::append_serve_resource_args(
+            &mut args,
+            parsed.max_connections,
+            parsed.io_timeout_ms,
+            parsed.max_body_bytes,
+            parsed.overview_cache_ms,
+        );
+        if parsed.no_enable_service {
+            args.push("--no-enable".to_string());
+        }
+        Some(run_json_command(args))
+    } else {
+        warnings.push(
+            "User-level autostart was explicitly skipped; this runtime will not be restored automatically after the next login."
+                .to_string(),
+        );
+        None
+    };
+
     let mut serve_args = vec![
         "serve".to_string(),
         "start".to_string(),
@@ -748,33 +789,6 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
         "--root".to_string(),
         root_text.clone(),
     ]);
-
-    let service_install = if parsed.install_service {
-        let mut args = vec![
-            "autostart".to_string(),
-            "enable".to_string(),
-            "--json".to_string(),
-            "--host".to_string(),
-            host.clone(),
-            "--port".to_string(),
-            port.to_string(),
-            "--root".to_string(),
-            root_text.clone(),
-        ];
-        resources::append_serve_resource_args(
-            &mut args,
-            parsed.max_connections,
-            parsed.io_timeout_ms,
-            parsed.max_body_bytes,
-            parsed.overview_cache_ms,
-        );
-        if parsed.no_enable_service {
-            args.push("--no-enable".to_string());
-        }
-        Some(run_json_command(args))
-    } else {
-        None
-    };
 
     let probe_host = http_probe::probe_host(&host);
     let health = http_json_get(&probe_host, port, &health_path);

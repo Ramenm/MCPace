@@ -4,7 +4,34 @@ All notable user-facing changes are recorded here. Keep entries focused on behav
 
 ## Unreleased
 
-No unreleased changes.
+### Changed
+
+- `mcpace up` now installs or repairs user-level autostart by default; `--no-autostart` keeps an explicit session-only path.
+- Linux persistence now uses `mcpace-agent.service` under `systemd --user` with restart-on-failure instead of desktop-only XDG Autostart.
+- On Windows and Linux, `mcpace up` now activates the user supervisor immediately and verifies the managed endpoint before returning, instead of leaving a detached owner until the next login.
+
+### Fixed
+
+- Windows setup now repairs stale Run commands and missing autostart plans during the normal `mcpace up` flow.
+- The hidden Windows launcher now supervises non-zero agent exits with bounded backoff, and root discovery can recover from the short launcher-plan Run entry.
+- Same-configuration `serve restart` now preserves systemd/Windows supervisor ownership and uses an acknowledged stop handshake to prevent duplicate runtime starts.
+- Autostart migration removes known legacy Windows Startup-folder launchers and Linux XDG entries to avoid duplicate owners.
+
+## 0.8.2 - 2026-07-16
+
+### Changed
+
+- Synchronized the Rust crate, npm launcher, native optional dependency pins, lockfiles, and project configuration at version `0.8.2`.
+- Repacked the source tree with one named root, without Git metadata, dependencies, caches, runtime state, agent transcripts, or build outputs.
+
+### Verification
+
+- Re-ran the complete 447-test Node inventory file by file so early failures could not hide later failures.
+- Kept stale Rust/live-proof and source-without-Git release gates fail-closed instead of marking the package production-ready.
+
+### Security
+
+- No production security boundary is claimed fixed by this packaging patch. Mandatory HTTP identity, approval receipts, principal-bound leases, centralized SSRF controls, cancellation propagation, and sandboxing remain release blockers.
 
 ## 0.8.0 - 2026-07-14
 

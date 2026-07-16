@@ -162,6 +162,24 @@ pub(crate) fn configure_no_window(command: &mut std::process::Command) {
 }
 
 #[cfg(windows)]
+pub(crate) fn process_image_is(pid: u32, expected_image: &str) -> bool {
+    let mut command = std::process::Command::new("tasklist");
+    command.args(["/FI", &format!("PID eq {}", pid), "/FO", "CSV", "/NH"]);
+    configure_no_window(&mut command);
+    let Ok(output) = command.output() else {
+        return false;
+    };
+    if !output.status.success() {
+        return false;
+    }
+    let expected_pid = format!(",\"{}\",", pid);
+    let expected_image = expected_image.to_ascii_lowercase();
+    String::from_utf8_lossy(&output.stdout).lines().any(|line| {
+        line.to_ascii_lowercase().contains(&expected_image) && line.contains(&expected_pid)
+    })
+}
+
+#[cfg(windows)]
 pub(crate) fn enable_kill_on_exit_job() -> Result<(), WindowsProcessError> {
     use std::ffi::c_void;
     use std::sync::OnceLock;

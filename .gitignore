@@ -79,3 +79,17 @@ __pycache__/
 # Local MCP settings fragments are machine-specific; keep README/examples tracked.
 /mcp_settings.d/*.json
 !/mcp_settings.d/*.example.json
+node_modules/
+target/
+.worktrees/
+worktrees/
+.pi-subagents/
+.playwright-mcp/
+.serena/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.log
+*.tmp
+*.temp

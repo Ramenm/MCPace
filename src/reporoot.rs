@@ -77,7 +77,41 @@ fn find_from_windows_autostart() -> Option<PathBuf> {
             }
         }
     }
-    None
+    root_from_windows_autostart_plan(&windows_autostart_plan_path())
+}
+
+#[cfg(windows)]
+fn windows_autostart_plan_path() -> PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("TEMP").map(PathBuf::from))
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("MCPace")
+        .join("agent")
+        .join("autostart-plan.json")
+}
+
+#[cfg(windows)]
+fn root_from_windows_autostart_plan(path: &Path) -> Option<PathBuf> {
+    let value: serde_json::Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+    let root = value
+        .get("rootPath")
+        .and_then(serde_json::Value::as_str)
+        .map(ToString::to_string)
+        .or_else(|| {
+            let args = value.get("targetArgs")?.as_array()?;
+            args.windows(2).find_map(|items| {
+                (items[0].as_str()? == "--root")
+                    .then(|| items[1].as_str().map(ToString::to_string))
+                    .flatten()
+            })
+        })?;
+    let candidate = PathBuf::from(root);
+    if has_root_markers(&candidate) {
+        Some(candidate)
+    } else {
+        find_from(&candidate)
+    }
 }
 
 #[cfg(windows)]
@@ -206,5 +240,30 @@ mod tests {
             windows_vbs_path_from_command(command).as_deref(),
             Some(Path::new(r"C:\MCPace\runtime\service\mcpace-autostart.vbs"))
         );
+    }
+
+    #[test]
+    fn current_hidden_launcher_plan_recovers_the_installed_root() {
+        let base =
+            std::env::temp_dir().join(format!("mcpace-reporoot-plan-test-{}", std::process::id()));
+        let root = base.join("root");
+        let plan = base.join("autostart-plan.json");
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(root.join("mcpace.config.json"), "{}\n").unwrap();
+        std::fs::write(
+            &plan,
+            serde_json::json!({
+                "schema": "mcpace.windowsAutostartPlan.v1",
+                "targetAppPath": "C:\\MCPace\\mcpace.exe",
+                "targetArgs": ["agent", "run", "--autostart", "--root", root],
+                "rootPath": root,
+            })
+            .to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(root_from_windows_autostart_plan(&plan), Some(root));
+        let _ = std::fs::remove_dir_all(base);
     }
 }

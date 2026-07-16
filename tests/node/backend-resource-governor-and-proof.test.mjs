@@ -99,16 +99,78 @@ test("dashboard browser lifecycle proof prevents tab wake-up refresh storms", ()
 	);
 });
 
-test("autostart verify records visible MCPace Agent state instead of raw service-manager probes", () => {
+test("autostart verify records supervised user-level state across platforms", () => {
 	const service = read("src/service.rs");
+	const config = read("src/service/config.rs");
+	const verify = read("src/service/verify.rs");
+	const surface = `${service}\n${config}\n${verify}`;
 	assert.match(service, /"appliedState", service_applied_state_json\(config\)/);
 	assert.match(service, /mcpace\.autostartAppliedState\.v1/);
-	assert.match(service, /visibleAs/);
-	assert.match(service, /MCPace Agent/);
-	assert.match(service, /XDG Autostart/);
-	assert.match(service, /Windows current-user Run registry/);
-	assert.match(service, /LaunchAgent/);
-	assert.match(service, /supervisedByMcpaceAgent/);
+	assert.match(verify, /visibleAs/);
+	assert.match(surface, /MCPace Agent/);
+	assert.match(surface, /systemd user service/);
+	assert.match(service, /LinuxLaunchMode::Systemd/);
+	assert.match(surface, /Windows current-user Run registry/);
+	assert.match(surface, /LaunchAgent/);
+	assert.match(verify, /supervisedByMcpaceAgent/);
+	assert.match(verify, /activatedImmediately/);
+	assert.doesNotMatch(config, /linux-xdg-autostart/);
+});
+
+test("default up transfers initial runtime ownership to the user supervisor", () => {
+	const setup = read("src/setup.rs");
+	const service = read("src/service.rs");
+	const config = read("src/service/config.rs");
+	assert.ok(
+		setup.indexOf("let service_install = if parsed.install_service") <
+			setup.indexOf("let mut serve_args = vec!"),
+		"autostart activation must precede the fallback serve start",
+	);
+	assert.match(service, /start_user_supervisor_after_enable\(config\)/);
+	assert.match(config, /stop_runtime_before_supervisor_start\(config\)/);
+	assert.match(config, /vec!\["--user", "daemon-reload"\]/);
+	assert.match(config, /vec!\["--user", "start", unit\.as_str\(\)\]/);
+	assert.match(config, /spawn_detached_no_window/);
+	assert.match(config, /process_image_is\(pid, "mcpace-agent-launcher\.exe"\)/);
+	assert.match(config, /if supervisor_runtime_ready\(&endpoint\)/);
+	assert.match(
+		config,
+		/healthy && platform_user_supervisor_is_active\(&endpoint\.root\)/,
+	);
+});
+
+test("Windows supervisor acknowledges stop before serve restart can spawn", () => {
+	const launcher = read("src/bin/mcpace-agent-launcher.rs");
+	const serve = read("src/serve.rs");
+	assert.match(launcher, /struct SupervisorRegistration/);
+	assert.match(
+		launcher,
+		/let waited = child\.wait\(\);[\s\S]*stop_requested\(stop_marker\)[\s\S]*acknowledge_stop_request\(stop_marker\)/,
+	);
+	assert.match(
+		serve,
+		/request_agent_supervisor_stop\(&canonical_root\);[\s\S]*stop_existing_serve\(&canonical_root\);[\s\S]*wait_for_agent_supervisor_stop\(&canonical_root\)[\s\S]*run_start_after_supervisor_stop\([\s\S]*clear_agent_supervisor_stop_request\(&canonical_root\)/,
+	);
+	assert.match(
+		serve,
+		/run_start_impl\(parsed, default_root, stdout, stderr, false\)/,
+	);
+	assert.match(
+		serve,
+		/already healthy with different settings; refusing to start a duplicate runtime/,
+	);
+	assert.match(
+		serve,
+		/fn run_stop[\s\S]*wait_for_agent_supervisor_stop\(&canonical_root\)[\s\S]*clear_agent_supervisor_stop_request\(&canonical_root\)/,
+	);
+	assert.match(
+		serve,
+		/let restart_with_supervisor = agent_supervisor_is_active/,
+	);
+	assert.match(
+		serve,
+		/if restart_with_supervisor \{[\s\S]*start_agent_supervisor\(&canonical_root\)/,
+	);
 });
 
 test("static Rust guard and trusted-publish preflight are wired into CI scripts and release manifest", () => {

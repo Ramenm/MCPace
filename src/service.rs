@@ -15,15 +15,16 @@ mod config;
 mod legacy;
 mod verify;
 
-// The applied-state payload is implemented in service::verify.rs; keep its public contract
-// explicit here: mcpace.autostartAppliedState.v1, visibleAs MCPace Agent, XDG Autostart,
-// LaunchAgent, Windows current-user Run registry, and supervisedByMcpaceAgent.
 use cli::{parse_cli, write_help};
 #[cfg(all(test, windows))]
 use config::autolaunch_token;
 #[cfg(any(test, not(windows)))]
 use config::quote_shellish_token;
-use config::service_config;
+#[cfg(all(test, target_os = "linux"))]
+use config::{normalized_linux_path, quote_systemd_token};
+use config::{
+    service_config, start_user_supervisor_after_enable, stop_user_supervisor_before_disable,
+};
 use legacy::{
     cleanup_legacy_autostart, cleanup_machine_wide_autostart, legacy_autostart_absent_detail,
     LegacyCleanup,
@@ -35,6 +36,8 @@ use verify::{
 
 pub(crate) const APP_NAME: &str = "MCPace Agent";
 pub(crate) const LEGACY_APP_NAME: &str = "MCPace";
+const LINUX_AUTOSTART_ID: &str = "mcpace-agent";
+const MACOS_AGENT_EXTRA_CONFIG: &str = "<key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict><key>ThrottleInterval</key><integer>10</integer>";
 const AUTOSTART_APPLIED_STATE_SCHEMA: &str = "mcpace.autostartAppliedState.v1";
 #[cfg(windows)]
 const WINDOWS_AUTOSTART_PLAN_SCHEMA: &str = "mcpace.windowsAutostartPlan.v1";
@@ -186,11 +189,12 @@ pub fn run(
 }
 
 fn build_launcher(config: &ServiceConfig) -> auto_launch::Result<AutoLaunch> {
-    build_named_launcher(APP_NAME, config)
-}
-
-fn build_legacy_launcher(config: &ServiceConfig) -> auto_launch::Result<AutoLaunch> {
-    build_named_launcher(LEGACY_APP_NAME, config)
+    let app_id = if cfg!(target_os = "linux") {
+        LINUX_AUTOSTART_ID
+    } else {
+        APP_NAME
+    };
+    build_named_launcher(app_id, config)
 }
 
 fn build_named_launcher(app_name: &str, config: &ServiceConfig) -> auto_launch::Result<AutoLaunch> {
@@ -200,8 +204,9 @@ fn build_named_launcher(app_name: &str, config: &ServiceConfig) -> auto_launch::
         .set_app_path(&config.app_path)
         .set_args(&config.args)
         .set_macos_launch_mode(MacOSLaunchMode::LaunchAgent)
+        .set_agent_extra_config(MACOS_AGENT_EXTRA_CONFIG)
         .set_windows_enable_mode(WindowsEnableMode::CurrentUser)
-        .set_linux_launch_mode(LinuxLaunchMode::XdgAutostart);
+        .set_linux_launch_mode(LinuxLaunchMode::Systemd);
     builder.build()
 }
 
@@ -256,28 +261,24 @@ fn service_install(launcher: &AutoLaunch, config: &ServiceConfig, dry_run: bool)
             let machine_cleanup = cleanup_machine_wide_autostart(config, false);
             warnings.extend(cleanup.warnings);
             warnings.extend(machine_cleanup.warnings);
-            report(
-                "install",
-                enabled && cleanup.ok && machine_cleanup.ok,
-                enabled,
-                config,
-                warnings,
-                if enabled && cleanup.ok && machine_cleanup.ok {
-                    None
-                } else if !cleanup.ok {
-                    Some(
-                        "auto-launch enable completed but legacy autostart cleanup failed"
-                            .to_string(),
-                    )
-                } else if !machine_cleanup.ok {
-                    Some(
-                        "auto-launch enable completed but machine-wide autostart cleanup failed"
-                            .to_string(),
-                    )
-                } else {
-                    Some("auto-launch enable completed but is_enabled returned false".to_string())
-                },
-            )
+            let activation_error = if enabled && cleanup.ok && machine_cleanup.ok {
+                start_user_supervisor_after_enable(config)
+                    .err()
+                    .map(|error| error.to_string())
+            } else {
+                None
+            };
+            let ok = enabled && cleanup.ok && machine_cleanup.ok && activation_error.is_none();
+            let error = if !cleanup.ok {
+                Some("auto-launch enable completed but legacy cleanup failed".to_string())
+            } else if !machine_cleanup.ok {
+                Some("auto-launch enable completed but machine-wide cleanup failed".to_string())
+            } else if !enabled {
+                Some("auto-launch enable completed but is_enabled returned false".to_string())
+            } else {
+                activation_error
+            };
+            report("install", ok, enabled, config, warnings, error)
         }
         Err(error) => report(
             "install",
@@ -304,6 +305,16 @@ fn service_uninstall(launcher: &AutoLaunch, config: &ServiceConfig, dry_run: boo
             config,
             warnings,
             None,
+        );
+    }
+    if let Err(error) = stop_user_supervisor_before_disable(config) {
+        return report(
+            "uninstall",
+            false,
+            enabled_or_false(launcher),
+            config,
+            config.warnings.clone(),
+            Some(error.to_string()),
         );
     }
     match launcher.disable() {
@@ -1049,14 +1060,14 @@ fn reboot_model_json(config: &ServiceConfig) -> JsonValue {
         target_os = "linux"
     ) {
         (
-            "desktop-user-login",
-            false,
+            "user-systemd-manager",
             true,
-            "XDG Autostart via auto-launch",
+            true,
+            "systemd user service via auto-launch",
             vec![
-                "autostart install writes a user-visible XDG .desktop login item",
-                "MCPace Agent owns the managed foreground serve runtime and restart guard",
-                "XDG Autostart is intentionally a user-login launcher, not a system service supervisor",
+                "autostart install writes and enables mcpace-agent.service for the current user",
+                "systemd restarts MCPace Agent after non-zero runtime exits",
+                "boot-before-login requires user lingering; otherwise startup follows the user session",
             ],
         )
     } else if cfg!(target_os = "macos") {
@@ -1074,14 +1085,14 @@ fn reboot_model_json(config: &ServiceConfig) -> JsonValue {
     } else if cfg!(windows) {
         (
             "user-login",
-            false,
+            true,
             true,
             "Windows current-user Run registry via auto-launch",
             vec![
                 "the login item starts MCPace Agent after the current user logs in",
                 "new installs do not use wscript.exe, generated VBS launchers, or direct console-window startup",
-                "Windows current-user Run registry starts mcpace-agent-launcher.exe; the launcher starts MCPace Agent with CREATE_NO_WINDOW so no terminal appears",
-                "Windows current-user Run registry launches at login but does not restart the process after a later crash",
+                "Windows current-user Run registry starts mcpace-agent-launcher.exe; the hidden launcher supervises MCPace Agent without opening a terminal",
+                "the launcher restarts non-zero exits with bounded exponential backoff",
             ],
         )
     } else {
@@ -1122,10 +1133,10 @@ fn reboot_model_json(config: &ServiceConfig) -> JsonValue {
 fn service_resource_controls_json() -> JsonValue {
     if cfg!(target_os = "linux") {
         return JsonValue::object([
-            ("manager", JsonValue::string("XDG Autostart")),
-            ("osSupervisor", JsonValue::bool(false)),
-            ("supervisesRuntime", JsonValue::bool(false)),
-            ("note", JsonValue::string("XDG Autostart is visible after desktop login; MCPace Agent and serve restart guard handle MCPace-specific lifecycle checks")),
+            ("manager", JsonValue::string("systemd user service")),
+            ("restartOnFailure", JsonValue::bool(true)),
+            ("supervisesRuntime", JsonValue::bool(true)),
+            ("note", JsonValue::string("mcpace-agent.service starts with the user systemd manager; lingering is required only for boot-before-login")),
         ]);
     }
     if cfg!(target_os = "macos") {
@@ -1138,9 +1149,9 @@ fn service_resource_controls_json() -> JsonValue {
     if cfg!(windows) {
         return JsonValue::object([
             ("manager", JsonValue::string("Windows current-user Run registry + mcpace-agent-launcher.exe")),
-            ("osSupervisor", JsonValue::bool(false)),
-            ("supervisesRuntime", JsonValue::bool(false)),
-            ("note", JsonValue::string("Current-user Run registry launches the hidden GUI-subsystem sidecar at login; MCPace Agent supervises the foreground runtime without opening a terminal")),
+            ("restartOnFailure", JsonValue::bool(true)),
+            ("supervisesRuntime", JsonValue::bool(true)),
+            ("note", JsonValue::string("The current-user Run entry starts the hidden launcher, which supervises MCPace Agent with bounded backoff")),
         ]);
     }
     JsonValue::object([("manager", JsonValue::string("unsupported"))])

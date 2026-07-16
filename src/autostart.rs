@@ -41,5 +41,6 @@ pub fn run(
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Usage: mcpace autostart <enable|disable|status|verify|repair|print> [--json] [serve options]");
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Autostart is the normal user-level login item. It installs MCPace Agent via auto-launch and does not create a privileged system service.");
+    let _ = writeln!(stdout, "Autostart is installed and repaired automatically by `mcpace up` unless --no-autostart is used. It is user-level: systemd --user on Linux, a supervised hidden login launcher on Windows, and a LaunchAgent on macOS.");
+    let _ = writeln!(stdout, "On Windows and Linux, enable/repair activates the supervisor immediately and disable stops its current runtime.");
 }

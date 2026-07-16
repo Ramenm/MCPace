@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.rustLiveProof.v1",
-  "generatedAt": "2026-07-15T02:29:26.020Z",
+  "generatedAt": "2026-07-16T15:12:38.754Z",
   "repoRoot": ".",
   "pinnedRust": "1.95.0",
   "status": "pass",
@@ -9,34 +9,34 @@
   "releaseBuildExecuted": true,
   "rustBuildInputs": {
     "algorithm": "sha256",
-    "fingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d",
+    "fingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb",
     "fileCount": 202
   },
   "proofInputSnapshots": {
     "before": {
-      "sourceFingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d",
+      "sourceFingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb",
       "sourceFileCount": 202,
-      "proofGeneratorSha256": "951b04d2226dcf62388c0480996b937877768aaa1c9d9a827eb5472a1eb810a3",
+      "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
       "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0"
     },
     "after": {
-      "sourceFingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d",
+      "sourceFingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb",
       "sourceFileCount": 202,
-      "proofGeneratorSha256": "951b04d2226dcf62388c0480996b937877768aaa1c9d9a827eb5472a1eb810a3",
+      "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
       "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0"
     }
   },
   "releaseArtifact": {
     "path": "target/release/mcpace.exe",
-    "sha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
-    "sourceFingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d"
+    "sha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
+    "sourceFingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb"
   },
   "releaseArtifactStability": {
-    "beforeSha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
-    "afterSha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
+    "beforeSha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
+    "afterSha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
     "stable": true
   },
-  "proofGeneratorSha256": "951b04d2226dcf62388c0480996b937877768aaa1c9d9a827eb5472a1eb810a3",
+  "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
   "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0",
   "findings": [
     {
@@ -51,7 +51,7 @@
       "detail": "rustc is available",
       "command": "rustc --version",
       "output": "rustc 1.95.0 (59807616e 2026-04-14)",
-      "durationMs": 282
+      "durationMs": 78
     },
     {
       "id": "tool-cargo",
@@ -59,7 +59,7 @@
       "detail": "cargo is available",
       "command": "cargo --version",
       "output": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
-      "durationMs": 241
+      "durationMs": 81
     },
     {
       "id": "tool-rustfmt",
@@ -68,7 +68,7 @@
       "command": "rustfmt --version --verbose",
       "output": "rustfmt 1.9.0-stable (59807616e1 2026-04-14)",
       "rustcCommit": "59807616e1fa2540724bfbac14d7976d7e4a3860",
-      "durationMs": 223
+      "durationMs": 79
     },
     {
       "id": "tool-clippy",
@@ -76,7 +76,7 @@
       "detail": "cargo is available",
       "command": "cargo clippy --version",
       "output": "clippy 0.1.95 (59807616e1 2026-04-14)",
-      "durationMs": 362
+      "durationMs": 136
     },
     {
       "id": "cargo-lock-synchronized",
@@ -94,8 +94,8 @@
       "timedOut": false,
       "error": null,
       "stdoutTail": "",
-      "stderrTail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.21s",
-      "durationMs": 410
+      "stderrTail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s",
+      "durationMs": 344
     },
     {
       "id": "cargo-test-locked",
@@ -106,9 +106,9 @@
       "signal": null,
       "timedOut": false,
       "error": null,
-      "stdoutTail": "test upstream::tests::tool_list_cache_returns_fresh_entries_and_drops_stale_entries ... ok\ntest upstream::tests::tool_policy_audit_flags_unprotected_mutating_tools_without_enforcing_heuristics ... ok\ntest upstream::tests::tool_policy_audit_reports_declarative_policy_coverage ... ok\ntest upstream::tests::tool_summary_uses_upstream_name_title_and_description ... ok\ntest upstream::tests::tools_list_pagination_merges_pages_and_rejects_repeated_cursors ... ok\ntest verify::args::tests::parses_verify_action_and_compat_flags ... ok\ntest verify::args::tests::rejects_second_action ... ok\ntest windows_process::tests::kill_on_exit_job_can_be_enabled_idempotently ... ok\n\ntest result: ok. 267 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 75.97s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-      "stderrTail": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s\n     Running unittests src\\lib.rs (target\\debug\\deps\\mcpace-7b841b2f08261fde.exe)\nrecovered poisoned upstream lease queue lane state\n     Running unittests src\\main.rs (target\\debug\\deps\\mcpace-7db3f70e2d18c107.exe)\n     Running unittests src\\bin\\mcpace-agent-launcher.rs (target\\debug\\deps\\mcpace_agent_launcher-8b6b1e8dbccdc9e1.exe)\n   Doc-tests mcpace",
-      "durationMs": 77573
+      "stdoutTail": "test upstream::tests::tools_list_pagination_merges_pages_and_rejects_repeated_cursors ... ok\ntest verify::args::tests::parses_verify_action_and_compat_flags ... ok\ntest verify::args::tests::rejects_second_action ... ok\ntest windows_process::tests::kill_on_exit_job_can_be_enabled_idempotently ... ok\ntest windows_process::tests::process_image_check_rejects_stale_or_reused_pid_files ... ok\n\ntest result: ok. 273 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 63.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 3 tests\ntest tests::restart_backoff_is_bounded_and_monotonic ... ok\ntest tests::stop_request_interrupts_backoff_before_another_spawn ... ok\ntest tests::supervisor_registration_removes_only_its_own_pid_file ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "stderrTail": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.26s\n     Running unittests src\\lib.rs (target\\debug\\deps\\mcpace-724b1517db22f99f.exe)\nrecovered poisoned upstream lease queue lane state\n     Running unittests src\\main.rs (target\\debug\\deps\\mcpace-f0c3c1c86db37b1b.exe)\n     Running unittests src\\bin\\mcpace-agent-launcher.rs (target\\debug\\deps\\mcpace_agent_launcher-16888b50b1605c1e.exe)\n   Doc-tests mcpace",
+      "durationMs": 64458
     },
     {
       "id": "cargo-fmt-check",
@@ -121,7 +121,7 @@
       "error": null,
       "stdoutTail": "",
       "stderrTail": "",
-      "durationMs": 1310
+      "durationMs": 1015
     },
     {
       "id": "cargo-clippy-locked",
@@ -133,8 +133,8 @@
       "timedOut": false,
       "error": null,
       "stdoutTail": "",
-      "stderrTail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.42s",
-      "durationMs": 839
+      "stderrTail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.33s",
+      "durationMs": 517
     },
     {
       "id": "cargo-build-release-locked",
@@ -146,23 +146,23 @@
       "timedOut": false,
       "error": null,
       "stdoutTail": "",
-      "stderrTail": "Finished `release` profile [optimized] target(s) in 0.40s",
-      "durationMs": 632
+      "stderrTail": "Finished `release` profile [optimized] target(s) in 0.32s",
+      "durationMs": 421
     },
     {
       "id": "rust-build-inputs-stable",
       "status": "pass",
       "detail": "Rust sources and proof generators stayed stable across the proof (202 files)",
       "before": {
-        "sourceFingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d",
+        "sourceFingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb",
         "sourceFileCount": 202,
-        "proofGeneratorSha256": "951b04d2226dcf62388c0480996b937877768aaa1c9d9a827eb5472a1eb810a3",
+        "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
         "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0"
       },
       "after": {
-        "sourceFingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d",
+        "sourceFingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb",
         "sourceFileCount": 202,
-        "proofGeneratorSha256": "951b04d2226dcf62388c0480996b937877768aaa1c9d9a827eb5472a1eb810a3",
+        "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
         "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0"
       },
       "fileCount": 202
@@ -173,11 +173,11 @@
       "detail": "fresh release binary stayed stable while being SHA-256 bound to stable Rust sources and proof generators",
       "artifact": {
         "path": "target/release/mcpace.exe",
-        "sha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
-        "sourceFingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d"
+        "sha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
+        "sourceFingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb"
       },
-      "artifactBeforeSha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
-      "artifactAfterSha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377"
+      "artifactBeforeSha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
+      "artifactAfterSha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb"
     }
   ],
   "releaseHostCommandPlan": [

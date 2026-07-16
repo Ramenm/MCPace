@@ -160,10 +160,7 @@ function versionProbe(
 	const result = spawnCapture(repoRoot, command, args, SHORT_TIMEOUT_MS);
 	if (!result.ok) {
 		const error =
-			result.error ||
-			result.stderr ||
-			result.stdout ||
-			`exit ${result.status}`;
+			result.error || result.stderr || result.stdout || `exit ${result.status}`;
 		return {
 			id,
 			status: "blocker",
@@ -259,9 +256,7 @@ function cargoStep(repoRoot, id, args, detail, timeoutMs = DEFAULT_TIMEOUT_MS) {
 		exitCode: result.status,
 		signal: result.signal,
 		timedOut: result.timedOut,
-		error: result.error
-			? sanitizeProofText(result.error, repoRoot)
-			: null,
+		error: result.error ? sanitizeProofText(result.error, repoRoot) : null,
 		stdoutTail: sanitizeProofText(
 			result.stdout.split(/\r?\n/).slice(-25).join("\n"),
 			repoRoot,

@@ -4,6 +4,8 @@ name: security
 # only when the matching MCPACE_ENABLE_PRIVATE_* repository variable is enabled.
 # Manual dispatch stays available for explicit proof runs.
 on:
+  schedule:
+    - cron: "17 4 * * 1"
   workflow_dispatch:
   pull_request:
 

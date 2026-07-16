@@ -203,7 +203,7 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Usage:");
-    let _ = writeln!(stdout, "  mcpace up");
+    let _ = writeln!(stdout, "  mcpace up [--no-autostart]");
     let _ = writeln!(
         stdout,
         "  mcpace install <path|package|url|command...> [--as <name>] [--dry-run]"
@@ -236,7 +236,7 @@ fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Quickstart:");
     let _ = writeln!(stdout, "  mcpace up");
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "`up` creates/repairs MCPace home, imports existing MCP servers, starts the endpoint, and wires detected clients. It does not add a default upstream server.");
+    let _ = writeln!(stdout, "`up` creates/repairs MCPace home, imports existing MCP servers, starts the endpoint, wires detected clients, and installs or repairs user-level autostart. Use --no-autostart for session-only use. It does not add a default upstream server.");
     let _ = writeln!(stdout, "Server type is inferred from command/url/path/package input. Endpoint: {}. Supported client patchers: {}.", runtimepaths::default_local_mcp_url(), client_install_support_summary());
 }
 

@@ -426,8 +426,8 @@ fn run_managed_foreground(
             &endpoint.health_path,
         )
         .unwrap_or(false);
-        if existing_healthy
-            && state_matches_start_request(
+        if existing_healthy {
+            let settings_match = state_matches_start_request(
                 &existing_state,
                 &host,
                 port,
@@ -435,12 +435,16 @@ fn run_managed_foreground(
                 parsed.io_timeout_ms,
                 parsed.max_body_bytes,
                 parsed.overview_cache_ms,
-            )
-        {
+            );
+            let detail = if settings_match {
+                "already healthy"
+            } else {
+                "already healthy with different settings; refusing to start a duplicate runtime"
+            };
             let _ = writeln!(
                 stdout,
-                "MCPace managed service is already healthy at {}",
-                existing_state.url
+                "MCPace managed service is {} at {}",
+                detail, existing_state.url
             );
             return 0;
         }
@@ -491,6 +495,25 @@ fn run_start(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
+    run_start_impl(parsed, default_root, stdout, stderr, true)
+}
+
+fn run_start_after_supervisor_stop(
+    parsed: ParsedArgs,
+    default_root: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    run_start_impl(parsed, default_root, stdout, stderr, false)
+}
+
+fn run_start_impl(
+    parsed: ParsedArgs,
+    default_root: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+    clear_stop_request: bool,
+) -> i32 {
     let json_output = parsed.json_output;
     let mut resource_args = Vec::new();
     resources::append_serve_resource_args(
@@ -514,6 +537,9 @@ fn run_start(
     };
 
     let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
+    if clear_stop_request {
+        clear_agent_supervisor_stop_request(&canonical_root);
+    }
     let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
     let host = parsed.host.unwrap_or_else(|| endpoint.host.clone());
     let port = parsed.port.unwrap_or(endpoint.port);
@@ -711,7 +737,13 @@ fn run_stop(
         return 1;
     };
     let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
+    request_agent_supervisor_stop(&canonical_root);
     stop_existing_serve(&canonical_root);
+    if let Err(error) = wait_for_agent_supervisor_stop(&canonical_root) {
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        return 1;
+    }
+    clear_agent_supervisor_stop_request(&canonical_root);
 
     let status = match collect_status(&canonical_root, None, None) {
         Ok(value) => value,
@@ -738,8 +770,61 @@ fn run_restart(
         return 1;
     };
     let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
+    let endpoint = runtimepaths::resolve_serve_endpoint(Some(&canonical_root));
+    let requested_host = parsed.host.as_deref().unwrap_or(&endpoint.host);
+    let requested_port = parsed.port.unwrap_or(endpoint.port);
+    let state_path =
+        runtimepaths::serve_state_path(&runtimepaths::resolve_state_root(&canonical_root));
+    let restart_with_supervisor = agent_supervisor_is_active(&canonical_root)
+        && read_state(&state_path).ok().is_some_and(|state| {
+            state_matches_start_request(
+                &state,
+                requested_host,
+                requested_port,
+                parsed.max_connections,
+                parsed.io_timeout_ms,
+                parsed.max_body_bytes,
+                parsed.overview_cache_ms,
+            )
+        });
+    request_agent_supervisor_stop(&canonical_root);
     stop_existing_serve(&canonical_root);
-    run_start(parsed, default_root, stdout, stderr)
+    if let Err(error) = wait_for_agent_supervisor_stop(&canonical_root) {
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        return 1;
+    }
+    if restart_with_supervisor {
+        clear_agent_supervisor_stop_request(&canonical_root);
+        if let Err(error) = start_agent_supervisor(&canonical_root) {
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
+            return 1;
+        }
+        if let Err(error) = wait_for_health(
+            requested_host,
+            requested_port,
+            &endpoint.health_path,
+            100,
+            Duration::from_millis(100),
+        ) {
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
+            return 1;
+        }
+        let status = match collect_status(
+            &canonical_root,
+            Some(requested_host.to_string()),
+            Some(requested_port),
+        ) {
+            Ok(value) => value,
+            Err(error) => {
+                diagnostics::stderr_line(stderr, format_args!("{}", error));
+                return 1;
+            }
+        };
+        return write_status_response(&status, parsed.json_output, stdout);
+    }
+    let exit_code = run_start_after_supervisor_stop(parsed, default_root, stdout, stderr);
+    clear_agent_supervisor_stop_request(&canonical_root);
+    exit_code
 }
 
 fn state_matches_start_request(
@@ -758,6 +843,154 @@ fn state_matches_start_request(
         && state.max_body_bytes == max_body_bytes
         && state.overview_cache_ms == overview_cache_ms
 }
+
+#[cfg(windows)]
+fn agent_supervisor_is_active(root: &Path) -> bool {
+    fs::read_to_string(agent_supervisor_pid_path(root))
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok())
+        .is_some_and(|pid| {
+            crate::windows_process::process_image_is(pid, "mcpace-agent-launcher.exe")
+        })
+}
+
+#[cfg(target_os = "linux")]
+fn agent_supervisor_is_active(_root: &Path) -> bool {
+    std::process::Command::new("systemctl")
+        .args(["--user", "is-active", "--quiet", "mcpace-agent.service"])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+#[cfg(all(not(windows), not(target_os = "linux")))]
+fn agent_supervisor_is_active(_root: &Path) -> bool {
+    false
+}
+
+#[cfg(windows)]
+fn start_agent_supervisor(root: &Path) -> Result<(), String> {
+    let current_exe = std::env::current_exe()
+        .map_err(|error| format!("failed to resolve mcpace executable: {}", error))?;
+    let launcher = current_exe.with_file_name("mcpace-agent-launcher.exe");
+    if !launcher.is_file() {
+        return Err(format!(
+            "Windows MCPace Agent launcher is missing: {}",
+            launcher.display()
+        ));
+    }
+    crate::windows_process::spawn_detached_no_window(
+        &launcher,
+        &[OsString::from("--from-login")],
+        Some(root),
+    )
+    .map(|_| ())
+    .map_err(|error| format!("failed to restart MCPace Agent supervisor: {}", error))
+}
+
+#[cfg(target_os = "linux")]
+fn start_agent_supervisor(_root: &Path) -> Result<(), String> {
+    let output = std::process::Command::new("systemctl")
+        .args(["--user", "start", "mcpace-agent.service"])
+        .output()
+        .map_err(|error| format!("failed to restart systemd user service: {}", error))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    Err(format!(
+        "failed to restart systemd user service: {}",
+        String::from_utf8_lossy(&output.stderr).trim()
+    ))
+}
+
+#[cfg(all(not(windows), not(target_os = "linux")))]
+fn start_agent_supervisor(_root: &Path) -> Result<(), String> {
+    Err("user supervisor restart is not supported on this platform".to_string())
+}
+
+#[cfg(windows)]
+fn agent_supervisor_runtime_path(root: &Path, name: &str) -> PathBuf {
+    root.join("data").join("runtime").join("agent").join(name)
+}
+
+#[cfg(windows)]
+fn agent_supervisor_stop_request_path(root: &Path) -> PathBuf {
+    agent_supervisor_runtime_path(root, "stop-requested")
+}
+
+#[cfg(windows)]
+fn agent_supervisor_pid_path(root: &Path) -> PathBuf {
+    agent_supervisor_runtime_path(root, "supervisor.pid")
+}
+
+#[cfg(windows)]
+fn request_agent_supervisor_stop(root: &Path) {
+    let path = agent_supervisor_stop_request_path(root);
+    if let Some(parent) = path.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+    let _ = fs::write(path, format!("{}\n", std::process::id()));
+}
+
+#[cfg(target_os = "linux")]
+fn request_agent_supervisor_stop(_root: &Path) {
+    let _ = std::process::Command::new("systemctl")
+        .args(["--user", "stop", "mcpace-agent.service"])
+        .output();
+}
+
+#[cfg(all(not(windows), not(target_os = "linux")))]
+fn request_agent_supervisor_stop(_root: &Path) {}
+
+#[cfg(windows)]
+fn wait_for_agent_supervisor_stop(root: &Path) -> Result<(), String> {
+    const ACK_TIMEOUT: Duration = Duration::from_secs(5);
+    const POLL_INTERVAL: Duration = Duration::from_millis(25);
+
+    let marker = agent_supervisor_stop_request_path(root);
+    let pid_path = agent_supervisor_pid_path(root);
+    let supervisor_pid = fs::read_to_string(&pid_path)
+        .ok()
+        .and_then(|value| value.trim().parse::<u32>().ok());
+    let Some(supervisor_pid) = supervisor_pid else {
+        let _ = fs::remove_file(&pid_path);
+        return Ok(());
+    };
+    if !crate::windows_process::process_image_is(supervisor_pid, "mcpace-agent-launcher.exe") {
+        let _ = fs::remove_file(&pid_path);
+        return Ok(());
+    }
+
+    let started = std::time::Instant::now();
+    while started.elapsed() < ACK_TIMEOUT {
+        if !marker.is_file() {
+            return Ok(());
+        }
+        thread::sleep(POLL_INTERVAL);
+    }
+    if !crate::windows_process::process_image_is(supervisor_pid, "mcpace-agent-launcher.exe") {
+        let _ = fs::remove_file(&marker);
+        let _ = fs::remove_file(&pid_path);
+        return Ok(());
+    }
+    Err(format!(
+        "timed out waiting for MCPace Agent supervisor pid {} to acknowledge stop; refusing to start a duplicate runtime",
+        supervisor_pid
+    ))
+}
+
+#[cfg(not(windows))]
+fn wait_for_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(windows)]
+fn clear_agent_supervisor_stop_request(root: &Path) {
+    let _ = fs::remove_file(agent_supervisor_stop_request_path(root));
+}
+
+#[cfg(not(windows))]
+fn clear_agent_supervisor_stop_request(_root: &Path) {}
 
 fn stop_existing_serve(canonical_root: &Path) {
     let state_root = runtimepaths::resolve_state_root(canonical_root);

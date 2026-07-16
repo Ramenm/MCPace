@@ -8,6 +8,13 @@ fn service_config_launches_agent_not_serve_or_wscript() {
         assert_eq!(config.launch_args, vec!["--from-login".to_string()]);
         assert_eq!(config.target_args[0], "agent");
         assert_eq!(config.target_args[1], "run");
+    } else if cfg!(target_os = "linux") {
+        assert!(config
+            .launch_args
+            .iter()
+            .any(|value| value == &config.target_app_path));
+        assert!(config.launch_args.iter().any(|value| value == "agent"));
+        assert!(config.launch_args.iter().any(|value| value == "run"));
     } else {
         assert_eq!(config.launch_args[0], "agent");
         assert_eq!(config.launch_args[1], "run");
@@ -96,6 +103,31 @@ fn service_config_keeps_plain_target_args_but_escapes_autolaunch_args() {
             .iter()
             .any(|value| value == "/tmp/MCPace Demo"));
     }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_systemd_tokens_escape_specifiers_and_environment_expansion() {
+    assert_eq!(
+        quote_systemd_token("/tmp/MCPace Demo"),
+        "\"/tmp/MCPace Demo\""
+    );
+    assert_eq!(
+        quote_systemd_token("PATH=/opt/100%/$USER/bin"),
+        "\"PATH=/opt/100%%/$$USER/bin\""
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_login_path_deduplicates_and_drops_wsl_windows_mounts() {
+    let raw = std::ffi::OsString::from(
+        "/home/user/.local/bin:/usr/bin:/mnt/c/Program Files/nodejs:/usr/bin:/bin",
+    );
+    assert_eq!(
+        normalized_linux_path(&raw, true).as_deref(),
+        Some("/home/user/.local/bin:/usr/bin:/bin")
+    );
 }
 
 #[cfg(windows)]

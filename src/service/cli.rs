@@ -178,9 +178,12 @@ fn normalize_compat_arg(arg: &str) -> String {
 pub(crate) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "Usage: mcpace autostart <enable|repair|status|verify|disable|print> [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]");
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Installs a visible user-level login item named MCPace Agent through the upstream auto-launch crate.");
-    let _ = writeln!(stdout, "On Windows the login item launches mcpace-agent-launcher.exe first, which starts `mcpace agent run --autostart` without opening a terminal window.");
-    let _ = writeln!(stdout, "On macOS/Linux the login item launches `mcpace agent run --autostart`; the agent then runs the foreground managed MCPace runtime.");
+    let _ = writeln!(
+        stdout,
+        "Installs or repairs the user-level MCPace Agent started by `mcpace up`."
+    );
+    let _ = writeln!(stdout, "On Windows the login item launches mcpace-agent-launcher.exe, which supervises `mcpace agent run --autostart` without opening a terminal window.");
+    let _ = writeln!(stdout, "On Linux systemd --user restarts non-zero exits; on macOS a LaunchAgent keeps the managed runtime available after login.");
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,

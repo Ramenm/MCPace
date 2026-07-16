@@ -3,7 +3,7 @@
 Common files:
 
 | Path | Purpose |
-|---|---|
+| --- | --- |
 | `mcpace.config.json` | Runtime defaults, scheduling policy, UI surface, and include paths. |
 | `mcp_settings.json` | Root MCP server settings. |
 | `mcp_settings.d/*.json` | Per-server fragments written by install/import/up flows. |
@@ -20,17 +20,32 @@ merged user/project MCP settings registry.
 
 Clients should point at MCPace itself, not at each upstream server. For example,
 Codex and Cursor only need `http://127.0.0.1:39022/mcp`; MCPace then loads
-upstreams from the merged settings sources. On Windows, the generated user-level
-autostart entry is visible as `MCPace Agent` but points at
-`mcpace-agent-launcher.exe`, a tiny GUI-subsystem sidecar next to `mcpace.exe`.
-That launcher reads persistent MCPace environment settings such as
-`MCPACE_MCP_SETTINGS` from the user/machine registry before starting `serve`, so
-login startup does not open a terminal window and does not depend on a stale
-Explorer or WScript environment. CLI
-commands also fall back to the installed autostart root when no `--root`,
-`MCPACE_ROOT`, or current-directory root is available, so commands such as
-`mcpace serve restart` can work from a normal home-directory shell after service
-installation.
+upstreams from the merged settings sources.
+
+`mcpace up` installs or repairs user-level persistence by default. On Windows
+and Linux it immediately hands the first runtime to that user supervisor and
+waits for a healthy endpoint; the next `serve start` is only a status check, not
+a competing detached owner. A same-configuration `mcpace serve restart` keeps
+that supervisor ownership. Use `mcpace up --no-autostart` only when a
+session-only runtime is intentional.
+
+- **Windows:** the current-user Run entry is visible as `MCPace Agent` and
+  points at `mcpace-agent-launcher.exe`, a GUI-subsystem sidecar next to
+  `mcpace.exe`. The launcher reads the validated per-user plan, starts without a
+  terminal, and restarts non-zero agent exits with bounded backoff. It also
+  hydrates persistent MCPace path settings such as `MCPACE_MCP_SETTINGS` from
+  the user/machine registry.
+- **Ubuntu/Linux:** MCPace enables `~/.config/systemd/user/mcpace-agent.service`.
+  The unit uses `Restart=on-failure`, does not require a desktop session, and
+  starts with the user's systemd manager. Boot-before-login additionally
+  requires user lingering; ordinary desktop/server login does not.
+- **macOS:** MCPace uses a user LaunchAgent with keep-alive-on-failure behavior.
+
+CLI commands fall back to the installed Windows autostart plan when no
+`--root`, `MCPACE_ROOT`, or current-directory root is available, so commands
+such as `mcpace serve restart` can work from a normal home-directory shell after
+installation. WSL is a special case: a Linux user service cannot start the WSL
+virtual machine after Windows reboot; Windows must start the distribution first.
 
 ## Config-first import
 
@@ -54,7 +69,7 @@ Supported input shapes:
 Normalization rules:
 
 | Input | Normalized result |
-|---|---|
+| --- | --- |
 | `command` | `type: "stdio"` |
 | `url`, `serverUrl`, `httpUrl`, `endpoint` | `type: "streamable-http"` plus `url` |
 | `transport: "command"` or `"stdio"` | stdio server |
@@ -95,7 +110,7 @@ MCPace applies conservative policy before manual overrides:
 Typical defaults:
 
 | Server signal | Default policy | Why |
-|---|---|---|
+| --- | --- | --- |
 | `filesystem` | project/session isolated | File scope is project/worktree-bound. |
 | `memory`, `context`, `sequential-thinking` | session isolated | Mutable chat context should not bleed. |
 | `git`, worktree, repo tools | project single-writer | Repository mutation needs a conflict domain. |
@@ -108,7 +123,7 @@ Typical defaults:
 Classification fields exposed in JSON and dashboard views:
 
 | Field | Common values |
-|---|---|
+| --- | --- |
 | `runtimeType` | `stateless`, `stateful`, `external`, `interactive`, `side-effecting`, `legacy`, `unknown` |
 | `stateClass` | `stateless`, `session-stateful`, `project-stateful`, `credential-stateful`, `remote-session-stateful`, `host-stateful`, `unknown-conservative` |
 | `effectClass` | `read-only`, `external-read`, `ephemeral-state`, `project-mutating`, `external-mutating`, `host-mutating`, `process-exec`, `unknown` |
@@ -216,7 +231,7 @@ Official Registry package versions, fixed runtime/package arguments, and require
 ## Options
 
 | Option | Purpose |
-|---|---|
+| --- | --- |
 | `--as <name>` | Set server name. |
 | `--path <path>` | Add path scopes for servers that need them. |
 | `--env KEY=VALUE` | Add environment variables. |

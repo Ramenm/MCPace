@@ -1,25 +1,25 @@
 {
   "schema": "mcpace.liveMcpE2eProof.v1",
-  "generatedAt": "2026-07-15T02:29:29.706Z",
+  "generatedAt": "2026-07-16T15:12:41.318Z",
   "status": "pass",
   "root": ".",
   "rootName": "mcpace",
   "platform": "win32",
   "arch": "x64",
-  "binarySha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
+  "binarySha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
   "binaryStability": {
-    "selectedBeforeSha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
-    "privateCopyBeforeSha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
-    "privateCopyAfterSha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
-    "selectedAfterSha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
+    "selectedBeforeSha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
+    "privateCopyBeforeSha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
+    "privateCopyAfterSha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
+    "selectedAfterSha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
     "strategy": "private-hash-verified-copy",
     "stable": true
   },
-  "sourceFingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d",
+  "sourceFingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb",
   "sourceFileCount": 202,
   "sourceFiles": {
-    "Cargo.lock": "db203271fc855a228ac99b1b6b64905a08ad07d5f1bf29441214981cb4da3e77",
-    "Cargo.toml": "62b6546650869f7f8d4cd149c01a0c4a73c71c593bca78c8bf2ab505b5eead37",
+    "Cargo.lock": "2905de1b3a7e6d0e49fa9e645638ca469cdce5fa9c12926baaf1e4106f5c488e",
+    "Cargo.toml": "ecdc8a7c6e08735ab7445eb3b0db4976a9a0808b381040dc6845885f4bd7b91c",
     "catalog/approved-servers.json": "ad60af950f03196cccd957e3b8eea7f37806a16193628070bf443ee8417936a1",
     "rust-toolchain.toml": "24ef3b9d3edbd850aa386cb0a98e10450b0030991a4537cb359f54d49dbbb33a",
     "src/adapter.rs": "f92466dc49fb4fa67c7e151e8e3329fa0f31d482ea33249a62540aebef556c47",
@@ -30,10 +30,10 @@
     "src/adapter/tests.rs": "2dfa59a9b03c12188ad654fed364562ff1bb581455c243e48044483dd9cb1781",
     "src/agent.rs": "c59bcea205b131a864dcbf063d6ac06924f1b81907205f1e69923634acc1ed48",
     "src/agent/tests.rs": "16eedc2d38488e95e6e88c2fb5b1c15426c2bb5e17797be3cc8824895f0c64fa",
-    "src/app.rs": "9562cc945f929ad4cb8f2c3d961d9245b48394f6cebe67f53730ca487828fe7a",
+    "src/app.rs": "39c1db002a768cb9341b7d71d0c1cac6d5330a711347deeae09a239ba666bb58",
     "src/app/tests.rs": "f770b04404375e5429f24326601af69f6f1536b37c10ac66f994eea645efc0e2",
-    "src/autostart.rs": "26bd9757f02452b172710572dd7f8f03a347cd1e253e82adc72ccd46d23a367d",
-    "src/bin/mcpace-agent-launcher.rs": "05bec9c12fd010296a4253066a689369dfc040e5d4fd96478da44e8991baed6c",
+    "src/autostart.rs": "1f1d49ae51e8dc70de4e34992b7c471fe29193b8075eee8f6285e000a7b5c01c",
+    "src/bin/mcpace-agent-launcher.rs": "12aa87cf40ddcd5d4b4501a89fba5980cc5e21b9e28c16ecc860fdb6e10a1ebd",
     "src/candidates.rs": "e8b4735a992eaa8e71124223ab81dcbf67344d41a9679bd4fa12468742c11a2f",
     "src/catalog.rs": "3fe682c495d0481e4ce5e8174a3f1a52d749f41fd2f1ef11b19e50db91405300",
     "src/cleanup.rs": "e51f298dc4ef71ef2ca5c2da8289e3014f9d42d4c47e03e5ea9e22937fc9b2de",
@@ -150,14 +150,14 @@
     "src/projects.rs": "a1fb7e82b22c0e7f6cb4dcba44986211939e83183325b6e14ade30691b013205",
     "src/release.rs": "8314fca733d557901b15aa224fd2731313aa4e705cf97fc52c181cde0c181a40",
     "src/repair.rs": "f6f6fc44b67571c289ccf23249c1cda599f24c29689904c1c94e1d1f4f021f9a",
-    "src/reporoot.rs": "bbd83198ac7cf85c33dd76c190f82c102a4c78cac1a87a27c2c5a5414c8f0e1c",
+    "src/reporoot.rs": "34608af2d98710e4e405e023a988b07088bba9e473ecec6293d9afba1ecb1a52",
     "src/resources.rs": "67999d9fd8c881aa85d3f800b379da4bd03b7f52548f74738fe6edba32081048",
     "src/resources/tests.rs": "e944cfe084ab0dc8f1a02fd374e78bf660333940abbe6510313c0aa03c80e5e7",
     "src/restart_guard.rs": "ffdd798258928a9a70aef39aa33348795418b36d83c164f6163b984aa7885f8c",
     "src/restart_guard/tests.rs": "630345c002c2c416539e4d3c33491450e21f615445fb8e95ecbee1460202bbb3",
     "src/runtimepaths.rs": "e1034c783fc98ac8661bb2472e2cb391dac116bf8464c25953d5c42219bc474f",
     "src/runtimepaths/tests.rs": "0fc60007dda0bca5eae114a4ca207e85b8adc985ad9beb2f60443e3f85f2cb5f",
-    "src/serve.rs": "1a6f3f28786c4cd5db41a8ae3f92887dc41acea22a36908328caa1045a8a8c96",
+    "src/serve.rs": "52ba42b539f019e21bcf487567a9a71c341f0fb49f7f31418396a34f138e8d6c",
     "src/serve/tests.rs": "d969ed1f8a3874c175d8583e781783d579400d72962aca74d60bd11e01c6dc13",
     "src/server.rs": "7e34a2313505499cfe110e6a1de26827d4c4fce9b39c72d7593691f4c8380688",
     "src/server/add.rs": "e74ad342cad19612ef9bbb12c876111484d273484de05b46ce238b234381c4ea",
@@ -177,14 +177,14 @@
     "src/server/sources.rs": "5cf8e563dc487a8fa13dbf778de08efde46a6278793b402e13666e7d8daad458",
     "src/server/test.rs": "71327ecae6dbf99bb5a83c2b4520ab60834ddf223561ab3a238bda41f59574bf",
     "src/server/toggle.rs": "d6ee43e34f17edcb8dcfea9cfc4affd5e76cdd522ebc2da51f4a01a7e7ef27ca",
-    "src/service.rs": "1d69b8b1243d1dd4629ac555973641226c93bd591ffe68f28796e00420693717",
-    "src/service/cli.rs": "d5201fd733fa165803d6ba2069f7a859fb58f85b584ee06c48bd67753732baf8",
-    "src/service/config.rs": "60c019dfd6b8e0519ae9e61a8c14c65d61bc4056f1f7de7720c15f2fc39be5ad",
-    "src/service/legacy.rs": "8e9c4aa73cf5e69dfd99bddd2419e9325ef5d495e858f93815cc3a341c58b414",
-    "src/service/tests.rs": "f0bcad3d5ce1bc323b0f24a177180d046c01acd35e9444e4ab6177a4a487e8dc",
-    "src/service/verify.rs": "5565a24c3c0736b85aceb05d5c4ac0486fd39243b4ff768f9be9690225cf7fcb",
-    "src/setup.rs": "e7fb718fe5943a986e8758b7cce43badd2582b82ba411f6cbeeab8a51e198202",
-    "src/setup/tests.rs": "2797a519ad0ef9f9086a1dff2ccab42d2baa9ba26093fbf160c3bd27b49831c4",
+    "src/service.rs": "752b66b3b2bfc7a06fbf1a8fcab1653bd319698b2abd127a4c6374c215e3bb32",
+    "src/service/cli.rs": "ea5a909f29df40615db71bfccb3e5538b5040c75c658b13e33a73563947e406f",
+    "src/service/config.rs": "069791a8820133ab40502f253d9f2152dab5d10a1b964c0a71560ad36639c7a3",
+    "src/service/legacy.rs": "0f7db587ab972689a2d87390493900b729c43f3976b0146d320a80ef3f5c0295",
+    "src/service/tests.rs": "7b3b1dc260410c63fbd897bb2859eb44654afec3d148977880261b9a045ff8a5",
+    "src/service/verify.rs": "41c7c147d62b226b7b8b41cf5711b0bd7127a91f5b201c39a305f7d211eb0e5b",
+    "src/setup.rs": "1a028a63ab84f3c29a9fb488586cbbf571704b0d1225589971b1fa95542245fa",
+    "src/setup/tests.rs": "078fb4be085701621178d04de05ca5e3eb6547694be8f427c2b2ef7ff2b0b53b",
     "src/source_type.rs": "15c8fe051a660d1cd96a8db56202243eaad5f2fba859f72a22796df43b3d907d",
     "src/stdio_shim.rs": "b16cb63e33ef0d864f1627233d0df909bbdd230b8a0ac2f669e871c787f0adcd",
     "src/stdio_shim/tests.rs": "b6464b5cd8f80ef176748fd45b5433a1e385f5795093436f154f5e0a44af5546",
@@ -218,50 +218,50 @@
     "src/verify/args/tests.rs": "0c5bf11b943af798a7150345acae25d9690eeadf2568f62e15e649fa771d40a9",
     "src/verify/model.rs": "ab53c1d0cb8b6588fbade5f03288ded9a153ed2e49c453ead75d79bed597a40d",
     "src/verify/render.rs": "03228c2a2f2fe4aeb30c1eed69f69c549a9ead2410c6021fb29cf4933de1323c",
-    "src/windows_process.rs": "e3f1b67338ca7532fa01d413444b6b4326571cd03d748616690668b0757e5b6a",
-    "src/windows_process/tests.rs": "b4f3c71140a8c9e09034975915db2361e0d4fe414b68287891b4503f0f3b321a"
+    "src/windows_process.rs": "5bd63ee465d9fbbb5de1b880124a319fe4d82d97b09ea3782b6080d17ecab9aa",
+    "src/windows_process/tests.rs": "c82ba392a72935b6275570f34754e2bce7839b6e08beb799b6da930acbcb6d4e"
   },
   "rustBuildBinding": {
-    "generatedAt": "2026-07-15T02:29:26.020Z",
-    "proofGeneratorSha256": "951b04d2226dcf62388c0480996b937877768aaa1c9d9a827eb5472a1eb810a3",
+    "generatedAt": "2026-07-16T15:12:38.754Z",
+    "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
     "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0",
     "releaseArtifact": {
       "path": "target/release/mcpace.exe",
-      "sha256": "61f29c059bfd81d80f972711fab20905cd54263325dcda1f8c443f9007b06377",
-      "sourceFingerprint": "906ae04768fe42184223ed3caa8eef5047d92e41d56d8e1518679a43560fe62d"
+      "sha256": "7a3431f0dfb557aa27101eef525d73144b3402e530bc08de38f57159c46474bb",
+      "sourceFingerprint": "c6d12b3b81af56bfbbc259baf47f1142ac81145f2811bf4ca1a96e4a10d5accb"
     }
   },
   "proofGeneratorSha256": "a931f410981cdb9e4288ad0dc2e88a0faa100464eb48d0c8bbbfaebe201408eb",
   "proofInputs": {
-    "package.json": "6685e2d4ed0c92be94d7449bdf406f18628df164ab45103e3c17cfd1bc1de1b0",
-    "reports/rust-live-proof.json": "676bf6f654a5fe80a7ee055c52032e9ec9fe6a1eba16007299dd5408d0716494",
+    "package.json": "c44ad8154a9ed43bd850f702c8ad24b78e13dac9823a0dabac71aa18bb5523dc",
+    "reports/rust-live-proof.json": "baecdba1face555b9375d182d81905b99429d7aeee17c38966513202659ceb7e",
     "scripts/lib/rust-build-provenance.mjs": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0",
     "scripts/live-mcp-e2e-proof.mjs": "a931f410981cdb9e4288ad0dc2e88a0faa100464eb48d0c8bbbfaebe201408eb"
   },
   "proofInputSnapshots": {
     "before": {
-      "package.json": "6685e2d4ed0c92be94d7449bdf406f18628df164ab45103e3c17cfd1bc1de1b0",
-      "reports/rust-live-proof.json": "676bf6f654a5fe80a7ee055c52032e9ec9fe6a1eba16007299dd5408d0716494",
+      "package.json": "c44ad8154a9ed43bd850f702c8ad24b78e13dac9823a0dabac71aa18bb5523dc",
+      "reports/rust-live-proof.json": "baecdba1face555b9375d182d81905b99429d7aeee17c38966513202659ceb7e",
       "scripts/lib/rust-build-provenance.mjs": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0",
       "scripts/live-mcp-e2e-proof.mjs": "a931f410981cdb9e4288ad0dc2e88a0faa100464eb48d0c8bbbfaebe201408eb"
     },
     "after": {
-      "package.json": "6685e2d4ed0c92be94d7449bdf406f18628df164ab45103e3c17cfd1bc1de1b0",
-      "reports/rust-live-proof.json": "676bf6f654a5fe80a7ee055c52032e9ec9fe6a1eba16007299dd5408d0716494",
+      "package.json": "c44ad8154a9ed43bd850f702c8ad24b78e13dac9823a0dabac71aa18bb5523dc",
+      "reports/rust-live-proof.json": "baecdba1face555b9375d182d81905b99429d7aeee17c38966513202659ceb7e",
       "scripts/lib/rust-build-provenance.mjs": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0",
       "scripts/live-mcp-e2e-proof.mjs": "a931f410981cdb9e4288ad0dc2e88a0faa100464eb48d0c8bbbfaebe201408eb"
     }
   },
   "processTreeCleanup": {
-    "leaderPid": 57632,
+    "leaderPid": 34820,
     "ownedPids": [
-      62784
+      36428
     ],
     "containment": "kill-on-close-job+verified-pids",
     "taskkillExitCode": 0,
     "verified": true
   },
-  "durationMs": 2291,
+  "durationMs": 1644,
   "steps": [
     {
       "id": "serve-ready",

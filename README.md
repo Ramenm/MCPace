@@ -13,13 +13,14 @@ mcpace up
 
 Node.js 22+ is required. This is the supported public install path: npm automatically selects the matching internal native package for Windows, glibc Linux, or macOS; do not install `@mcpace/cli-<target>` packages directly. Native `.msi`, `.deb`, and `.pkg` artifacts are currently private draft proofs, not public downloads; Windows and macOS publication remains blocked on signing and notarization. See [`docs/release-completion.md`](docs/release-completion.md). Source installs for local development still work with `cargo install --path .`.
 
-`mcpace up` creates or repairs `~/.mcpace`, imports safe existing MCP servers from detected local configs, starts `http://127.0.0.1:39022/mcp`, wires detected clients, and runs readiness checks. It does **not** add a filesystem server, memory server, or any other upstream server by default.
+`mcpace up` creates or repairs `~/.mcpace`, imports safe existing MCP servers from detected local configs, starts `http://127.0.0.1:39022/mcp`, wires detected clients, installs or repairs user-level autostart, and runs readiness checks. After the next login, Windows uses the hidden MCPace supervisor and Linux uses `systemd --user` to restore the endpoint automatically. Use `mcpace up --no-autostart` for a session-only runtime. On WSL, the distribution must use systemd and Windows must start the distribution before its Linux user service can run. MCPace does **not** add a filesystem server, memory server, or any other upstream server by default.
 
 ## Daily commands
 
 | Need | Command |
 | --- | --- |
-| Start or repair the local home | `mcpace up` |
+| Start or repair the local home and autostart | `mcpace up` |
+| Run without future login startup | `mcpace up --no-autostart` |
 | Preview auto discovery | `mcpace auto --dry-run` |
 | Add trusted discovered servers | `mcpace auto` |
 | Add an explicit server | `mcpace install npm:@modelcontextprotocol/server-memory --as memory` |

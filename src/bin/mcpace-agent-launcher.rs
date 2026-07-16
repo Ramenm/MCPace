@@ -16,6 +16,10 @@ use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
 #[cfg(windows)]
 use std::process::{Command, Stdio};
+#[cfg(windows)]
+use std::thread;
+#[cfg(windows)]
+use std::time::{Duration, Instant};
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -28,7 +32,23 @@ const MCPACE_EXE_NAME: &str = "mcpace.exe";
 #[cfg(windows)]
 const ROOT_MARKER_FILE: &str = "mcpace.config.json";
 #[cfg(windows)]
+const SUPERVISOR_PID_FILE: &str = "supervisor.pid";
+#[cfg(windows)]
 const MAX_LOG_BYTES: u64 = 5 * 1024 * 1024;
+#[cfg(windows)]
+const STABLE_RUN_RESET: Duration = Duration::from_secs(120);
+#[cfg(windows)]
+const STOP_POLL_INTERVAL: Duration = Duration::from_millis(250);
+#[cfg(windows)]
+const RESTART_DELAYS: [Duration; 7] = [
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(4),
+    Duration::from_secs(8),
+    Duration::from_secs(16),
+    Duration::from_secs(30),
+    Duration::from_secs(60),
+];
 
 #[cfg(windows)]
 #[derive(Debug, Deserialize)]
@@ -105,6 +125,28 @@ fn run_windows() -> i32 {
         .map(agent_log_dir_for_root)
         .unwrap_or_else(fallback_log_dir);
     let _ = fs::create_dir_all(&log_dir);
+    let _registration = match root.as_deref() {
+        Some(value) => match SupervisorRegistration::create(agent_supervisor_pid_path(value)) {
+            Ok(registration) => Some(registration),
+            Err(error) => {
+                let _ = write_launcher_log(
+                    &log_dir,
+                    &format!("failed to register MCPace Agent supervisor: {}", error),
+                );
+                return 1;
+            }
+        },
+        None => None,
+    };
+    let stop_marker = root.as_deref().map(agent_supervisor_stop_path);
+    if stop_requested(stop_marker.as_deref()) {
+        acknowledge_stop_request(stop_marker.as_deref());
+        let _ = write_launcher_log(
+            &log_dir,
+            "MCPace Agent stop was requested during supervisor startup; supervisor is stopping",
+        );
+        return 0;
+    }
 
     if !invocation.program.is_file() {
         let _ = write_launcher_log(
@@ -117,45 +159,181 @@ fn run_windows() -> i32 {
         return 1;
     }
 
-    let stdout = open_log_file(&log_dir.join("agent-stdout.log"));
-    let stderr = open_log_file(&log_dir.join("agent-stderr.log"));
+    supervise_invocation(
+        &invocation,
+        root.as_deref(),
+        &log_dir,
+        stop_marker.as_deref(),
+    )
+}
 
-    let mut command = Command::new(&invocation.program);
-    command.args(&invocation.args);
-    if let Some(root) = root.as_deref() {
-        command.current_dir(root);
-    }
-    command
-        .stdin(Stdio::null())
-        .stdout(stdout.map(Stdio::from).unwrap_or_else(|_| Stdio::null()))
-        .stderr(stderr.map(Stdio::from).unwrap_or_else(|_| Stdio::null()))
-        .creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
-
-    match command.spawn() {
-        Ok(child) => {
+#[cfg(windows)]
+fn supervise_invocation(
+    invocation: &Invocation,
+    root: Option<&Path>,
+    log_dir: &Path,
+    stop_marker: Option<&Path>,
+) -> i32 {
+    let mut consecutive_failures = 0usize;
+    loop {
+        if stop_requested(stop_marker) {
+            acknowledge_stop_request(stop_marker);
             let _ = write_launcher_log(
-                &log_dir,
-                &format!(
-                    "started hidden MCPace Agent pid={} source={} target={} argsCount={}",
-                    child.id(),
-                    invocation.source,
-                    invocation.program.display(),
-                    invocation.args.len()
-                ),
+                log_dir,
+                "MCPace Agent stop was requested; supervisor is stopping before spawn",
             );
-            0
+            return 0;
         }
-        Err(error) => {
+        let stdout = open_log_file(&log_dir.join("agent-stdout.log"));
+        let stderr = open_log_file(&log_dir.join("agent-stderr.log"));
+        let mut command = Command::new(&invocation.program);
+        command.args(&invocation.args);
+        if let Some(root) = root {
+            command.current_dir(root);
+        }
+        command
+            .stdin(Stdio::null())
+            .stdout(stdout.map(Stdio::from).unwrap_or_else(|_| Stdio::null()))
+            .stderr(stderr.map(Stdio::from).unwrap_or_else(|_| Stdio::null()))
+            .creation_flags(CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP);
+
+        let started = Instant::now();
+        let outcome = match command.spawn() {
+            Ok(mut child) => {
+                let _ = write_launcher_log(
+                    log_dir,
+                    &format!(
+                        "started supervised MCPace Agent pid={} source={} target={} argsCount={}",
+                        child.id(),
+                        invocation.source,
+                        invocation.program.display(),
+                        invocation.args.len()
+                    ),
+                );
+                let waited = child.wait();
+                if stop_requested(stop_marker) {
+                    acknowledge_stop_request(stop_marker);
+                    let _ = write_launcher_log(
+                        log_dir,
+                        "MCPace Agent stop was requested; supervisor is stopping",
+                    );
+                    return 0;
+                }
+                match waited {
+                    Ok(status) if status.success() => {
+                        let _ = write_launcher_log(
+                            log_dir,
+                            "MCPace Agent exited successfully; supervisor is stopping",
+                        );
+                        return 0;
+                    }
+                    Ok(status) => format!("MCPace Agent exited with status {}", status),
+                    Err(error) => format!("failed while waiting for MCPace Agent: {}", error),
+                }
+            }
+            Err(error) => format!(
+                "failed to start supervised MCPace Agent source={} target={}: {}",
+                invocation.source,
+                invocation.program.display(),
+                error
+            ),
+        };
+
+        if stop_requested(stop_marker) {
+            acknowledge_stop_request(stop_marker);
             let _ = write_launcher_log(
-                &log_dir,
-                &format!(
-                    "failed to start hidden MCPace Agent source={} target={}: {}",
-                    invocation.source,
-                    invocation.program.display(),
-                    error
-                ),
+                log_dir,
+                "MCPace Agent stop was requested; supervisor is stopping",
             );
-            1
+            return 0;
+        }
+        if started.elapsed() >= STABLE_RUN_RESET {
+            consecutive_failures = 0;
+        } else {
+            consecutive_failures = consecutive_failures.saturating_add(1);
+        }
+        let delay = restart_delay(consecutive_failures);
+        let _ = write_launcher_log(
+            log_dir,
+            &format!(
+                "{}; restarting after {}ms (consecutiveFailures={})",
+                outcome,
+                delay.as_millis(),
+                consecutive_failures
+            ),
+        );
+        if !wait_for_restart(delay, stop_marker) {
+            acknowledge_stop_request(stop_marker);
+            let _ = write_launcher_log(
+                log_dir,
+                "MCPace Agent stop was requested during restart backoff; supervisor is stopping",
+            );
+            return 0;
+        }
+    }
+}
+
+#[cfg(windows)]
+fn stop_requested(stop_marker: Option<&Path>) -> bool {
+    stop_marker.is_some_and(Path::is_file)
+}
+
+#[cfg(windows)]
+fn acknowledge_stop_request(stop_marker: Option<&Path>) {
+    if let Some(path) = stop_marker {
+        let _ = fs::remove_file(path);
+    }
+}
+
+#[cfg(windows)]
+fn wait_for_restart(delay: Duration, stop_marker: Option<&Path>) -> bool {
+    let mut waited = Duration::ZERO;
+    while waited < delay {
+        if stop_requested(stop_marker) {
+            return false;
+        }
+        let step = STOP_POLL_INTERVAL.min(delay - waited);
+        thread::sleep(step);
+        waited += step;
+    }
+    !stop_requested(stop_marker)
+}
+
+#[cfg(windows)]
+fn restart_delay(consecutive_failures: usize) -> Duration {
+    let index = consecutive_failures
+        .saturating_sub(1)
+        .min(RESTART_DELAYS.len() - 1);
+    RESTART_DELAYS[index]
+}
+
+#[cfg(windows)]
+struct SupervisorRegistration {
+    path: PathBuf,
+    pid: u32,
+}
+
+#[cfg(windows)]
+impl SupervisorRegistration {
+    fn create(path: PathBuf) -> std::io::Result<Self> {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let pid = std::process::id();
+        fs::write(&path, format!("{}\n", pid))?;
+        Ok(Self { path, pid })
+    }
+}
+
+#[cfg(windows)]
+impl Drop for SupervisorRegistration {
+    fn drop(&mut self) {
+        let owns_registration = fs::read_to_string(&self.path)
+            .ok()
+            .and_then(|value| value.trim().parse::<u32>().ok())
+            == Some(self.pid);
+        if owns_registration {
+            let _ = fs::remove_file(&self.path);
         }
     }
 }
@@ -348,6 +526,16 @@ fn agent_log_dir_for_root(root: &Path) -> PathBuf {
 }
 
 #[cfg(windows)]
+fn agent_supervisor_stop_path(root: &Path) -> PathBuf {
+    agent_log_dir_for_root(root).join("stop-requested")
+}
+
+#[cfg(windows)]
+fn agent_supervisor_pid_path(root: &Path) -> PathBuf {
+    agent_log_dir_for_root(root).join(SUPERVISOR_PID_FILE)
+}
+
+#[cfg(windows)]
 fn default_plan_path() -> PathBuf {
     fallback_log_dir().join("autostart-plan.json")
 }
@@ -395,4 +583,52 @@ fn write_launcher_log(log_dir: &Path, message: &str) -> std::io::Result<()> {
         .map(|duration| duration.as_millis())
         .unwrap_or(0);
     writeln!(file, "{} pid={} {}", now_ms, std::process::id(), message)
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn restart_backoff_is_bounded_and_monotonic() {
+        assert_eq!(restart_delay(0), Duration::from_secs(1));
+        assert_eq!(restart_delay(1), Duration::from_secs(1));
+        assert_eq!(restart_delay(2), Duration::from_secs(2));
+        assert_eq!(restart_delay(6), Duration::from_secs(30));
+        assert_eq!(restart_delay(7), Duration::from_secs(60));
+        assert_eq!(restart_delay(100), Duration::from_secs(60));
+    }
+
+    #[test]
+    fn stop_request_interrupts_backoff_before_another_spawn() {
+        let root =
+            std::env::temp_dir().join(format!("mcpace-launcher-stop-test-{}", std::process::id()));
+        let marker = agent_supervisor_stop_path(&root);
+        std::fs::create_dir_all(marker.parent().unwrap()).unwrap();
+        std::fs::write(&marker, "stop\n").unwrap();
+
+        assert!(stop_requested(Some(&marker)));
+        assert!(!wait_for_restart(Duration::from_secs(1), Some(&marker)));
+        acknowledge_stop_request(Some(&marker));
+        assert!(!marker.exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn supervisor_registration_removes_only_its_own_pid_file() {
+        let root = std::env::temp_dir().join(format!(
+            "mcpace-launcher-registration-test-{}",
+            std::process::id()
+        ));
+        let path = agent_supervisor_pid_path(&root);
+        let registration = SupervisorRegistration::create(path.clone()).unwrap();
+        assert_eq!(
+            std::fs::read_to_string(&path).unwrap().trim(),
+            std::process::id().to_string()
+        );
+        std::fs::write(&path, "1\n").unwrap();
+        drop(registration);
+        assert!(path.is_file());
+        let _ = std::fs::remove_dir_all(root);
+    }
 }
