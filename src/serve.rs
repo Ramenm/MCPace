@@ -615,7 +615,7 @@ fn run_start_impl(
         }
     };
     let runner_path = runtimepaths::serve_runner_path_for_start(&state_root);
-    if let Err(error) = copy_serve_runner(&current_exe, &runner_path) {
+    if let Err(error) = fs::copy(&current_exe, &runner_path) {
         diagnostics::stderr_line(
             stderr,
             format_args!(
@@ -658,7 +658,7 @@ fn run_start_impl(
         }
     };
 
-    let pid = match spawn_background(
+    let mut background_process = match spawn_background(
         &runner_path,
         &canonical_root,
         &host,
@@ -685,7 +685,7 @@ fn run_start_impl(
         max_body_bytes,
         overview_cache_ms,
         url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
-        pid,
+        pid: background_process.pid(),
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runner_path),
         stdout_log_path: sanitize_display(&stdout_log_path),
@@ -704,10 +704,14 @@ fn run_start_impl(
         60,
         Duration::from_millis(100),
     ) {
+        let child_status = background_process.status_detail();
         let _ = kill_process(state.pid);
         let _ = fs::remove_file(&state_path);
         remove_managed_serve_runner_copy(&state_root, &state);
-        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("{}; child process {}", error, child_status),
+        );
         return 1;
     }
 
@@ -1445,43 +1449,48 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
     })
 }
 
-fn health_check(host: &str, port: u16, path: &str) -> Result<bool, String> {
+fn health_probe_detail(host: &str, port: u16, path: &str) -> Result<(), String> {
     let probe_host = http_probe::probe_host(host);
     let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
     let request = format!(
         "GET {} HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
         path, probe_host
     );
-    let response = match http_probe::raw_response(
+    let response = http_probe::raw_response(
         &probe_host,
         port,
         &request,
         HEALTH_PROBE_IO_TIMEOUT,
         HEALTH_PROBE_MAX_RESPONSE_BYTES,
-    ) {
-        Ok(response) => response,
-        Err(error) if error.message().starts_with("resolve ") => return Err(error.to_string()),
-        Err(_) => return Ok(false),
-    };
-    let parsed = match http_probe::parse_response(&response) {
-        Ok(parsed) => parsed,
-        Err(_) => return Ok(false),
-    };
+    )
+    .map_err(|error| error.to_string())?;
+    let parsed = http_probe::parse_response(&response)
+        .map_err(|_| "parse HTTP health response: malformed response".to_string())?;
     if parsed.status != 200 {
-        return Ok(false);
+        return Err(format!(
+            "health endpoint returned HTTP status {}",
+            parsed.status
+        ));
     }
-    let body_bytes = parsed.body_bytes().map_err(|error| error.to_string())?;
-    let payload = match String::from_utf8(body_bytes)
-        .ok()
-        .and_then(|body| parse_str(body.trim()).ok())
-    {
-        Some(payload) => payload,
-        None => return Ok(false),
-    };
-    Ok(matches!(
-        payload.get("readiness"),
-        Some(JsonValue::Object(_))
-    ))
+    let body_bytes = parsed
+        .body_bytes()
+        .map_err(|error| format!("decode HTTP health body: {}", error))?;
+    let body = String::from_utf8(body_bytes)
+        .map_err(|_| "health endpoint returned a non-UTF-8 body".to_string())?;
+    let payload =
+        parse_str(body.trim()).map_err(|error| format!("parse health response JSON: {}", error))?;
+    if !matches!(payload.get("readiness"), Some(JsonValue::Object(_))) {
+        return Err("health response JSON did not contain a readiness object".to_string());
+    }
+    Ok(())
+}
+
+fn health_check(host: &str, port: u16, path: &str) -> Result<bool, String> {
+    match health_probe_detail(host, port, path) {
+        Ok(()) => Ok(true),
+        Err(error) if error.starts_with("resolve ") => Err(error),
+        Err(_) => Ok(false),
+    }
 }
 
 fn wait_for_health(
@@ -1492,15 +1501,49 @@ fn wait_for_health(
     delay: Duration,
 ) -> Result<(), String> {
     let path = runtimepaths::normalize_http_path(path, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH);
+    let started = std::time::Instant::now();
+    let mut failures = Vec::<(String, usize)>::new();
+    let mut omitted_distinct_failures = 0usize;
     for _ in 0..attempts {
-        if health_check(host, port, &path).unwrap_or(false) {
-            return Ok(());
+        match health_probe_detail(host, port, &path) {
+            Ok(()) => return Ok(()),
+            Err(error) if error.starts_with("resolve ") => return Err(error),
+            Err(error) => {
+                if let Some((_, count)) = failures.iter_mut().find(|(message, _)| message == &error)
+                {
+                    *count = count.saturating_add(1);
+                } else if failures.len() < 4 {
+                    failures.push((error, 1));
+                } else {
+                    omitted_distinct_failures = omitted_distinct_failures.saturating_add(1);
+                }
+            }
         }
         thread::sleep(delay);
     }
+    let failure_summary = if failures.is_empty() {
+        "no probe attempts were made".to_string()
+    } else {
+        failures
+            .iter()
+            .map(|(message, count)| format!("{}x {}", count, message))
+            .collect::<Vec<_>>()
+            .join("; ")
+    };
+    let omitted_summary = if omitted_distinct_failures == 0 {
+        String::new()
+    } else {
+        format!(
+            "; {} additional distinct failures omitted",
+            omitted_distinct_failures
+        )
+    };
     Err(format!(
-        "serve did not become healthy on {} in time",
-        http_url(host, port, &path)
+        "serve did not become healthy on {} after {} ms; probe failures: {}{}",
+        http_url(host, port, &path),
+        started.elapsed().as_millis(),
+        failure_summary,
+        omitted_summary
     ))
 }
 
@@ -1555,38 +1598,6 @@ fn files_have_same_contents(left: &Path, right: &Path) -> Result<bool, std::io::
         return Ok(false);
     }
     Ok(fs::read(left)? == fs::read(right)?)
-}
-
-fn copy_serve_runner(source: &Path, destination: &Path) -> Result<(), std::io::Error> {
-    #[cfg(target_os = "macos")]
-    {
-        use std::os::unix::fs::PermissionsExt;
-
-        // A fresh data-only file avoids cloning macOS quarantine/provenance
-        // metadata while retaining the upgrade-isolated runner lifecycle.
-        let mut source_file = File::open(source)?;
-        let mut destination_file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(destination)?;
-        let result = (|| {
-            std::io::copy(&mut source_file, &mut destination_file)?;
-            destination_file.sync_all()?;
-            let mut permissions = destination_file.metadata()?.permissions();
-            permissions.set_mode(0o700);
-            fs::set_permissions(destination, permissions)?;
-            Ok(())
-        })();
-        if result.is_err() {
-            let _ = fs::remove_file(destination);
-        }
-        result
-    }
-
-    #[cfg(not(target_os = "macos"))]
-    {
-        fs::copy(source, destination).map(|_| ())
-    }
 }
 
 fn resolve_runner_source() -> Result<PathBuf, std::io::Error> {
@@ -1650,6 +1661,32 @@ fn now_ms() -> u128 {
     runtimepaths::unix_time_ms()
 }
 
+struct SpawnedBackground {
+    pid: u32,
+    #[cfg(unix)]
+    child: std::process::Child,
+}
+
+impl SpawnedBackground {
+    fn pid(&self) -> u32 {
+        self.pid
+    }
+
+    #[cfg(unix)]
+    fn status_detail(&mut self) -> String {
+        match self.child.try_wait() {
+            Ok(Some(status)) => format!("exited before startup completed ({})", status),
+            Ok(None) => "was still running when startup timed out".to_string(),
+            Err(error) => format!("status check failed: {}", error),
+        }
+    }
+
+    #[cfg(not(unix))]
+    fn status_detail(&mut self) -> String {
+        format!("status is unavailable for pid {}", self.pid)
+    }
+}
+
 fn spawn_background(
     runner_path: &Path,
     root_path: &Path,
@@ -1658,12 +1695,13 @@ fn spawn_background(
     extra_args: &[String],
     stdout_file: File,
     stderr_file: File,
-) -> Result<u32, String> {
+) -> Result<SpawnedBackground, String> {
     #[cfg(windows)]
     {
         drop(stdout_file);
         drop(stderr_file);
-        return spawn_background_windows(runner_path, root_path, host, port, extra_args);
+        return spawn_background_windows(runner_path, root_path, host, port, extra_args)
+            .map(|pid| SpawnedBackground { pid });
     }
 
     #[cfg(unix)]
@@ -1689,7 +1727,10 @@ fn spawn_background(
 
         return command
             .spawn()
-            .map(|child| child.id())
+            .map(|child| SpawnedBackground {
+                pid: child.id(),
+                child,
+            })
             .map_err(|error| format!("failed to start MCPace serve runtime: {}", error));
     }
 

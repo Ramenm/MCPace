@@ -21,10 +21,6 @@ impl HttpProbeError {
             message: message.into(),
         }
     }
-
-    pub(crate) fn message(&self) -> &str {
-        &self.message
-    }
 }
 
 impl fmt::Display for HttpProbeError {

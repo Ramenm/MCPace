@@ -23,41 +23,45 @@ fn free_port() -> u16 {
     port
 }
 
-#[test]
-fn serve_runner_copy_preserves_executable_bytes() {
-    let root = temp_root();
-    let source = root.join("source-runner");
-    let destination = root.join("copied-runner");
-    fs::write(&source, b"mcpace runner fixture\n").unwrap();
-
-    copy_serve_runner(&source, &destination).unwrap();
-
-    assert_eq!(fs::read(&destination).unwrap(), b"mcpace runner fixture\n");
-    #[cfg(target_os = "macos")]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        assert_eq!(
-            fs::metadata(&destination).unwrap().permissions().mode() & 0o777,
-            0o700
-        );
-    }
-    let _ = fs::remove_dir_all(root);
+fn loopback_response_server(status: &str, body: &str) -> (u16, std::thread::JoinHandle<()>) {
+    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let response = format!(
+        "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        status,
+        body.len(),
+        body
+    );
+    let handle = std::thread::spawn(move || {
+        let (mut stream, _) = listener.accept().unwrap();
+        let mut request = [0u8; 1024];
+        let _ = std::io::Read::read(&mut stream, &mut request);
+        std::io::Write::write_all(&mut stream, response.as_bytes()).unwrap();
+    });
+    (port, handle)
 }
 
-#[cfg(target_os = "macos")]
 #[test]
-fn macos_serve_runner_copy_preserves_preexisting_destination() {
-    let root = temp_root();
-    let source = root.join("source-runner");
-    let destination = root.join("existing-runner");
-    fs::write(&source, b"new runner\n").unwrap();
-    fs::write(&destination, b"existing runner\n").unwrap();
+fn health_probe_accepts_complete_readiness_response() {
+    let (port, handle) =
+        loopback_response_server("200 OK", r#"{"readiness":{"readyForRuntimeOps":true}}"#);
 
-    let error = copy_serve_runner(&source, &destination).unwrap_err();
+    health_probe_detail("127.0.0.1", port, "/healthz").unwrap();
 
-    assert_eq!(error.kind(), std::io::ErrorKind::AlreadyExists);
-    assert_eq!(fs::read(&destination).unwrap(), b"existing runner\n");
-    let _ = fs::remove_dir_all(root);
+    handle.join().unwrap();
+}
+
+#[test]
+fn startup_health_failure_retains_probe_detail() {
+    let (port, handle) = loopback_response_server("503 Service Unavailable", "{}");
+    let probe_error = health_probe_detail("127.0.0.1", port, "/healthz").unwrap_err();
+    assert_eq!(probe_error, "health endpoint returned HTTP status 503");
+    handle.join().unwrap();
+
+    let unavailable_port = free_port();
+    let startup_error =
+        wait_for_health("127.0.0.1", unavailable_port, "/healthz", 1, Duration::ZERO).unwrap_err();
+    assert!(startup_error.contains("probe failures: 1x connect 127.0.0.1:"));
 }
 
 #[test]

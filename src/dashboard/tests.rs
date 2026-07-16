@@ -1518,15 +1518,18 @@ fn unified_serve_exposes_health_and_mcp_routes() {
         )
     });
 
-    let mut health_response = String::new();
-    let mut stream = connect_to_test_listener(addr);
-    write!(
-        stream,
+    let health_request = format!(
         "GET /healthz HTTP/1.1\r\nHost: {}\r\nConnection: close\r\n\r\n",
         addr
+    );
+    let health_response = crate::http_probe::raw_response(
+        "127.0.0.1",
+        addr.port(),
+        &health_request,
+        Duration::from_secs(5),
+        256 * 1024,
     )
-    .unwrap();
-    stream.read_to_string(&mut health_response).unwrap();
+    .expect("shared HTTP probe should accept the unified health response");
     assert!(health_response.contains("\"ok\""));
     assert!(health_response.contains("\"readiness\""));
 
