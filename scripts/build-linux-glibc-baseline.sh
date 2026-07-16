@@ -36,7 +36,7 @@ docker run --rm   -e "CARGO_HOME=/work/.cargo-baseline"   -e "RUSTUP_HOME=/work/
     rustup target add "$MCPACE_RUST_TARGET"
     if [ "$MCPACE_GLIBC_BASELINE_CHECKS" = "full" ]; then
       cargo fmt --check
-      cargo generate-lockfile --locked
+      cargo metadata --locked --format-version 1 --no-deps >/dev/null
       cargo clippy --locked --all-targets --target "$MCPACE_RUST_TARGET" -- -D warnings
       cargo test --locked --target "$MCPACE_RUST_TARGET" -- --test-threads=1
     fi

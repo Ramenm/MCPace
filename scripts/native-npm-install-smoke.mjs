@@ -57,14 +57,19 @@ function installedLauncher(appDir) {
   const stat = fs.lstatSync(launcher);
   if (!stat.isFile() && !stat.isSymbolicLink()) throw new Error(`installed launcher command must be a file or symlink: ${launcher}`);
   const resolved = fs.realpathSync(launcher);
-  if (!fs.statSync(resolved).isFile() || !pathInside(appDir, resolved)) {
+  const resolvedPrefix = fs.realpathSync(appDir);
+  if (!fs.statSync(resolved).isFile() || !pathInside(resolvedPrefix, resolved)) {
     throw new Error(`installed launcher must resolve to a regular file inside its npm prefix: ${launcher}`);
   }
   return launcher;
 }
 
 function readPackageJson(filePath) {
-  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  try {
+    return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+  } catch (error) {
+    throw new Error(`invalid installed package JSON at ${filePath}: ${error?.message ?? String(error)}`, { cause: error });
+  }
 }
 
 function requireCondition(condition, message) {

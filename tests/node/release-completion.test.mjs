@@ -458,6 +458,15 @@ test("publish workflow builds native packages before publishing the main launche
 	const npmInstallSmoke = read("scripts/native-npm-install-smoke.mjs");
 	assert.match(npmInstallSmoke, /--offline/);
 	assert.match(npmInstallSmoke, /registry.*unreachable/);
+	assert.match(npmInstallSmoke, /resolvedPrefix = fs\.realpathSync\(appDir\)/);
+	assert.match(npmInstallSmoke, /pathInside\(resolvedPrefix, resolved\)/);
+	assert.match(npmInstallSmoke, /invalid installed package JSON/);
+	const linuxBaseline = read("scripts/build-linux-glibc-baseline.sh");
+	assert.match(
+		linuxBaseline,
+		/cargo metadata --locked --format-version 1 --no-deps >\/dev\/null/,
+	);
+	assert.doesNotMatch(linuxBaseline, /cargo generate-lockfile --locked/);
 	assert.match(workflow, /expected 6 native npm tarballs/);
 	assert.match(
 		workflow,
