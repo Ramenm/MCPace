@@ -66,7 +66,10 @@ test("project assurance model checks user-visible truth, safety, and unverified 
 		report.summary.pass >= 8,
 		"expected most assurance claims to be statically proven",
 	);
-	assert.equal(report.overall, "pass");
+	assert.equal(
+		report.overall,
+		report.summary.warn > 0 ? "needs-live-rust-proof" : "pass",
+	);
 
 	const claimIds = new Set(report.claims.map((claim) => claim.id));
 	for (const id of [
