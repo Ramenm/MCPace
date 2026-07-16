@@ -11,7 +11,19 @@ fn raw_probe_timeout_is_a_total_deadline_against_trickle_responses() {
     let handle = thread::spawn(move || {
         let (mut stream, _) = listener.accept().unwrap();
         let mut request = Vec::new();
-        let _ = stream.read_to_end(&mut request);
+        let mut buffer = [0u8; 256];
+        while request.len() < 4096 {
+            let Ok(count) = stream.read(&mut buffer) else {
+                break;
+            };
+            if count == 0 {
+                break;
+            }
+            request.extend_from_slice(&buffer[..count]);
+            if request.windows(4).any(|window| window == b"\r\n\r\n") {
+                break;
+            }
+        }
         for byte in b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\n{}" {
             if stream.write_all(&[*byte]).is_err() {
                 break;

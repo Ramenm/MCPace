@@ -116,9 +116,33 @@ fn read_test_request(stream: &mut TcpStream) -> String {
     stream
         .set_read_timeout(Some(Duration::from_secs(3)))
         .unwrap();
-    let mut raw = String::new();
-    stream.read_to_string(&mut raw).unwrap();
-    raw
+    let mut raw = Vec::new();
+    let mut buffer = [0u8; 4096];
+    loop {
+        let count = stream.read(&mut buffer).unwrap();
+        if count == 0 {
+            break;
+        }
+        raw.extend_from_slice(&buffer[..count]);
+        assert!(raw.len() <= 1024 * 1024, "test HTTP request was unbounded");
+
+        let Some(header_end) = raw.windows(4).position(|window| window == b"\r\n\r\n") else {
+            continue;
+        };
+        let headers = std::str::from_utf8(&raw[..header_end]).unwrap();
+        let content_length = headers
+            .lines()
+            .find_map(|line| {
+                let (name, value) = line.split_once(':')?;
+                name.eq_ignore_ascii_case("content-length")
+                    .then(|| value.trim().parse::<usize>().unwrap())
+            })
+            .unwrap_or(0);
+        if raw.len() >= header_end + 4 + content_length {
+            break;
+        }
+    }
+    String::from_utf8(raw).unwrap()
 }
 
 fn write_test_response(stream: &mut TcpStream, status: &str, body: &str, session: bool) {

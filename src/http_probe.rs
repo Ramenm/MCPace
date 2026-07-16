@@ -3,7 +3,7 @@ use crate::json_helpers;
 use crate::runtimepaths;
 use std::fmt;
 use std::io::{ErrorKind, Read, Write};
-use std::net::{Shutdown, TcpStream, ToSocketAddrs};
+use std::net::{TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
 pub(crate) const DEFAULT_MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
@@ -203,7 +203,12 @@ pub(crate) fn raw_response_until(
                 stream
                     .write_all(request.as_bytes())
                     .map_err(|error| format!("write request: {}", error))?;
-                let _ = stream.shutdown(Shutdown::Write);
+                // Darwin rejects the deadline reader's later SO_RCVTIMEO
+                // update after SHUT_WR. The request is already HTTP-framed, so
+                // keep its write side open there; retain EOF compatibility for
+                // existing non-Darwin peers that read requests to completion.
+                #[cfg(not(target_os = "macos"))]
+                let _ = stream.shutdown(std::net::Shutdown::Write);
                 return read_response_until(&mut stream, max_response_bytes, &ready, deadline);
             }
             Err(error) => last_error = Some(error),

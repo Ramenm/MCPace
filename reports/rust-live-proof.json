@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.rustLiveProof.v1",
-  "generatedAt": "2026-07-16T19:33:54.238Z",
+  "generatedAt": "2026-07-16T20:32:38.904Z",
   "repoRoot": ".",
   "pinnedRust": "1.95.0",
   "status": "pass",
@@ -9,18 +9,18 @@
   "releaseBuildExecuted": true,
   "rustBuildInputs": {
     "algorithm": "sha256",
-    "fingerprint": "cc34e2bdf0f8fa7bc99f18c1861a74fd854148cea1585cd5dd3482114d665b6f",
+    "fingerprint": "714052ceee80c84b1966c6f6d7fd23a9df33842c9d48a47a535813399d6c27d2",
     "fileCount": 202
   },
   "proofInputSnapshots": {
     "before": {
-      "sourceFingerprint": "cc34e2bdf0f8fa7bc99f18c1861a74fd854148cea1585cd5dd3482114d665b6f",
+      "sourceFingerprint": "714052ceee80c84b1966c6f6d7fd23a9df33842c9d48a47a535813399d6c27d2",
       "sourceFileCount": 202,
       "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
       "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0"
     },
     "after": {
-      "sourceFingerprint": "cc34e2bdf0f8fa7bc99f18c1861a74fd854148cea1585cd5dd3482114d665b6f",
+      "sourceFingerprint": "714052ceee80c84b1966c6f6d7fd23a9df33842c9d48a47a535813399d6c27d2",
       "sourceFileCount": 202,
       "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
       "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0"
@@ -28,12 +28,12 @@
   },
   "releaseArtifact": {
     "path": "target/release/mcpace.exe",
-    "sha256": "a99e6dee0d74a33d1b2206d6ef4a0f931041933be09c22bf8d4552178acc9362",
-    "sourceFingerprint": "cc34e2bdf0f8fa7bc99f18c1861a74fd854148cea1585cd5dd3482114d665b6f"
+    "sha256": "8852a0265ff36f524469cde446cf525f41afd93556251ff71d5a297cbd4ced0a",
+    "sourceFingerprint": "714052ceee80c84b1966c6f6d7fd23a9df33842c9d48a47a535813399d6c27d2"
   },
   "releaseArtifactStability": {
-    "beforeSha256": "a99e6dee0d74a33d1b2206d6ef4a0f931041933be09c22bf8d4552178acc9362",
-    "afterSha256": "a99e6dee0d74a33d1b2206d6ef4a0f931041933be09c22bf8d4552178acc9362",
+    "beforeSha256": "8852a0265ff36f524469cde446cf525f41afd93556251ff71d5a297cbd4ced0a",
+    "afterSha256": "8852a0265ff36f524469cde446cf525f41afd93556251ff71d5a297cbd4ced0a",
     "stable": true
   },
   "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
@@ -51,7 +51,7 @@
       "detail": "rustc is available",
       "command": "rustc --version",
       "output": "rustc 1.95.0 (59807616e 2026-04-14)",
-      "durationMs": 75
+      "durationMs": 122
     },
     {
       "id": "tool-cargo",
@@ -59,7 +59,7 @@
       "detail": "cargo is available",
       "command": "cargo --version",
       "output": "cargo 1.95.0 (f2d3ce0bd 2026-03-21)",
-      "durationMs": 82
+      "durationMs": 114
     },
     {
       "id": "tool-rustfmt",
@@ -68,7 +68,7 @@
       "command": "rustfmt --version --verbose",
       "output": "rustfmt 1.9.0-stable (59807616e1 2026-04-14)",
       "rustcCommit": "59807616e1fa2540724bfbac14d7976d7e4a3860",
-      "durationMs": 82
+      "durationMs": 100
     },
     {
       "id": "tool-clippy",
@@ -76,7 +76,7 @@
       "detail": "cargo is available",
       "command": "cargo clippy --version",
       "output": "clippy 0.1.95 (59807616e1 2026-04-14)",
-      "durationMs": 136
+      "durationMs": 169
     },
     {
       "id": "cargo-lock-synchronized",
@@ -94,8 +94,8 @@
       "timedOut": false,
       "error": null,
       "stdoutTail": "",
-      "stderrTail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.23s",
-      "durationMs": 323
+      "stderrTail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.29s",
+      "durationMs": 397
     },
     {
       "id": "cargo-test-locked",
@@ -106,9 +106,9 @@
       "signal": null,
       "timedOut": false,
       "error": null,
-      "stdoutTail": "test upstream::tests::tools_list_pagination_merges_pages_and_rejects_repeated_cursors ... ok\ntest verify::args::tests::parses_verify_action_and_compat_flags ... ok\ntest verify::args::tests::rejects_second_action ... ok\ntest windows_process::tests::kill_on_exit_job_can_be_enabled_idempotently ... ok\ntest windows_process::tests::process_image_check_rejects_stale_or_reused_pid_files ... ok\n\ntest result: ok. 275 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 65.63s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 3 tests\ntest tests::restart_backoff_is_bounded_and_monotonic ... ok\ntest tests::stop_request_interrupts_backoff_before_another_spawn ... ok\ntest tests::supervisor_registration_removes_only_its_own_pid_file ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
-      "stderrTail": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.22s\n     Running unittests src\\lib.rs (target\\debug\\deps\\mcpace-724b1517db22f99f.exe)\nrecovered poisoned upstream lease queue lane state\n     Running unittests src\\main.rs (target\\debug\\deps\\mcpace-f0c3c1c86db37b1b.exe)\n     Running unittests src\\bin\\mcpace-agent-launcher.rs (target\\debug\\deps\\mcpace_agent_launcher-16888b50b1605c1e.exe)\n   Doc-tests mcpace",
-      "durationMs": 67013
+      "stdoutTail": "test upstream::tests::tools_list_pagination_merges_pages_and_rejects_repeated_cursors ... ok\ntest verify::args::tests::parses_verify_action_and_compat_flags ... ok\ntest verify::args::tests::rejects_second_action ... ok\ntest windows_process::tests::kill_on_exit_job_can_be_enabled_idempotently ... ok\ntest windows_process::tests::process_image_check_rejects_stale_or_reused_pid_files ... ok\n\ntest result: ok. 275 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 70.55s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 3 tests\ntest tests::restart_backoff_is_bounded_and_monotonic ... ok\ntest tests::stop_request_interrupts_backoff_before_another_spawn ... ok\ntest tests::supervisor_registration_removes_only_its_own_pid_file ... ok\n\ntest result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "stderrTail": "Finished `test` profile [unoptimized + debuginfo] target(s) in 0.29s\n     Running unittests src\\lib.rs (target\\debug\\deps\\mcpace-724b1517db22f99f.exe)\nrecovered poisoned upstream lease queue lane state\n     Running unittests src\\main.rs (target\\debug\\deps\\mcpace-f0c3c1c86db37b1b.exe)\n     Running unittests src\\bin\\mcpace-agent-launcher.rs (target\\debug\\deps\\mcpace_agent_launcher-16888b50b1605c1e.exe)\n   Doc-tests mcpace",
+      "durationMs": 72434
     },
     {
       "id": "cargo-fmt-check",
@@ -121,7 +121,7 @@
       "error": null,
       "stdoutTail": "",
       "stderrTail": "",
-      "durationMs": 999
+      "durationMs": 1358
     },
     {
       "id": "cargo-clippy-locked",
@@ -133,8 +133,8 @@
       "timedOut": false,
       "error": null,
       "stdoutTail": "",
-      "stderrTail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.33s",
-      "durationMs": 515
+      "stderrTail": "Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.39s",
+      "durationMs": 641
     },
     {
       "id": "cargo-build-release-locked",
@@ -146,21 +146,21 @@
       "timedOut": false,
       "error": null,
       "stdoutTail": "",
-      "stderrTail": "Finished `release` profile [optimized] target(s) in 0.30s",
-      "durationMs": 407
+      "stderrTail": "Finished `release` profile [optimized] target(s) in 0.41s",
+      "durationMs": 538
     },
     {
       "id": "rust-build-inputs-stable",
       "status": "pass",
       "detail": "Rust sources and proof generators stayed stable across the proof (202 files)",
       "before": {
-        "sourceFingerprint": "cc34e2bdf0f8fa7bc99f18c1861a74fd854148cea1585cd5dd3482114d665b6f",
+        "sourceFingerprint": "714052ceee80c84b1966c6f6d7fd23a9df33842c9d48a47a535813399d6c27d2",
         "sourceFileCount": 202,
         "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
         "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0"
       },
       "after": {
-        "sourceFingerprint": "cc34e2bdf0f8fa7bc99f18c1861a74fd854148cea1585cd5dd3482114d665b6f",
+        "sourceFingerprint": "714052ceee80c84b1966c6f6d7fd23a9df33842c9d48a47a535813399d6c27d2",
         "sourceFileCount": 202,
         "proofGeneratorSha256": "e3800b01d0f33dcec8dae4bcf532c43f6cad2f8e44612db6b30965f8e856973b",
         "provenanceGeneratorSha256": "9b590576f2c1c48e0de4b59b6e9c428e24bdf8b145240a74c08bd355c4ea68f0"
@@ -173,11 +173,11 @@
       "detail": "fresh release binary stayed stable while being SHA-256 bound to stable Rust sources and proof generators",
       "artifact": {
         "path": "target/release/mcpace.exe",
-        "sha256": "a99e6dee0d74a33d1b2206d6ef4a0f931041933be09c22bf8d4552178acc9362",
-        "sourceFingerprint": "cc34e2bdf0f8fa7bc99f18c1861a74fd854148cea1585cd5dd3482114d665b6f"
+        "sha256": "8852a0265ff36f524469cde446cf525f41afd93556251ff71d5a297cbd4ced0a",
+        "sourceFingerprint": "714052ceee80c84b1966c6f6d7fd23a9df33842c9d48a47a535813399d6c27d2"
       },
-      "artifactBeforeSha256": "a99e6dee0d74a33d1b2206d6ef4a0f931041933be09c22bf8d4552178acc9362",
-      "artifactAfterSha256": "a99e6dee0d74a33d1b2206d6ef4a0f931041933be09c22bf8d4552178acc9362"
+      "artifactBeforeSha256": "8852a0265ff36f524469cde446cf525f41afd93556251ff71d5a297cbd4ced0a",
+      "artifactAfterSha256": "8852a0265ff36f524469cde446cf525f41afd93556251ff71d5a297cbd4ced0a"
     }
   ],
   "releaseHostCommandPlan": [
