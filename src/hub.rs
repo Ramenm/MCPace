@@ -9,7 +9,27 @@ use crate::diagnostics;
 
 use self::args::{parse_cli, write_help};
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct HubRuntimeLivenessError(String);
+
+impl std::fmt::Display for HubRuntimeLivenessError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for HubRuntimeLivenessError {}
+
+pub(crate) fn runtime_is_live(root_path: &Path) -> Result<bool, HubRuntimeLivenessError> {
+    let status = status::collect_status(root_path)
+        .map_err(|error| HubRuntimeLivenessError(error.to_string()))?;
+    Ok(matches!(
+        status.status.as_str(),
+        "running" | "starting" | "stopping"
+    ))
+}
 
 pub fn run(
     args: &[String],

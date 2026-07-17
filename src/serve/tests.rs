@@ -65,6 +65,28 @@ fn startup_health_failure_retains_probe_detail() {
 }
 
 #[test]
+fn cooperative_stop_tokens_are_random_and_strictly_validated() {
+    let first = random_stop_token().unwrap();
+    let second = random_stop_token().unwrap();
+    assert!(valid_stop_token(&first));
+    assert!(valid_stop_token(&second));
+    assert_ne!(first, second);
+    assert!(!valid_stop_token("short"));
+    assert!(!valid_stop_token(&"g".repeat(64)));
+}
+
+#[test]
+fn absent_systemd_user_service_is_not_a_stop_failure() {
+    assert!(systemd_service_absent(
+        "Failed to stop mcpace-agent.service: Unit mcpace-agent.service not loaded."
+    ));
+    assert!(systemd_service_absent(
+        "Unit mcpace-agent.service could not be found."
+    ));
+    assert!(!systemd_service_absent("Access denied"));
+}
+
+#[test]
 fn serve_url_and_probe_hosts_handle_ipv6_and_wildcards() {
     assert_eq!(
         http_url("127.0.0.1", 39022, "/mcp"),
@@ -329,19 +351,8 @@ fn status_reports_healthy_endpoint_without_managed_state() {
         status_text
     );
 
-    let _ = kill_process(state.pid);
-    for _ in 0..40 {
-        if !health_check(
-            &state.host,
-            state.port,
-            runtimepaths::DEFAULT_LOCAL_HEALTH_PATH,
-        )
-        .unwrap_or(false)
-        {
-            break;
-        }
-        thread::sleep(Duration::from_millis(100));
-    }
+    request_cooperative_serve_stop(&state_root, &state, state.stop_token.as_deref().unwrap())
+        .unwrap();
     remove_managed_serve_runner_copy(&state_root, &state);
     cleanup_stale_serve_runner_copies(&state_root, None);
     let _ = fs::remove_dir_all(root);
@@ -392,6 +403,8 @@ fn start_recovers_stale_state_even_with_restart_guard() {
         overview_cache_ms: Some(250),
         url: runtimepaths::http_url("127.0.0.1", port, runtimepaths::DEFAULT_LOCAL_MCP_PATH),
         pid: 999_999,
+        process_identity: None,
+        stop_token: None,
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runtimepaths::runtime_bin_dir(&state_root).join(
             if cfg!(windows) {
@@ -451,6 +464,162 @@ fn start_recovers_stale_state_even_with_restart_guard() {
         &mut stop_stderr,
     );
     assert_eq!(stop, 0, "stderr: {}", String::from_utf8_lossy(&stop_stderr));
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn serve_start_lock_reclaims_stale_identity_and_rejects_live_owner() {
+    let root = temp_root();
+    let state_root = runtimepaths::resolve_state_root(&root);
+    runtimepaths::ensure_runtime_dir(&state_root).unwrap();
+    runtimepaths::ensure_serve_dir(&state_root).unwrap();
+    let lock_path = runtimepaths::serve_start_lock_path(&state_root);
+    fs::write(
+        &lock_path,
+        JsonValue::object([
+            ("pid", JsonValue::number(std::process::id())),
+            (
+                "processIdentity",
+                JsonValue::string("reused-process-identity"),
+            ),
+            ("startedAtMs", JsonValue::number(now_ms())),
+        ])
+        .to_pretty_string(),
+    )
+    .unwrap();
+
+    let guard = acquire_serve_start_lock(&state_root).unwrap();
+    let (_, guard_identity) = read_serve_start_lock_owner(&lock_path).unwrap();
+    fs::write(
+        &lock_path,
+        JsonValue::object([
+            ("pid", JsonValue::number(1)),
+            (
+                "processIdentity",
+                JsonValue::string(guard_identity.unwrap()),
+            ),
+            ("startedAtMs", JsonValue::number(now_ms())),
+        ])
+        .to_pretty_string(),
+    )
+    .unwrap();
+    drop(guard);
+    assert!(
+        lock_path.is_file(),
+        "drop must not remove another pid's lock"
+    );
+    fs::remove_file(&lock_path).unwrap();
+
+    let current_identity = process_identity_token(std::process::id()).unwrap();
+    fs::write(
+        &lock_path,
+        JsonValue::object([
+            ("pid", JsonValue::number(std::process::id())),
+            ("processIdentity", JsonValue::string(current_identity)),
+            ("startedAtMs", JsonValue::number(now_ms())),
+        ])
+        .to_pretty_string(),
+    )
+    .unwrap();
+    let error = acquire_serve_start_lock(&state_root).unwrap_err();
+    assert!(error.contains("already in progress"), "error: {}", error);
+    fs::remove_file(&lock_path).unwrap();
+
+    let replacement = acquire_serve_start_lock(&state_root).unwrap();
+    drop(replacement);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn serve_start_lock_reclaims_only_old_malformed_records() {
+    let root = temp_root();
+    let state_root = runtimepaths::resolve_state_root(&root);
+    runtimepaths::ensure_runtime_dir(&state_root).unwrap();
+    runtimepaths::ensure_serve_dir(&state_root).unwrap();
+    let lock_path = runtimepaths::serve_start_lock_path(&state_root);
+    fs::write(&lock_path, b"").unwrap();
+
+    let recent_error = acquire_serve_start_lock(&state_root).unwrap_err();
+    assert!(
+        recent_error.contains("newer than 30 seconds"),
+        "error: {}",
+        recent_error
+    );
+
+    let file = OpenOptions::new().write(true).open(&lock_path).unwrap();
+    file.set_times(
+        std::fs::FileTimes::new().set_modified(
+            std::time::SystemTime::now()
+                .checked_sub(Duration::from_secs(31))
+                .unwrap(),
+        ),
+    )
+    .unwrap();
+    let guard = acquire_serve_start_lock(&state_root).unwrap();
+    drop(guard);
+    assert!(!lock_path.exists());
+
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn stop_refuses_to_signal_a_reused_live_pid() {
+    let root = temp_root();
+    let state_root = runtimepaths::resolve_state_root(&root);
+    runtimepaths::ensure_runtime_dir(&state_root).unwrap();
+    runtimepaths::ensure_serve_dir(&state_root).unwrap();
+    let state_path = runtimepaths::serve_state_path(&state_root);
+    let current_exe = std::env::current_exe().unwrap();
+    let state = ServeState {
+        root_path: sanitize_display(&root),
+        state_root: sanitize_display(&state_root),
+        host: "127.0.0.1".to_string(),
+        port: free_port(),
+        max_connections: None,
+        io_timeout_ms: None,
+        max_body_bytes: None,
+        overview_cache_ms: None,
+        url: "http://127.0.0.1/".to_string(),
+        pid: std::process::id(),
+        process_identity: Some("reused-process-identity".to_string()),
+        stop_token: None,
+        started_at_ms: now_ms(),
+        runner_path: sanitize_display(&current_exe),
+        stdout_log_path: "stdout".to_string(),
+        stderr_log_path: "stderr".to_string(),
+    };
+    write_state(&state_path, &state).unwrap();
+
+    let error = stop_existing_serve(&root).unwrap_err();
+    assert!(error.contains("refusing to signal"), "error: {}", error);
+    assert!(state_path.is_file());
+    assert!(process_identity::capture(std::process::id())
+        .unwrap()
+        .is_some());
+
+    let current_identity = process_identity_token(std::process::id()).unwrap();
+    let mut tokenless_state = state.clone();
+    tokenless_state.process_identity = Some(current_identity);
+    tokenless_state.stop_token = None;
+    write_state(&state_path, &tokenless_state).unwrap();
+    let tokenless_error = stop_existing_serve(&root).unwrap_err();
+    assert!(
+        tokenless_error.contains("predates cooperative stop tokens"),
+        "error: {}",
+        tokenless_error
+    );
+
+    let mut pid_only_state = state;
+    pid_only_state.process_identity = None;
+    pid_only_state.runner_path.clear();
+    write_state(&state_path, &pid_only_state).unwrap();
+    let pid_only_error = stop_existing_serve(&root).unwrap_err();
+    assert!(
+        pid_only_error.contains("refusing to signal"),
+        "error: {}",
+        pid_only_error
+    );
+
     let _ = fs::remove_dir_all(root);
 }
 

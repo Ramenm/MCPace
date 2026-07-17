@@ -181,6 +181,21 @@ fn normalize_cleanup_flag(arg: &str) -> &str {
 
 fn cleanup_report(root_path: &Path, scope: &str, dry_run: bool) -> JsonValue {
     let state_root = runtimepaths::resolve_state_root(root_path);
+    let mut coordination_error = None;
+    let _lifecycle_coordination = if !dry_run && matches!(scope, "runtime" | "all-safe") {
+        match crate::serve::acquire_lifecycle_coordination(&state_root) {
+            Ok(guard) => Some(guard),
+            Err(error) => {
+                coordination_error = Some(format!(
+                    "runtime cleanup is blocked because lifecycle coordination could not be acquired: {}",
+                    error
+                ));
+                None
+            }
+        }
+    } else {
+        None
+    };
     let mut actions = planned_actions(&state_root, scope);
     let mut warnings = Vec::new();
 
@@ -191,9 +206,23 @@ fn cleanup_report(root_path: &Path, scope: &str, dry_run: bool) -> JsonValue {
         ));
     }
 
+    let runtime_blocker =
+        coordination_error.or_else(|| runtime_cleanup_blocker(root_path, &state_root, scope));
+    if let Some(blocker) = runtime_blocker {
+        warnings.push(blocker.clone());
+        for action in &mut actions {
+            if matches!(
+                action.class,
+                "ephemeral-runtime" | "recoverable-runtime-marker"
+            ) {
+                action.error = Some(blocker.clone());
+            }
+        }
+    }
+
     if !dry_run && !matches!(scope, "status") {
         for action in &mut actions {
-            if !action.existed {
+            if !action.existed || action.error.is_some() {
                 continue;
             }
             let result = if action.path.is_dir() {
@@ -250,6 +279,51 @@ fn cleanup_report(root_path: &Path, scope: &str, dry_run: bool) -> JsonValue {
         ),
         ("blockers", JsonValue::array(blockers)),
     ])
+}
+
+fn runtime_cleanup_blocker(root_path: &Path, state_root: &Path, scope: &str) -> Option<String> {
+    if !matches!(scope, "runtime" | "all-safe") {
+        return None;
+    }
+
+    match crate::serve::managed_runtime_is_live(root_path) {
+        Ok(true) => {
+            return Some(
+                "runtime cleanup is blocked while the managed MCPace HTTP service is live; stop it before removing ownership markers"
+                    .to_string(),
+            );
+        }
+        Ok(false) => {}
+        Err(error) => {
+            return Some(format!(
+                "runtime cleanup is blocked because managed serve liveness could not be verified: {}",
+                error
+            ));
+        }
+    }
+
+    let hub_metadata_exists = [
+        runtimepaths::hub_state_path(state_root),
+        runtimepaths::hub_health_path(state_root),
+        runtimepaths::hub_lock_path(state_root),
+    ]
+    .iter()
+    .any(|path| path.exists());
+    if !hub_metadata_exists {
+        return None;
+    }
+
+    match crate::hub::runtime_is_live(root_path) {
+        Ok(true) => Some(
+            "runtime cleanup is blocked while the MCPace hub is live; stop it before removing ownership markers"
+                .to_string(),
+        ),
+        Ok(false) => None,
+        Err(error) => Some(format!(
+            "runtime cleanup is blocked because hub liveness could not be verified: {}",
+            error
+        )),
+    }
 }
 
 fn planned_actions(state_root: &Path, scope: &str) -> Vec<CleanupAction> {
@@ -374,3 +448,6 @@ fn write_text_report(report: &JsonValue, stdout: &mut dyn Write) {
         "Policy: durable config, source fragments, client config, and backups are preserved."
     );
 }
+
+#[cfg(test)]
+mod tests;

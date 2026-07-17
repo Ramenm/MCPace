@@ -797,6 +797,7 @@ test("repository text files use LF line endings as declared in .editorconfig/.gi
 		if (
 			relative.startsWith(".git/") ||
 			relative.startsWith(".omx/") ||
+			relative.startsWith(".serena/") ||
 			relative.startsWith("node_modules/") ||
 			relative.startsWith("target/") ||
 			relative.startsWith("dist/")

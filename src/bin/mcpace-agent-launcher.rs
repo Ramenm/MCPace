@@ -125,6 +125,29 @@ fn run_windows() -> i32 {
         .map(agent_log_dir_for_root)
         .unwrap_or_else(fallback_log_dir);
     let _ = fs::create_dir_all(&log_dir);
+    let _supervisor_mutex = match root.as_deref() {
+        Some(value) => match SupervisorMutex::acquire(value) {
+            Ok(Some(supervisor_mutex)) => Some(supervisor_mutex),
+            Ok(None) => {
+                let _ = write_launcher_log(
+                    &log_dir,
+                    "another MCPace Agent supervisor already owns this root; exiting",
+                );
+                return 0;
+            }
+            Err(error) => {
+                let _ = write_launcher_log(
+                    &log_dir,
+                    &format!(
+                        "failed to acquire MCPace Agent supervisor ownership: {}",
+                        error
+                    ),
+                );
+                return 1;
+            }
+        },
+        None => None,
+    };
     let _registration = match root.as_deref() {
         Some(value) => match SupervisorRegistration::create(agent_supervisor_pid_path(value)) {
             Ok(registration) => Some(registration),
@@ -210,15 +233,42 @@ fn supervise_invocation(
                         invocation.args.len()
                     ),
                 );
-                let waited = child.wait();
-                if stop_requested(stop_marker) {
-                    acknowledge_stop_request(stop_marker);
-                    let _ = write_launcher_log(
-                        log_dir,
-                        "MCPace Agent stop was requested; supervisor is stopping",
-                    );
-                    return 0;
-                }
+                let waited = loop {
+                    match child.try_wait() {
+                        Ok(Some(status)) => break Ok(status),
+                        Ok(None) => {}
+                        Err(error) => break Err(error),
+                    }
+                    if stop_requested(stop_marker) {
+                        if let Err(error) = child.kill() {
+                            let _ = write_launcher_log(
+                                log_dir,
+                                &format!(
+                                    "failed to terminate supervised MCPace Agent after stop request: {}",
+                                    error
+                                ),
+                            );
+                            return 1;
+                        }
+                        if let Err(error) = child.wait() {
+                            let _ = write_launcher_log(
+                                log_dir,
+                                &format!(
+                                    "failed to reap supervised MCPace Agent after stop request: {}",
+                                    error
+                                ),
+                            );
+                            return 1;
+                        }
+                        acknowledge_stop_request(stop_marker);
+                        let _ = write_launcher_log(
+                            log_dir,
+                            "MCPace Agent stop was requested; supervisor terminated its owned child and is stopping",
+                        );
+                        return 0;
+                    }
+                    thread::sleep(STOP_POLL_INTERVAL);
+                };
                 match waited {
                     Ok(status) if status.success() => {
                         let _ = write_launcher_log(
@@ -305,6 +355,65 @@ fn restart_delay(consecutive_failures: usize) -> Duration {
         .saturating_sub(1)
         .min(RESTART_DELAYS.len() - 1);
     RESTART_DELAYS[index]
+}
+
+#[cfg(windows)]
+struct SupervisorMutex {
+    handle: *mut std::ffi::c_void,
+}
+
+#[cfg(windows)]
+impl SupervisorMutex {
+    fn acquire(root: &Path) -> std::io::Result<Option<Self>> {
+        const ERROR_ALREADY_EXISTS: u32 = 183;
+
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn CreateMutexW(
+                mutex_attributes: *mut std::ffi::c_void,
+                initial_owner: i32,
+                name: *const u16,
+            ) -> *mut std::ffi::c_void;
+            fn CloseHandle(object: *mut std::ffi::c_void) -> i32;
+            fn GetLastError() -> u32;
+        }
+
+        let canonical_root = fs::canonicalize(root).unwrap_or_else(|_| root.to_path_buf());
+        let mut hash = 0xcbf29ce484222325_u64;
+        for byte in canonical_root.to_string_lossy().to_lowercase().as_bytes() {
+            hash ^= u64::from(*byte);
+            hash = hash.wrapping_mul(0x100000001b3);
+        }
+        let name = format!(r"Local\MCPace.Agent.{hash:016x}");
+        let wide = name
+            .encode_utf16()
+            .chain(std::iter::once(0))
+            .collect::<Vec<_>>();
+        let handle = unsafe { CreateMutexW(std::ptr::null_mut(), 0, wide.as_ptr()) };
+        if handle.is_null() {
+            return Err(std::io::Error::last_os_error());
+        }
+        if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+            unsafe {
+                let _ = CloseHandle(handle);
+            }
+            return Ok(None);
+        }
+        Ok(Some(Self { handle }))
+    }
+}
+
+#[cfg(windows)]
+impl Drop for SupervisorMutex {
+    fn drop(&mut self) {
+        #[link(name = "kernel32")]
+        extern "system" {
+            fn CloseHandle(object: *mut std::ffi::c_void) -> i32;
+        }
+        unsafe {
+            let _ = CloseHandle(self.handle);
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -611,6 +720,18 @@ mod tests {
         assert!(!wait_for_restart(Duration::from_secs(1), Some(&marker)));
         acknowledge_stop_request(Some(&marker));
         assert!(!marker.exists());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn supervisor_mutex_allows_only_one_owner_per_root() {
+        let root =
+            std::env::temp_dir().join(format!("mcpace-launcher-mutex-test-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+        let first = SupervisorMutex::acquire(&root).unwrap().unwrap();
+        assert!(SupervisorMutex::acquire(&root).unwrap().is_none());
+        drop(first);
+        assert!(SupervisorMutex::acquire(&root).unwrap().is_some());
         let _ = std::fs::remove_dir_all(root);
     }
 

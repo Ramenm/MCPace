@@ -22,11 +22,11 @@ Clients should point at MCPace itself, not at each upstream server. For example,
 Codex and Cursor only need `http://127.0.0.1:39022/mcp`; MCPace then loads
 upstreams from the merged settings sources.
 
-`mcpace up` installs or repairs user-level persistence by default. On Windows
-and Linux it immediately hands the first runtime to that user supervisor and
-waits for a healthy endpoint; the next `serve start` is only a status check, not
-a competing detached owner. A same-configuration `mcpace serve restart` keeps
-that supervisor ownership. Use `mcpace up --no-autostart` only when a
+`mcpace up` installs or repairs user-level persistence by default. On Windows,
+Linux, and macOS it immediately hands the first runtime to that user supervisor
+and waits for a healthy endpoint; the next `serve start` is only a status check,
+not a competing detached owner. A same-configuration `mcpace serve restart`
+keeps that supervisor ownership. Use `mcpace up --no-autostart` only when a
 session-only runtime is intentional.
 
 - **Windows:** the current-user Run entry is visible as `MCPace Agent` and
@@ -39,7 +39,10 @@ session-only runtime is intentional.
   The unit uses `Restart=on-failure`, does not require a desktop session, and
   starts with the user's systemd manager. Boot-before-login additionally
   requires user lingering; ordinary desktop/server login does not.
-- **macOS:** MCPace uses a user LaunchAgent with keep-alive-on-failure behavior.
+- **macOS:** MCPace bootstraps a user LaunchAgent immediately, with
+  keep-alive-on-failure behavior. Stop, restart, repair, and disable operations
+  use `launchctl` to preserve one launchd-owned runtime and unload it before
+  removing the plist.
 
 CLI commands fall back to the installed Windows autostart plan when no
 `--root`, `MCPACE_ROOT`, or current-directory root is available, so commands

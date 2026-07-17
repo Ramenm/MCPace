@@ -364,7 +364,7 @@ fn needs_shellish_quote(value: &str) -> bool {
         })
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 pub(super) fn start_user_supervisor_after_enable(
     config: &ServiceConfig,
 ) -> ServiceConfigResult<()> {
@@ -383,14 +383,14 @@ pub(super) fn start_user_supervisor_after_enable(
     }
 }
 
-#[cfg(not(any(windows, target_os = "linux")))]
+#[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
 pub(super) fn start_user_supervisor_after_enable(
     _config: &ServiceConfig,
 ) -> ServiceConfigResult<()> {
     Ok(())
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 fn stop_runtime_before_supervisor_start(config: &ServiceConfig) -> ServiceConfigResult<()> {
     let root = service_target_arg(&config.target_args, "--root").ok_or_else(|| {
         ServiceConfigError::Autostart(
@@ -443,6 +443,12 @@ fn start_platform_user_supervisor(_config: &ServiceConfig) -> ServiceConfigResul
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn start_platform_user_supervisor(_config: &ServiceConfig) -> ServiceConfigResult<()> {
+    crate::macos_launch_agent::start(super::APP_NAME)
+        .map_err(|error| ServiceConfigError::Autostart(error.to_string()))
+}
+
 #[cfg(windows)]
 fn start_platform_user_supervisor(config: &ServiceConfig) -> ServiceConfigResult<()> {
     let args = config
@@ -465,7 +471,7 @@ fn start_platform_user_supervisor(config: &ServiceConfig) -> ServiceConfigResult
     })
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 struct SupervisorEndpoint {
     root: PathBuf,
     host: String,
@@ -474,7 +480,7 @@ struct SupervisorEndpoint {
     state_path: PathBuf,
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 fn supervisor_endpoint(config: &ServiceConfig) -> ServiceConfigResult<SupervisorEndpoint> {
     let root = service_target_arg(&config.target_args, "--root")
         .map(PathBuf::from)
@@ -505,7 +511,7 @@ fn supervisor_endpoint(config: &ServiceConfig) -> ServiceConfigResult<Supervisor
     })
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 fn supervisor_runtime_ready(endpoint: &SupervisorEndpoint) -> bool {
     let healthy = endpoint.state_path.is_file()
         && crate::http_probe::json_get(
@@ -521,7 +527,7 @@ fn supervisor_runtime_ready(endpoint: &SupervisorEndpoint) -> bool {
     healthy && platform_user_supervisor_is_active(&endpoint.root)
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 fn wait_for_supervisor_runtime(endpoint: &SupervisorEndpoint) -> ServiceConfigResult<()> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
@@ -546,6 +552,11 @@ fn platform_user_supervisor_is_active(_root: &Path) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(target_os = "macos")]
+fn platform_user_supervisor_is_active(_root: &Path) -> bool {
+    crate::macos_launch_agent::is_loaded(super::APP_NAME).unwrap_or(false)
+}
+
 #[cfg(windows)]
 fn platform_user_supervisor_is_active(root: &Path) -> bool {
     std::fs::read_to_string(
@@ -559,7 +570,7 @@ fn platform_user_supervisor_is_active(root: &Path) -> bool {
     .is_some_and(|pid| crate::windows_process::process_image_is(pid, "mcpace-agent-launcher.exe"))
 }
 
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 fn service_target_arg<'a>(args: &'a [String], flag: &str) -> Option<&'a str> {
     args.windows(2)
         .find(|items| items[0] == flag)
@@ -572,6 +583,7 @@ pub(super) fn stop_user_supervisor_before_disable(
 ) -> ServiceConfigResult<()> {
     let unit = format!("{}.service", LINUX_AUTOSTART_ID);
     let output = std::process::Command::new("systemctl")
+        .env("LC_ALL", "C")
         .args(["--user", "stop", &unit])
         .output()
         .map_err(|error| {
@@ -600,7 +612,14 @@ pub(super) fn stop_user_supervisor_before_disable(
     stop_runtime_before_supervisor_start(config)
 }
 
-#[cfg(all(not(windows), not(target_os = "linux")))]
+#[cfg(target_os = "macos")]
+pub(super) fn stop_user_supervisor_before_disable(
+    config: &ServiceConfig,
+) -> ServiceConfigResult<()> {
+    stop_runtime_before_supervisor_start(config)
+}
+
+#[cfg(all(not(windows), not(target_os = "linux"), not(target_os = "macos")))]
 pub(super) fn stop_user_supervisor_before_disable(
     _config: &ServiceConfig,
 ) -> ServiceConfigResult<()> {

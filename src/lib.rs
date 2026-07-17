@@ -21,6 +21,8 @@ pub mod init;
 pub mod json;
 pub mod json_helpers;
 pub mod lab;
+#[cfg(target_os = "macos")]
+pub(crate) mod macos_launch_agent;
 pub(crate) mod mcp_autoinstall;
 pub mod mcp_protocol;
 pub mod mcp_server;
@@ -28,6 +30,7 @@ pub(crate) mod mcp_sources;
 pub(crate) mod persistent_env;
 pub(crate) mod platform_utils;
 pub(crate) mod process_detach;
+pub(crate) mod process_identity;
 pub mod profile;
 pub mod projects;
 pub mod release;

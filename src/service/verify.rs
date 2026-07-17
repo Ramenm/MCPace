@@ -96,7 +96,7 @@ pub(super) fn service_applied_state_json(config: &ServiceConfig) -> JsonValue {
         ("supervisedByOs", JsonValue::bool(supervised_by_os)),
         (
             "activatedImmediately",
-            JsonValue::bool(cfg!(any(windows, target_os = "linux"))),
+            JsonValue::bool(cfg!(any(windows, target_os = "linux", target_os = "macos"))),
         ),
         ("supervisedByMcpaceAgent", JsonValue::bool(true)),
         ("environment", service_environment_json()),

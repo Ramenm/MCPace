@@ -3,6 +3,7 @@ use crate::diagnostics;
 use crate::http_probe;
 use crate::json::{parse_str, JsonValue};
 use crate::json_helpers;
+use crate::process_identity::{self, ProcessMatch};
 use crate::resources;
 use crate::runtimepaths;
 use clap::{error::ErrorKind, Parser};
@@ -31,6 +32,7 @@ struct ParsedArgs {
     overview_cache_ms: Option<u64>,
     passthrough: Vec<String>,
     managed_service: bool,
+    stop_token: Option<String>,
     error: Option<String>,
 }
 
@@ -46,6 +48,8 @@ struct ServeState {
     overview_cache_ms: Option<u64>,
     url: String,
     pid: u32,
+    process_identity: Option<String>,
+    stop_token: Option<String>,
     started_at_ms: u128,
     runner_path: String,
     stdout_log_path: String,
@@ -66,6 +70,12 @@ pub fn run(
     if parsed.help {
         write_help(stdout);
         return 0;
+    }
+    if parsed.action.is_none() && !parsed.managed_service {
+        if let Err(error) = start_direct_stop_watcher(&parsed) {
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
+            return 1;
+        }
     }
 
     match parsed.action.as_deref() {
@@ -97,6 +107,9 @@ struct ServeCli {
 
     #[arg(long = "managed-service", hide = true)]
     managed_service: bool,
+
+    #[arg(long = "stop-token", value_name = "TOKEN", hide = true)]
+    stop_token: Option<String>,
 
     #[arg(long = "json")]
     json_output: bool,
@@ -184,8 +197,18 @@ fn parsed_from_cli(cli: ServeCli) -> ParsedArgs {
         overview_cache_ms: None,
         passthrough,
         managed_service: cli.managed_service,
+        stop_token: cli.stop_token,
         error: None,
     };
+
+    if parsed
+        .stop_token
+        .as_deref()
+        .is_some_and(|token| !valid_stop_token(token))
+    {
+        parsed.error = Some("serve --stop-token is invalid".to_string());
+        return parsed;
+    }
 
     if cli.allow_nonlocal_bind || cli.insecure_nonlocal_bind {
         parsed.error = Some(
@@ -416,6 +439,13 @@ fn run_managed_foreground(
         diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
+    let start_lock = match acquire_serve_start_lock(&state_root) {
+        Ok(value) => value,
+        Err(error) => {
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
+            return 1;
+        }
+    };
 
     let state_path = runtimepaths::serve_state_path(&state_root);
     let restart_guard_path = runtimepaths::serve_restart_guard_path(&state_root);
@@ -463,6 +493,20 @@ fn run_managed_foreground(
 
     let runner_path = resolve_runner_source()
         .unwrap_or_else(|_| std::env::current_exe().unwrap_or_else(|_| PathBuf::from("mcpace")));
+    let process_identity = match process_identity_token(std::process::id()) {
+        Ok(value) => value,
+        Err(error) => {
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
+            return 1;
+        }
+    };
+    let stop_token = match random_stop_token() {
+        Ok(value) => value,
+        Err(error) => {
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
+            return 1;
+        }
+    };
     let state = ServeState {
         root_path: sanitize_display(&canonical_root),
         state_root: sanitize_display(&state_root),
@@ -474,6 +518,8 @@ fn run_managed_foreground(
         overview_cache_ms: parsed.overview_cache_ms,
         url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
         pid: std::process::id(),
+        process_identity: Some(process_identity),
+        stop_token: Some(stop_token.clone()),
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runner_path),
         stdout_log_path: "service-manager-stdout".to_string(),
@@ -483,6 +529,13 @@ fn run_managed_foreground(
         diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
+    let _ = fs::remove_file(serve_stop_request_path(&state_root));
+    if let Err(error) = start_stop_watcher(state_root.clone(), stop_token) {
+        let _ = fs::remove_file(&state_path);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        return 1;
+    }
+    drop(start_lock);
 
     let exit_code = dashboard::run_serve(&parsed.passthrough, Some(canonical_root), stdout, stderr);
     remove_state_if_current_pid(&state_path, std::process::id());
@@ -556,6 +609,15 @@ fn run_start_impl(
         diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
     }
+    let stop_token = match random_stop_token() {
+        Ok(value) => value,
+        Err(error) => {
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
+            return 1;
+        }
+    };
+    resource_args.push("--stop-token".to_string());
+    resource_args.push(stop_token.clone());
     let _start_lock = match acquire_serve_start_lock(&state_root) {
         Ok(value) => value,
         Err(error) => {
@@ -563,6 +625,7 @@ fn run_start_impl(
             return 1;
         }
     };
+    let _ = fs::remove_file(serve_stop_request_path(&state_root));
 
     let state_path = runtimepaths::serve_state_path(&state_root);
     let restart_guard_path = runtimepaths::serve_restart_guard_path(&state_root);
@@ -583,7 +646,10 @@ fn run_start_impl(
                 max_body_bytes,
                 overview_cache_ms,
             ) {
-                stop_existing_serve(&canonical_root);
+                if let Err(error) = stop_existing_serve_locked(&canonical_root) {
+                    diagnostics::stderr_line(stderr, format_args!("{}", error));
+                    return 1;
+                }
             }
         } else {
             remove_managed_serve_runner_copy(&state_root, &existing_state);
@@ -675,6 +741,19 @@ fn run_start_impl(
         }
     };
 
+    let process_identity = match process_identity_token(background_process.pid()) {
+        Ok(value) => value,
+        Err(error) => {
+            let _ = request_unverified_cooperative_stop(
+                &state_root,
+                background_process.pid(),
+                &stop_token,
+            );
+            let _ = fs::remove_file(&runner_path);
+            diagnostics::stderr_line(stderr, format_args!("{}", error));
+            return 1;
+        }
+    };
     let state = ServeState {
         root_path: sanitize_display(&canonical_root),
         state_root: sanitize_display(&state_root),
@@ -686,12 +765,17 @@ fn run_start_impl(
         overview_cache_ms,
         url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
         pid: background_process.pid(),
+        process_identity: Some(process_identity),
+        stop_token: Some(stop_token),
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runner_path),
         stdout_log_path: sanitize_display(&stdout_log_path),
         stderr_log_path: sanitize_display(&stderr_log_path),
     };
     if let Err(error) = write_state(&state_path, &state) {
+        if let Some(token) = state.stop_token.as_deref() {
+            let _ = request_cooperative_serve_stop(&state_root, &state, token);
+        }
         let _ = fs::remove_file(&runner_path);
         diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
@@ -705,7 +789,9 @@ fn run_start_impl(
         Duration::from_millis(100),
     ) {
         let child_status = background_process.status_detail();
-        let _ = kill_process(state.pid);
+        if let Some(token) = state.stop_token.as_deref() {
+            let _ = request_cooperative_serve_stop(&state_root, &state, token);
+        }
         let _ = fs::remove_file(&state_path);
         remove_managed_serve_runner_copy(&state_root, &state);
         diagnostics::stderr_line(
@@ -741,8 +827,16 @@ fn run_stop(
         return 1;
     };
     let canonical_root = runtimepaths::canonicalize_or_original(&root_path);
-    request_agent_supervisor_stop(&canonical_root);
-    stop_existing_serve(&canonical_root);
+    if let Err(error) = request_agent_supervisor_stop(&canonical_root) {
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        return 1;
+    }
+    if let Err(error) = stop_existing_serve(&canonical_root) {
+        let _ = wait_for_agent_supervisor_stop(&canonical_root);
+        clear_agent_supervisor_stop_request(&canonical_root);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        return 1;
+    }
     if let Err(error) = wait_for_agent_supervisor_stop(&canonical_root) {
         diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
@@ -791,8 +885,16 @@ fn run_restart(
                 parsed.overview_cache_ms,
             )
         });
-    request_agent_supervisor_stop(&canonical_root);
-    stop_existing_serve(&canonical_root);
+    if let Err(error) = request_agent_supervisor_stop(&canonical_root) {
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        return 1;
+    }
+    if let Err(error) = stop_existing_serve(&canonical_root) {
+        let _ = wait_for_agent_supervisor_stop(&canonical_root);
+        clear_agent_supervisor_stop_request(&canonical_root);
+        diagnostics::stderr_line(stderr, format_args!("{}", error));
+        return 1;
+    }
     if let Err(error) = wait_for_agent_supervisor_stop(&canonical_root) {
         diagnostics::stderr_line(stderr, format_args!("{}", error));
         return 1;
@@ -867,7 +969,12 @@ fn agent_supervisor_is_active(_root: &Path) -> bool {
         .unwrap_or(false)
 }
 
-#[cfg(all(not(windows), not(target_os = "linux")))]
+#[cfg(target_os = "macos")]
+fn agent_supervisor_is_active(_root: &Path) -> bool {
+    crate::macos_launch_agent::is_loaded(crate::service::APP_NAME).unwrap_or(false)
+}
+
+#[cfg(all(not(windows), not(target_os = "linux"), not(target_os = "macos")))]
 fn agent_supervisor_is_active(_root: &Path) -> bool {
     false
 }
@@ -907,7 +1014,12 @@ fn start_agent_supervisor(_root: &Path) -> Result<(), String> {
     ))
 }
 
-#[cfg(all(not(windows), not(target_os = "linux")))]
+#[cfg(target_os = "macos")]
+fn start_agent_supervisor(_root: &Path) -> Result<(), String> {
+    crate::macos_launch_agent::start(crate::service::APP_NAME).map_err(|error| error.to_string())
+}
+
+#[cfg(all(not(windows), not(target_os = "linux"), not(target_os = "macos")))]
 fn start_agent_supervisor(_root: &Path) -> Result<(), String> {
     Err("user supervisor restart is not supported on this platform".to_string())
 }
@@ -928,23 +1040,61 @@ fn agent_supervisor_pid_path(root: &Path) -> PathBuf {
 }
 
 #[cfg(windows)]
-fn request_agent_supervisor_stop(root: &Path) {
+fn request_agent_supervisor_stop(root: &Path) -> Result<(), String> {
     let path = agent_supervisor_stop_request_path(root);
     if let Some(parent) = path.parent() {
-        let _ = fs::create_dir_all(parent);
+        fs::create_dir_all(parent).map_err(|error| {
+            format!(
+                "failed to create MCPace Agent supervisor control directory '{}': {}",
+                parent.display(),
+                error
+            )
+        })?;
     }
-    let _ = fs::write(path, format!("{}\n", std::process::id()));
+    fs::write(&path, format!("{}\n", std::process::id())).map_err(|error| {
+        format!(
+            "failed to request MCPace Agent supervisor stop at '{}': {}",
+            path.display(),
+            error
+        )
+    })
 }
 
 #[cfg(target_os = "linux")]
-fn request_agent_supervisor_stop(_root: &Path) {
-    let _ = std::process::Command::new("systemctl")
+fn request_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
+    let output = std::process::Command::new("systemctl")
+        .env("LC_ALL", "C")
         .args(["--user", "stop", "mcpace-agent.service"])
-        .output();
+        .output()
+        .map_err(|error| format!("failed to stop systemd user service: {}", error))?;
+    if output.status.success() {
+        return Ok(());
+    }
+    let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    if systemd_service_absent(&detail) {
+        return Ok(());
+    }
+    Err(format!("failed to stop systemd user service: {}", detail))
 }
 
-#[cfg(all(not(windows), not(target_os = "linux")))]
-fn request_agent_supervisor_stop(_root: &Path) {}
+#[cfg(any(test, target_os = "linux"))]
+fn systemd_service_absent(detail: &str) -> bool {
+    let detail = detail.to_ascii_lowercase();
+    detail.contains("not loaded")
+        || detail.contains("not found")
+        || detail.contains("could not be found")
+        || detail.contains("does not exist")
+}
+
+#[cfg(target_os = "macos")]
+fn request_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
+    crate::macos_launch_agent::stop(crate::service::APP_NAME).map_err(|error| error.to_string())
+}
+
+#[cfg(all(not(windows), not(target_os = "linux"), not(target_os = "macos")))]
+fn request_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
+    Ok(())
+}
 
 #[cfg(windows)]
 fn wait_for_agent_supervisor_stop(root: &Path) -> Result<(), String> {
@@ -983,7 +1133,18 @@ fn wait_for_agent_supervisor_stop(root: &Path) -> Result<(), String> {
     ))
 }
 
-#[cfg(not(windows))]
+#[cfg(target_os = "macos")]
+fn wait_for_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
+    if crate::macos_launch_agent::is_loaded(crate::service::APP_NAME)
+        .map_err(|error| error.to_string())?
+    {
+        Err("macOS LaunchAgent remained loaded after the stop request".to_string())
+    } else {
+        Ok(())
+    }
+}
+
+#[cfg(all(not(windows), not(target_os = "macos")))]
 fn wait_for_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
     Ok(())
 }
@@ -996,24 +1157,148 @@ fn clear_agent_supervisor_stop_request(root: &Path) {
 #[cfg(not(windows))]
 fn clear_agent_supervisor_stop_request(_root: &Path) {}
 
-fn stop_existing_serve(canonical_root: &Path) {
+pub(crate) fn managed_runtime_is_live(canonical_root: &Path) -> Result<bool, String> {
     let state_root = runtimepaths::resolve_state_root(canonical_root);
     let state_path = runtimepaths::serve_state_path(&state_root);
-    let existing = read_state(&state_path).ok();
+    if !state_path.exists() {
+        return Ok(false);
+    }
+    let state = read_state(&state_path)?;
+    match process_identity::match_process(
+        state.pid,
+        state.process_identity.as_deref(),
+        Some(Path::new(&state.runner_path)),
+    )
+    .map_err(|error| {
+        format!(
+            "failed to verify managed serve pid {} before cleanup: {}",
+            state.pid, error
+        )
+    })? {
+        ProcessMatch::Match => Ok(true),
+        ProcessMatch::NotFound | ProcessMatch::Mismatch => Ok(false),
+    }
+}
+
+fn stop_existing_serve(canonical_root: &Path) -> Result<(), String> {
+    let state_root = runtimepaths::resolve_state_root(canonical_root);
+    let _coordination = acquire_lifecycle_coordination(&state_root)?;
+    stop_existing_serve_locked(canonical_root)
+}
+
+fn stop_existing_serve_locked(canonical_root: &Path) -> Result<(), String> {
+    let state_root = runtimepaths::resolve_state_root(canonical_root);
+    let state_path = runtimepaths::serve_state_path(&state_root);
+    let existing = if state_path.exists() {
+        Some(read_state(&state_path)?)
+    } else {
+        None
+    };
     if let Some(state) = &existing {
-        let _ = kill_process(state.pid);
-        for _ in 0..40 {
-            let endpoint = runtimepaths::resolve_serve_endpoint(Some(canonical_root));
-            if !health_check(&state.host, state.port, &endpoint.health_path).unwrap_or(false) {
-                break;
+        let expected_runner = Path::new(&state.runner_path);
+        match process_identity::match_process(
+            state.pid,
+            state.process_identity.as_deref(),
+            Some(expected_runner),
+        )
+        .map_err(|error| {
+            format!(
+                "failed to verify serve process identity for pid {}: {}",
+                state.pid, error
+            )
+        })? {
+            ProcessMatch::Match => {
+                let token = state.stop_token.as_deref().ok_or_else(|| {
+                    format!(
+                        "serve state for pid {} predates cooperative stop tokens; refusing an unsafe raw-PID signal. Verify and stop that older process through the OS supervisor or process manager, then run 'mcpace cleanup runtime' before retrying",
+                        state.pid
+                    )
+                })?;
+                request_cooperative_serve_stop(&state_root, state, token)?;
+                remove_managed_serve_runner_copy(&state_root, state);
             }
-            thread::sleep(Duration::from_millis(100));
+            ProcessMatch::NotFound => {
+                remove_managed_serve_runner_copy(&state_root, state);
+            }
+            ProcessMatch::Mismatch => {
+                return Err(format!(
+                    "serve state pid {} no longer identifies the recorded MCPace runner '{}'; refusing to signal a reused or unrelated process",
+                    state.pid, state.runner_path
+                ));
+            }
         }
-        remove_managed_serve_runner_copy(&state_root, state);
     }
     cleanup_stale_serve_runner_copies(&state_root, existing.as_ref());
     crate::restart_guard::clear(&runtimepaths::serve_restart_guard_path(&state_root));
     let _ = fs::remove_file(&state_path);
+    Ok(())
+}
+
+fn request_unverified_cooperative_stop(
+    state_root: &Path,
+    pid: u32,
+    token: &str,
+) -> Result<(), String> {
+    let marker = serve_stop_request_path(state_root);
+    runtimepaths::write_private_text_atomic(&marker, &format!("{}\n", token))
+        .map_err(String::from)?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        match process_identity::capture(pid) {
+            Ok(None) => {
+                let _ = fs::remove_file(&marker);
+                return Ok(());
+            }
+            Ok(Some(_)) => thread::sleep(Duration::from_millis(25)),
+            Err(error) => {
+                let _ = fs::remove_file(&marker);
+                return Err(format!(
+                    "failed to observe serve pid {} during cooperative stop: {}",
+                    pid, error
+                ));
+            }
+        }
+    }
+    let _ = fs::remove_file(&marker);
+    Err(format!(
+        "serve pid {} did not acknowledge an unverified cooperative stop request within 5 seconds",
+        pid
+    ))
+}
+
+fn request_cooperative_serve_stop(
+    state_root: &Path,
+    state: &ServeState,
+    token: &str,
+) -> Result<(), String> {
+    let marker = serve_stop_request_path(state_root);
+    runtimepaths::write_private_text_atomic(&marker, &format!("{}\n", token))
+        .map_err(String::from)?;
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    while std::time::Instant::now() < deadline {
+        match process_identity::match_process(
+            state.pid,
+            state.process_identity.as_deref(),
+            Some(Path::new(&state.runner_path)),
+        )
+        .map_err(|error| {
+            format!(
+                "failed to verify serve pid {} while waiting for cooperative stop: {}",
+                state.pid, error
+            )
+        })? {
+            ProcessMatch::Match => thread::sleep(Duration::from_millis(25)),
+            ProcessMatch::NotFound | ProcessMatch::Mismatch => {
+                let _ = fs::remove_file(&marker);
+                return Ok(());
+            }
+        }
+    }
+    let _ = fs::remove_file(&marker);
+    Err(format!(
+        "serve pid {} did not acknowledge the cooperative stop request within 5 seconds; refusing an unsafe raw-PID signal",
+        state.pid
+    ))
 }
 
 fn remove_managed_serve_runner_copy(state_root: &Path, state: &ServeState) {
@@ -1276,41 +1561,222 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
     0
 }
 
+const MALFORMED_START_LOCK_STALE_AFTER: Duration = Duration::from_secs(30);
+
+#[derive(Debug)]
+pub(crate) struct ServeLifecycleCoordinationGuard {
+    _file: File,
+}
+
+pub(crate) fn acquire_lifecycle_coordination(
+    state_root: &Path,
+) -> Result<ServeLifecycleCoordinationGuard, String> {
+    runtimepaths::ensure_serve_dir(state_root).map_err(String::from)?;
+    let path = runtimepaths::serve_dir(state_root).join("lifecycle.lock");
+    let file = OpenOptions::new()
+        .create(true)
+        .read(true)
+        .write(true)
+        .truncate(false)
+        .open(&path)
+        .map_err(|error| {
+            format!(
+                "failed to open serve lifecycle coordination lock '{}': {}",
+                path.display(),
+                error
+            )
+        })?;
+    file.lock().map_err(|error| {
+        format!(
+            "failed to acquire serve lifecycle coordination lock '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
+    Ok(ServeLifecycleCoordinationGuard { _file: file })
+}
+
+#[derive(Debug)]
 struct ServeStartLockGuard {
     path: PathBuf,
+    owner_pid: u32,
+    process_identity: String,
+    _coordination: ServeLifecycleCoordinationGuard,
 }
 
 impl Drop for ServeStartLockGuard {
     fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
+        let owns_lock =
+            read_serve_start_lock_owner(&self.path)
+                .ok()
+                .is_some_and(|(pid, identity)| {
+                    pid == self.owner_pid && identity.as_deref() == Some(&self.process_identity)
+                });
+        if owns_lock {
+            let _ = fs::remove_file(&self.path);
+        }
     }
 }
 
 fn acquire_serve_start_lock(state_root: &Path) -> Result<ServeStartLockGuard, String> {
+    let coordination = acquire_lifecycle_coordination(state_root)?;
     let lock_path = runtimepaths::serve_start_lock_path(state_root);
+    let owner_pid = std::process::id();
+    let process_identity = process_identity_token(owner_pid)?;
     let payload = JsonValue::object([
-        ("pid", JsonValue::number(std::process::id())),
+        ("pid", JsonValue::number(owner_pid)),
+        (
+            "processIdentity",
+            JsonValue::string(process_identity.clone()),
+        ),
         ("startedAtMs", JsonValue::number(now_ms())),
     ])
     .to_pretty_string();
 
-    match OpenOptions::new().create_new(true).write(true).open(&lock_path) {
-        Ok(mut file) => {
-            file.write_all(payload.as_bytes())
-                .map_err(|error| format!("failed to write serve start lock '{}': {}", lock_path.display(), error))?;
-            let _ = file.sync_all();
-            Ok(ServeStartLockGuard { path: lock_path })
+    for attempt in 0..2 {
+        match OpenOptions::new()
+            .create_new(true)
+            .write(true)
+            .open(&lock_path)
+        {
+            Ok(mut file) => {
+                if let Err(error) = file.write_all(payload.as_bytes()) {
+                    let _ = fs::remove_file(&lock_path);
+                    return Err(format!(
+                        "failed to write serve start lock '{}': {}",
+                        lock_path.display(),
+                        error
+                    ));
+                }
+                let _ = file.sync_all();
+                return Ok(ServeStartLockGuard {
+                    path: lock_path,
+                    owner_pid,
+                    process_identity,
+                    _coordination: coordination,
+                });
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                let (existing_pid, existing_identity) =
+                    match read_serve_start_lock_owner(&lock_path) {
+                        Ok(owner) => owner,
+                        Err(parse_error) => {
+                            if attempt == 0 && malformed_start_lock_is_stale(&lock_path)? {
+                                fs::remove_file(&lock_path).map_err(|error| {
+                                    format!(
+                                    "failed to remove malformed stale serve start lock '{}': {}",
+                                    lock_path.display(),
+                                    error
+                                )
+                                })?;
+                                continue;
+                            }
+                            return Err(format!(
+                            "{}; refusing to reclaim a malformed start lock newer than {} seconds",
+                            parse_error,
+                            MALFORMED_START_LOCK_STALE_AFTER.as_secs()
+                        ));
+                        }
+                    };
+                match process_identity::match_process(
+                    existing_pid,
+                    existing_identity.as_deref(),
+                    None,
+                )
+                .map_err(|error| {
+                    format!(
+                        "failed to verify serve start lock owner pid {} at {}: {}",
+                        existing_pid,
+                        lock_path.display(),
+                        error
+                    )
+                })? {
+                    ProcessMatch::Match => {
+                        return Err(format!(
+                            "mcpace serve start is already in progress at {} (owner pid {})",
+                            lock_path.display(),
+                            existing_pid
+                        ));
+                    }
+                    ProcessMatch::NotFound | ProcessMatch::Mismatch if attempt == 0 => {
+                        fs::remove_file(&lock_path).map_err(|error| {
+                            format!(
+                                "failed to remove stale serve start lock '{}': {}",
+                                lock_path.display(),
+                                error
+                            )
+                        })?;
+                    }
+                    ProcessMatch::NotFound | ProcessMatch::Mismatch => {
+                        return Err(format!(
+                            "serve start lock at {} changed while stale ownership was being reclaimed",
+                            lock_path.display()
+                        ));
+                    }
+                }
+            }
+            Err(error) => {
+                return Err(format!(
+                    "failed to acquire serve start lock at {}: {}",
+                    lock_path.display(),
+                    error
+                ));
+            }
         }
-        Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => Err(format!(
-            "mcpace serve start is already in progress at {}; remove this lock manually only after verifying no start is active",
-            lock_path.display()
-        )),
-        Err(error) => Err(format!(
-            "failed to acquire serve start lock at {}: {}",
-            lock_path.display(),
-            error
-        )),
     }
+    Err(format!(
+        "failed to acquire serve start lock at {}",
+        lock_path.display()
+    ))
+}
+
+fn malformed_start_lock_is_stale(path: &Path) -> Result<bool, String> {
+    let modified = fs::metadata(path)
+        .and_then(|metadata| metadata.modified())
+        .map_err(|error| {
+            format!(
+                "failed to inspect malformed serve start lock '{}': {}",
+                path.display(),
+                error
+            )
+        })?;
+    Ok(std::time::SystemTime::now()
+        .duration_since(modified)
+        .map(|age| age >= MALFORMED_START_LOCK_STALE_AFTER)
+        .unwrap_or(false))
+}
+
+fn read_serve_start_lock_owner(path: &Path) -> Result<(u32, Option<String>), String> {
+    let raw = fs::read_to_string(path).map_err(|error| {
+        format!(
+            "failed to read serve start lock '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
+    let value = parse_str(&raw).map_err(|error| {
+        format!(
+            "failed to parse serve start lock '{}': {}",
+            path.display(),
+            error
+        )
+    })?;
+    let pid = value
+        .get("pid")
+        .and_then(JsonValue::as_i64)
+        .and_then(|value| u32::try_from(value).ok())
+        .filter(|value| *value > 0)
+        .ok_or_else(|| {
+            format!(
+                "serve start lock '{}' has no valid owner pid",
+                path.display()
+            )
+        })?;
+    let process_identity = value
+        .get("processIdentity")
+        .and_then(JsonValue::as_str)
+        .map(str::to_string);
+    Ok((pid, process_identity))
 }
 
 fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
@@ -1337,6 +1803,20 @@ fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
         ),
         ("url", JsonValue::string(state.url.clone())),
         ("pid", JsonValue::number(state.pid)),
+        (
+            "processIdentity",
+            state
+                .process_identity
+                .as_ref()
+                .map_or(JsonValue::Null, |value| JsonValue::string(value.clone())),
+        ),
+        (
+            "stopToken",
+            state
+                .stop_token
+                .as_ref()
+                .map_or(JsonValue::Null, |value| JsonValue::string(value.clone())),
+        ),
         ("startedAtMs", JsonValue::number(state.started_at_ms)),
         ("runnerPath", JsonValue::string(state.runner_path.clone())),
         (
@@ -1430,6 +1910,15 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
                 runtimepaths::http_url(&host, port, runtimepaths::DEFAULT_LOCAL_MCP_PATH)
             }),
         pid,
+        process_identity: json
+            .get("processIdentity")
+            .and_then(JsonValue::as_str)
+            .map(str::to_string),
+        stop_token: json
+            .get("stopToken")
+            .and_then(JsonValue::as_str)
+            .filter(|token| valid_stop_token(token))
+            .map(str::to_string),
         started_at_ms,
         runner_path: json
             .get("runnerPath")
@@ -1657,6 +2146,69 @@ fn sanitize_display(path: &Path) -> String {
     runtimepaths::strip_windows_extended_path_prefix(&rendered)
 }
 
+fn valid_stop_token(token: &str) -> bool {
+    token.len() == 64 && token.bytes().all(|byte| byte.is_ascii_hexdigit())
+}
+
+fn random_stop_token() -> Result<String, String> {
+    let mut bytes = [0_u8; 32];
+    getrandom::fill(&mut bytes)
+        .map_err(|error| format!("failed to generate serve stop token: {}", error))?;
+    Ok(bytes.iter().map(|byte| format!("{byte:02x}")).collect())
+}
+
+fn serve_stop_request_path(state_root: &Path) -> PathBuf {
+    runtimepaths::serve_dir(state_root).join("stop-requested")
+}
+
+fn start_direct_stop_watcher(parsed: &ParsedArgs) -> Result<(), String> {
+    let Some(token) = parsed.stop_token.as_deref() else {
+        return Ok(());
+    };
+    let root = parsed
+        .root_override
+        .as_deref()
+        .ok_or_else(|| "serve --stop-token requires --root".to_string())?;
+    let state_root =
+        runtimepaths::resolve_state_root(&runtimepaths::canonicalize_or_original(root));
+    start_stop_watcher(state_root, token.to_string())
+}
+
+fn start_stop_watcher(state_root: PathBuf, token: String) -> Result<(), String> {
+    let marker = serve_stop_request_path(&state_root);
+    thread::Builder::new()
+        .name("mcpace-serve-stop".to_string())
+        .spawn(move || loop {
+            let requested = fs::read_to_string(&marker)
+                .ok()
+                .is_some_and(|value| value.trim() == token);
+            if requested {
+                let _ = fs::remove_file(&marker);
+                std::process::exit(0);
+            }
+            thread::sleep(Duration::from_millis(50));
+        })
+        .map(|_| ())
+        .map_err(|error| format!("failed to start serve stop watcher: {}", error))
+}
+
+fn process_identity_token(pid: u32) -> Result<String, String> {
+    process_identity::capture(pid)
+        .map_err(|error| {
+            format!(
+                "failed to capture process identity for pid {}: {}",
+                pid, error
+            )
+        })?
+        .map(|identity| identity.start_token)
+        .ok_or_else(|| {
+            format!(
+                "process pid {} exited before its identity could be captured",
+                pid
+            )
+        })
+}
+
 fn now_ms() -> u128 {
     runtimepaths::unix_time_ms()
 }
@@ -1764,54 +2316,6 @@ fn spawn_background_windows(
     );
     crate::windows_process::spawn_detached_no_window(runner_path, &args, Some(root_path))
         .map_err(|error| format!("failed to start MCPace serve runtime: {}", error))
-}
-
-fn kill_process(pid: u32) -> Result<(), String> {
-    #[cfg(windows)]
-    {
-        let mut command = std::process::Command::new("taskkill");
-        command.args(["/PID", &pid.to_string(), "/T", "/F"]);
-        crate::windows_process::configure_no_window(&mut command);
-        let output = command
-            .output()
-            .map_err(|error| format!("failed to stop serve process {}: {}", pid, error))?;
-        if output.status.success() {
-            return Ok(());
-        }
-        let stderr_text = String::from_utf8_lossy(&output.stderr);
-        if stderr_text.contains("not found") || stderr_text.contains("не найден") {
-            return Ok(());
-        }
-        return Err(format!(
-            "failed to stop serve process {}: {}",
-            pid,
-            stderr_text.trim()
-        ));
-    }
-
-    #[cfg(unix)]
-    {
-        crate::process_detach::kill_unix_process_group(pid, 15);
-        let output = std::process::Command::new("kill")
-            .args(["-TERM", &pid.to_string()])
-            .output()
-            .map_err(|error| format!("failed to stop serve process {}: {}", pid, error))?;
-        if output.status.success() {
-            return Ok(());
-        }
-        let stderr_text = String::from_utf8_lossy(&output.stderr);
-        if stderr_text.contains("No such process") {
-            return Ok(());
-        }
-        return Err(format!(
-            "failed to stop serve process {}: {}",
-            pid,
-            stderr_text.trim()
-        ));
-    }
-
-    #[allow(unreachable_code)]
-    Ok(())
 }
 
 #[cfg(test)]

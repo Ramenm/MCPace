@@ -132,6 +132,12 @@ test("default up transfers initial runtime ownership to the user supervisor", ()
 	assert.match(config, /vec!\["--user", "start", unit\.as_str\(\)\]/);
 	assert.match(config, /spawn_detached_no_window/);
 	assert.match(config, /process_image_is\(pid, "mcpace-agent-launcher\.exe"\)/);
+	assert.match(config, /macos_launch_agent::start\(super::APP_NAME\)/);
+	assert.match(config, /stop_runtime_before_supervisor_start\(config\)/);
+	const macosSupervisor = read("src/macos_launch_agent.rs");
+	assert.match(macosSupervisor, /"bootstrap"/);
+	assert.match(macosSupervisor, /"kickstart"/);
+	assert.match(macosSupervisor, /"bootout"/);
 	assert.match(config, /if supervisor_runtime_ready\(&endpoint\)/);
 	assert.match(
 		config,
@@ -145,11 +151,11 @@ test("Windows supervisor acknowledges stop before serve restart can spawn", () =
 	assert.match(launcher, /struct SupervisorRegistration/);
 	assert.match(
 		launcher,
-		/let waited = child\.wait\(\);[\s\S]*stop_requested\(stop_marker\)[\s\S]*acknowledge_stop_request\(stop_marker\)/,
+		/let waited = loop[\s\S]*child\.try_wait\(\)[\s\S]*stop_requested\(stop_marker\)[\s\S]*child\.kill\(\)[\s\S]*child\.wait\(\)[\s\S]*acknowledge_stop_request\(stop_marker\)/,
 	);
 	assert.match(
 		serve,
-		/request_agent_supervisor_stop\(&canonical_root\);[\s\S]*stop_existing_serve\(&canonical_root\);[\s\S]*wait_for_agent_supervisor_stop\(&canonical_root\)[\s\S]*run_start_after_supervisor_stop\([\s\S]*clear_agent_supervisor_stop_request\(&canonical_root\)/,
+		/request_agent_supervisor_stop\(&canonical_root\)[\s\S]*stop_existing_serve\(&canonical_root\)[\s\S]*wait_for_agent_supervisor_stop\(&canonical_root\)[\s\S]*run_start_after_supervisor_stop\([\s\S]*clear_agent_supervisor_stop_request\(&canonical_root\)/,
 	);
 	assert.match(
 		serve,

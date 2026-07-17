@@ -587,7 +587,7 @@ test("Windows runtime files are replaced without deleting visible state first", 
 	assert.match(runtimepaths, /\\\\\?\\UNC\\/);
 });
 
-test("serve background lifecycle avoids Windows locked-runner and Linux orphan races", () => {
+test("serve background lifecycle avoids locked runners and raw-PID stop races", () => {
 	const serve = read("src", "serve.rs");
 	const runtimepaths = read("src", "runtimepaths.rs");
 	const start = sliceFn(serve, "run_start", "run_stop");
@@ -601,7 +601,11 @@ test("serve background lifecycle avoids Windows locked-runner and Linux orphan r
 		"remove_managed_serve_runner_copy",
 		"run_status",
 	);
-	const killProcess = sliceFn(serve, "kill_process");
+	const cooperativeStop = sliceFn(
+		serve,
+		"request_cooperative_serve_stop",
+		"remove_managed_serve_runner_copy",
+	);
 
 	assert.match(runtimepaths, /fn serve_runner_path_for_start/);
 	assert.match(start, /serve_runner_path_for_start\(&state_root\)/);
@@ -614,6 +618,7 @@ test("serve background lifecycle avoids Windows locked-runner and Linux orphan r
 		start,
 		/remove_managed_serve_runner_copy\(&state_root, &state\)/,
 	);
+	assert.match(stopExisting, /acquire_lifecycle_coordination\(&state_root\)/);
 	assert.match(
 		stopExisting,
 		/remove_managed_serve_runner_copy\(&state_root, state\)/,
@@ -622,7 +627,11 @@ test("serve background lifecycle avoids Windows locked-runner and Linux orphan r
 		cleanup,
 		/canonical_runner\.starts_with\(&canonical_runtime_bin\)/,
 	);
-	assert.match(killProcess, /kill_unix_process_group\(pid, 15\)/);
+	assert.match(cooperativeStop, /write_private_text_atomic/);
+	assert.match(cooperativeStop, /process_identity::match_process/);
+	assert.match(cooperativeStop, /refusing an unsafe raw-PID signal/);
+	assert.doesNotMatch(serve, /fn kill_process\(/);
+	assert.doesNotMatch(serve, /taskkill|kill_unix_process_group/);
 });
 
 test("stdio child environment keeps only one Windows PATH spelling", () => {
@@ -658,7 +667,12 @@ test("serve start replaces healthy stale endpoint instead of orphaning another r
 		start,
 		/if existing_healthy \{\s*if !state_matches_start_request\(/s,
 	);
-	assert.match(start, /stop_existing_serve\(&canonical_root\);/);
+	assert.match(start, /stop_existing_serve_locked\(&canonical_root\)/);
+	assert.ok(
+		start.indexOf("acquire_serve_start_lock(&state_root)") <
+			start.indexOf("remove_file(serve_stop_request_path(&state_root))"),
+		"start must own lifecycle coordination before clearing a stale stop marker",
+	);
 	assert.match(
 		start,
 		/\} else \{\s*remove_managed_serve_runner_copy\(&state_root, &existing_state\);\s*let _ = fs::remove_file\(&state_path\);\s*crate::restart_guard::clear\(&restart_guard_path\);\s*\}/s,
