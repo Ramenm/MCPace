@@ -145,6 +145,22 @@ test("default up transfers initial runtime ownership to the user supervisor", ()
 	);
 });
 
+test("Linux direct runtimes bypass an unavailable user bus only with explicit ownership", () => {
+	const serve = read("src/serve.rs");
+	assert.match(serve, /supervisor_managed: Some\(true\)/);
+	assert.match(serve, /supervisor_managed: Some\(false\)/);
+	assert.match(serve, /"supervisorManaged"/);
+	assert.match(
+		serve,
+		/systemd_stop_failure_is_ignorable\(\s*&detail,\s*recorded_runtime_is_explicitly_direct\(root\)/,
+	);
+	assert.match(serve, /state\.supervisor_managed == Some\(false\)/);
+	assert.match(
+		serve,
+		/fn systemd_stop_failure_is_ignorable[\s\S]*access denied[\s\S]*permission denied[\s\S]*return false;[\s\S]*systemd_service_absent/,
+	);
+});
+
 test("Windows supervisor acknowledges stop before serve restart can spawn", () => {
 	const launcher = read("src/bin/mcpace-agent-launcher.rs");
 	const serve = read("src/serve.rs");

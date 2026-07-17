@@ -76,14 +76,45 @@ fn cooperative_stop_tokens_are_random_and_strictly_validated() {
 }
 
 #[test]
-fn absent_systemd_user_service_is_not_a_stop_failure() {
+fn systemd_stop_errors_are_classified_narrowly() {
     assert!(systemd_service_absent(
         "Failed to stop mcpace-agent.service: Unit mcpace-agent.service not loaded."
     ));
     assert!(systemd_service_absent(
         "Unit mcpace-agent.service could not be found."
     ));
+    assert!(systemd_user_manager_unavailable(
+        "Failed to connect to bus: No medium found"
+    ));
+    assert!(systemd_user_manager_unavailable(
+        "System has not been booted with systemd as init system (PID 1). Can't operate."
+    ));
     assert!(!systemd_service_absent("Access denied"));
+    assert!(!systemd_user_manager_unavailable(
+        "Failed to connect to bus: Access denied"
+    ));
+    assert!(!systemd_user_manager_unavailable(
+        "Failed to connect to bus: No medium found; Access denied"
+    ));
+    assert!(!systemd_user_manager_unavailable(
+        "Failed to connect to bus: No medium found; Permission denied"
+    ));
+    assert!(systemd_stop_failure_is_ignorable(
+        "Unit mcpace-agent.service not loaded.",
+        false
+    ));
+    assert!(systemd_stop_failure_is_ignorable(
+        "Failed to connect to bus: No medium found",
+        true
+    ));
+    assert!(!systemd_stop_failure_is_ignorable(
+        "Failed to connect to bus: No medium found",
+        false
+    ));
+    assert!(!systemd_stop_failure_is_ignorable(
+        "Unit mcpace-agent.service not loaded; Permission denied",
+        true
+    ));
 }
 
 #[test]
@@ -182,6 +213,19 @@ fn serve_start_status_stop_round_trip() {
     assert!(
         health_check("127.0.0.1", port, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH).unwrap_or(false)
     );
+    let state_root = runtimepaths::resolve_state_root(&root);
+    let state_path = runtimepaths::serve_state_path(&state_root);
+    let direct_state = read_state(&state_path).unwrap();
+    assert_eq!(direct_state.supervisor_managed, Some(false));
+    assert!(recorded_runtime_is_explicitly_direct(&root));
+    let mut supervisor_state = direct_state.clone();
+    supervisor_state.supervisor_managed = Some(true);
+    write_state(&state_path, &supervisor_state).unwrap();
+    assert!(!recorded_runtime_is_explicitly_direct(&root));
+    supervisor_state.supervisor_managed = None;
+    write_state(&state_path, &supervisor_state).unwrap();
+    assert!(!recorded_runtime_is_explicitly_direct(&root));
+    write_state(&state_path, &direct_state).unwrap();
 
     let mut status_stdout = Vec::new();
     let mut status_stderr = Vec::new();
@@ -405,6 +449,7 @@ fn start_recovers_stale_state_even_with_restart_guard() {
         pid: 999_999,
         process_identity: None,
         stop_token: None,
+        supervisor_managed: None,
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runtimepaths::runtime_bin_dir(&state_root).join(
             if cfg!(windows) {
@@ -583,6 +628,7 @@ fn stop_refuses_to_signal_a_reused_live_pid() {
         pid: std::process::id(),
         process_identity: Some("reused-process-identity".to_string()),
         stop_token: None,
+        supervisor_managed: None,
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&current_exe),
         stdout_log_path: "stdout".to_string(),

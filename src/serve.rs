@@ -50,6 +50,7 @@ struct ServeState {
     pid: u32,
     process_identity: Option<String>,
     stop_token: Option<String>,
+    supervisor_managed: Option<bool>,
     started_at_ms: u128,
     runner_path: String,
     stdout_log_path: String,
@@ -520,6 +521,7 @@ fn run_managed_foreground(
         pid: std::process::id(),
         process_identity: Some(process_identity),
         stop_token: Some(stop_token.clone()),
+        supervisor_managed: Some(true),
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runner_path),
         stdout_log_path: "service-manager-stdout".to_string(),
@@ -767,6 +769,7 @@ fn run_start_impl(
         pid: background_process.pid(),
         process_identity: Some(process_identity),
         stop_token: Some(stop_token),
+        supervisor_managed: Some(false),
         started_at_ms: now_ms(),
         runner_path: sanitize_display(&runner_path),
         stdout_log_path: sanitize_display(&stdout_log_path),
@@ -1061,7 +1064,7 @@ fn request_agent_supervisor_stop(root: &Path) -> Result<(), String> {
 }
 
 #[cfg(target_os = "linux")]
-fn request_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
+fn request_agent_supervisor_stop(root: &Path) -> Result<(), String> {
     let output = std::process::Command::new("systemctl")
         .env("LC_ALL", "C")
         .args(["--user", "stop", "mcpace-agent.service"])
@@ -1071,7 +1074,7 @@ fn request_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
         return Ok(());
     }
     let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if systemd_service_absent(&detail) {
+    if systemd_stop_failure_is_ignorable(&detail, recorded_runtime_is_explicitly_direct(root)) {
         return Ok(());
     }
     Err(format!("failed to stop systemd user service: {}", detail))
@@ -1084,6 +1087,36 @@ fn systemd_service_absent(detail: &str) -> bool {
         || detail.contains("not found")
         || detail.contains("could not be found")
         || detail.contains("does not exist")
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn systemd_user_manager_unavailable(detail: &str) -> bool {
+    let detail = detail.to_ascii_lowercase();
+    if detail.contains("access denied") || detail.contains("permission denied") {
+        return false;
+    }
+    detail.contains("failed to connect to bus: no medium found")
+        || detail.contains("failed to connect to bus: no such file or directory")
+        || detail.contains("failed to connect to bus: host is down")
+        || detail.contains("system has not been booted with systemd as init system")
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn systemd_stop_failure_is_ignorable(detail: &str, explicitly_direct: bool) -> bool {
+    let normalized = detail.to_ascii_lowercase();
+    if normalized.contains("access denied") || normalized.contains("permission denied") {
+        return false;
+    }
+    systemd_service_absent(detail)
+        || (explicitly_direct && systemd_user_manager_unavailable(detail))
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn recorded_runtime_is_explicitly_direct(root: &Path) -> bool {
+    let state_root = runtimepaths::resolve_state_root(root);
+    read_state(&runtimepaths::serve_state_path(&state_root))
+        .ok()
+        .is_some_and(|state| state.supervisor_managed == Some(false))
 }
 
 #[cfg(target_os = "macos")]
@@ -1817,6 +1850,12 @@ fn write_state(path: &Path, state: &ServeState) -> Result<(), String> {
                 .as_ref()
                 .map_or(JsonValue::Null, |value| JsonValue::string(value.clone())),
         ),
+        (
+            "supervisorManaged",
+            state
+                .supervisor_managed
+                .map_or(JsonValue::Null, JsonValue::bool),
+        ),
         ("startedAtMs", JsonValue::number(state.started_at_ms)),
         ("runnerPath", JsonValue::string(state.runner_path.clone())),
         (
@@ -1919,6 +1958,7 @@ fn read_state(path: &Path) -> Result<ServeState, String> {
             .and_then(JsonValue::as_str)
             .filter(|token| valid_stop_token(token))
             .map(str::to_string),
+        supervisor_managed: json.get("supervisorManaged").and_then(JsonValue::as_bool),
         started_at_ms,
         runner_path: json
             .get("runnerPath")
