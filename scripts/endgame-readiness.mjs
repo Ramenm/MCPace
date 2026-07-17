@@ -125,7 +125,7 @@ function run(args) {
 			repoRoot,
 			"rust-live-proof",
 			"scripts/rust-live-proof.mjs",
-			args.enforce ? ["--write"] : [],
+			args.enforce ? ["--enforce"] : [],
 			LONG_TIMEOUT_MS,
 		),
 		runJson(

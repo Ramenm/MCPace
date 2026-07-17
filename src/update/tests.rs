@@ -1,5 +1,31 @@
 use super::*;
 
+struct EnvSnapshot(Vec<(&'static str, Option<std::ffi::OsString>)>);
+
+impl EnvSnapshot {
+    fn clear(keys: &[&'static str]) -> Self {
+        let values = keys
+            .iter()
+            .map(|key| (*key, std::env::var_os(key)))
+            .collect::<Vec<_>>();
+        for key in keys {
+            std::env::remove_var(key);
+        }
+        Self(values)
+    }
+}
+
+impl Drop for EnvSnapshot {
+    fn drop(&mut self) {
+        for (key, value) in self.0.drain(..) {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+}
+
 #[test]
 fn semver_compare_handles_current_and_outdated_cases() {
     assert_eq!(compare_semver("0.3.5", "0.3.5"), Some(Ordering::Equal));
@@ -44,17 +70,21 @@ fn update_report_json_keeps_dashboard_updates_package_manager_managed() {
 
 #[test]
 fn update_source_defaults_to_npm_when_no_offline_hint_is_set() {
-    std::env::remove_var("MCPACE_UPDATE_SOURCE");
-    std::env::remove_var("MCPACE_LATEST_VERSION");
+    let _env_lock = crate::resources::TEST_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _env = EnvSnapshot::clear(&["MCPACE_UPDATE_SOURCE", "MCPACE_LATEST_VERSION"]);
     assert_eq!(derive_update_source(None, None), Ok(UpdateSource::Npm));
 }
 
 #[test]
 fn update_source_env_rejects_unknown_values() {
+    let _env_lock = crate::resources::TEST_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _env = EnvSnapshot::clear(&["MCPACE_UPDATE_SOURCE", "MCPACE_LATEST_VERSION"]);
     std::env::set_var("MCPACE_UPDATE_SOURCE", "surprise-network");
-    std::env::remove_var("MCPACE_LATEST_VERSION");
     let parsed = parse_cli(&[]);
-    std::env::remove_var("MCPACE_UPDATE_SOURCE");
     assert_eq!(
         parsed.error.as_deref(),
         Some("unsupported MCPACE_UPDATE_SOURCE 'surprise-network'; expected none, env, or npm")

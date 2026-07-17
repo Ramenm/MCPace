@@ -47,20 +47,20 @@ test("platform proof covers Linux macOS and Windows with native smoke gates", ()
 	assert.deepEqual(report.platforms.published, ["darwin", "linux", "win32"]);
 	assert.deepEqual(report.platforms.workflow, ["darwin", "linux", "win32"]);
 	assert.ok(report.summary.publishedTargetCount >= 6);
-	assert.ok(report.summary.publicCommandCount >= 20);
+	assert.equal(report.summary.publicCommandCount, 10);
 	assert.ok(report.summary.smokeCommandCount >= 15);
 
 	const smokeCommands = new Set(
 		report.smokeCommands.map((item) => item.command),
 	);
 	for (const command of [
-		"doctor --json",
-		"verify readiness --json",
-		"server list --json",
-		"server capabilities --json",
-		"client list --json",
-		"hub status --json",
-		"lab report --json",
+		"advanced doctor --json",
+		"advanced server list --json",
+		"advanced server capabilities --json",
+		"advanced client list --json",
+		"advanced dev lab report --json",
+		"advanced autostart --help",
+		"uninstall --help",
 	]) {
 		assert.ok(smokeCommands.has(command), `missing smoke command ${command}`);
 	}
@@ -93,6 +93,21 @@ test("platform proof workflow is manual and runs Node Rust and binary smoke on a
 	assert.match(workflow, /npm run platform:binary-smoke/);
 	assert.match(workflow, /Smoke isolated runtime lifecycle/);
 	assert.match(workflow, /npm run check:installer-runtime-smoke -- --binary/);
+	assert.match(workflow, /npm run proof:autostart/);
+	assert.match(workflow, /MCPACE_DISPOSABLE_AUTOSTART_PROOF:\s*["']?1/);
+	assert.match(workflow, /--confirm-disposable-user/);
+});
+
+test("destructive autostart proof is double-gated to disposable users", () => {
+	const script = read("scripts/autostart-lifecycle-proof.mjs");
+	const releaseWorkflow = read(".github/workflows/release.yml");
+	for (const source of [script, releaseWorkflow]) {
+		assert.match(source, /MCPACE_DISPOSABLE_AUTOSTART_PROOF/);
+		assert.match(source, /--confirm-disposable-user/);
+	}
+	assert.match(script, /refusing to modify the current user's login startup/);
+	assert.match(script, /supervisorVerified/);
+	assert.match(script, /evidence\.recoveryOwnership/);
 });
 
 test("platform docs assign source and launcher dry-runs to the correct commands", () => {

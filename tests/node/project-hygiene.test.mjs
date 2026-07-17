@@ -143,6 +143,14 @@ test("release manifest includes Node script entrypoints referenced by npm script
 		}
 	}
 	assert.deepEqual(missing, []);
+	assert.ok(
+		manifestIncludesPath(manifest, "scripts/lib/repo-files.mjs"),
+		"release source ZIP must include the helper imported by archive verification scripts",
+	);
+	assert.ok(
+		manifestIncludesPath(manifest, "docs/research"),
+		"release source ZIP must include linked research documentation",
+	);
 });
 
 test("npm Rust scripts use the Cargo preflight wrapper instead of raw cargo", () => {
@@ -1032,7 +1040,21 @@ test("Node syntax auto jobs retry failed children serially before failing", () =
 	assert.match(syntax, /uv_cwd\/spawn ENOENT|uv_cwd/);
 });
 
-test("public MCP stdio command is exposed without making users type stdio-shim", () => {
+test("removed pseudo-long single-dash flags do not return through parser shims", () => {
+	const rust = walkFiles(path.join(repoRoot, "src"), (file) => file.endsWith(".rs"))
+		.map((file) => fs.readFileSync(file, "utf8"))
+		.join("\n");
+	assert.doesNotMatch(rust, /"-[a-z][a-z0-9-]+"\s*=>\s*"--[a-z]/);
+});
+
+test("up stays convergent and does not duplicate upstream installation", () => {
+	const setup = fs.readFileSync(path.join(repoRoot, "src", "setup.rs"), "utf8");
+	assert.doesNotMatch(setup, /SERVER_SPEC_OR_PATH|\[server-spec\]/);
+	assert.doesNotMatch(setup, /long\s*=\s*"(?:server|as|path|force)"/);
+	assert.match(setup, /`up` never installs a new upstream server/);
+});
+
+test("generated MCP stdio entrypoints stay callable but hidden from the human CLI", () => {
 	const catalog = fs.readFileSync(
 		path.join(repoRoot, "src", "catalog.rs"),
 		"utf8",
@@ -1048,11 +1070,11 @@ test("public MCP stdio command is exposed without making users type stdio-shim",
 	);
 	const setup = fs.readFileSync(path.join(repoRoot, "src", "setup.rs"), "utf8");
 
-	assert.match(catalog, /name:\s*"stdio"/);
-	assert.match(catalog, /aliases:\s*&\["stdio-shim",\s*"stdio_shim"\]/);
-	assert.match(catalog, /Live MCP stdio launch surface/);
-	assert.match(app, /"stdio" \| "stdio-shim" => stdio_shim::run/);
-	assert.match(app, /mcpace stdio \[--root <path>\]/);
+	assert.match(catalog, /name:\s*"stdio"[\s\S]*visibility:\s*CommandVisibility::HiddenCompatibility/);
+	assert.match(catalog, /name:\s*"stdio-shim"[\s\S]*visibility:\s*CommandVisibility::HiddenCompatibility/);
+	assert.doesNotMatch(catalog, /"stdio_shim"/);
+	assert.match(app, /CommandRoute::Stdio \| CommandRoute::StdioShim/);
+	assert.doesNotMatch(app, /mcpace stdio \[--root <path>\]/);
 	assert.match(shim, /Usage: mcpace stdio \[--root <path>\]/);
 	assert.match(shim, /compatibility alias/);
 	assert.match(

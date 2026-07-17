@@ -1,11 +1,11 @@
 use super::*;
 
 #[test]
-fn parses_verify_action_and_compat_flags() {
+fn parses_verify_action_and_canonical_flags() {
     let parsed = parse_cli(&[
         "readiness".to_string(),
-        "-json".to_string(),
-        "-root".to_string(),
+        "--json".to_string(),
+        "--root".to_string(),
         "/tmp/mcpace".to_string(),
     ]);
     assert!(parsed.error.is_none());

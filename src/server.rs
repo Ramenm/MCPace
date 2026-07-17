@@ -1,4 +1,3 @@
-mod add;
 mod args;
 mod discover;
 mod import;
@@ -15,10 +14,9 @@ mod test;
 mod toggle;
 use crate::diagnostics;
 
-use self::args::{parse_cli, write_help};
+use self::args::{parse_cli, write_help, write_install_help};
 pub use self::loader::load_server_records;
 pub use self::model::ServerRecord;
-use crate::candidates;
 use std::io::Write;
 use std::path::PathBuf;
 
@@ -28,6 +26,13 @@ pub fn run(
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
+    if args.first().map(String::as_str) == Some("install")
+        && args.iter().any(|arg| arg == "--help" || arg == "-h")
+    {
+        write_install_help(stdout);
+        return 0;
+    }
+
     let parsed = parse_cli(args);
     if let Some(error) = parsed.error {
         diagnostics::stderr_line(stderr, format_args!("{}", error));
@@ -39,17 +44,6 @@ pub fn run(
     }
 
     let action = parsed.action.clone().unwrap_or_default();
-    if action == "candidates" {
-        let mut forwarded = Vec::new();
-        if parsed.json_output {
-            forwarded.push("--json".to_string());
-        }
-        if let Some(root) = &parsed.root_override {
-            forwarded.push("--root".to_string());
-            forwarded.push(root.display().to_string());
-        }
-        return candidates::run(&forwarded, default_root, stdout, stderr);
-    }
     if action == "sources" {
         return sources::run(&parsed, default_root, stdout, stderr);
     }
@@ -72,9 +66,6 @@ pub fn run(
             forwarded.push(root.display().to_string());
         }
         return crate::hub::run(&forwarded, default_root, stdout, stderr);
-    }
-    if action == "add" {
-        return add::run(&parsed, default_root, stdout, stderr);
     }
     if action == "install" {
         return install::run(&parsed, default_root, stdout, stderr);

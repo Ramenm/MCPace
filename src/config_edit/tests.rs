@@ -7,7 +7,7 @@ fn toml_managed_block_repair_preserves_foreign_tables_when_marker_overreaches() 
         "model = \"gpt\"\n",
         "\n",
         "# BEGIN MCPACE MANAGED BLOCK: MCPace\n",
-        "# This block is managed by `mcpace client install`.\n",
+        "# This block is managed by `mcpace advanced client install`.\n",
         "[mcp_servers.MCPace]\n",
         "url = \"http://127.0.0.1:1/mcp\"\n",
         "enabled = true\n",
@@ -95,4 +95,84 @@ fn json_server_object_error_is_typed_and_user_facing_message_matches_contract() 
     assert!(error
         .to_string()
         .contains("JSON client config '.vscode/mcp.json' has a non-object servers field"));
+}
+
+#[test]
+fn json_removal_deletes_only_the_expected_mcpace_entry() {
+    let existing = r#"{
+  "mcpServers": {
+    "MCPace": { "type": "http", "url": "http://127.0.0.1:39022/mcp" },
+    "other": { "url": "https://example.test/mcp" }
+  },
+  "theme": "dark"
+}"#;
+
+    let update = remove_json_mcp_server_entry(
+        existing,
+        "MCPace",
+        "mcpServers",
+        "http://127.0.0.1:39022/mcp",
+        Path::new("client.json"),
+    )
+    .expect("owned JSON entry should be removable");
+
+    assert!(update.replaced_existing_block);
+    assert!(!update.contents.contains("127.0.0.1:39022"));
+    assert!(update.contents.contains("example.test"));
+    assert!(update.contents.contains("dark"));
+}
+
+#[test]
+fn json_removal_preserves_same_named_foreign_entry() {
+    let existing = r#"{"mcpServers":{"MCPace":{"url":"https://foreign.example/mcp"}}}"#;
+
+    let update = remove_json_mcp_server_entry(
+        existing,
+        "MCPace",
+        "mcpServers",
+        "http://127.0.0.1:39022/mcp",
+        Path::new("client.json"),
+    )
+    .expect("foreign JSON entry should be left untouched");
+
+    assert!(!update.replaced_existing_block);
+    assert_eq!(update.contents, existing);
+}
+
+#[test]
+fn toml_removal_preserves_foreign_tables_outside_managed_block() {
+    let managed = build_toml_mcp_server_block("MCPace", "http://127.0.0.1:39022/mcp", "\n");
+    let existing = format!(
+        "model = \"gpt\"\n\n{}\n[notice]\ntext = \"keep\"\n",
+        managed
+    );
+
+    let update = remove_toml_mcp_server_block(&existing, "MCPace", Path::new("config.toml"))
+        .expect("managed TOML block should be removable");
+
+    assert!(update.replaced_existing_block);
+    assert!(!update.contents.contains("MCPACE MANAGED BLOCK"));
+    assert!(!update.contents.contains("127.0.0.1:39022"));
+    assert!(update.contents.contains("[notice]\ntext = \"keep\""));
+}
+
+#[test]
+fn yaml_removal_preserves_other_servers() {
+    let existing = concat!(
+        "mcp_servers:\n",
+        "  # BEGIN MCPACE MANAGED BLOCK: MCPace\n",
+        "  MCPace:\n",
+        "    url: \"http://127.0.0.1:39022/mcp\"\n",
+        "  # END MCPACE MANAGED BLOCK: MCPace\n",
+        "  other:\n",
+        "    url: \"https://example.test/mcp\"\n",
+    );
+
+    let update = remove_yaml_mcp_server_entry(existing, "MCPace", Path::new("config.yaml"))
+        .expect("managed YAML entry should be removable");
+
+    assert!(update.replaced_existing_block);
+    assert!(!update.contents.contains("MCPACE MANAGED BLOCK"));
+    assert!(update.contents.contains("other:"));
+    assert!(update.contents.contains("example.test"));
 }

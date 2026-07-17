@@ -128,6 +128,8 @@ test("default up transfers initial runtime ownership to the user supervisor", ()
 	);
 	assert.match(service, /start_user_supervisor_after_enable\(config\)/);
 	assert.match(config, /stop_runtime_before_supervisor_start\(config\)/);
+	assert.match(config, /stop_registered_user_supervisor_before_replace\(config\)/);
+	assert.match(config, /refusing to replace invalid Windows autostart plan/);
 	assert.match(config, /vec!\["--user", "daemon-reload"\]/);
 	assert.match(config, /vec!\["--user", "start", unit\.as_str\(\)\]/);
 	assert.match(config, /spawn_detached_no_window/);
@@ -141,7 +143,7 @@ test("default up transfers initial runtime ownership to the user supervisor", ()
 	assert.match(config, /if supervisor_runtime_ready\(&endpoint\)/);
 	assert.match(
 		config,
-		/healthy && platform_user_supervisor_is_active\(&endpoint\.root\)/,
+		/supervisor_endpoint_ready\(endpoint\)\s*&&\s*platform_user_supervisor_is_active\(&endpoint\.root\)/,
 	);
 });
 
@@ -152,9 +154,10 @@ test("Linux direct runtimes bypass an unavailable user bus only with explicit ow
 	assert.match(serve, /"supervisorManaged"/);
 	assert.match(
 		serve,
-		/systemd_stop_failure_is_ignorable\(\s*&detail,\s*recorded_runtime_is_explicitly_direct\(root\)/,
+		/if !recorded_runtime_is_explicitly_managed\(root\) \{\s*return Ok\(\(\)\);/,
 	);
-	assert.match(serve, /state\.supervisor_managed == Some\(false\)/);
+	assert.match(serve, /recorded_runtime_supervision\(root\) == Some\(false\)/);
+	assert.match(serve, /recorded_runtime_supervision\(root\) == Some\(true\)/);
 	assert.match(
 		serve,
 		/fn systemd_stop_failure_is_ignorable[\s\S]*access denied[\s\S]*permission denied[\s\S]*return false;[\s\S]*systemd_service_absent/,

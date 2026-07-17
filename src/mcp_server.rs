@@ -1050,7 +1050,7 @@ fn run_app_json_command(
 
     let mut stdout_buffer = Vec::new();
     let mut stderr_buffer = Vec::new();
-    let exit_code = app::run(args, &mut stdout_buffer, &mut stderr_buffer);
+    let exit_code = app::run_internal(args, &mut stdout_buffer, &mut stderr_buffer);
     let stdout_text = command_output_to_string(stdout_buffer)?;
 
     if matches!(output_policy, CommandOutputPolicy::AcceptStructuredStdout)

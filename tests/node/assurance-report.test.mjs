@@ -6,6 +6,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import test from "node:test";
 import { sameStringRecord } from "../../scripts/lib/proof-records.mjs";
+import { generatedReportFreshness } from "../../scripts/lib/report-freshness.mjs";
 import {
 	createVerifiedArtifactCopy,
 	provenanceGeneratorSha256,
@@ -56,6 +57,44 @@ test("proof record validation rejects omitted and substituted inputs", () => {
 		sameStringRecord({ ...expected, "scripts/unrelated.mjs": "c" }, expected),
 		false,
 	);
+});
+
+test("generated report freshness ignores time but rejects substituted content", () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mcpace-report-freshness-"));
+	try {
+		fs.mkdirSync(path.join(tmp, "reports"));
+		const expected = {
+			schema: "example.v1",
+			generatedAt: "2026-07-18T00:00:00.000Z",
+			status: "pass",
+		};
+		fs.writeFileSync(
+			path.join(tmp, "reports", "example.json"),
+			JSON.stringify({ ...expected, generatedAt: "2026-07-17T00:00:00.000Z" }),
+		);
+		fs.writeFileSync(path.join(tmp, "reports", "example.md"), "current\n");
+		const options = {
+			repoRoot: tmp,
+			jsonPath: "reports/example.json",
+			expectedReport: expected,
+			markdownPath: "reports/example.md",
+			expectedMarkdown: "current\n",
+		};
+		assert.deepEqual(generatedReportFreshness(options), []);
+		fs.writeFileSync(
+			path.join(tmp, "reports", "example.json"),
+			JSON.stringify({ ...expected, status: "stale" }),
+		);
+		assert.match(generatedReportFreshness(options).join("\n"), /is stale/);
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+test("aggregate endgame enforcement does not rewrite source-bound proof evidence", () => {
+	const endgame = read("scripts/endgame-readiness.mjs");
+	assert.match(endgame, /args\.enforce \? \["--enforce"\] : \[\]/);
+	assert.doesNotMatch(endgame, /args\.enforce \? \["--write"\] : \[\]/);
 });
 
 test("project assurance model checks user-visible truth, safety, and unverified gates", () => {
@@ -112,6 +151,7 @@ test("assurance artifacts are part of the release bundle contract", () => {
 		"reports/live-mcp-e2e-proof.json",
 		"scripts/live-mcp-e2e-proof.mjs",
 		"scripts/lib/proof-records.mjs",
+		"scripts/lib/report-freshness.mjs",
 		"scripts/lib/rust-build-provenance.mjs",
 		"reports/rust-live-proof.json",
 		"reports/supply-chain-evidence.json",
@@ -129,6 +169,15 @@ test("assurance artifacts are part of the release bundle contract", () => {
 		/project-assurance\.mjs --check/,
 	);
 	assert.match(packageJson.scripts.check, /check:assurance/);
+	assert.match(packageJson.scripts["check:inventory"], /project-inventory\.mjs --check/);
+	assert.match(packageJson.scripts.check, /check:inventory/);
+	for (const script of [
+		"scripts/project-assurance.mjs",
+		"scripts/platform-proof.mjs",
+		"scripts/project-inventory.mjs",
+	]) {
+		assert.match(read(script), /generatedReportFreshness/);
+	}
 	assert.match(
 		packageJson.scripts["proof:live-mcp-e2e"],
 		/live-mcp-e2e-proof\.mjs/,

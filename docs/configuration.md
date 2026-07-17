@@ -24,8 +24,8 @@ upstreams from the merged settings sources.
 
 `mcpace up` installs or repairs user-level persistence by default. On Windows,
 Linux, and macOS it immediately hands the first runtime to that user supervisor
-and waits for a healthy endpoint; the next `serve start` is only a status check,
-not a competing detached owner. A same-configuration `mcpace serve restart`
+and waits for a healthy endpoint; the next `mcpace start` is only a status check,
+not a competing detached owner. A same-configuration `mcpace restart`
 keeps that supervisor ownership. Use `mcpace up --no-autostart` only when a
 session-only runtime is intentional.
 
@@ -46,16 +46,18 @@ session-only runtime is intentional.
 
 CLI commands fall back to the installed Windows autostart plan when no
 `--root`, `MCPACE_ROOT`, or current-directory root is available, so commands
-such as `mcpace serve restart` can work from a normal home-directory shell after
+such as `mcpace restart` can work from a normal home-directory shell after
 installation. WSL is a special case: a Linux user service cannot start the WSL
 virtual machine after Windows reboot; Windows must start the distribution first.
+
+`mcpace advanced autostart prove --json` is the safe no-reboot lifecycle proof. It preserves the initial running/stopped state, stops the current runtime without disabling registration, activates the exact registered Windows launcher/systemd user unit/LaunchAgent, verifies endpoint and process identity, and restores the initial state. This proves manager activation and crash-path wiring, but not fresh login ordering; release validation still uses a disposable VM or dedicated Mac for an actual login session.
 
 ## Config-first import
 
 ```bash
-mcpace server import ./mcp.json --dry-run
-mcpace server import ./mcp.json --force
-mcpace server sources --json
+mcpace advanced server import ./mcp.json --dry-run
+mcpace advanced server import ./mcp.json --force
+mcpace advanced server sources --json
 mcpace up
 ```
 
@@ -136,9 +138,9 @@ Classification fields exposed in JSON and dashboard views:
 User path:
 
 ```bash
-mcpace auto --dry-run
-mcpace auto
-mcpace auto filesystem --json
+mcpace advanced server auto --dry-run
+mcpace advanced server auto
+mcpace advanced server auto filesystem --json
 ```
 
 Config block:
@@ -162,24 +164,24 @@ Config block:
 }
 ```
 
-`mcpace auto --dry-run` does not launch external packages. Package download/execution happens through the configured launcher only after the trust gate passes. The embedded starter entries use exact package versions; automatic discovery skips candidates whose launcher is unavailable, and a completed install returns failure when its mandatory live probe fails instead of reporting a broken server as ready.
+`mcpace advanced server auto --dry-run` does not launch external packages. Package download/execution happens through the configured launcher only after the trust gate passes. The embedded starter entries use exact package versions; automatic discovery skips candidates whose launcher is unavailable, and a completed install returns failure when its mandatory live probe fails instead of reporting a broken server as ready.
 
 Advanced/debug commands:
 
 ```bash
-mcpace server discover filesystem --json
-mcpace server discover --auto
-mcpace server discover --refresh --json
-mcpace server test <name> --refresh --json
+mcpace advanced server discover filesystem --json
+mcpace advanced server discover --auto
+mcpace advanced server discover --refresh --json
+mcpace advanced server test <name> --refresh --json
 ```
 
 ## Execution policy
 
 ```bash
-mcpace server set-policy filesystem --mode session-isolated --affinity client,project,chat
-mcpace server set-policy git --mode project-isolated --affinity client,project
-mcpace server set-policy fetch --mode pool --max-workers 4 --queue-timeout-ms 5000
-mcpace server set-policy shell --mode serialized --reuse-policy sticky
+mcpace advanced server set-policy filesystem --mode session-isolated --affinity client,project,chat
+mcpace advanced server set-policy git --mode project-isolated --affinity client,project
+mcpace advanced server set-policy fetch --mode pool --max-workers 4 --queue-timeout-ms 5000
+mcpace advanced server set-policy shell --mode serialized --reuse-policy sticky
 ```
 
 This writes a human-readable `execution` block and the canonical scheduler `policy` block inside `mcpace.config.json`.
@@ -187,10 +189,10 @@ This writes a human-readable `execution` block and the canonical scheduler `poli
 ## Inspect runtime routing
 
 ```bash
-mcpace server list --json
-mcpace server instances --client-id cursor --session-id chat-a --project-root .
-mcpace server leases --json
-mcpace dashboard
+mcpace advanced server list --json
+mcpace advanced server instances --client-id cursor --session-id chat-a --project-root .
+mcpace advanced server leases --json
+mcpace advanced runtime foreground
 ```
 
 `server instances` is a planning view: it shows how MCPace would route the current client/session/project before a live conflict happens.

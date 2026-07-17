@@ -24,7 +24,7 @@ pub(super) fn run(
         diagnostics::stderr_line(
             stderr,
             format_args!(
-                "server {} requires a server name, for example: mcpace server {} filesystem",
+                "server {} requires a server name, for example: mcpace advanced server {} filesystem",
                 action, action
             ),
         );

@@ -5,7 +5,18 @@ import test from 'node:test';
 import { repoRoot } from '../../scripts/lib/project-metadata.mjs';
 
 const read = (...parts) => fs.readFileSync(path.join(repoRoot, ...parts), 'utf8');
-const readJson = (...parts) => JSON.parse(read(...parts));
+const parseJson = (source, label) => {
+  try {
+    return JSON.parse(source);
+  } catch (error) {
+    throw new Error(`invalid JSON in ${label}: ${error.message}`, { cause: error });
+  }
+};
+const readJson = (...parts) => parseJson(read(...parts), parts.join('/'));
+const readJsonFile = (file) => parseJson(
+  fs.readFileSync(file, 'utf8'),
+  path.relative(repoRoot, file),
+);
 
 function fixtureFiles() {
   const dir = path.join(repoRoot, 'eval', 'fixtures', 'runtime');
@@ -22,19 +33,19 @@ test('lab command is one-step and defaults to an evidence report', () => {
   const app = read('src', 'app.rs');
 
   assert.match(labRun, /unwrap_or\("report"\)/);
-  assert.match(labArgs, /Usage: mcpace lab \[report\|list\|matrix\|coverage\|gaps\|show\|probe\]/);
+  assert.match(labArgs, /Usage: mcpace advanced dev lab \[report\|list\|matrix\|coverage\|gaps\|show\|probe\]/);
   assert.match(labArgs, /Default action: report/);
   assert.match(labRender, /server -> evidence -> runtimeType\/stateClass\/effectClass -> concurrencyPolicy/);
   assert.match(labRender, /Live safe probe/);
   assert.match(labRender, /Evidence matrix sample/);
-  assert.match(app, /mcpace lab \[--json\]/);
+  assert.match(app, /"lab" => lab::run/);
 });
 
 test('lab golden corpus covers popular and random MCP server classes', () => {
   const corpus = readJson('eval', 'popular-server-corpus.json');
   const randomAudit = readJson('eval', 'random-server-audit.json');
   const files = fixtureFiles();
-  const scenarios = files.map((file) => JSON.parse(fs.readFileSync(file, 'utf8')));
+  const scenarios = files.map(readJsonFile);
 
   assert.ok(files.length >= 46);
   assert.ok(corpus.npmPack.length >= 10);
@@ -99,7 +110,7 @@ test('lab golden corpus covers popular and random MCP server classes', () => {
 });
 
 test('lab fixtures are evidence-rich and do not ship sandbox download artifacts', () => {
-  const scenarios = fixtureFiles().map((file) => JSON.parse(fs.readFileSync(file, 'utf8')));
+  const scenarios = fixtureFiles().map(readJsonFile);
   for (const scenario of scenarios) {
     assert.ok(scenario.traffic.serverArchetype, `${scenario.id} missing server archetype`);
     assert.ok(scenario.expected.runtimeType, `${scenario.id} missing runtime type`);

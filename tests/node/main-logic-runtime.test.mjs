@@ -24,14 +24,17 @@ test("public command routing matches the documented primary runtime path", () =>
 	const help = read("src/app.rs");
 	assert.match(
 		catalog,
-		/name: "setup"[\s\S]*aliases: &\["up", "quickstart", "bootstrap", "one-click"\]/,
+		/name: "up"[\s\S]*aliases: &\[\][\s\S]*visibility: CommandVisibility::Public[\s\S]*route: CommandRoute::Up/,
 	);
-	assert.match(app, /"setup" => setup::run/);
-	assert.match(app, /"serve" => serve::run/);
+	assert.match(app, /CommandRoute::Up => setup::run/);
+	assert.match(app, /CommandRoute::Serve => serve::run/);
 	assert.match(app, /"server" => server::run/);
 	assert.match(app, /"client" => client::run/);
+	assert.match(app, /CommandRoute::Status => status::run/);
+	assert.match(app, /CommandRoute::Uninstall => uninstall::run/);
 	assert.match(help, /mcpace up/);
-	assert.match(help, /does not add a default upstream server/);
+	assert.match(help, /installs or repairs user-level login startup/);
+	assert.doesNotMatch(catalog, /"quickstart"|"bootstrap"|"one-click"/);
 });
 
 test("main read-modify-write flows take locks before reading current state", () => {

@@ -8,6 +8,7 @@ const REQUIRED_DOCS = new Set([
   'README.md',
   'architecture.md',
   'architecture-simplification.md',
+  'cli-migration.md',
   'configuration.md',
   'dashboard-base.md',
   'frontend.md',
@@ -104,7 +105,7 @@ test('root README is a short landing page and detailed docs live under docs/', (
   assert.match(readme, /^# MCPace$/m);
   assert.match(readme, /MCPace runs MCP servers at the right concurrency\./);
   assert.match(readme, /mcpace up/);
-  assert.match(readme, /server set-policy/);
+  assert.match(readme, /mcpace advanced server/);
   assert.match(readme, /does \*\*not\*\* add a filesystem server/);
   assert.doesNotMatch(readme, /UpstreamSessionPool|proof gate|release harness|operator manual/i);
 });
@@ -138,7 +139,7 @@ test('source bundle excludes stale public-repo docs and heavyweight artifacts', 
 
 test('release manifest matches the normalized bundle contract', () => {
   const manifest = JSON.parse(readText('release-manifest.json'));
-  for (const required of ['README.md', 'docs/README.md', 'docs/lab-harness.md', 'reports/summary.md', 'tests/node', 'packages/npm/cli', 'catalog', 'manifests', 'eval', 'scripts/check-node-syntax.mjs', 'scripts/rust-live-proof.mjs', 'scripts/rust-boundary-contract.mjs', 'scripts/supply-chain-evidence.mjs', 'scripts/endgame-readiness.mjs', 'docs/rust-live-proof.md', 'docs/rust-boundary-contract.md', 'docs/endgame-readiness.md']) {
+  for (const required of ['README.md', 'docs/README.md', 'docs/lab-harness.md', 'reports/summary.md', 'reports/verification.json', 'tests/node', 'packages/npm/cli', 'catalog', 'manifests', 'eval', 'scripts/check-node-syntax.mjs', 'scripts/rust-live-proof.mjs', 'scripts/rust-boundary-contract.mjs', 'scripts/supply-chain-evidence.mjs', 'scripts/endgame-readiness.mjs', 'docs/rust-live-proof.md', 'docs/rust-boundary-contract.md', 'docs/endgame-readiness.md']) {
     assert.ok(manifest.includePaths.includes(required), `manifest missing ${required}`);
   }
   for (const removed of [...REMOVED_ROOT_DOCS, ...REMOVED_LEGACY_CONFIGS]) {

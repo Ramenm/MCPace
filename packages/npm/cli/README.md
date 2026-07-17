@@ -23,6 +23,18 @@ mcpace up
 
 `mcpace up` creates/repairs MCPace home, imports existing MCP servers from detected configs when safe, starts the endpoint, wires detected clients, and installs or repairs user-level autostart. It immediately transfers the runtime to the current user's supervisor: the hidden MCPace launcher on Windows, `systemd --user` on Linux, or a LaunchAgent on macOS. That supervisor also restores the endpoint after login and restarts failures. Use `mcpace up --no-autostart` for a session-only runtime. On WSL, systemd must be enabled and Windows must start the distribution before its Linux user service can run. It does not add a new upstream server by default.
 
+## Remove MCPace
+
+Run the product cleanup before removing the npm launcher:
+
+```bash
+mcpace uninstall --dry-run
+mcpace uninstall
+npm uninstall -g @mcpace/cli
+```
+
+`mcpace uninstall` stops the runtime, removes current and historical MCPace user-login entries, removes only ownership-verified MCPace client entries, and clears ephemeral runtime state. It preserves durable configuration, upstream definitions, and rollback backups. npm does not provide a reliable cross-platform uninstall hook for this OS lifecycle, so removing the package first can leave an inert startup entry behind.
+
 Node floor: 22+.
 
 ## License

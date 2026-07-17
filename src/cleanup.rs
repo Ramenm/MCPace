@@ -96,7 +96,7 @@ enum CleanupScope {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace cleanup",
+    name = "mcpace advanced runtime cleanup",
     disable_version_flag = true,
     about = "Inspect or remove MCPace runtime artifacts"
 )]
@@ -162,21 +162,9 @@ fn cleanup_scope_name(scope: CleanupScope) -> String {
 
 fn cleanup_argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace cleanup"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_cleanup_flag(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced runtime cleanup"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_cleanup_flag(arg: &str) -> &str {
-    match arg {
-        "-json" => "--json",
-        "-root" => "--root",
-        "-?" => "--help",
-        other => other,
-    }
 }
 
 fn cleanup_report(root_path: &Path, scope: &str, dry_run: bool) -> JsonValue {
@@ -418,7 +406,7 @@ impl CleanupAction {
 }
 
 fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace cleanup [status|cache|runtime|logs|all-safe] [--json] [--root <path>] [--dry-run]");
+    let _ = writeln!(stdout, "Usage: mcpace advanced runtime cleanup [status|cache|runtime|logs|all-safe] [--json] [--root <path>] [--dry-run]");
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Safe cleanup preserves durable user config, MCP source fragments, external client configs, and client-install backups.");
 }

@@ -64,7 +64,7 @@
       "id": "live-safe-probe",
       "priority": "p0",
       "missing": false,
-      "description": "mcpace lab probe / server test can start configured servers with the safe MCP lifecycle and request tools/list without tools/call. resources/list and prompts/list remain optional future enrichments.",
+      "description": "mcpace advanced dev lab probe / advanced server test can start configured servers with the safe MCP lifecycle and request tools/list without tools/call. resources/list and prompts/list remain optional future enrichments.",
       "why": "Metadata-only left many random packages in needs-safe-probe or unknown-conservative; MCP lifecycle and tool discovery are the strongest non-destructive evidence.",
       "status": "implemented-tools-list-probe"
     },
@@ -119,9 +119,9 @@
   ],
   "completionDefinition": {
     "usableNow": [
-      "mcpace auto can choose safe conservative defaults without asking the user for server type",
+      "mcpace advanced server auto can choose safe conservative defaults without asking the user for server type",
       "weak/unknown random servers are routed to needs-safe-probe or plan-only instead of guessed policies",
-      "mcpace lab probe provides the live safe probe path for configured servers"
+      "mcpace advanced dev lab probe provides the live safe probe path for configured servers"
     ],
     "notFinishedUntil": [
       "permission manifest inference is connected to auto-install review",

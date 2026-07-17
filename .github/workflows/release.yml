@@ -279,6 +279,8 @@ jobs:
 
       - name: Verify Ubuntu/Debian installer
         if: matrix.platform == 'linux'
+        env:
+          MCPACE_DISPOSABLE_AUTOSTART_PROOF: "1"
         run: |
           set -euo pipefail
           installer="$(
@@ -293,11 +295,16 @@ jobs:
           dpkg -s mcpace >/dev/null
           npm run check:installer-runtime-smoke -- \
             --binary /usr/bin/mcpace --json
+          npm run proof:autostart -- \
+            --binary /usr/bin/mcpace --json --allow-manager-skip \
+            --confirm-disposable-user
           sudo apt-get remove -y mcpace
         shell: bash
 
       - name: Verify Windows MSI installer
         if: matrix.platform == 'win32'
+        env:
+          MCPACE_DISPOSABLE_AUTOSTART_PROOF: "1"
         shell: pwsh
         run: |
           $installer = Get-ChildItem `
@@ -332,7 +339,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $probeRoot | Out-Null
           $configPath = Join-Path $probeRoot 'mcpace.config.json'
           Set-Content -LiteralPath $configPath -Value '{}'
-          $planJson = & $installed autostart print `
+          $planJson = & $installed advanced autostart print `
             --root $probeRoot `
             --json
           $autostartPlan = $planJson | ConvertFrom-Json
@@ -365,12 +372,18 @@ jobs:
           }
           npm run check:installer-runtime-smoke -- `
             --binary $installed --json
+          npm run proof:autostart -- `
+            --binary $installed --json --confirm-disposable-user
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows autostart lifecycle proof failed: $LASTEXITCODE"
+          }
           Invoke-Msi @('/x', $installer.FullName, '/qn', '/norestart')
 
       - name: Verify macOS PKG installer, receipt, and runtime
         if: matrix.platform == 'darwin'
         env:
           MCPACE_MACOS_BINARY_ARCH: ${{ matrix.macos_binary_arch }}
+          MCPACE_DISPOSABLE_AUTOSTART_PROOF: "1"
         run: |
           set -euo pipefail
           installer="$(
@@ -396,6 +409,8 @@ jobs:
           otool -L /usr/local/bin/mcpace
           npm run check:installer-runtime-smoke -- \
             --binary /usr/local/bin/mcpace --json
+          npm run proof:autostart -- \
+            --binary /usr/local/bin/mcpace --json --confirm-disposable-user
           sudo rm -f /usr/local/bin/mcpace
           sudo rm -rf /usr/local/share/doc/mcpace
           sudo pkgutil --forget io.github.ramenm.mcpace || true

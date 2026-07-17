@@ -3,11 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { writeFileAtomicSync } from './lib/atomic-fs.mjs';
+import { generatedReportFreshness } from './lib/report-freshness.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
 const args = new Set(process.argv.slice(2));
 const write = args.has('--write');
+const check = args.has('--check');
 const jsonOnly = args.has('--json');
 
 function posix(relativePath) {
@@ -53,8 +55,9 @@ function parseCommandCatalog() {
     const description = block.match(/description:\s*"([\s\S]*?)"/)?.[1]?.replace(/\s+/g, ' ') ?? '';
     const aliasBlock = block.match(/aliases:\s*&\[([\s\S]*?)\]/)?.[1] ?? '';
     const aliases = [...aliasBlock.matchAll(/"([^"]+)"/g)].map((entry) => entry[1]);
-    const implemented = /implemented:\s*true/.test(block);
-    commands.push({ name, aliases, implemented, description });
+    const visibility = block.match(/visibility:\s*CommandVisibility::([A-Za-z]+)/)?.[1] ?? 'Unknown';
+    const route = block.match(/route:\s*CommandRoute::([A-Za-z]+)/)?.[1] ?? null;
+    commands.push({ name, aliases, visibility, route, implemented: Boolean(route), description });
   }
   return commands;
 }
@@ -180,21 +183,21 @@ function buildRuntimeFlowAudit() {
     endToEndFlows: [
       {
         name: 'Quickstart / up',
-        trigger: 'mcpace up / mcpace setup',
+        trigger: 'mcpace up',
         path: ['src/app.rs', 'src/setup.rs', 'src/init.rs', 'src/serve.rs', 'src/client/actions.rs', 'src/verify/*'],
         usefulWork: 'Create or repair the MCPace home, import existing MCP settings, start the local endpoint, wire supported clients, and run readiness checks without adding default upstream servers.',
         safetyBoundary: 'No default filesystem/memory/server is installed unless the user imports or installs one.',
       },
       {
         name: 'Client wiring',
-        trigger: 'mcpace client install/export/plan/restore',
+        trigger: 'mcpace advanced client install/export/plan/restore',
         path: ['src/client.rs', 'src/client/args.rs', 'src/client/actions.rs', 'src/client/actions/config_update.rs', 'src/client/plan.rs'],
         usefulWork: 'Detect supported clients, generate one MCPace endpoint entry, preserve existing user MCP servers, and keep backup/restore paths.',
         safetyBoundary: 'Client mutation stays inside client actions; setup only orchestrates.',
       },
       {
         name: 'Server inventory and policy',
-        trigger: 'mcpace server list/import/install/auto/set-policy/instances/test',
+        trigger: 'mcpace install + mcpace advanced server list/import/auto/set-policy/instances/test',
         path: ['src/server.rs', 'src/server/*', 'src/mcp_sources/*', 'src/source_type.rs', 'src/adapter/discovery.rs'],
         usefulWork: 'Merge MCP settings, normalize source shapes, infer runtime policy, write explicit server fragments, and plan instances/leases.',
         safetyBoundary: 'Unknown packages stay review/plan-only unless trust gates allow install and probe.',
@@ -215,7 +218,7 @@ function buildRuntimeFlowAudit() {
       },
       {
         name: 'Observability / operator UI',
-        trigger: 'mcpace dashboard / /api/overview / runtime_diagnostics',
+        trigger: 'mcpace advanced runtime foreground / /api/overview / runtime_diagnostics',
         path: ['src/dashboard.rs', 'src/dashboard/*', 'src/hub/status.rs', 'src/upstream/diagnostics.rs'],
         usefulWork: 'Show endpoint health, configured servers, warnings, leases, logs, and runtime/upstream availability without inventing unavailable telemetry.',
         safetyBoundary: 'Process-level CPU/RAM/latency histograms remain explicit telemetry gaps until runtime collection exists.',
@@ -449,8 +452,9 @@ function buildInventory() {
     counts: {
       rustFiles: rust.files.length,
       rustFunctions: rust.functions.length,
-      publicCommands: commands.length,
-      implementedPublicCommands: commands.filter((command) => command.implemented).length,
+      publicCommands: commands.filter((command) => command.visibility === 'Public').length,
+      hiddenCompatibilityCommands: commands.filter((command) => command.visibility === 'HiddenCompatibility').length,
+      implementedPublicCommands: commands.filter((command) => command.visibility === 'Public' && command.implemented).length,
       duplicateFunctionNames: rust.duplicates.length,
       longRustFiles: rust.longFiles.length,
     },
@@ -494,6 +498,7 @@ function renderMarkdown(inventory) {
   lines.push(`- Rust functions parsed: ${inventory.counts.rustFunctions}`);
   lines.push(`- Public command groups: ${inventory.counts.publicCommands}`);
   lines.push(`- Implemented public command groups: ${inventory.counts.implementedPublicCommands}`);
+  lines.push(`- Hidden compatibility entrypoints: ${inventory.counts.hiddenCompatibilityCommands}`);
   lines.push(`- Duplicate function names to review: ${inventory.counts.duplicateFunctionNames}`);
   lines.push(`- Rust files at or above 700 lines: ${inventory.counts.longRustFiles}`);
   lines.push(`- npm launcher present/executable: ${inventory.npmLauncher.exists ? 'yes' : 'no'} / ${inventory.npmLauncher.executable ? 'yes' : 'no'}`);
@@ -514,12 +519,12 @@ function renderMarkdown(inventory) {
     lines.push(`| ${slice.slice} | ${slice.owners.map((owner) => `\`${owner}\``).join(', ')} |`);
   }
   lines.push('');
-  lines.push('## Public command groups');
+  lines.push('## Command routes');
   lines.push('');
-  lines.push('| Command | Aliases | Implemented | Job |');
-  lines.push('|---|---|---:|---|');
+  lines.push('| Command | Visibility | Aliases | Route | Job |');
+  lines.push('|---|---|---|---|---|');
   for (const command of inventory.commands) {
-    lines.push(`| \`${command.name}\` | ${command.aliases.length ? command.aliases.map((alias) => `\`${alias}\``).join(', ') : '—'} | ${command.implemented ? 'yes' : 'no'} | ${command.description || '—'} |`);
+    lines.push(`| \`${command.name}\` | ${command.visibility} | ${command.aliases.length ? command.aliases.map((alias) => `\`${alias}\``).join(', ') : '—'} | ${command.route || '—'} | ${command.description || '—'} |`);
   }
   lines.push('');
   lines.push('## Grouped subcommands');
@@ -622,17 +627,34 @@ function renderMarkdown(inventory) {
 }
 
 const inventory = buildInventory();
+const markdown = renderMarkdown(inventory);
+const freshnessFindings = check
+  ? generatedReportFreshness({
+      repoRoot,
+      jsonPath: 'reports/internal-inventory.json',
+      expectedReport: inventory,
+      markdownPath: 'reports/internal-inventory.md',
+      expectedMarkdown: markdown,
+    })
+  : [];
 if (write) {
   const reportsDir = path.join(repoRoot, 'reports');
   fs.mkdirSync(reportsDir, { recursive: true });
   writeFileAtomicSync(path.join(reportsDir, 'internal-inventory.json'), JSON.stringify(inventory, null, 2) + '\n', { mode: 0o644 });
-  writeFileAtomicSync(path.join(reportsDir, 'internal-inventory.md'), renderMarkdown(inventory), { mode: 0o644 });
+  writeFileAtomicSync(path.join(reportsDir, 'internal-inventory.md'), markdown, { mode: 0o644 });
 }
 
 if (jsonOnly) {
   process.stdout.write(JSON.stringify(inventory, null, 2) + '\n');
+} else if (check) {
+  process.stdout.write(`MCPace inventory reports: ${freshnessFindings.length === 0 ? 'fresh' : 'stale'}\n`);
 } else if (!write) {
-  process.stdout.write(renderMarkdown(inventory));
+  process.stdout.write(markdown);
 } else {
   process.stdout.write('Wrote reports/internal-inventory.json and reports/internal-inventory.md\n');
+}
+
+if (check && freshnessFindings.length > 0) {
+  process.stderr.write(`MCPace inventory reports are stale:\n- ${freshnessFindings.join('\n- ')}\n`);
+  process.exit(1);
 }

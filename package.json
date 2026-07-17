@@ -12,8 +12,9 @@
   "scripts": {
     "lint:npm": "node scripts/check-node-syntax.mjs --json && npm run lint:rust-static",
     "test:npm": "node scripts/run-node-tests.mjs --quiet",
-    "check": "npm run lint:npm && npm run check:rust-boundaries && npm run check:rust-compile && npm run test:npm && npm run check:platform && npm run check:assurance && npm run check:clean-archive && npm run check:modernization",
+    "check": "npm run lint:npm && npm run check:rust-boundaries && npm run check:rust-compile && npm run test:npm && npm run check:inventory && npm run check:platform && npm run check:assurance && npm run check:clean-archive && npm run check:modernization",
     "inventory": "node scripts/project-inventory.mjs --write",
+    "check:inventory": "node scripts/project-inventory.mjs --check",
     "check:package": "publint packages/npm/cli",
     "check:ci": "node scripts/check-ci.mjs",
     "ci:local:quick": "npm run check",
@@ -58,6 +59,7 @@
     "evidence:runtime": "node scripts/runtime-evidence.mjs",
     "lint:rust-static": "node scripts/rust-static-guard.mjs --json",
     "proof:browser-lifecycle": "node scripts/browser-lifecycle-proof.mjs",
+    "proof:autostart": "node scripts/autostart-lifecycle-proof.mjs",
     "proof:live-mcp-e2e": "node scripts/live-mcp-e2e-proof.mjs --json",
     "proof:live-mcp-e2e:write": "node scripts/live-mcp-e2e-proof.mjs --json --write",
     "check:publish-trust": "node scripts/publish-trust-preflight.mjs",

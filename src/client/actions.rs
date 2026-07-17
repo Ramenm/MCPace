@@ -1,11 +1,23 @@
 use crate::diagnostics;
 use crate::text_utils::yes_no;
 mod backup;
+#[cfg(test)]
+mod compatibility_tests;
 mod config_update;
 mod list;
+mod removal;
+#[cfg(test)]
+mod removal_tests;
 mod render_models;
 
 pub(super) use self::list::run_list;
+
+pub(super) fn remove_owned_client_integrations(
+    root_path: &Path,
+    dry_run: bool,
+) -> super::ClientIntegrationResult<JsonValue> {
+    removal::remove_owned_client_integrations(root_path, dry_run)
+}
 
 use self::backup::{
     install_backup_root, now_ms, restore_client_install_backup, safe_file_segment,
@@ -158,7 +170,7 @@ pub(super) fn run_export(
     {
         Some(value) => value,
         None => {
-            diagnostics::stderr_line(stderr, format_args!("unknown client target '{}'; use 'mcpace client list' to inspect supported surfaces",
+            diagnostics::stderr_line(stderr, format_args!("unknown client target '{}'; use 'mcpace advanced client list' to inspect supported surfaces",
                 context.client_id));
             return 2;
         }
@@ -242,7 +254,7 @@ pub(super) fn run_install(
     {
         Some(value) => value,
         None => {
-            diagnostics::stderr_line(stderr, format_args!("unknown client target '{}'; use 'mcpace client list' to inspect supported surfaces",
+            diagnostics::stderr_line(stderr, format_args!("unknown client target '{}'; use 'mcpace advanced client list' to inspect supported surfaces",
                 context.client_id));
             return 2;
         }
@@ -307,7 +319,7 @@ pub(super) fn run_restore(
         return 1;
     };
     let Some(client_id) = parsed.client_id.as_deref() else {
-        diagnostics::stderr_line(stderr, format_args!("client restore requires a client target id, for example: mcpace client restore codex"));
+        diagnostics::stderr_line(stderr, format_args!("client restore requires a client target id, for example: mcpace advanced client restore codex"));
         return 2;
     };
 
@@ -824,7 +836,7 @@ impl ClientInstallPlan {
 
         let manifest_path = backup_path.join("manifest.json");
         let restore_command = format!(
-            "mcpace client restore {} --backup {} --root <mcpace-root>",
+            "mcpace advanced client restore {} --backup {} --root <mcpace-root>",
             self.client_target_id, id
         );
         let manifest = JsonValue::object([
@@ -981,13 +993,7 @@ fn build_adapter_contract(
         _ => AdapterContractPreview {
             kind: "stdio-launcher".to_string(),
             command: Some(plan.launcher_command.clone()),
-            args: vec![
-                "stdio".to_string(),
-                "--root".to_string(),
-                sanitize_launcher_root_path(&plan.root_path),
-                "--client-id".to_string(),
-                target.id.clone(),
-            ],
+            args: stdio_launcher_args(&plan.root_path, &target.id),
             url_template: None,
             metadata_carrier:
                 "MCP initialize params, roots, cwd, and optional _meta context hints".to_string(),
@@ -1001,6 +1007,16 @@ fn build_adapter_contract(
             ],
         },
     }
+}
+
+fn stdio_launcher_args(root_path: &str, client_id: &str) -> Vec<String> {
+    vec![
+        "stdio".to_string(),
+        "--root".to_string(),
+        sanitize_launcher_root_path(root_path),
+        "--client-id".to_string(),
+        client_id.to_string(),
+    ]
 }
 
 fn sanitize_launcher_root_path(root_path: &str) -> String {

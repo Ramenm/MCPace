@@ -20,7 +20,7 @@ enum VerifyAction {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace verify",
+    name = "mcpace advanced doctor",
     disable_version_flag = true,
     about = "Run MCPace verification and readiness checks"
 )]
@@ -70,32 +70,20 @@ pub(super) fn parse_cli(args: &[String]) -> ParsedArgs {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace verify"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_flag(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced doctor"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_flag(arg: &str) -> &str {
-    match arg {
-        "-json" => "--json",
-        "-root" => "--root",
-        "-?" => "--help",
-        other => other,
-    }
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace verify <doctor|readiness> [--json] [--root <path>]"
+        "Usage: mcpace advanced doctor [--json] [--root <path>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
-    let _ = writeln!(stdout, "  mcpace verify doctor [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace verify readiness [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  mcpace advanced doctor [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  mcpace status [--json] [--root <path>]");
 }
 
 #[cfg(test)]

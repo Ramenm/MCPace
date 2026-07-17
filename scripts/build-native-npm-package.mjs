@@ -220,7 +220,7 @@ function writeReadme(packageDir, target) {
 		(target.platform === "win32" ? "mcpace.exe" : "mcpace");
 	const sidecarNote =
 		target.platform === "win32"
-			? ` It also includes \`${WINDOWS_AGENT_LAUNCHER_NAME}\`, the GUI-subsystem login-start sidecar used by \`mcpace autostart\` so Windows does not open a terminal window at user login.`
+			? ` It also includes \`${WINDOWS_AGENT_LAUNCHER_NAME}\`, the GUI-subsystem login-start sidecar used by \`mcpace advanced autostart\` so Windows does not open a terminal window at user login.`
 			: "";
 	writeFileAtomicSync(
 		path.join(packageDir, "README.md"),

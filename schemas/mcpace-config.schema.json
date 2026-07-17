@@ -285,16 +285,16 @@
         "maxAutoInstallsPerRun": {
           "type": "integer",
           "minimum": 0,
-          "description": "Maximum number of trusted/approved candidates mcpace auto may add during an automatic sweep."
+          "description": "Maximum number of trusted/approved candidates mcpace advanced server auto may add during an automatic sweep."
         },
         "autoRefreshRegistry": {
           "type": "boolean",
-          "description": "When true, mcpace auto refreshes the registry cache automatically when missing or older than registryCacheTtlHours."
+          "description": "When true, mcpace advanced server auto refreshes the registry cache automatically when missing or older than registryCacheTtlHours."
         },
         "registryCacheTtlHours": {
           "type": "integer",
           "minimum": 0,
-          "description": "Age after which mcpace auto refreshes the registry cache. 0 means refresh every auto run."
+          "description": "Age after which mcpace advanced server auto refreshes the registry cache. 0 means refresh every auto run."
         },
         "defaultCommand": {
           "type": "string",
@@ -302,7 +302,7 @@
             "auto",
             "plan-only"
           ],
-          "description": "User-facing default. auto means use mcpace auto for discovery/setup/probe; plan-only keeps discover read-only unless advanced flags are passed."
+          "description": "User-facing default. auto means use mcpace advanced server auto for discovery/setup/probe; plan-only keeps discover read-only unless advanced flags are passed."
         }
       }
     }

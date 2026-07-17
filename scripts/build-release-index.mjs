@@ -164,7 +164,7 @@ function buildIndex({ assetDir, outDir }) {
     packageName: '@mcpace/cli',
     updatePolicy: {
       mode: 'package-manager-managed',
-      defaultCheck: 'mcpace update check --source npm',
+      defaultCheck: 'mcpace advanced update check --source npm',
       recommendedInstall: 'npm install -g @mcpace/cli@latest',
       directGitHubInstallers: 'manual-upgrade-only',
       selfRewrite: false,

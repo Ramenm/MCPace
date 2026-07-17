@@ -20,7 +20,7 @@ struct ParsedArgs {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace release",
+    name = "mcpace advanced dev release",
     disable_version_flag = true,
     about = "Build local release artifacts without publishing"
 )]
@@ -187,27 +187,15 @@ fn parse_cli(args: &[String]) -> ParsedArgs {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace release"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced dev release"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_arg(arg: &str) -> String {
-    match arg {
-        "-json" => "--json".to_string(),
-        "-root" => "--root".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
 }
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace release [build] [--json] [--root <path>]"
+        "Usage: mcpace advanced dev release [build] [--json] [--root <path>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -224,7 +212,7 @@ fn write_help(stdout: &mut dyn Write) {
 fn write_usage(stderr: &mut dyn Write) {
     diagnostics::stderr_line(
         stderr,
-        format_args!("Usage: mcpace release [build] [--json] [--root <path>]"),
+        format_args!("Usage: mcpace advanced dev release [build] [--json] [--root <path>]"),
     );
 }
 

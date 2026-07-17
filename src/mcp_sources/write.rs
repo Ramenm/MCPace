@@ -246,7 +246,7 @@ pub fn remove_mcp_server_entry(
         Some(path) => resolve_under_root(root_path, path),
         None => find_source_path_for_server(root_path, &normalized_name)?.ok_or_else(|| {
             format!(
-                "MCP server '{}' was not found in known sources; run 'mcpace server sources' or pass --settings <path>",
+                "MCP server '{}' was not found in known sources; run 'mcpace advanced server sources' or pass --settings <path>",
                 display_name
             )
         })?,
@@ -343,7 +343,7 @@ pub fn set_mcp_server_enabled(
         Some(path) => resolve_under_root(root_path, path),
         None => find_source_path_for_server(root_path, &normalized_name)?.ok_or_else(|| {
             format!(
-                "MCP server '{}' was not found in known sources; run 'mcpace server sources' or pass --settings <path>",
+                "MCP server '{}' was not found in known sources; run 'mcpace advanced server sources' or pass --settings <path>",
                 display_name
             )
         })?,
@@ -514,15 +514,17 @@ impl McpServerWriteResult {
                 JsonValue::array(if self.server_type == "stdio" {
                     vec![
                         JsonValue::string(format!(
-                            "mcpace server test {} --refresh --json",
+                            "mcpace advanced server test {} --refresh --json",
                             self.normalized_name
                         )),
-                        JsonValue::string("mcpace client install <client|all> --dry-run --diff"),
+                        JsonValue::string(
+                            "mcpace advanced client install <client|all> --dry-run --diff",
+                        ),
                     ]
                 } else {
                     vec![
                         JsonValue::string(format!(
-                            "mcpace server test {} --refresh --json",
+                            "mcpace advanced server test {} --refresh --json",
                             self.normalized_name
                         )),
                         JsonValue::string("MCPace forwards Streamable HTTP directly; HTTPS uses platform certificate verification and plain HTTP is limited to loopback"),
@@ -577,10 +579,10 @@ impl McpServerToggleResult {
                 "suggestedNextCommands",
                 JsonValue::array([
                     JsonValue::string(format!(
-                        "mcpace server test {} --refresh --json",
+                        "mcpace advanced server test {} --refresh --json",
                         self.normalized_name
                     )),
-                    JsonValue::string("mcpace verify readiness --json"),
+                    JsonValue::string("mcpace status --json"),
                 ]),
             ),
         ])

@@ -21,10 +21,10 @@ Use the canonical commands in the root `README.md` and `package.json`. Common en
 ```bash
 npm test
 npm run check
-cargo run -- --help
+cargo run --bin mcpace -- help
 ```
 
-Before using HTTP mutation endpoints, configure the project’s HTTP authentication token and review the security notes in `SECURITY.md` and `docs/research/security-hardening-sources.md`.
+Before using HTTP mutation endpoints, configure the project’s HTTP authentication token and review the security notes in `SECURITY.md` and `docs/research/security-hardening-sources.md`. The command replacement table is in `docs/cli-migration.md`. The intentionally small CLI, hidden compatibility entrypoints, upstream project comparison, and no-reboot startup proof boundary are documented in `docs/research/cli-and-autostart-patterns.md`.
 
 ## Full local verification
 
@@ -34,7 +34,7 @@ npm run check
 cargo fmt --all -- --check
 cargo check --all-targets
 cargo clippy --all-targets -- -D warnings
-cargo test --all-targets
+npm run test:rust
 ```
 
 Some assurance/readiness commands intentionally report a blocked state until a live Rust binary proof is regenerated from the exact current source snapshot. A blocked proof must not be relabelled as passing. This source bundle is not production-release approval; publish only after every enforced release gate passes on the signed build hosts.

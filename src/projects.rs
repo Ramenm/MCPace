@@ -180,7 +180,7 @@ pub fn run(
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace projects [list|scan [project-path]] [--json] [--root <path>]"
+        "Usage: mcpace advanced dev projects [list|scan [project-path]] [--json] [--root <path>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -191,7 +191,7 @@ fn write_help(stdout: &mut dyn Write) {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace projects",
+    name = "mcpace advanced dev projects",
     disable_version_flag = true,
     about = "Inspect and update the MCPace project registry"
 )]
@@ -204,9 +204,6 @@ struct ProjectsCli {
 
     #[arg(value_name = "EXTRA")]
     extra: Vec<String>,
-
-    #[arg(long = "scan", hide = true)]
-    scan_flag: bool,
 
     #[arg(long = "json")]
     json_output: bool,
@@ -237,23 +234,13 @@ fn parse_cli(args: &[String]) -> ParsedArgs {
 }
 
 fn parsed_from_cli(cli: ProjectsCli) -> ParsedArgs {
-    let mut action = cli.action.as_deref().map(str::to_ascii_lowercase);
-    let mut scan_path = cli.scan_path;
-    if cli.scan_flag
-        && scan_path.is_none()
-        && action
-            .as_deref()
-            .is_some_and(|value| !matches!(value, "list" | "scan"))
-    {
-        scan_path = cli.action.clone().map(PathBuf::from);
-        action = None;
-    }
+    let action = cli.action.as_deref().map(str::to_ascii_lowercase);
 
     let mut parsed = ParsedArgs {
         json_output: cli.json_output,
         help: false,
-        scan: cli.scan_flag || action.as_deref() == Some("scan"),
-        scan_path,
+        scan: action.as_deref() == Some("scan"),
+        scan_path: cli.scan_path,
         root_override: cli.root_override,
         error: None,
     };
@@ -280,22 +267,9 @@ fn parsed_from_cli(cli: ProjectsCli) -> ParsedArgs {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace projects"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced dev projects"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_arg(arg: &str) -> String {
-    match arg {
-        "-json" => "--json".to_string(),
-        "-root" => "--root".to_string(),
-        "-scan" => "--scan".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
 }
 
 fn read_projects(path: &Path) -> ProjectRegistryResult<Vec<ProjectSummary>> {

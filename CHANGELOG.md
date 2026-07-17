@@ -4,9 +4,18 @@ All notable user-facing changes are recorded here. Keep entries focused on behav
 
 ## Unreleased
 
+### Added
+
+- Added public `start`, `stop`, `restart`, `status`, and `uninstall` lifecycle commands.
+- Added `mcpace advanced autostart prove`, which activates the exact registered login target without rebooting, validates endpoint/process identity, and restores the initial running state.
+- Added ownership-checked removal of supported client entries during uninstall, with rollback backups and `--dry-run`/`--keep-clients` controls.
+
 ### Changed
 
-- `mcpace up` now installs or repairs user-level autostart by default; `--no-autostart` keeps an explicit session-only path.
+- **Breaking pre-1.0 CLI cleanup:** the ordinary surface is now only `up`, `start`, `stop`, `restart`, `status`, `install`, `uninstall`, `advanced`, `help`, and `version`. Server/client/startup/runtime/lease/maintainer detail moved under `mcpace advanced`; gratuitous top-level aliases now fail instead of silently changing meaning.
+- Generated `stdio`, installed `agent run --autostart`, legacy `stdio-shim`/`mcp-server`, managed `serve`, and internal `hub` entrypoints remain callable but hidden because existing client configs and login registrations depend on them.
+- `mcpace up` now installs or repairs user-level autostart by default; `--no-autostart` keeps an explicit session-only path. It no longer accepts positional server installation or server-install flags; use `mcpace install` first.
+- Removed pseudo-long single-dash options such as `-json`/`-root` and duplicate long-option aliases; canonical `--json`, `--root`, and grouped commands are required.
 - Linux persistence now uses `mcpace-agent.service` under `systemd --user` with restart-on-failure instead of desktop-only XDG Autostart.
 - On Windows and Linux, `mcpace up` now activates the user supervisor immediately and verifies the managed endpoint before returning, instead of leaving a detached owner until the next login.
 
@@ -14,8 +23,19 @@ All notable user-facing changes are recorded here. Keep entries focused on behav
 
 - Windows setup now repairs stale Run commands and missing autostart plans during the normal `mcpace up` flow.
 - The hidden Windows launcher now supervises non-zero agent exits with bounded backoff, and root discovery can recover from the short launcher-plan Run entry.
-- Same-configuration `serve restart` now preserves systemd/Windows supervisor ownership and uses an acknowledged stop handshake to prevent duplicate runtime starts.
+- Same-configuration `mcpace restart` now preserves systemd/Windows supervisor ownership and uses an acknowledged stop handshake to prevent duplicate runtime starts.
+- Runtime stop is root-scoped and idempotent when no user-manager unit exists, so stopping one direct root cannot stop another root's global supervisor.
+- Autostart repair now stops the previously registered user supervisor before replacing its root/command, preventing stale-root ownership and duplicate launchers.
+- The destructive crash-recovery harness now requires an explicit disposable-user flag and environment marker before changing login startup, and confirms the recovered endpoint is still owned by the registered user supervisor.
+- Rust lifecycle/projection/serve tests now isolate process-global environment state, use collision-free temporary roots and deterministic unavailable-port probes, and retain bounded but load-tolerant deadlines, removing the known CI-only flakes.
+- Installed-binary smoke tests now drop inherited developer overrides, and `up` checks the raw readiness contract rather than the grouped doctor report.
+- Platform, assurance, and inventory checks now fail when their checked-in reports are stale while ignoring timestamp-only regeneration noise.
 - Autostart migration removes known legacy Windows Startup-folder launchers and Linux XDG entries to avoid duplicate owners.
+
+### Migration
+
+- Replace old interactive commands with the grouped forms shown by `mcpace advanced --help`; there is intentionally no alias grace period for the pre-1.0 human CLI. The exact replacement table is in `docs/cli-migration.md`.
+- Do not rewrite generated `mcpace stdio` or installed `mcpace agent run --autostart` commands. Existing `stdio-shim` and `mcp-server` configs remain supported through 0.8.x and should be migrated using `docs/supported-clients.md` before 1.0.
 
 ## 0.8.2 - 2026-07-16
 

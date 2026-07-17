@@ -185,17 +185,23 @@ pub fn run(
 }
 
 fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace init [--json] [--root <path>]");
+    let _ = writeln!(
+        stdout,
+        "Usage: mcpace advanced dev init [--json] [--root <path>]"
+    );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
-    let _ = writeln!(stdout, "  mcpace init [--json] [--root <path>]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced dev init [--json] [--root <path>]"
+    );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "init creates the runtime state layout, seeds empty state stores, and reports current readiness.");
 }
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace init",
+    name = "mcpace advanced dev init",
     disable_version_flag = true,
     about = "Initialize the MCPace state layout"
 )]
@@ -235,21 +241,9 @@ fn parse_cli(args: &[String]) -> ParsedArgs {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace init"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced dev init"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_arg(arg: &str) -> String {
-    match arg {
-        "-json" => "--json".to_string(),
-        "-root" => "--root".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
 }
 
 fn initialize_layout(root_path: &Path) -> InitResult<InitReport> {

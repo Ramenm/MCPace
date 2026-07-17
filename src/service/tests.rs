@@ -19,10 +19,20 @@ fn service_config_launches_agent_not_serve_or_wscript() {
         assert_eq!(config.launch_args[0], "agent");
         assert_eq!(config.launch_args[1], "run");
     }
-    assert!(config
-        .target_args
-        .iter()
-        .any(|value| value == "--autostart"));
+    assert_eq!(
+        config.target_args,
+        vec![
+            "agent".to_string(),
+            "run".to_string(),
+            "--autostart".to_string(),
+            "--root".to_string(),
+            root.display().to_string(),
+            "--host".to_string(),
+            "127.0.0.1".to_string(),
+            "--port".to_string(),
+            "39022".to_string(),
+        ]
+    );
     assert!(!config.app_path.to_ascii_lowercase().contains("wscript"));
     assert!(launches_mcpace_agent(&config));
 }
@@ -40,6 +50,55 @@ fn parse_action_aliases_keep_existing_service_surface_compatible() {
     assert!(parsed.json_output);
     assert_eq!(parsed.host, None);
     assert_eq!(parsed.port, None);
+}
+
+#[test]
+fn prove_action_and_dry_run_are_parsed_without_aliasing() {
+    let parsed = parse_cli(&[
+        "prove".to_string(),
+        "--dry-run".to_string(),
+        "--json".to_string(),
+    ]);
+    assert_eq!(parsed.action, "prove");
+    assert!(parsed.dry_run);
+    assert!(parsed.json_output);
+}
+
+#[test]
+fn proof_report_records_activation_and_state_restoration_evidence() {
+    let root = PathBuf::from("/tmp/mcpace-proof");
+    let config = service_config(&root, "127.0.0.1", 39022, None, None, None, None).unwrap();
+    let report = report_with_supervisor_proof(
+        &config,
+        true,
+        SupervisorProof {
+            dry_run: false,
+            initial_runtime_active: true,
+            activation_attempted: true,
+            endpoint_verified: true,
+            supervisor_verified: true,
+            restored_initial_state: true,
+        },
+    );
+    let proof = report.get("proof").expect("proof object");
+    assert_eq!(
+        proof.get("schema").and_then(JsonValue::as_str),
+        Some("mcpace.autostartProof.v1")
+    );
+    assert_eq!(
+        proof.get("endpointVerified").and_then(JsonValue::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        proof.get("supervisorVerified").and_then(JsonValue::as_bool),
+        Some(true)
+    );
+    assert_eq!(
+        proof
+            .get("restoredInitialState")
+            .and_then(JsonValue::as_bool),
+        Some(true)
+    );
 }
 
 #[test]

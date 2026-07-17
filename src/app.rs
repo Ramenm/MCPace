@@ -1,83 +1,138 @@
-use crate::catalog::{find, normalize};
+use crate::catalog::{find, normalize, public_commands, CommandRoute};
 use crate::client_catalog::client_install_support_summary;
 use crate::runtimepaths;
 use crate::{
-    agent, autostart, candidates, cleanup, client, connect, dashboard, diagnostics, doctor, hub,
-    init, lab, mcp_server, profile, projects, release, repair, reporoot, serve, server, service,
-    setup, stdio_shim, update, verify,
+    agent, autostart, candidates, cleanup, client, diagnostics, hub, init, lab, mcp_server,
+    profile, projects, release, reporoot, serve, server, setup, status, stdio_shim, uninstall,
+    update, verify,
 };
-use clap::{error::ErrorKind, Parser};
-use std::ffi::OsString;
 use std::io::Write;
 use std::path::PathBuf;
 
 pub fn run(args: Vec<String>, stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
     let root_path = reporoot::find_from_current_or_executable();
-
     if args.is_empty() {
         write_help(stdout);
         return 0;
     }
 
     let normalized = normalize(&args[0]);
-    match normalized.as_str() {
-        "project" => return projects::run(&args[1..], root_path, stdout, stderr),
-        "install" | "add" | "add-server" | "server-install" => {
-            return run_server_with_action("install", &args[1..], root_path, stdout, stderr)
-        }
-        "servers" => return run_server_with_action("list", &args[1..], root_path, stdout, stderr),
-        "auto" | "autodiscover" | "server-auto" => {
-            return run_server_with_action("auto", &args[1..], root_path, stdout, stderr)
-        }
-        "capabilities" | "server-capabilities" => {
-            return run_server_with_action("capabilities", &args[1..], root_path, stdout, stderr)
-        }
-        "readiness" | "status" => {
-            return run_verify_with_action("readiness", &args[1..], root_path, stdout, stderr)
-        }
-        "check" | "probe" => {
-            return run_verify_with_action("doctor", &args[1..], root_path, stdout, stderr)
-        }
-        "smoke" | "stress-status" | "stress-startup-status" => {
-            return run_planned(&normalized, stderr)
-        }
-        _ => {}
-    }
+    let Some(spec) = find(&normalized) else {
+        diagnostics::stderr_line(stderr, format_args!("unknown command: {}", args[0]));
+        diagnostics::stderr_line(
+            stderr,
+            format_args!("Run 'mcpace help' to see the public commands."),
+        );
+        return 2;
+    };
 
-    let resolved = find(&normalized)
-        .map(|spec| spec.name)
-        .unwrap_or(normalized.as_str());
-    match resolved {
-        "help" => {
+    match spec.route {
+        CommandRoute::Help => run_help(&args[1..], stdout, stderr),
+        CommandRoute::Version => run_version(stdout),
+        CommandRoute::Up => setup::run(&args[1..], root_path, stdout, stderr),
+        CommandRoute::Start => run_lifecycle("start", &args[1..], root_path, stdout, stderr),
+        CommandRoute::Stop => run_lifecycle("stop", &args[1..], root_path, stdout, stderr),
+        CommandRoute::Restart => run_lifecycle("restart", &args[1..], root_path, stdout, stderr),
+        CommandRoute::Status => status::run(&args[1..], root_path, stdout, stderr),
+        CommandRoute::Install => {
+            run_server_with_action("install", &args[1..], root_path, stdout, stderr)
+        }
+        CommandRoute::Uninstall => uninstall::run(&args[1..], root_path, stdout, stderr),
+        CommandRoute::Advanced => run_advanced(&args[1..], root_path, stdout, stderr),
+        CommandRoute::Stdio | CommandRoute::StdioShim => {
+            stdio_shim::run(&args[1..], root_path, stdout, stderr)
+        }
+        CommandRoute::Agent => agent::run(&args[1..], root_path, stdout, stderr),
+        CommandRoute::Serve => serve::run(&args[1..], root_path, stdout, stderr),
+        CommandRoute::Hub => hub::run(&args[1..], root_path, stdout, stderr),
+        CommandRoute::McpServer => mcp_server::run(&args[1..], root_path, stdout, stderr),
+    }
+}
+
+pub(crate) fn run_internal(
+    args: Vec<String>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    run(canonical_internal_args(args), stdout, stderr)
+}
+
+fn canonical_internal_args(args: Vec<String>) -> Vec<String> {
+    let Some(first) = args.first().map(|value| normalize(value)) else {
+        return args;
+    };
+    let prefix: &[&str] = match first.as_str() {
+        "doctor" => &["advanced", "doctor"],
+        "server" => &["advanced", "server"],
+        "client" => &["advanced", "client"],
+        "autostart" | "service" => &["advanced", "autostart"],
+        "cleanup" => &["advanced", "runtime", "cleanup"],
+        "repair" => &["advanced", "runtime", "repair"],
+        "dashboard" => &["advanced", "runtime", "foreground"],
+        "lab" => &["advanced", "dev", "lab"],
+        "candidates" => &["advanced", "dev", "candidates"],
+        "profile" => &["advanced", "dev", "profile"],
+        "projects" => &["advanced", "dev", "projects"],
+        "release" => &["advanced", "dev", "release"],
+        "init" => &["advanced", "dev", "init"],
+        "update" => &["advanced", "update"],
+        "verify" => {
+            let action = args.get(1).map(|value| normalize(value));
+            return match action.as_deref() {
+                Some("readiness") => {
+                    let mut canonical = vec![
+                        "advanced".to_string(),
+                        "doctor".to_string(),
+                        "readiness".to_string(),
+                    ];
+                    canonical.extend(args.into_iter().skip(2));
+                    canonical
+                }
+                Some("doctor") => {
+                    let mut canonical = vec!["advanced".to_string(), "doctor".to_string()];
+                    canonical.extend(args.into_iter().skip(2));
+                    canonical
+                }
+                _ => args,
+            };
+        }
+        _ => return args,
+    };
+
+    let mut canonical = prefix
+        .iter()
+        .map(|value| (*value).to_string())
+        .collect::<Vec<_>>();
+    canonical.extend(args.into_iter().skip(1));
+    canonical
+}
+
+fn run_help(args: &[String], stdout: &mut dyn Write, stderr: &mut dyn Write) -> i32 {
+    match args.first().map(|value| normalize(value)) {
+        None => {
             write_help(stdout);
             0
         }
-        "version" => run_version(stdout),
-        "doctor" => run_doctor(&args[1..], root_path, stdout, stderr),
-        "setup" => setup::run(&args[1..], root_path, stdout, stderr),
-        "service" => service::run(&args[1..], root_path, stdout, stderr),
-        "autostart" => autostart::run(&args[1..], root_path, stdout, stderr),
-        "agent" => agent::run(&args[1..], root_path, stdout, stderr),
-        "dashboard" => dashboard::run(&args[1..], root_path, stdout, stderr),
-        "serve" => serve::run(&args[1..], root_path, stdout, stderr),
-        "init" => init::run(&args[1..], root_path, stdout, stderr),
-        "hub" => hub::run(&args[1..], root_path, stdout, stderr),
-        "stdio" | "stdio-shim" => stdio_shim::run(&args[1..], root_path, stdout, stderr),
-        "mcp-server" => mcp_server::run(&args[1..], root_path, stdout, stderr),
-        "client" => client::run(&args[1..], root_path, stdout, stderr),
-        "cleanup" => cleanup::run(&args[1..], root_path, stdout, stderr),
-        "connect" => connect::run(&args[1..], root_path, stdout, stderr),
-        "profile" => profile::run(&args[1..], root_path, stdout, stderr),
-        "projects" => projects::run(&args[1..], root_path, stdout, stderr),
-        "candidates" => candidates::run(&args[1..], root_path, stdout, stderr),
-        "lab" => lab::run(&args[1..], root_path, stdout, stderr),
-        "server" => server::run(&args[1..], root_path, stdout, stderr),
-        "verify" => verify::run(&args[1..], root_path, stdout, stderr),
-        "repair" => repair::run(&args[1..], root_path, stdout, stderr),
-        "update" => update::run(&args[1..], stdout, stderr),
-        "release" => release::run(&args[1..], root_path, stdout, stderr),
-        _ => {
-            diagnostics::stderr_line(stderr, format_args!("unknown command: {}", args[0]));
+        Some(topic) if topic == "advanced" => {
+            write_advanced_help(stdout);
+            0
+        }
+        Some(topic) if topic == "start" || topic == "stop" || topic == "restart" => {
+            write_lifecycle_help(&topic, stdout);
+            0
+        }
+        Some(topic) if topic == "status" => {
+            status::run(&["--help".to_string()], None, stdout, stderr)
+        }
+        Some(topic) if topic == "uninstall" => {
+            uninstall::run(&["--help".to_string()], None, stdout, stderr)
+        }
+        Some(topic) if topic == "up" => setup::run(&["--help".to_string()], None, stdout, stderr),
+        Some(topic) if topic == "install" => {
+            run_server_with_action("install", &["--help".to_string()], None, stdout, stderr)
+        }
+        Some(topic) => {
+            diagnostics::stderr_line(stderr, format_args!("unknown help topic: {}", topic));
             diagnostics::stderr_line(
                 stderr,
                 format_args!("Run 'mcpace help' to see the public commands."),
@@ -92,72 +147,23 @@ fn run_version(stdout: &mut dyn Write) -> i32 {
     0
 }
 
-#[derive(Debug, Parser)]
-#[command(
-    name = "mcpace doctor",
-    disable_version_flag = true,
-    about = "Run MCPace doctor checks"
-)]
-struct DoctorCli {
-    /// Emit machine-readable JSON.
-    #[arg(long = "json", short = 'j')]
-    json_output: bool,
-
-    /// MCPace project/root directory.
-    #[arg(long = "root", value_name = "PATH")]
-    root_override: Option<PathBuf>,
-}
-
-fn run_doctor(
+fn run_lifecycle(
+    action: &str,
     args: &[String],
-    default_root: Option<PathBuf>,
+    root_path: Option<PathBuf>,
     stdout: &mut dyn Write,
     stderr: &mut dyn Write,
 ) -> i32 {
-    let cli = match DoctorCli::try_parse_from(doctor_argv(args)) {
-        Ok(cli) => cli,
-        Err(error)
-            if matches!(
-                error.kind(),
-                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
-            ) =>
-        {
-            let _ = writeln!(stdout, "Usage: mcpace doctor [--json] [--root <path>]");
-            return 0;
-        }
-        Err(error) => {
-            let _ = write!(stderr, "{}", error);
-            return 2;
-        }
-    };
-
-    let report = doctor::run(cli.root_override.or(default_root));
-    if cli.json_output {
-        let _ = writeln!(stdout, "{}", report.to_pretty_json());
+    if args
+        .first()
+        .is_some_and(|value| matches!(value.as_str(), "-h" | "--help"))
+    {
+        write_lifecycle_help(action, stdout);
         return 0;
     }
-
-    doctor::write_text_report(&report, stdout);
-    0
-}
-
-fn doctor_argv(args: &[String]) -> Vec<OsString> {
-    let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace doctor"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_doctor_flag(arg))),
-    );
-    argv
-}
-
-fn normalize_doctor_flag(arg: &str) -> &str {
-    match arg {
-        "-json" => "--json",
-        "-root" => "--root",
-        "-?" => "--help",
-        other => other,
-    }
+    let mut forwarded = vec![action.to_string()];
+    forwarded.extend(args.iter().cloned());
+    serve::run(&forwarded, root_path, stdout, stderr)
 }
 
 fn run_server_with_action(
@@ -172,6 +178,133 @@ fn run_server_with_action(
     server::run(&forwarded, root_path, stdout, stderr)
 }
 
+fn run_advanced(
+    args: &[String],
+    root_path: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let Some(group) = args.first().map(|value| normalize(value)) else {
+        write_advanced_help(stdout);
+        return 0;
+    };
+    if matches!(group.as_str(), "-h" | "--help" | "help") {
+        write_advanced_help(stdout);
+        return 0;
+    }
+
+    match group.as_str() {
+        "doctor" => {
+            if args
+                .get(1)
+                .is_some_and(|value| normalize(value) == "readiness")
+            {
+                verify::run(&args[1..], root_path, stdout, stderr)
+            } else {
+                run_verify_with_action("doctor", &args[1..], root_path, stdout, stderr)
+            }
+        }
+        "server" => server::run(&args[1..], root_path, stdout, stderr),
+        "client" => client::run(&args[1..], root_path, stdout, stderr),
+        "autostart" => autostart::run(&args[1..], root_path, stdout, stderr),
+        "runtime" => run_advanced_runtime(&args[1..], root_path, stdout, stderr),
+        "lease" => run_hub_with_action("lease", &args[1..], root_path, stdout, stderr),
+        "update" => update::run(&args[1..], stdout, stderr),
+        "dev" => run_advanced_dev(&args[1..], root_path, stdout, stderr),
+        _ => {
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("unknown advanced command: {}", args[0]),
+            );
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("Run 'mcpace advanced --help' to see advanced commands."),
+            );
+            2
+        }
+    }
+}
+
+fn run_advanced_runtime(
+    args: &[String],
+    root_path: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let Some(action) = args.first().map(|value| normalize(value)) else {
+        write_advanced_runtime_help(stdout);
+        return 0;
+    };
+    if matches!(action.as_str(), "-h" | "--help" | "help") {
+        write_advanced_runtime_help(stdout);
+        return 0;
+    }
+    match action.as_str() {
+        "foreground" => serve::run(&args[1..], root_path, stdout, stderr),
+        "logs" => run_hub_with_action("logs", &args[1..], root_path, stdout, stderr),
+        "repair" => run_hub_with_action("repair", &args[1..], root_path, stdout, stderr),
+        "cleanup" => cleanup::run(&args[1..], root_path, stdout, stderr),
+        _ => {
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("unknown advanced runtime action: {}", args[0]),
+            );
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("Run 'mcpace advanced runtime --help' for usage."),
+            );
+            2
+        }
+    }
+}
+
+fn run_advanced_dev(
+    args: &[String],
+    root_path: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let Some(action) = args.first().map(|value| normalize(value)) else {
+        write_advanced_dev_help(stdout);
+        return 0;
+    };
+    if matches!(action.as_str(), "-h" | "--help" | "help") {
+        write_advanced_dev_help(stdout);
+        return 0;
+    }
+    match action.as_str() {
+        "lab" => lab::run(&args[1..], root_path, stdout, stderr),
+        "candidates" => candidates::run(&args[1..], root_path, stdout, stderr),
+        "profile" => profile::run(&args[1..], root_path, stdout, stderr),
+        "projects" => projects::run(&args[1..], root_path, stdout, stderr),
+        "release" => release::run(&args[1..], root_path, stdout, stderr),
+        "init" => init::run(&args[1..], root_path, stdout, stderr),
+        _ => {
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("unknown advanced dev action: {}", args[0]),
+            );
+            diagnostics::stderr_line(
+                stderr,
+                format_args!("Run 'mcpace advanced dev --help' for usage."),
+            );
+            2
+        }
+    }
+}
+
+fn run_hub_with_action(
+    action: &str,
+    args: &[String],
+    root_path: Option<PathBuf>,
+    stdout: &mut dyn Write,
+    stderr: &mut dyn Write,
+) -> i32 {
+    let mut forwarded = vec![action.to_string()];
+    forwarded.extend(args.iter().cloned());
+    hub::run(&forwarded, root_path, stdout, stderr)
+}
+
 fn run_verify_with_action(
     action: &str,
     args: &[String],
@@ -184,17 +317,6 @@ fn run_verify_with_action(
     verify::run(&forwarded, root_path, stdout, stderr)
 }
 
-fn run_planned(name: &str, stderr: &mut dyn Write) -> i32 {
-    diagnostics::stderr_line(
-        stderr,
-        format_args!(
-            "command '{}' is not available in the public CLI surface; run 'mcpace help' for supported commands.",
-            name
-        ),
-    );
-    2
-}
-
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(stdout, "MCPace");
     let _ = writeln!(
@@ -202,42 +324,94 @@ fn write_help(stdout: &mut dyn Write) {
         "Local MCP process scheduler for concurrent AI agents."
     );
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Usage:");
-    let _ = writeln!(stdout, "  mcpace up [--no-autostart]");
+    let _ = writeln!(stdout, "Usage: mcpace <command> [options]");
+    let _ = writeln!(stdout);
+    let _ = writeln!(stdout, "Commands:");
+    for command in public_commands()
+        .filter(|command| !matches!(command.route, CommandRoute::Help | CommandRoute::Version))
+    {
+        let _ = writeln!(stdout, "  {:10} {}", command.name, command.description);
+    }
     let _ = writeln!(
         stdout,
-        "  mcpace install <path|package|url|command...> [--as <name>] [--dry-run]"
+        "  {:10} Show this help or help for one command.",
+        "help"
     );
-    let _ = writeln!(
-        stdout,
-        "  mcpace auto [query] [--dry-run]        # one-command server discovery/setup/probe"
-    );
-    let _ = writeln!(stdout, "  mcpace serve [start|stop|status]");
-    let _ = writeln!(
-        stdout,
-        "  mcpace stdio [--root <path>]              # MCP stdio launch surface"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace autostart <enable|disable|status>  # user-level launch at login"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace server <auto|list|test|remove|enable|disable|sources>"
-    );
-    let _ = writeln!(stdout, "  mcpace client <install|export|list|restore>");
-    let _ = writeln!(stdout, "  mcpace connect [client]");
-    let _ = writeln!(
-        stdout,
-        "  mcpace lab [--json]               # evidence corpus for auto-classifier decisions"
-    );
-    let _ = writeln!(stdout, "  mcpace doctor [--json]");
+    let _ = writeln!(stdout, "  {:10} Print the MCPace version.", "version");
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Quickstart:");
     let _ = writeln!(stdout, "  mcpace up");
+    let _ = writeln!(stdout, "  mcpace status");
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "`up` creates/repairs MCPace home, imports existing MCP servers, starts the endpoint, wires detected clients, and installs or repairs user-level autostart. Use --no-autostart for session-only use. It does not add a default upstream server.");
-    let _ = writeln!(stdout, "Server type is inferred from command/url/path/package input. Endpoint: {}. Supported client patchers: {}.", runtimepaths::default_local_mcp_url(), client_install_support_summary());
+    let _ = writeln!(stdout, "`up` is convergent: it creates or repairs MCPace home, imports existing MCP servers, starts the endpoint, wires detected clients, and installs or repairs user-level login startup. Use --no-autostart for session-only use.");
+    let _ = writeln!(
+        stdout,
+        "Endpoint: {}. Supported client patchers: {}.",
+        runtimepaths::default_local_mcp_url(),
+        client_install_support_summary()
+    );
+}
+
+fn write_lifecycle_help(action: &str, stdout: &mut dyn Write) {
+    let _ = writeln!(stdout, "Usage: mcpace {} [--json] [--root <path>]", action);
+    let _ = writeln!(stdout);
+    let detail = match action {
+        "start" => "Starts the already-configured runtime without changing clients or login startup.",
+        "stop" => "Stops the current runtime while leaving login startup enabled for the next login.",
+        "restart" => "Restarts the current runtime without changing configuration, clients, or login startup.",
+        _ => "Controls the configured runtime.",
+    };
+    let _ = writeln!(stdout, "{}", detail);
+}
+
+fn write_advanced_help(stdout: &mut dyn Write) {
+    let _ = writeln!(stdout, "Usage: mcpace advanced <command> [options]");
+    let _ = writeln!(stdout);
+    let _ = writeln!(stdout, "Commands:");
+    let _ = writeln!(stdout, "  doctor       Run detailed readiness diagnostics");
+    let _ = writeln!(
+        stdout,
+        "  server       Discover, inspect, test, and configure upstream servers"
+    );
+    let _ = writeln!(
+        stdout,
+        "  client       Inspect, install, restore, and export client integration"
+    );
+    let _ = writeln!(
+        stdout,
+        "  autostart    Inspect, repair, disable, or prove login startup"
+    );
+    let _ = writeln!(
+        stdout,
+        "  runtime      Foreground serving, logs, repair, and safe cleanup"
+    );
+    let _ = writeln!(stdout, "  lease        Inspect and control runtime leases");
+    let _ = writeln!(
+        stdout,
+        "  update       Show package-manager update guidance"
+    );
+    let _ = writeln!(
+        stdout,
+        "  dev          Maintainer-only evidence and release tooling"
+    );
+}
+
+fn write_advanced_runtime_help(stdout: &mut dyn Write) {
+    let _ = writeln!(
+        stdout,
+        "Usage: mcpace advanced runtime <foreground|logs|repair|cleanup> [options]"
+    );
+}
+
+fn write_advanced_dev_help(stdout: &mut dyn Write) {
+    let _ = writeln!(
+        stdout,
+        "Usage: mcpace advanced dev <lab|candidates|profile|projects|release|init> [options]"
+    );
+    let _ = writeln!(
+        stdout,
+        "Maintainer-only commands are intentionally excluded from the public surface."
+    );
 }
 
 #[cfg(test)]

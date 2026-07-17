@@ -1,8 +1,8 @@
 {
   "schema": "mcpace.projectInventory.v1",
-  "generatedAt": "2026-07-05T18:11:55.985Z",
+  "generatedAt": "2026-07-17T22:55:17.767Z",
   "root": ".",
-  "rootName": "wave11_work",
+  "rootName": "mcpace",
   "commands": [
     {
       "name": "help",
@@ -10,228 +10,145 @@
         "-h",
         "--help"
       ],
+      "visibility": "Public",
+      "route": "Help",
       "implemented": true,
-      "description": "Show help for the Rust-only CLI."
+      "description": "Show the public MCPace command surface."
     },
     {
       "name": "version",
       "aliases": [
-        "--version",
-        "-v"
+        "-v",
+        "--version"
       ],
+      "visibility": "Public",
+      "route": "Version",
       "implemented": true,
       "description": "Print the compiled MCPace binary version."
     },
     {
-      "name": "doctor",
+      "name": "up",
       "aliases": [],
+      "visibility": "Public",
+      "route": "Up",
       "implemented": true,
-      "description": "Inspect host/source readiness without starting a runtime."
+      "description": "Create or repair MCPace, start it, wire clients, and configure login startup."
     },
     {
-      "name": "setup",
-      "aliases": [
-        "up",
-        "quickstart",
-        "bootstrap",
-        "one-click"
-      ],
-      "implemented": true,
-      "description": "Home-first onboarding: create/repair MCPace home, start the endpoint, wire supported local clients, and smoke-test without adding upstream servers."
-    },
-    {
-      "name": "autostart",
-      "aliases": [
-        "startup"
-      ],
-      "implemented": true,
-      "description": "Install or inspect the visible user-level MCPace Agent login item."
-    },
-    {
-      "name": "service",
+      "name": "start",
       "aliases": [],
+      "visibility": "Public",
+      "route": "Start",
       "implemented": true,
-      "description": "Compatibility alias for user-level autostart; privileged system services are reserved for a future advanced mode."
+      "description": "Start the already-configured runtime for this login session."
+    },
+    {
+      "name": "stop",
+      "aliases": [],
+      "visibility": "Public",
+      "route": "Stop",
+      "implemented": true,
+      "description": "Stop the current runtime without disabling startup at the next login."
+    },
+    {
+      "name": "restart",
+      "aliases": [],
+      "visibility": "Public",
+      "route": "Restart",
+      "implemented": true,
+      "description": "Restart the configured runtime without changing clients or login startup."
+    },
+    {
+      "name": "status",
+      "aliases": [],
+      "visibility": "Public",
+      "route": "Status",
+      "implemented": true,
+      "description": "Show aggregate runtime and login-startup status without changing anything."
+    },
+    {
+      "name": "install",
+      "aliases": [],
+      "visibility": "Public",
+      "route": "Install",
+      "implemented": true,
+      "description": "Add or update an upstream MCP server."
+    },
+    {
+      "name": "uninstall",
+      "aliases": [],
+      "visibility": "Public",
+      "route": "Uninstall",
+      "implemented": true,
+      "description": "Remove MCPace local integration while preserving configuration and backups."
+    },
+    {
+      "name": "advanced",
+      "aliases": [],
+      "visibility": "Public",
+      "route": "Advanced",
+      "implemented": true,
+      "description": "Open diagnostics, server, client, startup, runtime, lease, and maintainer commands."
+    },
+    {
+      "name": "stdio",
+      "aliases": [],
+      "visibility": "HiddenCompatibility",
+      "route": "Stdio",
+      "implemented": true,
+      "description": "Internal MCP stdio transport entrypoint."
+    },
+    {
+      "name": "stdio-shim",
+      "aliases": [],
+      "visibility": "HiddenCompatibility",
+      "route": "StdioShim",
+      "implemented": true,
+      "description": "Legacy MCP stdio transport entrypoint retained through 0.8.x."
     },
     {
       "name": "agent",
       "aliases": [],
+      "visibility": "HiddenCompatibility",
+      "route": "Agent",
       "implemented": true,
-      "description": "Run or inspect the visible MCPace login agent used by autostart entries."
-    },
-    {
-      "name": "dashboard",
-      "aliases": [
-        "ui"
-      ],
-      "implemented": true,
-      "description": "Serve a local admin dashboard for MCPace."
+      "description": "Installed user-login agent entrypoint."
     },
     {
       "name": "serve",
       "aliases": [],
+      "visibility": "HiddenCompatibility",
+      "route": "Serve",
       "implemented": true,
-      "description": "Serve the local MCPace HTTP surface on one port."
-    },
-    {
-      "name": "profile",
-      "aliases": [],
-      "implemented": true,
-      "description": "Read-only runtime profile inspection."
-    },
-    {
-      "name": "projects",
-      "aliases": [
-        "project"
-      ],
-      "implemented": true,
-      "description": "Read-only project registry inspection."
-    },
-    {
-      "name": "candidates",
-      "aliases": [],
-      "implemented": true,
-      "description": "Inspect candidate server catalog."
-    },
-    {
-      "name": "lab",
-      "aliases": [],
-      "implemented": true,
-      "description": "Inspect runtime lab scenarios, coverage, and gap reports."
-    },
-    {
-      "name": "server",
-      "aliases": [
-        "servers",
-        "capabilities",
-        "server-capabilities",
-        "mcp",
-        "add-server",
-        "server-install"
-      ],
-      "implemented": true,
-      "description": "Grouped server inspection and automatic MCP package/URL/command install command."
-    },
-    {
-      "name": "verify",
-      "aliases": [
-        "check",
-        "status",
-        "smoke",
-        "readiness",
-        "probe",
-        "stress-status",
-        "stress-startup-status"
-      ],
-      "implemented": true,
-      "description": "Grouped verification command."
-    },
-    {
-      "name": "init",
-      "aliases": [
-        "boot"
-      ],
-      "implemented": true,
-      "description": "Bootstrap runtime state layout and readiness."
+      "description": "Legacy managed-runtime entrypoint."
     },
     {
       "name": "hub",
-      "aliases": [
-        "start"
-      ],
+      "aliases": [],
+      "visibility": "HiddenCompatibility",
+      "route": "Hub",
       "implemented": true,
-      "description": "Manage the local hub lifecycle, status, and logs."
-    },
-    {
-      "name": "stdio",
-      "aliases": [
-        "stdio-shim",
-        "stdio_shim"
-      ],
-      "implemented": true,
-      "description": "Live MCP stdio launch surface. This is the public launcher command; `stdio-shim` remains a compatibility alias for older client configs."
+      "description": "Internal runtime and lease entrypoint."
     },
     {
       "name": "mcp-server",
-      "aliases": [
-        "mcp_server"
-      ],
+      "aliases": [],
+      "visibility": "HiddenCompatibility",
+      "route": "McpServer",
       "implemented": true,
-      "description": "Internal MCP stdio compatibility surface."
-    },
-    {
-      "name": "client",
-      "aliases": [
-        "setup-clients",
-        "setup-mcp-clients"
-      ],
-      "implemented": true,
-      "description": "Grouped client planning/install/export command."
-    },
-    {
-      "name": "connect",
-      "aliases": [
-        "guide",
-        "next",
-        "onboard"
-      ],
-      "implemented": true,
-      "description": "Show client-first wiring guidance, endpoint details, and next commands."
-    },
-    {
-      "name": "cleanup",
-      "aliases": [
-        "clean",
-        "prune"
-      ],
-      "implemented": true,
-      "description": "Safely inspect or remove disposable cache, logs, and ephemeral runtime markers."
-    },
-    {
-      "name": "repair",
-      "aliases": [
-        "backup",
-        "rotate-logs",
-        "windows-mcp-lease",
-        "auth"
-      ],
-      "implemented": true,
-      "description": "Grouped repair/maintenance command."
-    },
-    {
-      "name": "update",
-      "aliases": [
-        "update-check"
-      ],
-      "implemented": true,
-      "description": "Check external package-manager update guidance without self-updating."
-    },
-    {
-      "name": "release",
-      "aliases": [
-        "build-release"
-      ],
-      "implemented": true,
-      "description": "Build local source release artifacts without publishing."
+      "description": "Legacy MCP server entrypoint retained through 0.8.x."
     }
   ],
   "groupedSubcommands": {
     "server": [
-      "add",
       "affinity",
       "allow-review",
-      "apply",
       "arg",
       "as",
       "auto",
       "auto-install",
-      "auto-mode",
-      "candidates",
       "capabilities",
-      "chat",
-      "client",
       "client-id",
-      "cmd",
       "command",
       "disable",
       "disabled",
@@ -239,12 +156,10 @@
       "dry-run",
       "enable",
       "env",
-      "file",
       "force",
       "from",
       "header",
       "import",
-      "in-flight",
       "install",
       "instances",
       "leases",
@@ -254,27 +169,20 @@
       "metadata-json",
       "mode",
       "path",
-      "project",
       "project-root",
-      "queue-timeout",
       "queue-timeout-ms",
       "refresh",
-      "refresh-registry",
       "remove",
       "reuse-policy",
-      "review-ok",
       "session-id",
       "set-policy",
       "settings",
-      "source",
       "sources",
       "test",
-      "timeout",
       "timeout-ms",
       "transport",
       "type",
-      "url",
-      "workers"
+      "url"
     ],
     "client": [
       "backup",
@@ -282,7 +190,6 @@
       "diff",
       "dry-run",
       "export",
-      "ingress",
       "install",
       "latest",
       "list",
@@ -298,7 +205,6 @@
       "client-id",
       "down",
       "foreground",
-      "ingress",
       "lease",
       "lease-id",
       "leases",
@@ -309,7 +215,6 @@
       "release",
       "renew",
       "repair",
-      "replace-existing",
       "run",
       "server",
       "session-id",
@@ -326,7 +231,6 @@
     ],
     "lab": [
       "coverage",
-      "filesystem",
       "gaps",
       "id",
       "list",
@@ -340,17 +244,18 @@
     ]
   },
   "counts": {
-    "rustFiles": 136,
-    "rustFunctions": 2104,
-    "publicCommands": 25,
-    "implementedPublicCommands": 25,
-    "duplicateFunctionNames": 86,
-    "longRustFiles": 28
+    "rustFiles": 194,
+    "rustFunctions": 2632,
+    "publicCommands": 10,
+    "hiddenCompatibilityCommands": 6,
+    "implementedPublicCommands": 10,
+    "duplicateFunctionNames": 126,
+    "longRustFiles": 32
   },
   "npmLauncher": {
     "binPath": "packages/npm/cli/bin/mcpace.js",
     "exists": true,
-    "executable": true
+    "executable": false
   },
   "architectureSlices": [
     {
@@ -436,71 +341,75 @@
   "longRustFiles": [
     {
       "file": "src/dashboard/overview.rs",
-      "lines": 3180
-    },
-    {
-      "file": "src/server/loader.rs",
-      "lines": 2706
-    },
-    {
-      "file": "src/dashboard.rs",
-      "lines": 2541
-    },
-    {
-      "file": "src/dashboard/tests.rs",
-      "lines": 2260
+      "lines": 3325
     },
     {
       "file": "src/upstream/tests.rs",
-      "lines": 1929
-    },
-    {
-      "file": "src/setup.rs",
-      "lines": 1913
-    },
-    {
-      "file": "src/serve.rs",
-      "lines": 1862
-    },
-    {
-      "file": "src/adapter/discovery.rs",
-      "lines": 1779
+      "lines": 2938
     },
     {
       "file": "src/upstream/lease_runtime.rs",
-      "lines": 1599
+      "lines": 2769
+    },
+    {
+      "file": "src/dashboard.rs",
+      "lines": 2728
+    },
+    {
+      "file": "src/server/loader.rs",
+      "lines": 2701
+    },
+    {
+      "file": "src/dashboard/tests.rs",
+      "lines": 2660
+    },
+    {
+      "file": "src/serve.rs",
+      "lines": 2401
+    },
+    {
+      "file": "src/setup.rs",
+      "lines": 1818
     },
     {
       "file": "src/server/discover.rs",
-      "lines": 1353
+      "lines": 1816
+    },
+    {
+      "file": "src/adapter/discovery.rs",
+      "lines": 1740
     },
     {
       "file": "src/mcp_server.rs",
-      "lines": 1340
+      "lines": 1499
+    },
+    {
+      "file": "src/upstream.rs",
+      "lines": 1483
     },
     {
       "file": "src/hub/leases.rs",
       "lines": 1323
     },
     {
-      "file": "src/upstream.rs",
-      "lines": 1290
-    },
-    {
       "file": "src/mcp_server/tool_surface.rs",
       "lines": 1174
+    },
+    {
+      "file": "src/service.rs",
+      "lines": 1148
+    },
+    {
+      "file": "src/mcp_autoinstall.rs",
+      "lines": 1120
     },
     {
       "file": "src/adapter.rs",
       "lines": 1113
     },
     {
-      "file": "src/mcp_autoinstall.rs",
-      "lines": 1095
-    },
-    {
       "file": "src/client/actions.rs",
-      "lines": 1026
+      "lines": 1075
     },
     {
       "file": "src/dashboard/http_tools.rs",
@@ -508,11 +417,7 @@
     },
     {
       "file": "src/client_catalog.rs",
-      "lines": 973
-    },
-    {
-      "file": "src/runtimepaths.rs",
-      "lines": 928
+      "lines": 976
     }
   ],
   "duplicateFunctionNames": [
@@ -523,6 +428,7 @@
         "src/adapter/profile.rs (private)",
         "src/adapter/profile.rs (private)",
         "src/adapter/proxy_uri.rs (private)",
+        "src/client.rs (private)",
         "src/client.rs (private)",
         "src/client.rs (private)",
         "src/client/actions/backup.rs (private)",
@@ -537,6 +443,7 @@
         "src/dashboard/response.rs (private)",
         "src/dashboard/response.rs (private)",
         "src/dashboard/response.rs (private)",
+        "src/execution.rs (private)",
         "src/http_probe.rs (private)",
         "src/http_probe.rs (private)",
         "src/hub/launcher.rs (private)",
@@ -545,6 +452,8 @@
         "src/hub/runtime.rs (private)",
         "src/hub/status.rs (private)",
         "src/hub/status.rs (private)",
+        "src/hub/status.rs (private)",
+        "src/init.rs (private)",
         "src/init.rs (private)",
         "src/init.rs (private)",
         "src/init.rs (private)",
@@ -577,7 +486,9 @@
         "src/upstream/inventory.rs (private)",
         "src/upstream/inventory.rs (private)",
         "src/upstream/inventory.rs (private)",
+        "src/upstream/inventory.rs (private)",
         "src/upstream/process_config.rs (private)",
+        "src/upstream/projection.rs (private)",
         "src/upstream/projection.rs (private)",
         "src/upstream/projection.rs (private)",
         "src/upstream/server_config.rs (private)",
@@ -593,6 +504,66 @@
         "src/upstream/tool_cache.rs (private)",
         "src/verify/model.rs (private)",
         "src/verify/model.rs (private)",
+        "src/verify/model.rs (private)",
+        "src/windows_process.rs (private)"
+      ]
+    },
+    {
+      "name": "fmt",
+      "owners": [
+        "src/adapter/profile.rs (private)",
+        "src/adapter/proxy_uri.rs (private)",
+        "src/bin/mcpace-agent-launcher.rs (private)",
+        "src/candidates.rs (private)",
+        "src/client.rs (private)",
+        "src/client.rs (private)",
+        "src/client/actions/backup.rs (private)",
+        "src/client/metadata.rs (private)",
+        "src/client_catalog.rs (private)",
+        "src/config_edit.rs (private)",
+        "src/dashboard/diagnostics.rs (private)",
+        "src/dashboard/http_boundary.rs (private)",
+        "src/dashboard/http_headers.rs (private)",
+        "src/dashboard/http_session.rs (private)",
+        "src/dashboard/overview.rs (private)",
+        "src/dashboard/response.rs (private)",
+        "src/execution.rs (private)",
+        "src/http_client.rs (private)",
+        "src/http_probe.rs (private)",
+        "src/hub.rs (private)",
+        "src/hub/launcher.rs (private)",
+        "src/hub/runtime.rs (private)",
+        "src/hub/status.rs (private)",
+        "src/init.rs (private)",
+        "src/json.rs (private)",
+        "src/json_helpers.rs (private)",
+        "src/lab/args.rs (private)",
+        "src/lab/loader.rs (private)",
+        "src/lib.rs (private)",
+        "src/macos_launch_agent.rs (private)",
+        "src/mcp_protocol.rs (private)",
+        "src/mcp_sources.rs (private)",
+        "src/mcp_sources/write_helpers.rs (private)",
+        "src/profile.rs (private)",
+        "src/projects.rs (private)",
+        "src/resources.rs (private)",
+        "src/restart_guard.rs (private)",
+        "src/runtimepaths.rs (private)",
+        "src/server/loader.rs (private)",
+        "src/server/policy.rs (private)",
+        "src/service.rs (private)",
+        "src/tool_result.rs (private)",
+        "src/update.rs (private)",
+        "src/update.rs (private)",
+        "src/upstream/http_runtime.rs (private)",
+        "src/upstream/inventory.rs (private)",
+        "src/upstream/lease_queue.rs (private)",
+        "src/upstream/process_config.rs (private)",
+        "src/upstream/projection.rs (private)",
+        "src/upstream/server_config.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/tool_cache.rs (private)",
         "src/verify/model.rs (private)",
         "src/windows_process.rs (private)"
       ]
@@ -614,11 +585,6 @@
         "src/client_catalog.rs (pub)",
         "src/client_catalog.rs (pub)",
         "src/client_catalog.rs (pub)",
-        "src/connect/model.rs (pub(super))",
-        "src/connect/model.rs (private)",
-        "src/connect/model.rs (private)",
-        "src/connect/model.rs (private)",
-        "src/connect/model.rs (private)",
         "src/dashboard/overview.rs (private)",
         "src/dashboard/overview.rs (private)",
         "src/dashboard/overview.rs (private)",
@@ -631,6 +597,7 @@
         "src/doctor.rs (private)",
         "src/doctor.rs (private)",
         "src/doctor.rs (private)",
+        "src/execution.rs (pub(crate))",
         "src/hub/model.rs (private)",
         "src/hub/model.rs (pub(super))",
         "src/hub/model.rs (pub(super))",
@@ -656,58 +623,6 @@
       ]
     },
     {
-      "name": "fmt",
-      "owners": [
-        "src/adapter/profile.rs (private)",
-        "src/adapter/proxy_uri.rs (private)",
-        "src/candidates.rs (private)",
-        "src/client.rs (private)",
-        "src/client/actions/backup.rs (private)",
-        "src/client/metadata.rs (private)",
-        "src/client_catalog.rs (private)",
-        "src/config_edit.rs (private)",
-        "src/connect/model.rs (private)",
-        "src/dashboard/diagnostics.rs (private)",
-        "src/dashboard/http_boundary.rs (private)",
-        "src/dashboard/http_headers.rs (private)",
-        "src/dashboard/http_session.rs (private)",
-        "src/dashboard/response.rs (private)",
-        "src/http_probe.rs (private)",
-        "src/hub/launcher.rs (private)",
-        "src/hub/runtime.rs (private)",
-        "src/hub/status.rs (private)",
-        "src/init.rs (private)",
-        "src/json.rs (private)",
-        "src/json_helpers.rs (private)",
-        "src/lab/args.rs (private)",
-        "src/lab/loader.rs (private)",
-        "src/mcp_protocol.rs (private)",
-        "src/mcp_sources.rs (private)",
-        "src/mcp_sources/write_helpers.rs (private)",
-        "src/profile.rs (private)",
-        "src/projects.rs (private)",
-        "src/resources.rs (private)",
-        "src/restart_guard.rs (private)",
-        "src/runtimepaths.rs (private)",
-        "src/server/loader.rs (private)",
-        "src/server/policy.rs (private)",
-        "src/service.rs (private)",
-        "src/tool_result.rs (private)",
-        "src/update.rs (private)",
-        "src/update.rs (private)",
-        "src/upstream/http_runtime.rs (private)",
-        "src/upstream/inventory.rs (private)",
-        "src/upstream/process_config.rs (private)",
-        "src/upstream/projection.rs (private)",
-        "src/upstream/server_config.rs (private)",
-        "src/upstream/session_pool.rs (private)",
-        "src/upstream/stdio_runtime.rs (private)",
-        "src/upstream/tool_cache.rs (private)",
-        "src/verify/model.rs (private)",
-        "src/windows_process.rs (private)"
-      ]
-    },
-    {
       "name": "run",
       "owners": [
         "src/agent.rs (pub)",
@@ -716,7 +631,6 @@
         "src/candidates.rs (pub)",
         "src/cleanup.rs (pub)",
         "src/client.rs (pub)",
-        "src/connect.rs (pub)",
         "src/dashboard.rs (pub)",
         "src/doctor.rs (pub)",
         "src/hub.rs (pub)",
@@ -727,10 +641,8 @@
         "src/profile.rs (pub)",
         "src/projects.rs (pub)",
         "src/release.rs (pub)",
-        "src/repair.rs (pub)",
         "src/serve.rs (pub)",
         "src/server.rs (pub)",
-        "src/server/add.rs (pub(super))",
         "src/server/discover.rs (pub(super))",
         "src/server/import.rs (pub(super))",
         "src/server/install.rs (pub(super))",
@@ -743,9 +655,42 @@
         "src/server/toggle.rs (pub(super))",
         "src/service.rs (pub)",
         "src/setup.rs (pub)",
+        "src/status.rs (pub)",
         "src/stdio_shim.rs (pub)",
+        "src/uninstall.rs (pub)",
         "src/update.rs (pub)",
         "src/verify.rs (pub)"
+      ]
+    },
+    {
+      "name": "drop",
+      "owners": [
+        "src/adapter/tests.rs (private)",
+        "src/app/tests.rs (private)",
+        "src/bin/mcpace-agent-launcher.rs (private)",
+        "src/bin/mcpace-agent-launcher.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/dashboard/admission.rs (private)",
+        "src/dashboard/governor.rs (private)",
+        "src/dashboard/tests.rs (private)",
+        "src/hub/leases.rs (private)",
+        "src/hub/model.rs (private)",
+        "src/hub/runtime/tests.rs (private)",
+        "src/init/tests.rs (private)",
+        "src/mcp_sources/tests.rs (private)",
+        "src/resources/tests.rs (private)",
+        "src/runtimepaths.rs (private)",
+        "src/serve.rs (private)",
+        "src/update/tests.rs (private)",
+        "src/upstream/lease_queue.rs (private)",
+        "src/upstream/lease_runtime.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/tests.rs (private)",
+        "src/upstream/tool_cache.rs (private)"
       ]
     },
     {
@@ -756,7 +701,6 @@
         "src/candidates.rs (private)",
         "src/cleanup.rs (private)",
         "src/client/args.rs (pub(super))",
-        "src/connect/args.rs (pub(super))",
         "src/dashboard.rs (private)",
         "src/hub/args.rs (pub(super))",
         "src/init.rs (private)",
@@ -765,14 +709,39 @@
         "src/profile.rs (private)",
         "src/projects.rs (private)",
         "src/release.rs (private)",
-        "src/repair.rs (private)",
         "src/serve.rs (private)",
         "src/server/args.rs (pub(super))",
-        "src/service.rs (private)",
+        "src/service/cli.rs (pub(crate))",
         "src/setup.rs (private)",
+        "src/status.rs (private)",
         "src/stdio_shim.rs (private)",
+        "src/uninstall.rs (private)",
         "src/update.rs (private)",
         "src/verify/args.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "new",
+      "owners": [
+        "src/adapter/profile.rs (private)",
+        "src/bin/mcpace-agent-launcher.rs (private)",
+        "src/dashboard.rs (private)",
+        "src/dashboard/http_session.rs (private)",
+        "src/dashboard/http_session.rs (pub(super))",
+        "src/dashboard/rate_limit.rs (private)",
+        "src/dashboard/response.rs (private)",
+        "src/http_probe.rs (private)",
+        "src/hub/runtime/tests.rs (private)",
+        "src/init/tests.rs (private)",
+        "src/json.rs (pub)",
+        "src/macos_launch_agent.rs (private)",
+        "src/upstream.rs (private)",
+        "src/upstream/http_runtime.rs (private)",
+        "src/upstream/session_pool.rs (private)",
+        "src/upstream/stdio_runtime.rs (private)",
+        "src/upstream/tests.rs (private)",
+        "src/verify/model.rs (private)",
+        "src/windows_process.rs (private)"
       ]
     },
     {
@@ -782,7 +751,6 @@
         "src/candidates.rs (private)",
         "src/cleanup.rs (private)",
         "src/client/args.rs (pub(super))",
-        "src/connect/args.rs (pub(super))",
         "src/dashboard.rs (private)",
         "src/hub/args.rs (pub(super))",
         "src/init.rs (private)",
@@ -793,38 +761,16 @@
         "src/release.rs (private)",
         "src/serve.rs (private)",
         "src/server/args.rs (pub(super))",
-        "src/service.rs (private)",
+        "src/service/cli.rs (pub(crate))",
         "src/setup.rs (private)",
         "src/update.rs (private)",
         "src/verify/args.rs (pub(super))"
       ]
     },
     {
-      "name": "drop",
-      "owners": [
-        "src/adapter/tests.rs (private)",
-        "src/app.rs (private)",
-        "src/dashboard.rs (private)",
-        "src/dashboard.rs (private)",
-        "src/dashboard/admission.rs (private)",
-        "src/dashboard/governor.rs (private)",
-        "src/dashboard/tests.rs (private)",
-        "src/hub/leases.rs (private)",
-        "src/hub/model.rs (private)",
-        "src/hub/runtime.rs (private)",
-        "src/resources.rs (private)",
-        "src/runtimepaths.rs (private)",
-        "src/serve.rs (private)",
-        "src/upstream/lease_runtime.rs (private)",
-        "src/upstream/stdio_runtime.rs (private)",
-        "src/upstream/tool_cache.rs (private)"
-      ]
-    },
-    {
       "name": "argv",
       "owners": [
         "src/client/args.rs (private)",
-        "src/connect/args.rs (private)",
         "src/dashboard.rs (private)",
         "src/hub/args.rs (private)",
         "src/init.rs (private)",
@@ -834,8 +780,10 @@
         "src/release.rs (private)",
         "src/serve.rs (private)",
         "src/server/args.rs (private)",
-        "src/service.rs (private)",
+        "src/service/cli.rs (private)",
         "src/setup.rs (private)",
+        "src/status.rs (private)",
+        "src/uninstall.rs (private)",
         "src/verify/args.rs (private)"
       ]
     },
@@ -851,28 +799,11 @@
         "src/dashboard/latency.rs (private)",
         "src/dashboard/rate_limit.rs (private)",
         "src/dashboard/trace.rs (private)",
+        "src/execution.rs (private)",
         "src/runtimepaths.rs (private)",
-        "src/service.rs (private)",
+        "src/service/cli.rs (private)",
         "src/tool_result.rs (private)",
         "src/upstream/session_pool.rs (private)"
-      ]
-    },
-    {
-      "name": "new",
-      "owners": [
-        "src/adapter/profile.rs (private)",
-        "src/dashboard.rs (private)",
-        "src/dashboard/http_session.rs (private)",
-        "src/dashboard/http_session.rs (pub(super))",
-        "src/dashboard/rate_limit.rs (private)",
-        "src/dashboard/response.rs (private)",
-        "src/http_probe.rs (private)",
-        "src/hub/runtime.rs (private)",
-        "src/json.rs (pub)",
-        "src/upstream/http_runtime.rs (private)",
-        "src/upstream/session_pool.rs (private)",
-        "src/verify/model.rs (private)",
-        "src/windows_process.rs (private)"
       ]
     },
     {
@@ -893,18 +824,18 @@
       ]
     },
     {
-      "name": "normalize_compat_arg",
+      "name": "temp_root",
       "owners": [
-        "src/client/args.rs (private)",
-        "src/dashboard.rs (private)",
-        "src/hub/args.rs (private)",
-        "src/init.rs (private)",
-        "src/projects.rs (private)",
-        "src/release.rs (private)",
-        "src/serve.rs (private)",
-        "src/server/args.rs (private)",
-        "src/service.rs (private)",
-        "src/setup.rs (private)"
+        "src/adapter/tests.rs (private)",
+        "src/cleanup/tests.rs (private)",
+        "src/client/actions/removal_tests.rs (private)",
+        "src/dashboard/tests.rs (private)",
+        "src/mcp_sources/import/tests.rs (private)",
+        "src/mcp_sources/tests.rs (private)",
+        "src/serve/tests.rs (private)",
+        "src/status/tests.rs (private)",
+        "src/uninstall/tests.rs (private)",
+        "src/upstream/tests.rs (private)"
       ]
     },
     {
@@ -916,8 +847,30 @@
         "src/projects.rs (private)",
         "src/serve.rs (private)",
         "src/server/args.rs (private)",
-        "src/service.rs (private)",
+        "src/service/cli.rs (private)",
         "src/setup.rs (private)"
+      ]
+    },
+    {
+      "name": "write_text_report",
+      "owners": [
+        "src/cleanup.rs (private)",
+        "src/doctor.rs (pub)",
+        "src/service.rs (private)",
+        "src/setup.rs (private)",
+        "src/status.rs (private)",
+        "src/uninstall.rs (private)",
+        "src/update.rs (private)"
+      ]
+    },
+    {
+      "name": "CloseHandle",
+      "owners": [
+        "src/bin/mcpace-agent-launcher.rs (private)",
+        "src/bin/mcpace-agent-launcher.rs (private)",
+        "src/process_identity.rs (private)",
+        "src/windows_process.rs (private)",
+        "src/windows_process.rs (private)"
       ]
     },
     {
@@ -931,6 +884,26 @@
       ]
     },
     {
+      "name": "normalize",
+      "owners": [
+        "src/adapter.rs (private)",
+        "src/catalog.rs (pub)",
+        "src/client/pathing.rs (pub(super))",
+        "src/client_catalog.rs (pub)",
+        "src/execution.rs (pub(crate))"
+      ]
+    },
+    {
+      "name": "now_ms",
+      "owners": [
+        "src/client/actions/backup.rs (pub(super))",
+        "src/dashboard/operations.rs (private)",
+        "src/dashboard/response.rs (pub(super))",
+        "src/hub/runtime.rs (pub(super))",
+        "src/serve.rs (private)"
+      ]
+    },
+    {
       "name": "snapshot_json",
       "owners": [
         "src/dashboard/admission.rs (pub(crate))",
@@ -941,23 +914,30 @@
       ]
     },
     {
-      "name": "temp_root",
+      "name": "agent_supervisor_is_active",
       "owners": [
-        "src/adapter/tests.rs (private)",
-        "src/dashboard/tests.rs (private)",
-        "src/mcp_sources/import.rs (private)",
         "src/serve.rs (private)",
-        "src/upstream/tests.rs (private)"
+        "src/serve.rs (private)",
+        "src/serve.rs (private)",
+        "src/serve.rs (private)"
       ]
     },
     {
-      "name": "write_text_report",
+      "name": "as_str",
       "owners": [
-        "src/cleanup.rs (private)",
-        "src/doctor.rs (pub)",
-        "src/service.rs (private)",
-        "src/setup.rs (private)",
-        "src/update.rs (private)"
+        "src/client_catalog.rs (pub)",
+        "src/client_catalog.rs (pub)",
+        "src/execution.rs (pub(crate))",
+        "src/json.rs (pub)"
+      ]
+    },
+    {
+      "name": "capture_platform",
+      "owners": [
+        "src/process_identity.rs (private)",
+        "src/process_identity.rs (private)",
+        "src/process_identity.rs (private)",
+        "src/process_identity.rs (private)"
       ]
     },
     {
@@ -970,30 +950,39 @@
       ]
     },
     {
-      "name": "normalize",
+      "name": "request_agent_supervisor_stop",
       "owners": [
-        "src/adapter.rs (private)",
-        "src/catalog.rs (pub)",
-        "src/client/pathing.rs (pub(super))",
-        "src/client_catalog.rs (pub)"
-      ]
-    },
-    {
-      "name": "normalize_compat_flag",
-      "owners": [
-        "src/connect/args.rs (private)",
-        "src/lab/args.rs (private)",
-        "src/mcp_server/args.rs (private)",
-        "src/verify/args.rs (private)"
-      ]
-    },
-    {
-      "name": "now_ms",
-      "owners": [
-        "src/client/actions/backup.rs (pub(super))",
-        "src/dashboard/response.rs (pub(super))",
-        "src/hub/runtime.rs (pub(super))",
+        "src/serve.rs (private)",
+        "src/serve.rs (private)",
+        "src/serve.rs (private)",
         "src/serve.rs (private)"
+      ]
+    },
+    {
+      "name": "start_agent_supervisor",
+      "owners": [
+        "src/serve.rs (private)",
+        "src/serve.rs (private)",
+        "src/serve.rs (private)",
+        "src/serve.rs (private)"
+      ]
+    },
+    {
+      "name": "stop_registered_user_supervisor_before_replace",
+      "owners": [
+        "src/service/config.rs (pub(super))",
+        "src/service/config.rs (pub(super))",
+        "src/service/config.rs (pub(super))",
+        "src/service/config.rs (pub(super))"
+      ]
+    },
+    {
+      "name": "stop_user_supervisor_before_disable",
+      "owners": [
+        "src/service/config.rs (pub(super))",
+        "src/service/config.rs (pub(super))",
+        "src/service/config.rs (pub(super))",
+        "src/service/config.rs (pub(super))"
       ]
     },
     {
@@ -1006,80 +995,27 @@
       ]
     },
     {
-      "name": "as_str",
+      "name": "autolaunch_token_impl",
       "owners": [
-        "src/client_catalog.rs (pub)",
-        "src/client_catalog.rs (pub)",
-        "src/json.rs (pub)"
+        "src/service/config.rs (private)",
+        "src/service/config.rs (private)",
+        "src/service/config.rs (private)"
       ]
     },
     {
-      "name": "call_tool",
+      "name": "autostart_target_impl",
       "owners": [
-        "src/upstream/lease_runtime.rs (pub)",
-        "src/upstream/session_pool.rs (pub(super))",
-        "src/upstream/session_pool.rs (pub(super))"
-      ]
-    },
-    {
-      "name": "call_tools",
-      "owners": [
-        "src/upstream/lease_runtime.rs (pub)",
-        "src/upstream/session_pool.rs (pub(super))",
-        "src/upstream/session_pool.rs (pub(super))"
-      ]
-    },
-    {
-      "name": "from_json",
-      "owners": [
-        "src/client_catalog.rs (private)",
-        "src/client_catalog.rs (private)",
-        "src/client_catalog.rs (private)"
-      ]
-    },
-    {
-      "name": "io",
-      "owners": [
-        "src/hub/runtime.rs (private)",
-        "src/init.rs (private)",
-        "src/runtimepaths.rs (private)"
-      ]
-    },
-    {
-      "name": "list_tools",
-      "owners": [
-        "src/upstream/lease_runtime.rs (pub)",
-        "src/upstream/session_pool.rs (pub(super))",
-        "src/upstream/session_pool.rs (pub(super))"
-      ]
-    },
-    {
-      "name": "message",
-      "owners": [
-        "src/http_probe.rs (pub(crate))",
-        "src/json.rs (pub)",
-        "src/upstream/inventory.rs (private)"
-      ]
-    },
-    {
-      "name": "preferred_install_config_path",
-      "owners": [
-        "src/client/actions.rs (private)",
-        "src/client_catalog.rs (pub)",
-        "src/client_catalog.rs (pub)"
+        "src/service/config.rs (private)",
+        "src/service/config.rs (private)",
+        "src/service/config.rs (private)"
       ]
     }
   ],
   "unsupportedMarkers": [
     {
       "file": "src/client_catalog/builtin.rs",
-      "line": 348,
+      "line": 354,
       "text": "\"Cloud agent supports tools only; resources and prompts are not available on this surface.\","
-    },
-    {
-      "file": "src/dashboard/diagnostics.rs",
-      "line": 207,
-      "text": "\"external/remote HTTP server policy is configured, but direct HTTPS/custom HTTP fan-out is not implemented in this HTTP adapter\","
     },
     {
       "file": "src/hub/launcher.rs",
@@ -1088,13 +1024,8 @@
     },
     {
       "file": "src/serve.rs",
-      "line": 1355,
+      "line": 2368,
       "text": "Err(\"background serve launch is not implemented for this platform\".to_string())"
-    },
-    {
-      "file": "src/upstream/http_runtime.rs",
-      "line": 262,
-      "text": "return Err(HttpUpstreamError::new(\"direct HTTPS upstream forwarding is not available without a TLS adapter; use a stdio bridge such as mcp-remote or a local HTTP gateway\"));"
     }
   ],
   "commandAliasDuplicates": [],
@@ -1387,7 +1318,7 @@
     "endToEndFlows": [
       {
         "name": "Quickstart / up",
-        "trigger": "mcpace up / mcpace setup",
+        "trigger": "mcpace up",
         "path": [
           "src/app.rs",
           "src/setup.rs",
@@ -1401,7 +1332,7 @@
       },
       {
         "name": "Client wiring",
-        "trigger": "mcpace client install/export/plan/restore",
+        "trigger": "mcpace advanced client install/export/plan/restore",
         "path": [
           "src/client.rs",
           "src/client/args.rs",
@@ -1414,7 +1345,7 @@
       },
       {
         "name": "Server inventory and policy",
-        "trigger": "mcpace server list/import/install/auto/set-policy/instances/test",
+        "trigger": "mcpace install + mcpace advanced server list/import/auto/set-policy/instances/test",
         "path": [
           "src/server.rs",
           "src/server/*",
@@ -1455,7 +1386,7 @@
       },
       {
         "name": "Observability / operator UI",
-        "trigger": "mcpace dashboard / /api/overview / runtime_diagnostics",
+        "trigger": "mcpace advanced runtime foreground / /api/overview / runtime_diagnostics",
         "path": [
           "src/dashboard.rs",
           "src/dashboard/*",
@@ -1483,6 +1414,11 @@
       {
         "method": "GET",
         "path": "/api/logs",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/api/operations",
         "dynamic": false
       },
       {
@@ -1522,7 +1458,27 @@
       },
       {
         "method": "GET",
+        "path": "/dashboard.product.css",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/dashboard.product.js",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/dashboard.render.details.js",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
         "path": "/dashboard.render.js",
+        "dynamic": false
+      },
+      {
+        "method": "GET",
+        "path": "/dashboard.runtime.js",
         "dynamic": false
       },
       {
@@ -1612,7 +1568,17 @@
       },
       {
         "method": "POST",
+        "path": "/api/actions/server-remove",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
         "path": "/api/actions/server-test",
+        "dynamic": false
+      },
+      {
+        "method": "POST",
+        "path": "/api/actions/update-check",
         "dynamic": false
       },
       {
@@ -1674,7 +1640,7 @@
       },
       {
         "key": "changes",
-        "frontendMentions": false,
+        "frontendMentions": true,
         "backendMentions": true
       },
       {
@@ -1741,14 +1707,14 @@
       "win32"
     ],
     "publishedTargetCount": 6,
-    "smokeCommandCount": 17,
+    "smokeCommandCount": 21,
     "note": "Do not add Tauri as a console dependency now. Tauri is appropriate for a packaged desktop app around the existing web dashboard; a real terminal UI should be Ratatui/crossterm later. Current safe step is a platform-proofed CLI/dashboard with native binary smoke tests."
   },
   "assurance": {
     "present": true,
-    "overall": "needs-live-rust-proof",
-    "pass": 12,
-    "warn": 2,
+    "overall": "pass",
+    "pass": 14,
+    "warn": 0,
     "fail": 0,
     "note": "Assurance report checks user-visible truth, safety boundaries, release reproducibility, and unverified Rust/live gates."
   }

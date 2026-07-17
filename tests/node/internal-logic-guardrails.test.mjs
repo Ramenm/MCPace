@@ -853,8 +853,8 @@ test("project registry scan is implemented and uses stable lower-camel records",
 	);
 	const serializer = sliceFn(projects, "to_json_value");
 
-	assert.match(parser, /scan_flag \|\| action\.as_deref\(\) == Some\("scan"\)/);
-	assert.match(parser, /"-scan" => "--scan"/);
+	assert.match(parser, /scan:\s*action\.as_deref\(\) == Some\("scan"\)/);
+	assert.doesNotMatch(projects, /"-scan"\s*=>\s*"--scan"/);
 	assert.match(projects, /fn resolve_scan_project_path/);
 	assert.match(
 		projects,
@@ -956,10 +956,8 @@ test("setup readiness counts real upstream sources, not policy-only catalog reco
 		runSetup,
 		/let server_count_before = server_counts_before\.source_enabled;/,
 	);
-	assert.match(
-		runSetup,
-		/server_count_before == 0 && requested_server_spec\.is_none\(\)/,
-	);
+	assert.match(runSetup, /let home_import = if server_count_before == 0/);
+	assert.doesNotMatch(runSetup, /requested_server_spec|server_spec_to_install/);
 	assert.match(counts, /policy_records: records\.len\(\)/);
 	assert.match(
 		counts,

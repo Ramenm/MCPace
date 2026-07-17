@@ -167,7 +167,7 @@ fn autostart_target_impl(
             hidden_launcher
         )],
         install_blocker: Some(format!(
-            "Windows hidden autostart launcher not found: {}. Build/package mcpace-agent-launcher.exe next to mcpace.exe, then run `mcpace autostart repair`.",
+            "Windows hidden autostart launcher not found: {}. Build/package mcpace-agent-launcher.exe next to mcpace.exe, then run `mcpace advanced autostart repair`.",
             hidden_launcher
         )),
         native_background: false,
@@ -390,15 +390,137 @@ pub(super) fn start_user_supervisor_after_enable(
     Ok(())
 }
 
+pub(super) fn write_autostart_plan(
+    config: &ServiceConfig,
+    dry_run: bool,
+) -> ServiceConfigResult<Vec<String>> {
+    write_autostart_plan_impl(config, dry_run)
+}
+
+#[cfg(windows)]
+fn write_autostart_plan_impl(
+    config: &ServiceConfig,
+    dry_run: bool,
+) -> ServiceConfigResult<Vec<String>> {
+    let Some(plan_path) = config.autostart_plan_path.as_deref() else {
+        return Err(ServiceConfigError::Autostart(
+            "Windows autostart plan path could not be resolved".to_string(),
+        ));
+    };
+    if dry_run {
+        return Ok(vec![format!(
+            "Dry run: would write Windows autostart plan to '{}'.",
+            plan_path
+        )]);
+    }
+    stop_registered_user_supervisor_before_replace(config)?;
+    let plan = super::expected_windows_autostart_plan(config);
+    let body = serde_json::to_string_pretty(&plan).map_err(|error| {
+        ServiceConfigError::Autostart(format!(
+            "failed to render Windows autostart plan: {}",
+            error
+        ))
+    })?;
+    let path = Path::new(plan_path);
+    crate::runtimepaths::write_text_atomic(path, &format!("{}\n", body)).map_err(|error| {
+        ServiceConfigError::Autostart(format!(
+            "failed to atomically write Windows autostart plan '{}': {}",
+            path.display(),
+            error
+        ))
+    })?;
+    Ok(vec![format!(
+        "Wrote Windows autostart plan to '{}'; Run registry only needs to start the hidden launcher.",
+        plan_path
+    )])
+}
+
+#[cfg(not(windows))]
+fn write_autostart_plan_impl(
+    config: &ServiceConfig,
+    dry_run: bool,
+) -> ServiceConfigResult<Vec<String>> {
+    if !dry_run {
+        stop_registered_user_supervisor_before_replace(config)?;
+    }
+    Ok(Vec::new())
+}
+
+#[cfg(target_os = "linux")]
+pub(super) fn stop_registered_user_supervisor_before_replace(
+    config: &ServiceConfig,
+) -> ServiceConfigResult<()> {
+    stop_user_supervisor_before_disable(config)
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn stop_registered_user_supervisor_before_replace(
+    _config: &ServiceConfig,
+) -> ServiceConfigResult<()> {
+    crate::macos_launch_agent::stop(super::APP_NAME)
+        .map_err(|error| ServiceConfigError::Autostart(error.to_string()))
+}
+
+#[cfg(windows)]
+pub(super) fn stop_registered_user_supervisor_before_replace(
+    config: &ServiceConfig,
+) -> ServiceConfigResult<()> {
+    let Some(plan_path) = config.autostart_plan_path.as_deref() else {
+        return Ok(());
+    };
+    let path = Path::new(plan_path);
+    if !path.is_file() {
+        return Ok(());
+    }
+    let body = std::fs::read_to_string(path).map_err(|error| {
+        ServiceConfigError::Autostart(format!(
+            "failed to read existing Windows autostart plan '{}': {}",
+            path.display(),
+            error
+        ))
+    })?;
+    let plan: super::WindowsAutostartPlan = serde_json::from_str(&body).map_err(|error| {
+        ServiceConfigError::Autostart(format!(
+            "refusing to replace invalid Windows autostart plan '{}': {}",
+            path.display(),
+            error
+        ))
+    })?;
+    let root = plan
+        .root_path
+        .as_deref()
+        .or_else(|| service_target_arg(&plan.target_args, "--root"))
+        .ok_or_else(|| {
+            ServiceConfigError::Autostart(
+                "existing Windows autostart plan does not contain a root".to_string(),
+            )
+        })?;
+    stop_runtime_for_root(config, root)
+}
+
+#[cfg(all(not(windows), not(target_os = "linux"), not(target_os = "macos")))]
+pub(super) fn stop_registered_user_supervisor_before_replace(
+    _config: &ServiceConfig,
+) -> ServiceConfigResult<()> {
+    Ok(())
+}
+
 #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
-fn stop_runtime_before_supervisor_start(config: &ServiceConfig) -> ServiceConfigResult<()> {
+pub(super) fn stop_runtime_before_supervisor_start(
+    config: &ServiceConfig,
+) -> ServiceConfigResult<()> {
     let root = service_target_arg(&config.target_args, "--root").ok_or_else(|| {
         ServiceConfigError::Autostart(
             "autostart target does not include the required --root argument".to_string(),
         )
     })?;
+    stop_runtime_for_root(config, root)
+}
+
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+fn stop_runtime_for_root(config: &ServiceConfig, root: &str) -> ServiceConfigResult<()> {
     let mut command = std::process::Command::new(&config.target_app_path);
-    command.args(["serve", "stop", "--json", "--root", root]);
+    command.args(["stop", "--json", "--root", root]);
     #[cfg(windows)]
     crate::windows_process::configure_no_window(&mut command);
     let output = command.output().map_err(|error| {
@@ -417,7 +539,7 @@ fn stop_runtime_before_supervisor_start(config: &ServiceConfig) -> ServiceConfig
 }
 
 #[cfg(target_os = "linux")]
-fn start_platform_user_supervisor(_config: &ServiceConfig) -> ServiceConfigResult<()> {
+pub(super) fn start_platform_user_supervisor(_config: &ServiceConfig) -> ServiceConfigResult<()> {
     let unit = format!("{}.service", LINUX_AUTOSTART_ID);
     for args in [
         vec!["--user", "daemon-reload"],
@@ -444,13 +566,13 @@ fn start_platform_user_supervisor(_config: &ServiceConfig) -> ServiceConfigResul
 }
 
 #[cfg(target_os = "macos")]
-fn start_platform_user_supervisor(_config: &ServiceConfig) -> ServiceConfigResult<()> {
+pub(super) fn start_platform_user_supervisor(_config: &ServiceConfig) -> ServiceConfigResult<()> {
     crate::macos_launch_agent::start(super::APP_NAME)
         .map_err(|error| ServiceConfigError::Autostart(error.to_string()))
 }
 
 #[cfg(windows)]
-fn start_platform_user_supervisor(config: &ServiceConfig) -> ServiceConfigResult<()> {
+pub(super) fn start_platform_user_supervisor(config: &ServiceConfig) -> ServiceConfigResult<()> {
     let args = config
         .launch_args
         .iter()
@@ -472,7 +594,7 @@ fn start_platform_user_supervisor(config: &ServiceConfig) -> ServiceConfigResult
 }
 
 #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
-struct SupervisorEndpoint {
+pub(super) struct SupervisorEndpoint {
     root: PathBuf,
     host: String,
     port: u16,
@@ -481,7 +603,9 @@ struct SupervisorEndpoint {
 }
 
 #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
-fn supervisor_endpoint(config: &ServiceConfig) -> ServiceConfigResult<SupervisorEndpoint> {
+pub(super) fn supervisor_endpoint(
+    config: &ServiceConfig,
+) -> ServiceConfigResult<SupervisorEndpoint> {
     let root = service_target_arg(&config.target_args, "--root")
         .map(PathBuf::from)
         .ok_or_else(|| {
@@ -512,8 +636,13 @@ fn supervisor_endpoint(config: &ServiceConfig) -> ServiceConfigResult<Supervisor
 }
 
 #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
-fn supervisor_runtime_ready(endpoint: &SupervisorEndpoint) -> bool {
-    let healthy = endpoint.state_path.is_file()
+pub(super) fn supervisor_runtime_ready(endpoint: &SupervisorEndpoint) -> bool {
+    supervisor_endpoint_ready(endpoint) && platform_user_supervisor_is_active(&endpoint.root)
+}
+
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+pub(super) fn supervisor_endpoint_ready(endpoint: &SupervisorEndpoint) -> bool {
+    endpoint.state_path.is_file()
         && crate::http_probe::json_get(
             &crate::http_probe::probe_host(&endpoint.host),
             endpoint.port,
@@ -521,14 +650,34 @@ fn supervisor_runtime_ready(endpoint: &SupervisorEndpoint) -> bool {
             std::time::Duration::from_secs(2),
             64 * 1024,
         )
-        .ok()
-        .and_then(|value| crate::json_helpers::bool_at_path(&value, &["ok"]))
-        .unwrap_or(false);
-    healthy && platform_user_supervisor_is_active(&endpoint.root)
+        .is_ok()
+        && supervisor_state_identity_matches(endpoint)
 }
 
 #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
-fn wait_for_supervisor_runtime(endpoint: &SupervisorEndpoint) -> ServiceConfigResult<()> {
+fn supervisor_state_identity_matches(endpoint: &SupervisorEndpoint) -> bool {
+    let Ok(state) = crate::json_helpers::read_json_file(&endpoint.state_path) else {
+        return false;
+    };
+    let Some(pid) = state
+        .get("pid")
+        .and_then(crate::json::JsonValue::as_i64)
+        .and_then(|value| u32::try_from(value).ok())
+    else {
+        return false;
+    };
+    let start_token = crate::json_helpers::string_at_path(&state, &["processIdentity"]);
+    let runner_path = crate::json_helpers::string_at_path(&state, &["runnerPath"]).map(Path::new);
+    matches!(
+        crate::process_identity::match_process(pid, start_token, runner_path),
+        Ok(crate::process_identity::ProcessMatch::Match)
+    )
+}
+
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+pub(super) fn wait_for_supervisor_runtime(
+    endpoint: &SupervisorEndpoint,
+) -> ServiceConfigResult<()> {
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     while std::time::Instant::now() < deadline {
         if supervisor_runtime_ready(endpoint) {

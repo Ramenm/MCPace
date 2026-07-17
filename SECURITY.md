@@ -55,16 +55,16 @@ Security-sensitive upstream concerns include:
 
 ## Dynamic discovery and install safety
 
-`mcpace auto` may search local catalogs and a cached/refreshable MCP Registry response, but auto mode is trust-gated. MCPace must not silently execute a random public MCP server package just because it matched a query.
+`mcpace advanced server auto` may search local catalogs and a cached/refreshable MCP Registry response, but auto mode is trust-gated. MCPace must not silently execute a random public MCP server package just because it matched a query.
 
 Default install rules:
 
-- a no-query `mcpace auto` uses only the pinned embedded/local curated catalog; named searches refresh a bounded query-specific Registry cache;
+- a no-query `mcpace advanced server auto` uses only the pinned embedded/local curated catalog; named searches refresh a bounded query-specific Registry cache;
 - Registry publication and publisher-supplied fields never grant trust: Registry entries remain `review` even when a custom cache path is configured;
 - `review` matches require a local catalog/config trust decision or an advanced review flag;
 - unknown package managers, custom package registry bases, blocked/deleted entries, repeated cursors, malformed metadata, and ambiguous matches stay plan-only or fail closed;
 - required Registry arguments, environment values, URL variables, and HTTP headers must be supplied explicitly; credential placeholders are not persisted as secrets;
-- after any trusted install, auto mode runs the same bounded, paginated `initialize`/`tools/list` probe path used by `mcpace server test <name> --refresh` unless run with `--dry-run`, and failed probes are not reported as ready.
+- after any trusted install, auto mode runs the same bounded, paginated `initialize`/`tools/list` probe path used by `mcpace advanced server test <name> --refresh` unless run with `--dry-run`, and failed probes are not reported as ready.
 
 ## Logging and diagnostics
 

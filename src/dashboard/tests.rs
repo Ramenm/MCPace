@@ -18,8 +18,6 @@ use std::sync::{Arc, Barrier, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
-static ENV_LOCK: Mutex<()> = Mutex::new(());
-
 struct EnvVarGuard {
     key: &'static str,
     value: Option<OsString>,
@@ -312,7 +310,7 @@ fn dashboard_ui_keeps_the_routine_path_compact_and_evidence_first() {
     assert_dashboard_assets_lack(&["Browser", " QA"]);
     assert_dashboard_assets_lack(&["Sentry", " issues"]);
     assert_dashboard_assets_lack(&["Example MCP", " sandbox"]);
-    assert_dashboard_assets_lack(&["mcpace lab", " probe"]);
+    assert_dashboard_assets_lack(&["mcpace advanced dev lab", " probe"]);
     assert_dashboard_assets_lack(&["cannot safely", " prove"]);
     assert_dashboard_assets_lack(&["before increasing", " workers"]);
     assert_dashboard_assets_lack(&["auto", "-safe"]);
@@ -496,7 +494,9 @@ fn overview_runtime_control_uses_cached_tools_list_evidence_for_risk() {
         eprintln!("skipping cached evidence risk test because node is not on PATH");
         return;
     }
-    let _env_lock = ENV_LOCK.lock().expect("env lock");
+    let _env_lock = crate::resources::TEST_ENV_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let _env = [
         EnvVarGuard::remove("MCPACE_MCP_SETTINGS"),
         EnvVarGuard::remove("MCPACE_MCP_SETTINGS_DIRS"),

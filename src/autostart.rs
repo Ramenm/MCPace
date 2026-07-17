@@ -25,7 +25,9 @@ pub fn run(
             "enable" => "install".to_string(),
             "disable" => "uninstall".to_string(),
             "repair" => "install".to_string(),
-            "status" | "verify" | "print" | "install" | "uninstall" => action.to_ascii_lowercase(),
+            "status" | "verify" | "prove" | "print" | "install" | "uninstall" => {
+                action.to_ascii_lowercase()
+            }
             other => {
                 diagnostics::stderr_line(
                     stderr,
@@ -39,8 +41,9 @@ pub fn run(
 }
 
 fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace autostart <enable|disable|status|verify|repair|print> [--json] [serve options]");
+    let _ = writeln!(stdout, "Usage: mcpace advanced autostart <enable|disable|status|verify|prove|repair|print> [--json] [serve options]");
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Autostart is installed and repaired automatically by `mcpace up` unless --no-autostart is used. It is user-level: systemd --user on Linux, a supervised hidden login launcher on Windows, and a LaunchAgent on macOS.");
     let _ = writeln!(stdout, "On Windows and Linux, enable/repair activates the supervisor immediately and disable stops its current runtime.");
+    let _ = writeln!(stdout, "`prove` activates the exact registered login target without rebooting, verifies endpoint/process identity, and restores the initial running state.");
 }

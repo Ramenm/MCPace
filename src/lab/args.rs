@@ -47,7 +47,7 @@ enum LabAction {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace lab",
+    name = "mcpace advanced dev lab",
     disable_version_flag = true,
     about = "Inspect and probe MCP runtime classification evidence"
 )]
@@ -65,7 +65,7 @@ struct LabCli {
     root_override: Option<PathBuf>,
 
     /// Scenario/server id filter for show and probe.
-    #[arg(long = "id", alias = "name", value_name = "ID")]
+    #[arg(long = "id", value_name = "ID")]
     id_filter: Option<String>,
 
     /// Live probe timeout in milliseconds.
@@ -136,47 +136,46 @@ fn validate_timeout(value: Option<u64>) -> Result<Option<u64>, LabArgsError> {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace lab"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_flag(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced dev lab"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_flag(arg: &str) -> &str {
-    match arg {
-        "-json" => "--json",
-        "-root" => "--root",
-        "-timeout-ms" => "--timeout-ms",
-        "-refresh" => "--refresh",
-        "-id" => "--id",
-        "-name" => "--name",
-        "-?" => "--help",
-        other => other,
-    }
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace lab [report|list|matrix|coverage|gaps|show|probe] [options]"
+        "Usage: mcpace advanced dev lab [report|list|matrix|coverage|gaps|show|probe] [options]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Default action: report. Implemented now:");
-    let _ = writeln!(stdout, "  mcpace lab [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace lab list [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace lab matrix [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace lab coverage [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace lab gaps [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace lab report [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  mcpace advanced dev lab [--json] [--root <path>]");
     let _ = writeln!(
         stdout,
-        "  mcpace lab show --id <scenario> [--json] [--root <path>]"
+        "  mcpace advanced dev lab list [--json] [--root <path>]"
     );
     let _ = writeln!(
         stdout,
-        "  mcpace lab probe [--id <server>] [--timeout-ms <ms>] [--refresh] [--json] [--root <path>]"
+        "  mcpace advanced dev lab matrix [--json] [--root <path>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced dev lab coverage [--json] [--root <path>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced dev lab gaps [--json] [--root <path>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced dev lab report [--json] [--root <path>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced dev lab show --id <scenario> [--json] [--root <path>]"
+    );
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced dev lab probe [--id <server>] [--timeout-ms <ms>] [--refresh] [--json] [--root <path>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "lab reads runtime fixtures plus a capability inventory and turns them into an evidence report: server -> evidence -> runtimeType/stateClass/effectClass -> concurrencyPolicy. The probe action performs a safe live MCP handshake (initialize + notifications/initialized + tools/list only) and never calls tools/call.");

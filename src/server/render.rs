@@ -400,56 +400,6 @@ pub(super) fn render_sources(
     0
 }
 
-pub(super) fn render_add_result(
-    result: &crate::mcp_sources::McpServerWriteResult,
-    json_output: bool,
-    stdout: &mut dyn Write,
-) -> i32 {
-    if json_output {
-        let _ = writeln!(stdout, "{}", result.to_json_value().to_pretty_string());
-        return 0;
-    }
-
-    let _ = writeln!(
-        stdout,
-        "MCP server {}: {} ({})",
-        result.action, result.name, result.server_type
-    );
-    let _ = writeln!(stdout, "  source: {}", result.path);
-    if let Some(command) = &result.command {
-        let _ = writeln!(stdout, "  command: {}", command);
-    }
-    if let Some(url) = &result.url {
-        let _ = writeln!(stdout, "  url: {}", url);
-    }
-    let _ = writeln!(
-        stdout,
-        "  args={} env={} headers={} existedBefore={} dryRun={}",
-        result.args_count,
-        result.env_count,
-        result.header_count,
-        yes_no(result.existed_before),
-        yes_no(result.dry_run)
-    );
-    if result.dry_run {
-        let _ = writeln!(
-            stdout,
-            "  no files written; rerun without --dry-run to apply"
-        );
-    } else {
-        let _ = writeln!(
-            stdout,
-            "  next: mcpace server test {} --refresh",
-            result.normalized_name
-        );
-        let _ = writeln!(
-            stdout,
-            "  then: mcpace client install <client|all> --dry-run --diff"
-        );
-    }
-    0
-}
-
 pub(super) fn render_install_result(
     result: &crate::mcp_autoinstall::McpAutoInstallResult,
     json_output: bool,
@@ -499,16 +449,16 @@ pub(super) fn render_install_result(
     } else if result.write.server_type == "stdio" {
         let _ = writeln!(
             stdout,
-            "  next: mcpace server test {} --refresh",
+            "  next: mcpace advanced server test {} --refresh",
             result.write.normalized_name
         );
         let _ = writeln!(
             stdout,
-            "  then: mcpace server capabilities {} --json",
+            "  then: mcpace advanced server capabilities {} --json",
             result.write.normalized_name
         );
     } else {
-        let _ = writeln!(stdout, "  next: mcpace server sources --json");
+        let _ = writeln!(stdout, "  next: mcpace advanced server sources --json");
     }
     0
 }
@@ -546,10 +496,10 @@ pub(super) fn render_toggle_result(
     } else {
         let _ = writeln!(
             stdout,
-            "  next: mcpace server test {} --refresh",
+            "  next: mcpace advanced server test {} --refresh",
             result.normalized_name
         );
-        let _ = writeln!(stdout, "  then: mcpace verify readiness --json");
+        let _ = writeln!(stdout, "  then: mcpace status --json");
     }
     0
 }

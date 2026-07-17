@@ -29,12 +29,6 @@ struct ParsedArgs {
     skip_client_install: bool,
     client_selector: Option<String>,
     install_service: bool,
-    no_enable_service: bool,
-    server_spec: Option<String>,
-    server_name: Option<String>,
-    server_paths: Vec<String>,
-    server_force: bool,
-    no_default_server: bool,
     error: Option<String>,
 }
 
@@ -109,9 +103,6 @@ pub fn run(
     about = "Home-first onboarding for MCPace"
 )]
 struct SetupCli {
-    #[arg(value_name = "SERVER_SPEC_OR_PATH")]
-    values: Vec<String>,
-
     #[arg(long = "json")]
     json_output: bool,
 
@@ -136,59 +127,11 @@ struct SetupCli {
     #[arg(long = "overview-cache-ms", value_name = "MS")]
     overview_cache_ms: Option<u64>,
 
-    #[arg(
-        long = "skip-client-install",
-        alias = "no-client",
-        alias = "skip-client"
-    )]
-    skip_client_install: bool,
-
-    #[arg(long = "client", alias = "for", value_name = "auto|all|none|ID")]
+    #[arg(long = "client", value_name = "auto|all|none|ID")]
     client_selector: Option<String>,
 
-    #[arg(long = "all-clients")]
-    all_clients: bool,
-
-    #[arg(long = "auto-client", alias = "auto-clients")]
-    auto_client: bool,
-
-    #[arg(
-        long = "server",
-        alias = "with-server",
-        alias = "install-server",
-        value_name = "SPEC"
-    )]
-    server_spec: Option<String>,
-
-    #[arg(long = "as", alias = "server-name", value_name = "NAME")]
-    server_name: Option<String>,
-
-    #[arg(long = "path", alias = "server-path", value_name = "PATH")]
-    server_paths: Vec<String>,
-
-    #[arg(long = "force")]
-    server_force: bool,
-
-    #[arg(long = "no-default-server", alias = "no-server")]
-    no_default_server: bool,
-
-    #[arg(
-        long = "install-service",
-        alias = "install-autostart",
-        alias = "autostart",
-        conflicts_with = "no_autostart"
-    )]
-    install_service: bool,
-
-    #[arg(
-        long = "no-autostart",
-        alias = "no-persist",
-        conflicts_with = "install_service"
-    )]
+    #[arg(long = "no-autostart")]
     no_autostart: bool,
-
-    #[arg(long = "no-enable")]
-    no_enable_service: bool,
 }
 
 fn parse_cli(args: &[String]) -> ParsedArgs {
@@ -224,26 +167,11 @@ fn parsed_from_cli(cli: SetupCli) -> ParsedArgs {
         io_timeout_ms: cli.io_timeout_ms,
         max_body_bytes: cli.max_body_bytes,
         overview_cache_ms: cli.overview_cache_ms,
-        skip_client_install: cli.skip_client_install || skip_client_selector,
+        skip_client_install: skip_client_selector,
         client_selector,
-        install_service: cli.install_service || !cli.no_autostart,
-        no_enable_service: cli.no_enable_service,
-        server_spec: cli.server_spec,
-        server_name: cli.server_name,
-        server_paths: cli.server_paths,
-        server_force: cli.server_force,
-        no_default_server: cli.no_default_server,
+        install_service: !cli.no_autostart,
         error: None,
     };
-
-    if cli.all_clients {
-        parsed.skip_client_install = false;
-        parsed.client_selector = Some("all".to_string());
-    }
-    if cli.auto_client {
-        parsed.skip_client_install = false;
-        parsed.client_selector = Some("auto".to_string());
-    }
     if parsed.max_connections == Some(0) {
         parsed.error = Some("setup --max-connections must be a positive integer".to_string());
         return parsed;
@@ -257,7 +185,6 @@ fn parsed_from_cli(cli: SetupCli) -> ParsedArgs {
         return parsed;
     }
 
-    apply_setup_positionals(&mut parsed, cli.values);
     parsed
 }
 
@@ -273,81 +200,17 @@ fn normalized_client_selector(value: Option<String>) -> (bool, Option<String>) {
     }
 }
 
-fn apply_setup_positionals(parsed: &mut ParsedArgs, values: Vec<String>) {
-    for value in values {
-        if parsed
-            .server_spec
-            .as_deref()
-            .map(looks_like_multiword_server_command)
-            .unwrap_or(false)
-        {
-            let mut spec = parsed.server_spec.take().unwrap_or_default();
-            if !spec.trim().is_empty() {
-                spec.push(' ');
-            }
-            spec.push_str(&value);
-            parsed.server_spec = Some(spec);
-        } else if parsed.server_spec.is_none() {
-            parsed.server_spec = Some(value);
-        } else {
-            parsed.server_paths.push(value);
-        }
-    }
-}
-
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
     argv.push(OsString::from("mcpace up"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_arg(arg: &str) -> String {
-    match arg {
-        "-json" => "--json".to_string(),
-        "-root" => "--root".to_string(),
-        "-host" => "--host".to_string(),
-        "-port" => "--port".to_string(),
-        "-max-connections" => "--max-connections".to_string(),
-        "-io-timeout-ms" => "--io-timeout-ms".to_string(),
-        "-max-body-bytes" => "--max-body-bytes".to_string(),
-        "-overview-cache-ms" => "--overview-cache-ms".to_string(),
-        "-skip-client-install" => "--skip-client-install".to_string(),
-        "-no-client" => "--no-client".to_string(),
-        "-skip-client" => "--skip-client".to_string(),
-        "-client" => "--client".to_string(),
-        "-for" => "--for".to_string(),
-        "-all-clients" => "--all-clients".to_string(),
-        "-auto-client" => "--auto-client".to_string(),
-        "-auto-clients" => "--auto-clients".to_string(),
-        "-server" => "--server".to_string(),
-        "-with-server" => "--with-server".to_string(),
-        "-install-server" => "--install-server".to_string(),
-        "-as" => "--as".to_string(),
-        "-server-name" => "--server-name".to_string(),
-        "-path" => "--path".to_string(),
-        "-server-path" => "--server-path".to_string(),
-        "-force" => "--force".to_string(),
-        "-no-default-server" => "--no-default-server".to_string(),
-        "-no-server" => "--no-server".to_string(),
-        "-install-service" => "--install-service".to_string(),
-        "-install-autostart" => "--install-autostart".to_string(),
-        "-autostart" => "--autostart".to_string(),
-        "-no-autostart" => "--no-autostart".to_string(),
-        "-no-persist" => "--no-persist".to_string(),
-        "-no-enable" => "--no-enable".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
 }
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace up [server-spec] [--as <name>] [--path <path>...] [--client auto|all|<id>|none] [--json] [--root <path>] [--host <addr>] [--port <n>] [--no-autostart]"
+        "Usage: mcpace up [--client auto|all|<id>|none] [--json] [--root <path>] [--host <addr>] [--port <n>] [--no-autostart]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -362,18 +225,10 @@ fn write_help(stdout: &mut dyn Write) {
     );
     let _ = writeln!(
         stdout,
-        "  mcpace up npm:@modelcontextprotocol/server-memory --as memory --client none"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace up http://127.0.0.1:8010/mcp --as local-gateway --client all"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace up --server \"npx -y @modelcontextprotocol/server-memory\" --as memory"
+        "  mcpace up --client none --no-autostart # session-only runtime without client edits"
     );
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Use 'mcpace install <path|package|url|command...>' when you actually want to add a new upstream server.");
+    let _ = writeln!(stdout, "`up` never installs a new upstream server. Use 'mcpace install <path|package|url|command...>' for that.");
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
@@ -609,6 +464,8 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
     }
 
     let init = run_json_command(vec![
+        "advanced".to_string(),
+        "dev".to_string(),
         "init".to_string(),
         "--json".to_string(),
         "--root".to_string(),
@@ -617,20 +474,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
 
     let server_counts_before = setup_server_counts(&root_path);
     let server_count_before = server_counts_before.source_enabled;
-    let requested_server_spec = parsed
-        .server_spec
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .map(ToString::to_string);
-    if parsed.no_default_server {
-        warnings.push(
-            "--no-default-server is now the default behavior; MCPace will not add an upstream server unless you pass one explicitly."
-                .to_string(),
-        );
-    }
-
-    let home_import = if server_count_before == 0 && requested_server_spec.is_none() {
+    let home_import = if server_count_before == 0 {
         Some(import_existing_home_mcp_servers(
             &root_path,
             &endpoint,
@@ -639,33 +483,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
     } else {
         None
     };
-    let server_spec_to_install = requested_server_spec.clone();
-    let server_install = server_spec_to_install.as_ref().map(|spec| {
-        let mut args = vec![
-            "install".to_string(),
-            spec.clone(),
-            "--json".to_string(),
-            "--root".to_string(),
-            root_text.clone(),
-        ];
-        if let Some(name) = parsed
-            .server_name
-            .as_deref()
-            .map(str::trim)
-            .filter(|value| !value.is_empty())
-        {
-            args.push("--as".to_string());
-            args.push(name.to_string());
-        }
-        for path in &parsed.server_paths {
-            args.push("--path".to_string());
-            args.push(path.clone());
-        }
-        if parsed.server_force {
-            args.push("--force".to_string());
-        }
-        run_json_command(args)
-    });
+    let server_install: Option<CommandResult> = None;
 
     let server_counts_after = setup_server_counts(&root_path);
     let server_count_after = server_counts_after.source_enabled;
@@ -679,6 +497,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
 
     let service_install = if parsed.install_service {
         let mut args = vec![
+            "advanced".to_string(),
             "autostart".to_string(),
             "enable".to_string(),
             "--json".to_string(),
@@ -696,9 +515,6 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
             parsed.max_body_bytes,
             parsed.overview_cache_ms,
         );
-        if parsed.no_enable_service {
-            args.push("--no-enable".to_string());
-        }
         Some(run_json_command(args))
     } else {
         warnings.push(
@@ -709,7 +525,6 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
     };
 
     let mut serve_args = vec![
-        "serve".to_string(),
         "start".to_string(),
         "--json".to_string(),
         "--host".to_string(),
@@ -751,7 +566,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
 
     let client_install = if parsed.skip_client_install {
         warnings.push(
-            "Client install was skipped; run 'mcpace client install <client-id>' when ready."
+            "Client install was skipped; run 'mcpace advanced client install <client-id>' when ready."
                 .to_string(),
         );
         None
@@ -783,7 +598,8 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
     };
 
     let readiness = run_json_command(vec![
-        "verify".to_string(),
+        "advanced".to_string(),
+        "doctor".to_string(),
         "readiness".to_string(),
         "--json".to_string(),
         "--root".to_string(),
@@ -918,7 +734,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
             );
         } else {
             warnings.push(
-                "MCPace responded to initialize, but no tools were discovered yet; run 'mcpace server test <name> --refresh' if the first client still shows no tools."
+                "MCPace responded to initialize, but no tools were discovered yet; run 'mcpace advanced server test <name> --refresh' if the first client still shows no tools."
                     .to_string(),
             );
         }
@@ -1097,7 +913,7 @@ fn run_setup(parsed: ParsedArgs, bootstrap: RootBootstrap) -> JsonValue {
                     endpoint
                 )),
                 JsonValue::string(
-                    "Add upstream servers only when you choose with 'mcpace install <package|url|command>' or 'mcpace server import <mcp-settings-file>'; MCPace keeps one stable client endpoint and preserves existing client config entries."
+                    "Add upstream servers only when you choose with 'mcpace install <package|url|command>' or 'mcpace advanced server import <mcp-settings-file>'; MCPace keeps one stable client endpoint and preserves existing client config entries."
                         .to_string(),
                 ),
             ]),
@@ -1616,6 +1432,7 @@ fn run_client_install(
     let selector = selector.unwrap_or("auto").trim().to_ascii_lowercase();
     if selector == "all" {
         return run_json_command(vec![
+            "advanced".to_string(),
             "client".to_string(),
             "install".to_string(),
             "all".to_string(),
@@ -1626,6 +1443,7 @@ fn run_client_install(
     }
     if selector != "auto" {
         return run_json_command(vec![
+            "advanced".to_string(),
             "client".to_string(),
             "install".to_string(),
             selector,
@@ -1638,7 +1456,7 @@ fn run_client_install(
     let detected = detect_local_clients(root_path, warnings);
     if detected.is_empty() {
         warnings.push(
-            "No supported local client was auto-detected, so MCPace did not create new app config files. Run 'mcpace client list' or 'mcpace client install cursor-local' after installing a client.".to_string(),
+            "No supported local client was auto-detected, so MCPace did not create new app config files. Run 'mcpace advanced client list' or 'mcpace advanced client install cursor-local' after installing a client.".to_string(),
         );
         let json = JsonValue::object([
             ("mode", JsonValue::string("auto-detected-none")),
@@ -1663,6 +1481,7 @@ fn run_client_install(
     let mut ok = true;
     for id in detected {
         let result = run_json_command(vec![
+            "advanced".to_string(),
             "client".to_string(),
             "install".to_string(),
             id.clone(),
@@ -1799,22 +1618,6 @@ fn root_bootstrap_json(bootstrap: &RootBootstrap) -> JsonValue {
             JsonValue::bool(bootstrap.created_settings_dir),
         ),
     ])
-}
-
-fn looks_like_multiword_server_command(spec: &str) -> bool {
-    let base = spec
-        .split_whitespace()
-        .next()
-        .unwrap_or("")
-        .rsplit(['/', '\\'])
-        .next()
-        .unwrap_or("")
-        .trim_end_matches(".exe")
-        .to_ascii_lowercase();
-    matches!(
-        base.as_str(),
-        "npx" | "bunx" | "pnpm" | "yarn" | "uvx" | "docker"
-    )
 }
 
 fn command_result_json(result: &CommandResult) -> JsonValue {

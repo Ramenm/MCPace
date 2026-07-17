@@ -1,0 +1,88 @@
+{
+  "schema": "mcpace.workspaceVerification.v1",
+  "generatedAt": "2026-07-18T02:13:47+03:00",
+  "project": "MCPace",
+  "version": "0.8.2",
+  "baseCommit": "577f01ffd4075ea0f837eccc0953b103de16ec88",
+  "sourceState": "0.8.2 release candidate derived from the recorded base commit",
+  "verdict": "code-ready-for-review-production-publication-blocked",
+  "localGates": {
+    "node": {
+      "status": "pass",
+      "files": 73,
+      "filesPassed": 73,
+      "tests": 457,
+      "passed": 455,
+      "skipped": 2,
+      "failed": 0
+    },
+    "rust": {
+      "status": "pass",
+      "toolchain": "1.95.0",
+      "libraryTests": 302,
+      "launcherTests": 4,
+      "failed": 0,
+      "cleanParallelRuns": 3,
+      "fmt": "pass",
+      "clippyWarningsDenied": "pass",
+      "lockedOfflineBuild": "pass"
+    },
+    "workspaceCheck": "pass",
+    "releaseReadinessEnforcement": "pass",
+    "endgameEnforcement": "pass",
+    "architectureBoundary": "pass",
+    "legacyBoundary": "pass",
+    "npmAuditProduction": {
+      "status": "pass",
+      "vulnerabilities": 0
+    },
+    "gitleaksReleaseManifest": {
+      "status": "pass",
+      "findings": 0
+    },
+    "trivyFinalSourceArchive": {
+      "status": "pass",
+      "highOrCriticalFindings": 0
+    },
+    "sourceArchive": {
+      "status": "pass",
+      "entries": 517
+    },
+    "npmPackage": {
+      "status": "pass",
+      "mainPackageEntries": 11,
+      "nativeWindowsInstallSmoke": "pass"
+    },
+    "installedBinaryRuntimeSmoke": {
+      "status": "pass",
+      "operations": [
+        "init",
+        "up",
+        "health",
+        "mcp-initialize",
+        "mcp-tools-list",
+        "stop"
+      ],
+      "toolCount": 8
+    },
+    "liveMcpProof": "pass",
+    "rustLiveProof": "pass"
+  },
+  "releaseArtifact": {
+    "path": "target/release/mcpace.exe",
+    "sha256": "d9c0ad8be10da39eda7b4a45a1a1e417e896f37d80f1d27e79b3109863056c1f",
+    "rustSourceFingerprint": "4213ebcc4c200f034cbf7a5945ff512e0f37a3c860b5c5d7de9718f3d6cd210d"
+  },
+  "externalBlockers": [
+    "exact-commit disposable autostart lifecycle matrix on Linux, Windows and macOS",
+    "fresh-login or reboot activation proof on disposable hosts",
+    "Windows signing and macOS signing, notarization and stapling",
+    "approved threat model and enforcement for HTTP mutation authentication, principal-bound grants and leases, cancellation, SSRF and approval receipts",
+    "clean-checkout publication preflight and npm publication of 0.8.2"
+  ],
+  "safety": {
+    "realLoginStartupModified": false,
+    "destructiveLifecycleProofRunLocally": false,
+    "proofGate": "--confirm-disposable-user plus MCPACE_DISPOSABLE_AUTOSTART_PROOF=1"
+  }
+}

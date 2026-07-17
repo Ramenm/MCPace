@@ -300,7 +300,17 @@ async function runProof() {
 		fs.writeFileSync(fixture, fixtureSource());
 		child = spawn(
 			executionBinary,
-			["serve", "--root", root, "--host", "127.0.0.1", "--port", String(port)],
+			[
+				"advanced",
+				"runtime",
+				"foreground",
+				"--root",
+				root,
+				"--host",
+				"127.0.0.1",
+				"--port",
+				String(port),
+			],
 			{
 				cwd: repoRoot,
 				detached: process.platform !== "win32",

@@ -81,6 +81,19 @@ test("installed runtime smoke retains bounded detached-start diagnostics", () =>
 	assert.match(script, /serve stderr tail/);
 	assert.match(script, /serve stdout tail/);
 	assert.match(script, /serveLogDiagnostics\(root\)/);
+	assert.match(
+		script,
+		/env:\s*childEnvForCommand\(command\)/,
+		"the isolated installer root must not inherit developer MCPACE_* overrides",
+	);
+});
+
+test("up checks the raw readiness contract instead of the grouped doctor report", () => {
+	const setup = read("src/setup.rs");
+	assert.match(
+		setup,
+		/"advanced"\.to_string\(\),\s*"doctor"\.to_string\(\),\s*"readiness"\.to_string\(\),\s*"--json"\.to_string\(\)/,
+	);
 });
 
 test("native npm install smoke requires all standard-install inputs and fails closed", () => {

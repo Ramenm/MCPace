@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.platformProof.v1",
-  "generatedAt": "2026-07-15T02:29:52.120Z",
+  "generatedAt": "2026-07-17T22:55:15.019Z",
   "root": ".",
   "rootName": "mcpace",
   "evidenceKind": "static-plan-contract",
@@ -13,8 +13,8 @@
     "fail": 0,
     "publishedTargetCount": 6,
     "plannedTargetCount": 2,
-    "publicCommandCount": 25,
-    "smokeCommandCount": 17
+    "publicCommandCount": 10,
+    "smokeCommandCount": 21
   },
   "uiDecision": {
     "requestedTerm": "Taori/Tauri for console view",
@@ -118,66 +118,10 @@
   },
   "commands": [
     {
-      "name": "agent",
+      "name": "advanced",
       "aliases": [],
-      "implemented": true,
-      "description": "Run or inspect the visible MCPace login agent used by autostart entries."
-    },
-    {
-      "name": "autostart",
-      "aliases": [
-        "startup"
-      ],
-      "implemented": true,
-      "description": "Install or inspect the visible user-level MCPace Agent login item."
-    },
-    {
-      "name": "candidates",
-      "aliases": [],
-      "implemented": true,
-      "description": "Inspect candidate server catalog."
-    },
-    {
-      "name": "cleanup",
-      "aliases": [
-        "clean",
-        "prune"
-      ],
-      "implemented": true,
-      "description": "Safely inspect or remove disposable cache, logs, and ephemeral runtime markers."
-    },
-    {
-      "name": "client",
-      "aliases": [
-        "setup-clients",
-        "setup-mcp-clients"
-      ],
-      "implemented": true,
-      "description": "Grouped client planning/install/export command."
-    },
-    {
-      "name": "connect",
-      "aliases": [
-        "guide",
-        "next",
-        "onboard"
-      ],
-      "implemented": true,
-      "description": "Show client-first wiring guidance, endpoint details, and next commands."
-    },
-    {
-      "name": "dashboard",
-      "aliases": [
-        "ui"
-      ],
-      "implemented": true,
-      "description": "Serve a local admin dashboard for MCPace."
-    },
-    {
-      "name": "doctor",
-      "aliases": [],
-      "implemented": true,
-      "description": "Inspect host/source readiness without starting a runtime."
+      "route": "Advanced",
+      "description": "Open diagnostics, server, client, startup, runtime, lease, and maintainer commands."
     },
     {
       "name": "help",
@@ -185,154 +129,64 @@
         "-h",
         "--help"
       ],
-      "implemented": true,
-      "description": "Show help for the Rust-only CLI."
+      "route": "Help",
+      "description": "Show the public MCPace command surface."
     },
     {
-      "name": "hub",
-      "aliases": [
-        "start"
-      ],
-      "implemented": true,
-      "description": "Manage the local hub lifecycle, status, and logs."
-    },
-    {
-      "name": "init",
-      "aliases": [
-        "boot"
-      ],
-      "implemented": true,
-      "description": "Bootstrap runtime state layout and readiness."
-    },
-    {
-      "name": "lab",
+      "name": "install",
       "aliases": [],
-      "implemented": true,
-      "description": "Inspect runtime lab scenarios, coverage, and gap reports."
+      "route": "Install",
+      "description": "Add or update an upstream MCP server."
     },
     {
-      "name": "mcp-server",
-      "aliases": [
-        "mcp_server"
-      ],
-      "implemented": true,
-      "description": "Internal MCP stdio compatibility surface."
-    },
-    {
-      "name": "profile",
+      "name": "restart",
       "aliases": [],
-      "implemented": true,
-      "description": "Read-only runtime profile inspection."
+      "route": "Restart",
+      "description": "Restart the configured runtime without changing clients or login startup."
     },
     {
-      "name": "projects",
-      "aliases": [
-        "project"
-      ],
-      "implemented": true,
-      "description": "Read-only project registry inspection."
-    },
-    {
-      "name": "release",
-      "aliases": [
-        "build-release"
-      ],
-      "implemented": true,
-      "description": "Build local source release artifacts without publishing."
-    },
-    {
-      "name": "repair",
-      "aliases": [
-        "backup",
-        "rotate-logs",
-        "windows-mcp-lease",
-        "auth"
-      ],
-      "implemented": true,
-      "description": "Grouped repair/maintenance command."
-    },
-    {
-      "name": "serve",
+      "name": "start",
       "aliases": [],
-      "implemented": true,
-      "description": "Serve the local MCPace HTTP surface on one port."
+      "route": "Start",
+      "description": "Start the already-configured runtime for this login session."
     },
     {
-      "name": "server",
-      "aliases": [
-        "servers",
-        "capabilities",
-        "server-capabilities",
-        "mcp",
-        "add-server",
-        "server-install"
-      ],
-      "implemented": true,
-      "description": "Grouped server inspection and automatic MCP package/URL/command install command."
-    },
-    {
-      "name": "service",
+      "name": "status",
       "aliases": [],
-      "implemented": true,
-      "description": "Compatibility alias for user-level autostart; privileged system services are reserved for a future advanced mode."
+      "route": "Status",
+      "description": "Show aggregate runtime and login-startup status without changing anything."
     },
     {
-      "name": "setup",
-      "aliases": [
-        "up",
-        "quickstart",
-        "bootstrap",
-        "one-click"
-      ],
-      "implemented": true,
-      "description": "Home-first onboarding: create/repair MCPace home, start the endpoint, wire supported local clients, and smoke-test without adding upstream servers."
+      "name": "stop",
+      "aliases": [],
+      "route": "Stop",
+      "description": "Stop the current runtime without disabling startup at the next login."
     },
     {
-      "name": "stdio",
-      "aliases": [
-        "stdio-shim",
-        "stdio_shim"
-      ],
-      "implemented": true,
-      "description": "Live MCP stdio launch surface. This is the public launcher command; `stdio-shim` remains a compatibility alias for older client configs."
+      "name": "uninstall",
+      "aliases": [],
+      "route": "Uninstall",
+      "description": "Remove MCPace local integration while preserving configuration and backups."
     },
     {
-      "name": "update",
-      "aliases": [
-        "update-check"
-      ],
-      "implemented": true,
-      "description": "Check external package-manager update guidance without self-updating."
-    },
-    {
-      "name": "verify",
-      "aliases": [
-        "check",
-        "status",
-        "smoke",
-        "readiness",
-        "probe",
-        "stress-status",
-        "stress-startup-status"
-      ],
-      "implemented": true,
-      "description": "Grouped verification command."
+      "name": "up",
+      "aliases": [],
+      "route": "Up",
+      "description": "Create or repair MCPace, start it, wire clients, and configure login startup."
     },
     {
       "name": "version",
       "aliases": [
-        "--version",
-        "-v"
+        "-v",
+        "--version"
       ],
-      "implemented": true,
+      "route": "Version",
       "description": "Print the compiled MCPace binary version."
     }
   ],
   "subcommands": {
     "server": [
-      "add",
       "auto",
-      "candidates",
       "capabilities",
       "disable",
       "discover",
@@ -363,6 +217,8 @@
       "logs",
       "repair",
       "run",
+      "running",
+      "starting",
       "status",
       "up"
     ]
@@ -373,7 +229,7 @@
         "help"
       ],
       "expects": "text",
-      "reason": "top-level command router and public help",
+      "reason": "small public command router and help",
       "command": "help",
       "coveredTopLevel": true
     },
@@ -388,178 +244,220 @@
     },
     {
       "args": [
+        "up",
+        "--help"
+      ],
+      "expects": "text",
+      "reason": "convergent onboarding help",
+      "command": "up --help",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "start",
+        "--help"
+      ],
+      "expects": "text",
+      "reason": "start lifecycle help",
+      "command": "start --help",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "stop",
+        "--help"
+      ],
+      "expects": "text",
+      "reason": "stop lifecycle help",
+      "command": "stop --help",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "restart",
+        "--help"
+      ],
+      "expects": "text",
+      "reason": "restart lifecycle help",
+      "command": "restart --help",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "install",
+        "--help"
+      ],
+      "expects": "text",
+      "reason": "server install help",
+      "command": "install --help",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "status",
+        "--json"
+      ],
+      "expects": "jsonOrNonzero",
+      "reason": "read-only aggregate runtime/startup status",
+      "command": "status --json",
+      "coveredTopLevel": true
+    },
+    {
+      "args": [
+        "advanced",
         "doctor",
         "--json"
       ],
       "expects": "json",
       "reason": "host and source readiness without runtime start",
-      "command": "doctor --json",
+      "command": "advanced doctor --json",
       "coveredTopLevel": true
     },
     {
       "args": [
-        "verify",
-        "readiness",
-        "--json"
-      ],
-      "expects": "json",
-      "reason": "user readiness gate",
-      "command": "verify readiness --json",
-      "coveredTopLevel": true
-    },
-    {
-      "args": [
+        "advanced",
         "server",
         "list",
         "--json"
       ],
       "expects": "json",
       "reason": "server inventory contract",
-      "command": "server list --json",
+      "command": "advanced server list --json",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
         "server",
         "capabilities",
         "--json"
       ],
       "expects": "json",
       "reason": "launch/capability metadata contract",
-      "command": "server capabilities --json",
+      "command": "advanced server capabilities --json",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
         "server",
         "sources",
         "--json"
       ],
       "expects": "json",
       "reason": "MCP settings source discovery contract",
-      "command": "server sources --json",
+      "command": "advanced server sources --json",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
         "client",
         "list",
         "--json"
       ],
       "expects": "json",
       "reason": "client catalog visibility contract",
-      "command": "client list --json",
+      "command": "advanced client list --json",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
         "client",
         "plan",
         "--json"
       ],
       "expects": "json",
-      "reason": "client install plan contract",
-      "command": "client plan --json",
+      "reason": "client routing plan contract",
+      "command": "advanced client plan --json",
       "coveredTopLevel": true
     },
     {
       "args": [
-        "hub",
-        "status",
-        "--json"
-      ],
-      "expects": "json",
-      "reason": "hub state read contract",
-      "command": "hub status --json",
-      "coveredTopLevel": true
-    },
-    {
-      "args": [
+        "advanced",
+        "dev",
         "profile",
         "--json"
       ],
       "expects": "json",
-      "reason": "runtime profile read contract",
-      "command": "profile --json",
+      "reason": "maintainer runtime profile read contract",
+      "command": "advanced dev profile --json",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
+        "dev",
         "projects",
         "--json"
       ],
       "expects": "json",
-      "reason": "project registry read contract",
-      "command": "projects --json",
+      "reason": "maintainer project registry read contract",
+      "command": "advanced dev projects --json",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
+        "dev",
         "lab",
         "report",
         "--json"
       ],
       "expects": "json",
-      "reason": "evidence corpus contract",
-      "command": "lab report --json",
+      "reason": "maintainer evidence corpus contract",
+      "command": "advanced dev lab report --json",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
+        "runtime",
         "cleanup",
         "status",
         "--json"
       ],
       "expects": "json",
       "reason": "non-destructive cleanup plan",
-      "command": "cleanup status --json",
+      "command": "advanced runtime cleanup status --json",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
+        "dev",
         "release",
         "--help"
       ],
       "expects": "text",
-      "reason": "release command help path",
-      "command": "release --help",
+      "reason": "maintainer release help path",
+      "command": "advanced dev release --help",
       "coveredTopLevel": true
     },
     {
       "args": [
+        "advanced",
         "autostart",
         "--help"
       ],
       "expects": "text",
-      "reason": "platform autostart help path",
-      "command": "autostart --help",
+      "reason": "platform startup help path",
+      "command": "advanced autostart --help",
       "coveredTopLevel": true
     },
     {
       "args": [
-        "serve",
-        "status",
-        "--json"
+        "uninstall",
+        "--help"
       ],
-      "expects": "jsonOrNonzero",
-      "reason": "serve state read path without starting daemon",
-      "command": "serve status --json",
+      "expects": "text",
+      "reason": "safe integration removal contract",
+      "command": "uninstall --help",
       "coveredTopLevel": true
     }
   ],
-  "topLevelCommandGaps": [
-    "agent",
-    "candidates",
-    "connect",
-    "dashboard",
-    "init",
-    "mcp-server",
-    "repair",
-    "service",
-    "setup",
-    "stdio",
-    "update"
-  ],
+  "topLevelCommandGaps": [],
   "checks": [
     {
       "id": "release-targets-cover-three-desktop-os",
@@ -589,12 +487,12 @@
     {
       "id": "all-public-commands-inventoried",
       "status": "pass",
-      "detail": "25 public command groups parsed from src/catalog.rs"
+      "detail": "10 public command groups parsed from src/catalog.rs"
     },
     {
       "id": "safe-binary-smoke-covers-operational-groups",
       "status": "pass",
-      "detail": "17 non-destructive native smoke commands defined"
+      "detail": "21 non-destructive native smoke commands defined"
     },
     {
       "id": "console-ui-decision-is-lightweight",

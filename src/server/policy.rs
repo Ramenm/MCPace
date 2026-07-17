@@ -93,7 +93,7 @@ pub(super) fn run(
         .map(str::trim)
         .filter(|name| !name.is_empty())
     else {
-        diagnostics::stderr_line(stderr, format_args!("server set-policy requires a server name, for example: mcpace server set-policy filesystem --mode session-isolated"));
+        diagnostics::stderr_line(stderr, format_args!("server set-policy requires a server name, for example: mcpace advanced server set-policy filesystem --mode session-isolated"));
         return 2;
     };
 

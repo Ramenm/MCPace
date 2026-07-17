@@ -10,7 +10,7 @@ pub fn run(
 ) -> i32 {
     if args
         .iter()
-        .any(|arg| matches!(arg.as_str(), "-h" | "--help" | "-?"))
+        .any(|arg| matches!(arg.as_str(), "-h" | "--help"))
     {
         write_help(stdout);
         return 0;
@@ -22,7 +22,7 @@ pub fn run(
 
 fn normalize_compat_args(args: &[String]) -> Vec<String> {
     args.iter()
-        .filter(|arg| !matches!(arg.as_str(), "--json" | "-json"))
+        .filter(|arg| arg.as_str() != "--json")
         .cloned()
         .collect()
 }

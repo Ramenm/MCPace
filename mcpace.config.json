@@ -40,7 +40,7 @@
       "./catalog/approved-servers.json"
     ],
     "defaultCommand": "auto",
-    "description": "One-command dynamic mode. `mcpace auto` refreshes the registry cache when it is missing or stale, selects approved/trusted candidates, writes server config, launches the package manager only during probe, reads live initialize/tools/list evidence, and lets MCPace infer safe runtime policy without asking the user for a server type.",
+    "description": "One-command dynamic mode. `mcpace advanced server auto` refreshes the registry cache when it is missing or stale, selects approved/trusted candidates, writes server config, launches the package manager only during probe, reads live initialize/tools/list evidence, and lets MCPace infer safe runtime policy without asking the user for a server type.",
     "enabled": true,
     "installUnknown": "plan-only",
     "maxAutoInstallsPerRun": 4,

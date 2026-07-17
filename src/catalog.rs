@@ -1,173 +1,156 @@
 use crate::text_utils;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandVisibility {
+    Public,
+    HiddenCompatibility,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CommandRoute {
+    Help,
+    Version,
+    Up,
+    Start,
+    Stop,
+    Restart,
+    Status,
+    Install,
+    Uninstall,
+    Advanced,
+    Stdio,
+    StdioShim,
+    Agent,
+    Serve,
+    Hub,
+    McpServer,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub struct CommandSpec {
     pub name: &'static str,
     pub description: &'static str,
     pub aliases: &'static [&'static str],
-    pub implemented: bool,
+    pub visibility: CommandVisibility,
+    pub route: CommandRoute,
 }
 
 pub const COMMANDS: &[CommandSpec] = &[
     CommandSpec {
         name: "help",
-        description: "Show help for the Rust-only CLI.",
+        description: "Show the public MCPace command surface.",
         aliases: &["-h", "--help"],
-        implemented: true,
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Help,
     },
     CommandSpec {
         name: "version",
         description: "Print the compiled MCPace binary version.",
-        aliases: &["--version", "-v"],
-        implemented: true,
+        aliases: &["-v", "--version"],
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Version,
     },
     CommandSpec {
-        name: "doctor",
-        description: "Inspect host/source readiness without starting a runtime.",
-        aliases: &[],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "setup",
+        name: "up",
         description:
-            "Home-first onboarding: create/repair MCPace home, start the endpoint, wire supported local clients, and smoke-test without adding upstream servers.",
-        aliases: &["up", "quickstart", "bootstrap", "one-click"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "autostart",
-        description: "Install or inspect the visible user-level MCPace Agent login item.",
-        aliases: &["startup"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "service",
-        description: "Compatibility alias for user-level autostart; privileged system services are reserved for a future advanced mode.",
+            "Create or repair MCPace, start it, wire clients, and configure login startup.",
         aliases: &[],
-        implemented: true,
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Up,
+    },
+    CommandSpec {
+        name: "start",
+        description: "Start the already-configured runtime for this login session.",
+        aliases: &[],
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Start,
+    },
+    CommandSpec {
+        name: "stop",
+        description: "Stop the current runtime without disabling startup at the next login.",
+        aliases: &[],
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Stop,
+    },
+    CommandSpec {
+        name: "restart",
+        description: "Restart the configured runtime without changing clients or login startup.",
+        aliases: &[],
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Restart,
+    },
+    CommandSpec {
+        name: "status",
+        description: "Show aggregate runtime and login-startup status without changing anything.",
+        aliases: &[],
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Status,
+    },
+    CommandSpec {
+        name: "install",
+        description: "Add or update an upstream MCP server.",
+        aliases: &[],
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Install,
+    },
+    CommandSpec {
+        name: "uninstall",
+        description: "Remove MCPace local integration while preserving configuration and backups.",
+        aliases: &[],
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Uninstall,
+    },
+    CommandSpec {
+        name: "advanced",
+        description:
+            "Open diagnostics, server, client, startup, runtime, lease, and maintainer commands.",
+        aliases: &[],
+        visibility: CommandVisibility::Public,
+        route: CommandRoute::Advanced,
+    },
+    // These entrypoints are intentionally callable but absent from public help and completion.
+    // Existing MCP client configurations and installed login entries depend on their exact names.
+    CommandSpec {
+        name: "stdio",
+        description: "Internal MCP stdio transport entrypoint.",
+        aliases: &[],
+        visibility: CommandVisibility::HiddenCompatibility,
+        route: CommandRoute::Stdio,
+    },
+    CommandSpec {
+        name: "stdio-shim",
+        description: "Legacy MCP stdio transport entrypoint retained through 0.8.x.",
+        aliases: &[],
+        visibility: CommandVisibility::HiddenCompatibility,
+        route: CommandRoute::StdioShim,
     },
     CommandSpec {
         name: "agent",
-        description: "Run or inspect the visible MCPace login agent used by autostart entries.",
+        description: "Installed user-login agent entrypoint.",
         aliases: &[],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "dashboard",
-        description: "Serve a local admin dashboard for MCPace.",
-        aliases: &["ui"],
-        implemented: true,
+        visibility: CommandVisibility::HiddenCompatibility,
+        route: CommandRoute::Agent,
     },
     CommandSpec {
         name: "serve",
-        description: "Serve the local MCPace HTTP surface on one port.",
+        description: "Legacy managed-runtime entrypoint.",
         aliases: &[],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "profile",
-        description: "Read-only runtime profile inspection.",
-        aliases: &[],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "projects",
-        description: "Read-only project registry inspection.",
-        aliases: &["project"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "candidates",
-        description: "Inspect candidate server catalog.",
-        aliases: &[],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "lab",
-        description: "Inspect runtime lab scenarios, coverage, and gap reports.",
-        aliases: &[],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "server",
-        description: "Grouped server inspection and automatic MCP package/URL/command install command.",
-        aliases: &["servers", "capabilities", "server-capabilities", "mcp", "add-server", "server-install"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "verify",
-        description: "Grouped verification command.",
-        aliases: &[
-            "check",
-            "status",
-            "smoke",
-            "readiness",
-            "probe",
-            "stress-status",
-            "stress-startup-status",
-        ],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "init",
-        description: "Bootstrap runtime state layout and readiness.",
-        aliases: &["boot"],
-        implemented: true,
+        visibility: CommandVisibility::HiddenCompatibility,
+        route: CommandRoute::Serve,
     },
     CommandSpec {
         name: "hub",
-        description: "Manage the local hub lifecycle, status, and logs.",
-        aliases: &["start"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "stdio",
-        description: "Live MCP stdio launch surface. This is the public launcher command; `stdio-shim` remains a compatibility alias for older client configs.",
-        aliases: &["stdio-shim", "stdio_shim"],
-        implemented: true,
+        description: "Internal runtime and lease entrypoint.",
+        aliases: &[],
+        visibility: CommandVisibility::HiddenCompatibility,
+        route: CommandRoute::Hub,
     },
     CommandSpec {
         name: "mcp-server",
-        description: "Internal MCP stdio compatibility surface.",
-        aliases: &["mcp_server"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "client",
-        description: "Grouped client planning/install/export command.",
-        aliases: &["setup-clients", "setup-mcp-clients"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "connect",
-        description: "Show client-first wiring guidance, endpoint details, and next commands.",
-        aliases: &["guide", "next", "onboard"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "cleanup",
-        description:
-            "Safely inspect or remove disposable cache, logs, and ephemeral runtime markers.",
-        aliases: &["clean", "prune"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "repair",
-        description: "Grouped repair/maintenance command.",
-        aliases: &["backup", "rotate-logs", "windows-mcp-lease", "auth"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "update",
-        description: "Check external package-manager update guidance without self-updating.",
-        aliases: &["update-check"],
-        implemented: true,
-    },
-    CommandSpec {
-        name: "release",
-        description: "Build local source release artifacts without publishing.",
-        aliases: &["build-release"],
-        implemented: true,
+        description: "Legacy MCP server entrypoint retained through 0.8.x.",
+        aliases: &[],
+        visibility: CommandVisibility::HiddenCompatibility,
+        route: CommandRoute::McpServer,
     },
 ];
 
@@ -176,6 +159,12 @@ pub fn find(name: &str) -> Option<&'static CommandSpec> {
     COMMANDS.iter().find(|command| {
         command.name == normalized || command.aliases.iter().any(|alias| *alias == normalized)
     })
+}
+
+pub fn public_commands() -> impl Iterator<Item = &'static CommandSpec> {
+    COMMANDS
+        .iter()
+        .filter(|command| command.visibility == CommandVisibility::Public)
 }
 
 pub fn normalize(value: &str) -> String {

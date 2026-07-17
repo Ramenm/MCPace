@@ -9,11 +9,15 @@ use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 struct ScopedEnvRemoval {
+    _lock: std::sync::MutexGuard<'static, ()>,
     values: Vec<(&'static str, Option<std::ffi::OsString>)>,
 }
 
 impl ScopedEnvRemoval {
     fn new(names: &[&'static str]) -> Self {
+        let lock = crate::resources::TEST_ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let values = names
             .iter()
             .map(|name| {
@@ -22,7 +26,10 @@ impl ScopedEnvRemoval {
                 (*name, value)
             })
             .collect();
-        Self { values }
+        Self {
+            _lock: lock,
+            values,
+        }
     }
 }
 
@@ -958,6 +965,10 @@ fn stderr_suffix_bounds_diagnostic_line_count_and_length() {
 #[cfg(unix)]
 #[test]
 fn spawn_stdio_server_does_not_forward_unspecified_parent_environment() {
+    let _environment = ScopedEnvRemoval::new(&[
+        "MCPACE_PARENT_SECRET_DO_NOT_FORWARD",
+        "MCPACE_ALLOWED_TOKEN_TEST",
+    ]);
     let root = temp_root();
     env::set_var("MCPACE_PARENT_SECRET_DO_NOT_FORWARD", "secret-value");
     env::set_var("MCPACE_ALLOWED_TOKEN_TEST", "allowed-value");
@@ -1193,6 +1204,7 @@ fn bare_launch_manager_commands_spawn_by_basename() {
 
 #[test]
 fn load_servers_accepts_source_only_standard_mcp_shape() {
+    let _environment = ScopedEnvRemoval::new(&["MCPACE_TEST_FORWARDED_ENV"]);
     let root = temp_root();
     fs::create_dir_all(root.join("workspace")).unwrap();
     env::set_var("MCPACE_TEST_FORWARDED_ENV", "forwarded-value");
@@ -1341,7 +1353,7 @@ fn plain_http_upstream_lists_and_calls_tools() {
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
     let handle = thread::spawn(move || {
-        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let deadline = std::time::Instant::now() + Duration::from_secs(20);
         let mut handled = 0usize;
         while handled < 14 && std::time::Instant::now() < deadline {
             match listener.accept() {

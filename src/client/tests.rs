@@ -45,7 +45,7 @@ fn client_export_text_missing_target_points_to_catalog() {
     assert!(stdout.is_empty());
     let error = String::from_utf8(stderr).expect("stderr is utf-8");
     assert!(error.contains("requires a client target"));
-    assert!(error.contains("mcpace client list"));
+    assert!(error.contains("mcpace advanced client list"));
 }
 
 #[test]

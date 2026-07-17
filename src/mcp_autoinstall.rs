@@ -153,8 +153,8 @@ fn build_auto_install_plan(
                     .to_string(),
             ],
             next_checks: vec![
-                "mcpace server sources --json".to_string(),
-                format!("mcpace connect --server {}", name),
+                "mcpace advanced server sources --json".to_string(),
+                format!("mcpace advanced server test {} --refresh --json", name),
             ],
         });
     }
@@ -181,7 +181,10 @@ fn build_auto_install_plan(
                 "custom stdio command starts conservative until initialize/tools-list evidence is collected"
                     .to_string(),
             ],
-            next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+            next_checks: vec![format!(
+                "mcpace advanced server test {} --refresh --json",
+                name
+            )],
         });
     }
 
@@ -221,7 +224,10 @@ fn build_auto_install_plan(
                     "statefulness is inferred later from source hints and live MCP probes, not from a packaged upstream catalog"
                         .to_string(),
                 ],
-                next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+                next_checks: vec![format!(
+                    "mcpace advanced server test {} --refresh --json",
+                    name
+                )],
             })
         }
         "pypi" => {
@@ -250,7 +256,10 @@ fn build_auto_install_plan(
                     "statefulness is inferred later from source hints and live MCP probes, not from a packaged upstream catalog"
                         .to_string(),
                 ],
-                next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+                next_checks: vec![format!(
+                    "mcpace advanced server test {} --refresh --json",
+                    name
+                )],
             })
         }
         "oci" => {
@@ -278,7 +287,10 @@ fn build_auto_install_plan(
                     "containerized MCP servers remain unknown stdio until image provenance and probe results are reviewed"
                         .to_string(),
                 ],
-                next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+                next_checks: vec![format!(
+                    "mcpace advanced server test {} --refresh --json",
+                    name
+                )],
             })
         }
         "nuget" | "mcpb" => Err(format!(
@@ -317,7 +329,10 @@ fn command_like_install_plan(
         package: command_like.package.clone(),
         args,
         assumptions: assumptions_for_command_like(&command_like),
-        next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+        next_checks: vec![format!(
+            "mcpace advanced server test {} --refresh --json",
+            name
+        )],
     })
 }
 
@@ -488,7 +503,10 @@ fn filesystem_path_install_plan(
             "filesystem access is limited to the configured path arguments".to_string(),
             "statefulness is inferred later from live MCP probes and source hints".to_string(),
         ],
-        next_checks: vec![format!("mcpace server test {} --refresh --json", name)],
+        next_checks: vec![format!(
+            "mcpace advanced server test {} --refresh --json",
+            name
+        )],
     }
 }
 

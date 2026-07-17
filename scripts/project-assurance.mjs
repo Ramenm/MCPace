@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileAtomicSync } from "./lib/atomic-fs.mjs";
 import { sameStringRecord } from "./lib/proof-records.mjs";
+import { generatedReportFreshness } from "./lib/report-freshness.mjs";
 import {
 	releaseBinaryPath,
 	rustBuildProvenance,
@@ -268,7 +269,7 @@ function buildAssurance() {
 			failureMode:
 				"Frontend invents readiness from partial fields and drifts away from backend runtime truth.",
 			nextCheck:
-				"Compare each server row with mcpace server capabilities <name> --json and verify the same launch/evidence/policy direction.",
+				"Compare each server row with mcpace advanced server capabilities <name> --json and verify the same launch/evidence/policy direction.",
 		}),
 		claim({
 			id: "runtime-control-plane",
@@ -645,6 +646,17 @@ function renderMarkdown(report) {
 }
 
 const report = buildAssurance();
+const markdown = renderMarkdown(report);
+const freshnessFindings =
+	check || args.has("--ci")
+		? generatedReportFreshness({
+				repoRoot,
+				jsonPath: "reports/assurance.json",
+				expectedReport: report,
+				markdownPath: "reports/assurance.md",
+				expectedMarkdown: markdown,
+			})
+		: [];
 if (write) {
 	const reportsDir = path.join(repoRoot, "reports");
 	fs.mkdirSync(reportsDir, { recursive: true });
@@ -655,7 +667,7 @@ if (write) {
 	);
 	writeFileAtomicSync(
 		path.join(reportsDir, "assurance.md"),
-		renderMarkdown(report),
+		markdown,
 		{ mode: 0o644 },
 	);
 }
@@ -667,12 +679,22 @@ if (jsonOnly) {
 		`MCPace assurance: ${report.overall} (${report.summary.pass} pass, ${report.summary.warn} warn, ${report.summary.fail} fail)\n`,
 	);
 } else if (!write) {
-	process.stdout.write(renderMarkdown(report));
+	process.stdout.write(markdown);
 }
 
-if ((check || args.has("--ci")) && report.summary.fail > 0) {
+if ((check || args.has("--ci")) && freshnessFindings.length > 0) {
 	process.stderr.write(
-		`MCPace assurance failed: ${report.summary.fail} failed claim(s).\n`,
+		`MCPace assurance reports are stale:\n- ${freshnessFindings.join("\n- ")}\n`,
 	);
+}
+if (
+	(check || args.has("--ci")) &&
+	(report.summary.fail > 0 || freshnessFindings.length > 0)
+) {
+	if (report.summary.fail > 0) {
+		process.stderr.write(
+			`MCPace assurance failed: ${report.summary.fail} failed claim(s).\n`,
+		);
+	}
 	process.exit(1);
 }

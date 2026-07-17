@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileAtomicSync } from "./lib/atomic-fs.mjs";
+import { generatedReportFreshness } from "./lib/report-freshness.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
@@ -45,14 +46,19 @@ function parseCatalogCommands() {
 		const aliases = [...aliasesBlock.matchAll(/"([^"]+)"/g)].map(
 			(entry) => entry[1],
 		);
-		const implemented = /implemented:\s*true/.test(block);
+		const visibility = block.match(
+			/visibility:\s*CommandVisibility::([A-Za-z]+)/,
+		)?.[1];
+		const route = block.match(/route:\s*CommandRoute::([A-Za-z]+)/)?.[1];
 		const description =
 			block
 				.match(/description:\s*"([\s\S]*?)",\n\s*aliases:/)?.[1]
 				?.replace(/"\s*\n\s*"/g, "")
 				?.replace(/\s+/g, " ")
 				?.trim() ?? "";
-		commands.push({ name, aliases, implemented, description });
+		if (visibility === "Public") {
+			commands.push({ name, aliases, route, description });
+		}
 	}
 	return commands.sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -97,83 +103,83 @@ function buildSmokeCommands(commands) {
 		{
 			args: ["help"],
 			expects: "text",
-			reason: "top-level command router and public help",
+			reason: "small public command router and help",
 		},
 		{ args: ["version"], expects: "text", reason: "version metadata path" },
+		{ args: ["up", "--help"], expects: "text", reason: "convergent onboarding help" },
+		{ args: ["start", "--help"], expects: "text", reason: "start lifecycle help" },
+		{ args: ["stop", "--help"], expects: "text", reason: "stop lifecycle help" },
+		{ args: ["restart", "--help"], expects: "text", reason: "restart lifecycle help" },
+		{ args: ["install", "--help"], expects: "text", reason: "server install help" },
 		{
-			args: ["doctor", "--json"],
+			args: ["status", "--json"],
+			expects: "jsonOrNonzero",
+			reason: "read-only aggregate runtime/startup status",
+		},
+		{
+			args: ["advanced", "doctor", "--json"],
 			expects: "json",
 			reason: "host and source readiness without runtime start",
 		},
 		{
-			args: ["verify", "readiness", "--json"],
-			expects: "json",
-			reason: "user readiness gate",
-		},
-		{
-			args: ["server", "list", "--json"],
+			args: ["advanced", "server", "list", "--json"],
 			expects: "json",
 			reason: "server inventory contract",
 		},
 		{
-			args: ["server", "capabilities", "--json"],
+			args: ["advanced", "server", "capabilities", "--json"],
 			expects: "json",
 			reason: "launch/capability metadata contract",
 		},
 		{
-			args: ["server", "sources", "--json"],
+			args: ["advanced", "server", "sources", "--json"],
 			expects: "json",
 			reason: "MCP settings source discovery contract",
 		},
 		{
-			args: ["client", "list", "--json"],
+			args: ["advanced", "client", "list", "--json"],
 			expects: "json",
 			reason: "client catalog visibility contract",
 		},
 		{
-			args: ["client", "plan", "--json"],
+			args: ["advanced", "client", "plan", "--json"],
 			expects: "json",
-			reason: "client install plan contract",
+			reason: "client routing plan contract",
 		},
 		{
-			args: ["hub", "status", "--json"],
+			args: ["advanced", "dev", "profile", "--json"],
 			expects: "json",
-			reason: "hub state read contract",
+			reason: "maintainer runtime profile read contract",
 		},
 		{
-			args: ["profile", "--json"],
+			args: ["advanced", "dev", "projects", "--json"],
 			expects: "json",
-			reason: "runtime profile read contract",
+			reason: "maintainer project registry read contract",
 		},
 		{
-			args: ["projects", "--json"],
+			args: ["advanced", "dev", "lab", "report", "--json"],
 			expects: "json",
-			reason: "project registry read contract",
+			reason: "maintainer evidence corpus contract",
 		},
 		{
-			args: ["lab", "report", "--json"],
-			expects: "json",
-			reason: "evidence corpus contract",
-		},
-		{
-			args: ["cleanup", "status", "--json"],
+			args: ["advanced", "runtime", "cleanup", "status", "--json"],
 			expects: "json",
 			reason: "non-destructive cleanup plan",
 		},
 		{
-			args: ["release", "--help"],
+			args: ["advanced", "dev", "release", "--help"],
 			expects: "text",
-			reason: "release command help path",
+			reason: "maintainer release help path",
 		},
 		{
-			args: ["autostart", "--help"],
+			args: ["advanced", "autostart", "--help"],
 			expects: "text",
-			reason: "platform autostart help path",
+			reason: "platform startup help path",
 		},
 		{
-			args: ["serve", "status", "--json"],
-			expects: "jsonOrNonzero",
-			reason: "serve state read path without starting daemon",
+			args: ["uninstall", "--help"],
+			expects: "text",
+			reason: "safe integration removal contract",
 		},
 	];
 	const catalogNames = new Set(commands.map((command) => command.name));
@@ -213,7 +219,6 @@ function buildReport() {
 	const topLevelCommandGaps = commands
 		.filter(
 			(command) =>
-				command.implemented &&
 				!smokeCommands.some((smoke) => smoke.args[0] === command.name),
 		)
 		.map((command) => command.name);
@@ -267,8 +272,7 @@ function buildReport() {
 		{
 			id: "all-public-commands-inventoried",
 			status:
-				commands.every((command) => command.implemented) &&
-				commands.length >= 20
+				commands.every((command) => command.route) && commands.length === 10
 					? "pass"
 					: "fail",
 			detail: `${commands.length} public command groups parsed from src/catalog.rs`,
@@ -430,6 +434,17 @@ function renderMarkdown(report) {
 }
 
 const report = buildReport();
+const markdown = renderMarkdown(report);
+const freshnessFindings =
+	check || args.has("--ci")
+		? generatedReportFreshness({
+				repoRoot,
+				jsonPath: "reports/platform-proof.json",
+				expectedReport: report,
+				markdownPath: "reports/platform-proof.md",
+				expectedMarkdown: markdown,
+			})
+		: [];
 if (write) {
 	fs.mkdirSync(path.join(repoRoot, "reports"), { recursive: true });
 	writeFileAtomicSync(
@@ -439,7 +454,7 @@ if (write) {
 	);
 	writeFileAtomicSync(
 		path.join(repoRoot, "reports/platform-proof.md"),
-		renderMarkdown(report),
+		markdown,
 		{ mode: 0o644 },
 	);
 }
@@ -451,12 +466,22 @@ if (jsonOnly) {
 		`MCPace platform proof: ${report.overall} (${report.summary.pass} pass, ${report.summary.warn} warn, ${report.summary.fail} fail)\n`,
 	);
 } else if (!write) {
-	process.stdout.write(renderMarkdown(report));
+	process.stdout.write(markdown);
 }
 
-if ((check || args.has("--ci")) && report.summary.fail > 0) {
+if ((check || args.has("--ci")) && freshnessFindings.length > 0) {
 	process.stderr.write(
-		`MCPace platform proof failed: ${report.summary.fail} failed check(s).\n`,
+		`MCPace platform proof reports are stale:\n- ${freshnessFindings.join("\n- ")}\n`,
 	);
+}
+if (
+	(check || args.has("--ci")) &&
+	(report.summary.fail > 0 || freshnessFindings.length > 0)
+) {
+	if (report.summary.fail > 0) {
+		process.stderr.write(
+			`MCPace platform proof failed: ${report.summary.fail} failed check(s).\n`,
+		);
+	}
 	process.exit(1);
 }

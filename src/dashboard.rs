@@ -488,7 +488,7 @@ fn is_loopback_bind_host(host: &str) -> bool {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace dashboard",
+    name = "mcpace advanced runtime foreground",
     disable_version_flag = true,
     about = "Serve the local MCPace dashboard UI"
 )]
@@ -624,41 +624,20 @@ fn parsed_from_cli(cli: DashboardCli) -> ParsedArgs {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace dashboard"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced runtime foreground"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_arg(arg: &str) -> String {
-    match arg {
-        "-root" => "--root".to_string(),
-        "-host" => "--host".to_string(),
-        "-port" => "--port".to_string(),
-        "-max-requests" => "--max-requests".to_string(),
-        "-max-connections" => "--max-connections".to_string(),
-        "-io-timeout-ms" => "--io-timeout-ms".to_string(),
-        "-max-body-bytes" => "--max-body-bytes".to_string(),
-        "-overview-cache-ms" => "--overview-cache-ms".to_string(),
-        "-allow-nonlocal-bind" => "--allow-nonlocal-bind".to_string(),
-        "-insecure-nonlocal-bind" => "--insecure-nonlocal-bind".to_string(),
-        "-auth-token-env" => "--auth-token-env".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
 }
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace dashboard [--root <path>] [--host <loopback>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--auth-token-env <NAME>]"
+        "Usage: mcpace advanced runtime foreground [--root <path>] [--host <loopback>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--auth-token-env <NAME>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "dashboard serves a local web UI for hub status, verification, servers, clients, and logs."
+        "The foreground runtime serves the local web UI plus the MCP endpoint."
     );
     let _ = writeln!(
         stdout,
@@ -2713,7 +2692,7 @@ pub(super) fn run_json_command_vec(
 
     let mut stdout_buffer = Vec::new();
     let mut stderr_buffer = Vec::new();
-    let exit_code = app::run(args, &mut stdout_buffer, &mut stderr_buffer);
+    let exit_code = app::run_internal(args, &mut stdout_buffer, &mut stderr_buffer);
     if exit_code != 0 {
         let stderr_text = String::from_utf8(stderr_buffer).unwrap_or_default();
         let stdout_text = String::from_utf8(stdout_buffer).unwrap_or_default();

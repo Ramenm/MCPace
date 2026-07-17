@@ -55,6 +55,10 @@ const ALLOWLIST = [
 		reason: "documented stdio-shim command alias metadata",
 	},
 	{
+		prefix: "src/app/tests.rs",
+		reason: "hidden compatibility entrypoint routing tests",
+	},
+	{
 		prefix: "src/client_catalog/builtin.rs",
 		reason: "client catalog marks deprecated SSE support",
 	},

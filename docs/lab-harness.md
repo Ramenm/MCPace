@@ -1,6 +1,6 @@
 # Runtime lab harness
 
-`mcpace lab` is the maintainer proof surface for automatic runtime scheduling. It keeps the user command simple (`mcpace auto`) while preserving a repeatable evidence chain:
+`mcpace advanced dev lab` is the maintainer proof surface for automatic runtime scheduling. It stays outside the human CLI while preserving a repeatable evidence chain:
 
 ```text
 server -> evidence -> runtimeType/stateClass/effectClass -> concurrencyPolicy
@@ -9,13 +9,13 @@ server -> evidence -> runtimeType/stateClass/effectClass -> concurrencyPolicy
 ## Default command
 
 ```bash
-mcpace lab
-mcpace lab coverage
-mcpace lab show --id popular-npm-filesystem
-mcpace lab probe --refresh --timeout-ms 30000
+mcpace advanced dev lab
+mcpace advanced dev lab coverage
+mcpace advanced dev lab show --id popular-npm-filesystem
+mcpace advanced dev lab probe --refresh --timeout-ms 30000
 ```
 
-`mcpace lab` defaults to a report. The probe path is only for configured servers and performs `initialize`, `notifications/initialized`, and `tools/list`; it does not call upstream tools.
+`mcpace advanced dev lab` defaults to a report. The probe path is only for configured servers and performs `initialize`, `notifications/initialized`, and `tools/list`; it does not call upstream tools.
 
 ## Corpus strategy
 
@@ -86,7 +86,7 @@ This prevents browser data packages from becoming host-stateful automation and p
 
 `eval/random-server-audit.json` checks unfamiliar packages across browser control, browser observation, web crawl, Mapbox, Kubernetes, and ESLint-style project analysis. The audit is metadata-only and exists to catch false positives, not to certify trust.
 
-Important rule: `mcpace auto` may use the audit's classification patterns, but it must still require trust or approval before executing unfamiliar package code.
+Important rule: `mcpace advanced server auto` may use the audit's classification patterns, but it must still require trust or approval before executing unfamiliar package code.
 
 ## Random held-out npm sweep
 
@@ -160,11 +160,11 @@ A name-only server must become `needs-safe-probe` or `unknown-conservative`, not
 
 ## Live safe probe
 
-`mcpace lab probe` starts only configured servers and runs the safe MCP lifecycle. It does not run `tools/call`:
+`mcpace advanced dev lab probe` starts only configured servers and runs the safe MCP lifecycle. It does not run `tools/call`:
 
 ```bash
-mcpace lab probe --refresh --timeout-ms 30000
-mcpace lab probe --id filesystem --refresh --json
+mcpace advanced dev lab probe --refresh --timeout-ms 30000
+mcpace advanced dev lab probe --id filesystem --refresh --json
 ```
 
 The output is evidence, not blind trust. Tool annotations are advisory, and MCPace keeps conservative policy unless names, descriptions, schemas, and configured policy agree.
