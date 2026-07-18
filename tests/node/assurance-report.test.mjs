@@ -487,6 +487,13 @@ test("generated proof reports use environment-neutral root metadata", () => {
 			"mcpace",
 			`${script} must not depend on checkout directory casing`,
 		);
+		if (schema === "mcpace.projectInventory.v1") {
+			assert.deepEqual(report.npmLauncher, {
+				binPath: "packages/npm/cli/bin/mcpace.js",
+				exists: true,
+				executable: true,
+			});
+		}
 	}
 
 	for (const script of [

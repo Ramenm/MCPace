@@ -423,6 +423,22 @@ function parsePlatformProofReport() {
   }
 }
 
+function npmLauncherIsExecutable(npmBin) {
+  const npmBinPath = path.join(repoRoot, npmBin);
+  if (!fs.existsSync(npmBinPath)) return false;
+  try {
+    const packageJson = JSON.parse(read('packages/npm/cli/package.json'));
+    const declaredBin = typeof packageJson.bin === 'string'
+      ? packageJson.bin
+      : packageJson.bin?.mcpace;
+    const packageRelativeBin = posix(path.relative('packages/npm/cli', npmBin));
+    const firstLine = read(npmBin).split(/\r?\n/, 1)[0];
+    return declaredBin === packageRelativeBin && firstLine === '#!/usr/bin/env node';
+  } catch {
+    return false;
+  }
+}
+
 function buildInventory() {
   const rust = parseRustFunctions();
   const commands = parseCommandCatalog();
@@ -462,7 +478,9 @@ function buildInventory() {
     npmLauncher: {
       binPath: npmBin,
       exists: fs.existsSync(npmBinPath),
-      executable: fs.existsSync(npmBinPath) ? (fs.statSync(npmBinPath).mode & 0o111) !== 0 : false,
+      // npm installs declared bin scripts as launchers on every supported OS.
+      // POSIX mode bits are validated separately and are not meaningful on Windows.
+      executable: npmLauncherIsExecutable(npmBin),
     },
     architectureSlices: [
       { slice: 'CLI dispatch', owners: ['src/app.rs', 'src/catalog.rs'] },
@@ -502,7 +520,7 @@ function renderMarkdown(inventory) {
   lines.push(`- Hidden compatibility entrypoints: ${inventory.counts.hiddenCompatibilityCommands}`);
   lines.push(`- Duplicate function names to review: ${inventory.counts.duplicateFunctionNames}`);
   lines.push(`- Rust files at or above 700 lines: ${inventory.counts.longRustFiles}`);
-  lines.push(`- npm launcher present/executable: ${inventory.npmLauncher.exists ? 'yes' : 'no'} / ${inventory.npmLauncher.executable ? 'yes' : 'no'}`);
+  lines.push(`- npm launcher present/npm-launchable: ${inventory.npmLauncher.exists ? 'yes' : 'no'} / ${inventory.npmLauncher.executable ? 'yes' : 'no'}`);
   lines.push(`- MCP HTTP methods detected: ${inventory.runtimeFlow.mcpHttpMethods.length}`);
   lines.push(`- MCP tool surfaces: stdio ${inventory.runtimeFlow.surfaces.stdioToolCount}, HTTP ${inventory.runtimeFlow.surfaces.httpToolCount}, common ${inventory.runtimeFlow.surfaces.commonToolCount}`);
   lines.push(`- Dashboard backend/frontend contract: ${inventory.dashboardContract.missingFrontendRoutes.length === 0 && inventory.dashboardContract.missingElementIds.length === 0 ? 'connected' : 'needs review'}`);

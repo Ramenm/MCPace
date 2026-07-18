@@ -257,10 +257,18 @@ jobs:
         if: matrix.platform == 'win32'
         shell: pwsh
         run: |
-          dotnet tool install --global wix --version 7.0.0
+          # WiX v6 introduced the OSMF and v7 enforces its EULA. Keep this
+          # exact pre-OSMF pin unless a separately reviewed legal decision
+          # approves migration to the fee-bearing toolchain.
+          dotnet tool install --global wix --version 5.0.2 --configfile .github/nuget-wix.config
           "$env:USERPROFILE\.dotnet\tools" |
             Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          & "$env:USERPROFILE\.dotnet\tools\wix.exe" --version
+          $wixPath = "$env:USERPROFILE\.dotnet\tools\wix.exe"
+          $wixVersion = (& $wixPath --version | Out-String).Trim()
+          if ($wixVersion -notmatch '^5\.0\.2(?:\+|$)') {
+            throw "unexpected WiX version: $wixVersion"
+          }
+          $wixVersion
 
       - name: Build GitHub native installer
         env:

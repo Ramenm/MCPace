@@ -27,6 +27,35 @@ fn help_documents_preserved_state() {
 }
 
 #[test]
+fn successful_stop_report_is_accepted_without_generic_ok() {
+    let stopped = Component {
+        status: 0,
+        planned: false,
+        report: Some(parse_str(r#"{"status":"stopped"}"#).unwrap()),
+        error: None,
+    };
+    assert!(!stopped.ok(), "serve status reports intentionally omit ok");
+    assert!(stopped.stopped());
+
+    let unverified = Component {
+        status: 0,
+        planned: false,
+        report: Some(parse_str(r#"{"status":"unverified"}"#).unwrap()),
+        error: None,
+    };
+    assert!(!unverified.stopped());
+
+    let failed = Component {
+        status: 1,
+        planned: false,
+        report: Some(parse_str(r#"{"status":"stopped"}"#).unwrap()),
+        error: None,
+    };
+    assert!(!failed.stopped());
+    assert!(Component::planned("stop").stopped());
+}
+
+#[test]
 fn dry_run_with_kept_clients_does_not_change_the_root() {
     let root = temp_root();
     let config = root.join("mcpace.config.json");

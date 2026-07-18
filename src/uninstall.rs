@@ -141,7 +141,7 @@ pub fn run(
         .get("ok")
         .and_then(JsonValue::as_bool)
         .unwrap_or(false);
-    let ok = stop.ok() && startup.ok() && clients_ok && runtime_cleanup.ok();
+    let ok = stop.stopped() && startup.ok() && clients_ok && runtime_cleanup.ok();
     let report = JsonValue::object([
         ("schema", JsonValue::string("mcpace.uninstall.v1")),
         ("ok", JsonValue::bool(ok)),
@@ -203,6 +203,17 @@ impl Component {
                 .and_then(|value| value.get("ok"))
                 .and_then(JsonValue::as_bool)
                 .unwrap_or(self.planned)
+    }
+
+    fn stopped(&self) -> bool {
+        self.status == 0
+            && (self.planned
+                || self
+                    .report
+                    .as_ref()
+                    .and_then(|value| value.get("status"))
+                    .and_then(JsonValue::as_str)
+                    == Some("stopped"))
     }
 
     fn into_json(self) -> JsonValue {
