@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.projectInventory.v1",
-  "generatedAt": "2026-07-18T05:50:01.005Z",
+  "generatedAt": "2026-07-18T09:40:50.491Z",
   "root": ".",
   "rootName": "mcpace",
   "commands": [
@@ -244,8 +244,8 @@
     ]
   },
   "counts": {
-    "rustFiles": 195,
-    "rustFunctions": 2639,
+    "rustFiles": 196,
+    "rustFunctions": 2643,
     "publicCommands": 10,
     "hiddenCompatibilityCommands": 6,
     "implementedPublicCommands": 10,
@@ -345,23 +345,23 @@
     },
     {
       "file": "src/upstream/tests.rs",
-      "lines": 2938
+      "lines": 2955
+    },
+    {
+      "file": "src/dashboard.rs",
+      "lines": 2879
     },
     {
       "file": "src/upstream/lease_runtime.rs",
       "lines": 2769
     },
     {
-      "file": "src/dashboard.rs",
-      "lines": 2728
+      "file": "src/dashboard/tests.rs",
+      "lines": 2704
     },
     {
       "file": "src/server/loader.rs",
       "lines": 2701
-    },
-    {
-      "file": "src/dashboard/tests.rs",
-      "lines": 2660
     },
     {
       "file": "src/serve.rs",

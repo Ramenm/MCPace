@@ -3,7 +3,7 @@ use crate::json_helpers;
 use crate::runtimepaths;
 use std::fmt;
 use std::io::{ErrorKind, Read, Write};
-use std::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, TcpStream, ToSocketAddrs};
 use std::time::{Duration, Instant};
 
 pub(crate) const DEFAULT_MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
@@ -160,6 +160,52 @@ pub(crate) fn raw_jsonrpc_response(
     })
 }
 
+fn connect_probe_addr(addr: &SocketAddr, deadline: Instant) -> std::io::Result<TcpStream> {
+    #[cfg(not(windows))]
+    {
+        let remaining = deadline
+            .checked_duration_since(Instant::now())
+            .ok_or_else(|| {
+                std::io::Error::new(ErrorKind::TimedOut, "connection deadline expired")
+            })?;
+        return TcpStream::connect_timeout(addr, remaining);
+    }
+
+    #[cfg(windows)]
+    {
+        if !addr.ip().is_loopback() {
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .ok_or_else(|| {
+                    std::io::Error::new(ErrorKind::TimedOut, "connection deadline expired")
+                })?;
+            return TcpStream::connect_timeout(addr, remaining);
+        }
+
+        // Windows can occasionally leave a loopback connect pending until its
+        // whole timeout despite an already-bound listener. Retry only timed-out
+        // loopback attempts in short slices while preserving one total deadline.
+        loop {
+            let remaining = deadline
+                .checked_duration_since(Instant::now())
+                .ok_or_else(|| {
+                    std::io::Error::new(ErrorKind::TimedOut, "connection deadline expired")
+                })?;
+            let attempt_timeout = remaining.min(Duration::from_millis(250));
+            match TcpStream::connect_timeout(addr, attempt_timeout) {
+                Ok(stream) => return Ok(stream),
+                Err(error)
+                    if matches!(error.kind(), ErrorKind::TimedOut | ErrorKind::WouldBlock)
+                        && Instant::now() < deadline =>
+                {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => return Err(error),
+            }
+        }
+    }
+}
+
 pub(crate) fn raw_response_until(
     host: &str,
     port: u16,
@@ -183,10 +229,10 @@ pub(crate) fn raw_response_until(
 
     let mut last_error = None;
     for addr in addrs {
-        let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
+        if deadline.checked_duration_since(Instant::now()).is_none() {
             break;
-        };
-        match TcpStream::connect_timeout(&addr, remaining) {
+        }
+        match connect_probe_addr(&addr, deadline) {
             Ok(mut stream) => {
                 let remaining =
                     deadline

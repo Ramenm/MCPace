@@ -310,7 +310,7 @@ function writeWindowsWixSource(wxsPath, target, binaryPath, version, sidecars) {
     </Feature>
   </Package>
   <Fragment>
-    <StandardDirectory Id="ProgramFilesFolder">
+    <StandardDirectory Id="ProgramFiles6432Folder">
       <Directory Id="INSTALLFOLDER" Name="MCPace" />
     </StandardDirectory>
   </Fragment>

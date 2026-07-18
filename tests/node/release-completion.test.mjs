@@ -220,6 +220,8 @@ test("native GitHub installer builder emits installable package shapes", () => {
 		const wxs = fs.readFileSync(reportPath(winReport.wixSourcePath), "utf8");
 		assert.match(wxs, /<Package Name="MCPace"/);
 		assert.match(wxs, /<MajorUpgrade /);
+		assert.match(wxs, /<StandardDirectory Id="ProgramFiles6432Folder">/);
+		assert.doesNotMatch(wxs, /<StandardDirectory Id="ProgramFilesFolder">/);
 		assert.match(wxs, /<Environment Id="MCPacePath" Name="PATH"/);
 		assert.match(wxs, /Name="mcpace\.exe"/);
 		assert.match(wxs, /MCPaceAgentLauncher/);

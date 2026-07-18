@@ -1,6 +1,6 @@
 use super::*;
-use std::net::TcpListener;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -17,14 +17,15 @@ fn temp_root() -> PathBuf {
 }
 
 fn free_port() -> u16 {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = crate::bind_loopback_test_listener();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
     port
 }
 
 fn loopback_response_server(status: &str, body: &str) -> (u16, std::thread::JoinHandle<()>) {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = crate::bind_loopback_test_listener();
+    listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
     let response = format!(
         "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -33,7 +34,23 @@ fn loopback_response_server(status: &str, body: &str) -> (u16, std::thread::Join
         body
     );
     let handle = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let (mut stream, _) = loop {
+            if Instant::now() >= deadline {
+                panic!("loopback response fixture did not receive a request before its deadline");
+            }
+            match listener.accept() {
+                Ok(connection) => break connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("loopback response fixture accept failed: {error}"),
+            }
+        };
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         let mut request = [0u8; 1024];
         let _ = std::io::Read::read(&mut stream, &mut request);
         std::io::Write::write_all(&mut stream, response.as_bytes()).unwrap();
@@ -43,6 +60,9 @@ fn loopback_response_server(status: &str, body: &str) -> (u16, std::thread::Join
 
 #[test]
 fn health_probe_accepts_complete_readiness_response() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (port, handle) =
         loopback_response_server("200 OK", r#"{"readiness":{"readyForRuntimeOps":true}}"#);
 
@@ -53,6 +73,9 @@ fn health_probe_accepts_complete_readiness_response() {
 
 #[test]
 fn startup_health_failure_retains_probe_detail() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (port, handle) = loopback_response_server("503 Service Unavailable", "{}");
     let probe_error = health_probe_detail("127.0.0.1", port, "/healthz").unwrap_err();
     assert_eq!(probe_error, "health endpoint returned HTTP status 503");

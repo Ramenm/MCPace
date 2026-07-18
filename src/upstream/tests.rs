@@ -4,7 +4,6 @@ use super::stdio_runtime::spawn_stdio_server;
 use super::*;
 use std::fs;
 use std::io::{Read, Write};
-use std::net::TcpListener;
 use std::thread;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
@@ -1348,14 +1347,22 @@ fn inventory_marks_stdio_and_plain_http_callable() {
 
 #[test]
 fn plain_http_upstream_lists_and_calls_tools() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let root = temp_root();
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind mock HTTP MCP server");
+    let listener = crate::bind_loopback_test_listener();
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let server_stop = std::sync::Arc::clone(&stop);
     let handle = thread::spawn(move || {
         let deadline = std::time::Instant::now() + Duration::from_secs(20);
         let mut handled = 0usize;
-        while handled < 14 && std::time::Instant::now() < deadline {
+        while handled < 14
+            && std::time::Instant::now() < deadline
+            && !server_stop.load(std::sync::atomic::Ordering::Acquire)
+        {
             match listener.accept() {
                 Ok((mut stream, _)) => {
                     handled += 1;
@@ -1412,15 +1419,22 @@ fn plain_http_upstream_lists_and_calls_tools() {
         json_helpers::value_at_path(&batch, &["callCount"]).and_then(JsonValue::as_i64),
         Some(2)
     );
+    stop.store(true, std::sync::atomic::Ordering::Release);
     let handled = handle.join().unwrap();
-    assert_eq!(handled, 14);
+    assert!(
+        (11..=14).contains(&handled),
+        "core HTTP lifecycle requests must complete; session DELETE cleanup remains best-effort: handled {handled}"
+    );
     let _ = fs::remove_dir_all(root);
 }
 
 #[test]
 fn non_pooled_call_uses_one_timeout_budget_for_verification_and_call() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let root = temp_root();
-    let listener = TcpListener::bind(("127.0.0.1", 0)).expect("bind delayed HTTP MCP server");
+    let listener = crate::bind_loopback_test_listener();
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
     let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -1467,7 +1481,10 @@ fn non_pooled_call_uses_one_timeout_budget_for_verification_and_call() {
     };
     assert!(
         error.to_ascii_lowercase().contains("timed out")
-            || error.to_ascii_lowercase().contains("timeout"),
+            || error.to_ascii_lowercase().contains("timeout")
+            || error
+                .to_ascii_lowercase()
+                .contains("connection deadline expired"),
         "unexpected timeout error: {error}"
     );
     assert!(

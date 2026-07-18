@@ -6,12 +6,13 @@ use super::{
     is_allowed_local_origin, query_bool_flag, run_http_tool, run_json_command, runtime_status_json,
     serve_listener, OverviewCacheState,
 };
+use crate::bind_loopback_test_listener;
 use crate::json::JsonValue;
 use crate::json_helpers;
 use std::ffi::OsString;
 use std::fs;
 use std::io::{BufReader, Read, Write};
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier, Mutex};
@@ -74,39 +75,6 @@ fn temp_root() -> PathBuf {
     let path = std::env::temp_dir().join(unique);
     fs::create_dir_all(&path).unwrap();
     path
-}
-
-fn bind_loopback_test_listener() -> TcpListener {
-    let mut last_error = String::new();
-    for _ in 0..64 {
-        let listener = match TcpListener::bind(("127.0.0.1", 0)) {
-            Ok(listener) => listener,
-            Err(error) => {
-                last_error = error.to_string();
-                continue;
-            }
-        };
-        let addr = match listener.local_addr() {
-            Ok(addr) => addr,
-            Err(error) => {
-                last_error = error.to_string();
-                continue;
-            }
-        };
-        match TcpStream::connect_timeout(&addr, Duration::from_millis(250)) {
-            Ok(probe_stream) => match listener.accept() {
-                Ok((accepted_stream, _)) => {
-                    drop(accepted_stream);
-                    drop(probe_stream);
-                    return listener;
-                }
-                Err(error) => last_error = error.to_string(),
-            },
-            Err(error) => last_error = error.to_string(),
-        }
-    }
-
-    panic!("failed to bind reachable loopback test listener: {last_error}");
 }
 
 fn write_fake_upstream_config(root: &std::path::Path) {
@@ -329,6 +297,26 @@ fn response_header(response: &str, name: &str) -> Option<String> {
     })
 }
 
+fn read_early_rejection_response(stream: &mut TcpStream, response: &mut String) {
+    match stream.read_to_string(response) {
+        Ok(_) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {
+            let (_, body) = response
+                .split_once("\r\n\r\n")
+                .expect("connection reset only after complete response headers");
+            let content_length = response_header(response, "Content-Length")
+                .and_then(|value| value.parse::<usize>().ok())
+                .expect("early rejection response has a valid Content-Length");
+            assert_eq!(
+                body.len(),
+                content_length,
+                "connection reset before the complete rejection response was received"
+            );
+        }
+        Err(error) => panic!("failed to read early rejection response: {error}"),
+    }
+}
+
 fn connect_to_test_listener(addr: SocketAddr) -> TcpStream {
     let started_at = Instant::now();
     let retry_for = Duration::from_secs(10);
@@ -369,6 +357,7 @@ fn test_config(
     super::DashboardConfig {
         root_path,
         max_requests,
+        accept_timeout: Some(Duration::from_secs(15)),
         max_connections: crate::resources::default_http_connection_limit(),
         io_timeout: crate::resources::default_http_io_timeout(),
         max_body_bytes: crate::resources::DEFAULT_MAX_HTTP_BODY_BYTES,
@@ -391,10 +380,14 @@ fn test_config(
 
 #[test]
 fn http_request_line_uses_one_absolute_deadline_against_trickle_input() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let listener = bind_loopback_test_listener();
+    listener.set_nonblocking(true).unwrap();
     let addr = listener.local_addr().unwrap();
     let writer = thread::spawn(move || {
-        let mut stream = TcpStream::connect(addr).unwrap();
+        let mut stream = connect_to_test_listener(addr);
         for byte in b"GET /healthz HTTP/1.1\r\n" {
             if stream.write_all(&[*byte]).is_err() {
                 break;
@@ -402,7 +395,20 @@ fn http_request_line_uses_one_absolute_deadline_against_trickle_input() {
             thread::sleep(Duration::from_millis(35));
         }
     });
-    let (stream, _) = listener.accept().unwrap();
+    let accept_deadline = Instant::now() + Duration::from_secs(10);
+    let (stream, _) = loop {
+        if Instant::now() >= accept_deadline {
+            panic!("trickle-input fixture did not connect before its deadline");
+        }
+        match listener.accept() {
+            Ok(connection) => break connection,
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => panic!("trickle-input fixture accept failed: {error}"),
+        }
+    };
+    stream.set_nonblocking(false).unwrap();
     let mut reader = BufReader::new(stream);
     let started = Instant::now();
     let result = super::read_limited_http_line(
@@ -418,6 +424,9 @@ fn http_request_line_uses_one_absolute_deadline_against_trickle_input() {
 
 #[test]
 fn unauthorized_request_is_rejected_before_declared_body_is_read() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let root = temp_root();
     write_minimal_config(&root);
     let listener = bind_loopback_test_listener();
@@ -439,11 +448,46 @@ fn unauthorized_request_is_rejected_before_declared_body_is_read() {
     )
     .unwrap();
     let mut response = String::new();
-    stream.read_to_string(&mut response).unwrap();
+    read_early_rejection_response(&mut stream, &mut response);
     assert!(response.starts_with("HTTP/1.1 401 Unauthorized"));
     assert!(started.elapsed() < Duration::from_secs(1));
 
     assert_eq!(handle.join().unwrap(), 0);
+    let _ = fs::remove_dir_all(root);
+}
+
+#[test]
+fn bounded_accept_timeout_stops_a_saturated_test_listener() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let root = temp_root();
+    write_minimal_config(&root);
+    let listener = bind_loopback_test_listener();
+    let addr = listener.local_addr().unwrap();
+    let mut config = test_config(root.clone(), None, super::ServeSurface::Dashboard);
+    config.accept_timeout = Some(Duration::from_millis(100));
+    config.max_connections = 1;
+    config.io_timeout = Duration::from_secs(5);
+    let handle = thread::spawn(move || {
+        let mut stderr = Vec::new();
+        serve_listener(listener, config, &mut stderr)
+    });
+
+    let clients = (0..3)
+        .map(|_| connect_to_test_listener(addr))
+        .collect::<Vec<_>>();
+    let watchdog = thread::spawn(move || {
+        thread::sleep(Duration::from_secs(1));
+        drop(clients);
+    });
+    let bounded_started = Instant::now();
+    assert_eq!(handle.join().unwrap(), 1);
+    assert!(
+        bounded_started.elapsed() < Duration::from_millis(750),
+        "bounded test listener failed to cancel a saturated worker queue before the watchdog"
+    );
+    watchdog.join().unwrap();
     let _ = fs::remove_dir_all(root);
 }
 
@@ -2146,7 +2190,7 @@ fn unified_serve_rejects_mcp_cross_origin_and_missing_accept() {
             initialize
         )
         .unwrap();
-    stream.read_to_string(&mut cross_origin_post).unwrap();
+    read_early_rejection_response(&mut stream, &mut cross_origin_post);
     assert!(
         cross_origin_post.starts_with("HTTP/1.1 403 Forbidden"),
         "cross-origin POST response: {}",

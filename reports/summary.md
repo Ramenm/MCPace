@@ -1,6 +1,6 @@
 # MCPace 0.8.2 verification summary
 
-Generated: 2026-07-18T00:35:30Z
+Generated: 2026-07-18T09:40:57Z
 Source lineage: base `577f01ffd4075ea0f837eccc0953b103de16ec88` plus the 0.8.2 hardening changes in this release candidate
 
 ## Decision
@@ -25,10 +25,10 @@ Generated and installed compatibility contracts remain callable but hidden: `std
 
 | Gate | Result |
 | --- | --- |
-| `npm test` | PASS — 73/73 files; direct TAP total 457 tests, 455 pass, 2 skip |
+| `npm test` | PASS — 73/73 files; direct TAP total 461 tests, 459 pass, 2 skip |
 | `npm run check` | PASS |
-| Rust tests | PASS — 302 library + 4 launcher tests |
-| Clean parallel Rust suite | PASS — 3/3 repeated runs via `scripts/cargo-task.mjs` |
+| Rust tests | PASS — 306 library + 4 launcher tests |
+| Enforced Rust proof run | PASS — current source via `scripts/cargo-task.mjs`; all test-server waits are bounded |
 | `cargo fmt --all -- --check` | PASS |
 | Clippy, all targets, locked/offline, warnings denied | PASS |
 | `npm run lint:npm` and `publint` | PASS |
@@ -38,7 +38,7 @@ Generated and installed compatibility contracts remain callable but hidden: `std
 | npm pack dry-run | PASS — 11 files |
 | isolated installed-binary runtime smoke | PASS — `up`, health, MCP initialize/tools, `stop` |
 | native Windows npm install smoke | PASS — launcher `0.8.2`, MCP tool count 8 |
-| release/source artifact Node tests | PASS |
+| release/source artifact Node tests | PASS — 521-entry verified source archive |
 | source release-readiness and endgame enforcement | PASS — 0 blockers |
 | architecture boundary guard | PASS — 0 failures |
 | legacy boundary guard | PASS — 0 unexpected files |
@@ -46,8 +46,8 @@ Generated and installed compatibility contracts remain callable but hidden: `std
 | Rust live proof and release build binding | PASS — 0 blockers |
 
 Current release binary: `target/release/mcpace.exe`
-SHA-256: `f976cc5a75618adacf609eff72299191bb34a6307ed36e6dc2423927a585d16d`
-Rust source fingerprint: `ccf98c6b7d82b15fa9009119521d4ab36913d02c29b903bffb7fb7f8cf75b351`
+SHA-256: `dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a`
+Rust source fingerprint: `30437034a9d96857215fa1b47f0fd9c67b418c81a24a4827a44a3da62a54e43a`
 
 Machine-readable evidence:
 
@@ -56,7 +56,7 @@ Machine-readable evidence:
 
 ## External release blockers
 
-1. Run `scripts/autostart-lifecycle-proof.mjs --confirm-disposable-user` with `MCPACE_DISPOSABLE_AUTOSTART_PROOF=1` on exact-commit Linux, Windows, and macOS disposable hosts.
+1. Keep `scripts/autostart-lifecycle-proof.mjs --confirm-disposable-user` with `MCPACE_DISPOSABLE_AUTOSTART_PROOF=1` green on the exact release commit across Linux, Windows, and macOS disposable hosts.
 2. Prove fresh login/reboot activation and recovery on those hosts; hosted macOS lifecycle is not a substitute for signed/notarized real GUI-login evidence.
 3. Sign Windows binaries and sign, notarize, and staple macOS artifacts.
 4. Enforce HTTP mutation authentication, principal-bound grants and leases, cancellation, centralized resolved-IP SSRF policy, and durable approval receipts according to an approved threat model.

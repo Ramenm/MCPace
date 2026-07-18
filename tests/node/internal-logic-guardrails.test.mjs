@@ -702,6 +702,7 @@ test("setup and serve share the bounded Streamable HTTP probe instead of cloning
 	const serve = read("src", "serve.rs");
 	const probe = read("src", "http_probe.rs");
 	const httpMcp = sliceFn(setup, "http_mcp_request", "http_mcp_notification");
+	const connector = sliceFn(probe, "connect_probe_addr", "raw_response_until");
 	const raw = sliceFn(probe, "raw_response_until", "read_response_until");
 	const reader = sliceFn(probe, "read_response_until", "response_ready");
 	const ready = sliceFn(probe, "response_ready", "parse_json_response");
@@ -723,8 +724,13 @@ test("setup and serve share the bounded Streamable HTTP probe instead of cloning
 		/to_socket_addrs\(\)/,
 		"shared probe should try every resolved localhost address",
 	);
-	assert.match(raw, /TcpStream::connect_timeout\(&addr, remaining\)/);
+	assert.match(raw, /connect_probe_addr\(&addr, deadline\)/);
 	assert.match(raw, /deadline\s*\.checked_duration_since\(Instant::now\(\)\)/);
+	assert.match(connector, /#\[cfg\(windows\)\]/);
+	assert.match(connector, /addr\.ip\(\)\.is_loopback\(\)/);
+	assert.match(connector, /remaining\.min\(Duration::from_millis\(250\)\)/);
+	assert.match(connector, /ErrorKind::TimedOut \| ErrorKind::WouldBlock/);
+	assert.match(connector, /Instant::now\(\) < deadline/);
 	assert.match(reader, /max_response_bytes/);
 	assert.match(
 		reader,
@@ -761,6 +767,47 @@ test("setup and serve share the bounded Streamable HTTP probe instead of cloning
 		/replace\("\\r\\n", "\\n"\)/,
 		"SSE parser should normalize CRLF without embedding raw newlines in string literals",
 	);
+});
+
+test("Rust loopback fixtures prove reachability and bound accept waits", () => {
+	const lib = read("src", "lib.rs");
+	const testSupport = read("src", "test_support_tests.rs");
+	assert.match(lib, /mod test_support_tests/);
+	assert.match(lib, /use test_support_tests::bind_loopback_test_listener/);
+	assert.match(testSupport, /fn bind_loopback_test_listener\(\)/);
+	assert.match(testSupport, /for _ in 0\.\.64/);
+	assert.match(
+		testSupport,
+		/TcpStream::connect_timeout\(&addr, Duration::from_millis\(250\)\)/,
+	);
+
+	const dashboard = read("src", "dashboard.rs");
+	const dashboardTests = read("src", "dashboard", "tests.rs");
+	assert.match(dashboard, /accept_deadline/);
+	assert.match(dashboard, /listener\.set_nonblocking\(true\)/);
+	assert.match(dashboard, /stream\.set_nonblocking\(false\)/);
+	assert.match(dashboard, /request_tx\.try_send\(pending\)/);
+	assert.match(dashboard, /stream\.shutdown\(Shutdown::Both\)/);
+	assert.match(dashboard, /join_request_workers_until/);
+	assert.match(dashboardTests, /accept_timeout: Some\(Duration::from_secs\(15\)\)/);
+	assert.match(dashboardTests, /bounded_accept_timeout_stops_a_saturated_test_listener/);
+
+	for (const parts of [
+		["src", "dashboard", "tests.rs"],
+		["src", "http_probe", "tests.rs"],
+		["src", "serve", "tests.rs"],
+		["src", "upstream", "tests.rs"],
+		["src", "upstream", "http_runtime", "tests.rs"],
+	]) {
+		const fixture = read(...parts);
+		assert.match(fixture, /bind_loopback_test_listener\(\)/, parts.join("/"));
+		assert.doesNotMatch(fixture, /TcpListener::bind/, parts.join("/"));
+		assert.doesNotMatch(
+			fixture,
+			/listener\.accept\(\)\.unwrap\(\)/,
+			parts.join("/"),
+		);
+	}
 });
 
 test("setup completes the MCP lifecycle before listing tools", () => {

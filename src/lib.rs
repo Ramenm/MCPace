@@ -88,3 +88,8 @@ pub fn enable_kill_on_exit_process_tree() -> Result<(), ProcessContainmentError>
 
 #[cfg(test)]
 pub(crate) static LOCAL_SERVER_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+#[cfg(test)]
+mod test_support_tests;
+#[cfg(test)]
+pub(crate) use test_support_tests::bind_loopback_test_listener;

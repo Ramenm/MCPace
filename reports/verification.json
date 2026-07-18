@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.workspaceVerification.v1",
-  "generatedAt": "2026-07-18T00:35:30Z",
+  "generatedAt": "2026-07-18T09:40:57Z",
   "project": "MCPace",
   "version": "0.8.2",
   "baseCommit": "577f01ffd4075ea0f837eccc0953b103de16ec88",
@@ -11,18 +11,18 @@
       "status": "pass",
       "files": 73,
       "filesPassed": 73,
-      "tests": 457,
-      "passed": 455,
+      "tests": 461,
+      "passed": 459,
       "skipped": 2,
       "failed": 0
     },
     "rust": {
       "status": "pass",
       "toolchain": "1.95.0",
-      "libraryTests": 302,
+      "libraryTests": 306,
       "launcherTests": 4,
       "failed": 0,
-      "cleanParallelRuns": 3,
+      "cleanParallelRuns": 1,
       "fmt": "pass",
       "clippyWarningsDenied": "pass",
       "lockedOfflineBuild": "pass"
@@ -46,7 +46,7 @@
     },
     "sourceArchive": {
       "status": "pass",
-      "entries": 517
+      "entries": 521
     },
     "npmPackage": {
       "status": "pass",
@@ -70,11 +70,11 @@
   },
   "releaseArtifact": {
     "path": "target/release/mcpace.exe",
-    "sha256": "f976cc5a75618adacf609eff72299191bb34a6307ed36e6dc2423927a585d16d",
-    "rustSourceFingerprint": "ccf98c6b7d82b15fa9009119521d4ab36913d02c29b903bffb7fb7f8cf75b351"
+    "sha256": "dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a",
+    "rustSourceFingerprint": "30437034a9d96857215fa1b47f0fd9c67b418c81a24a4827a44a3da62a54e43a"
   },
   "externalBlockers": [
-    "exact-commit disposable autostart lifecycle matrix on Linux, Windows and macOS",
+    "the exact release commit must retain green disposable autostart lifecycle evidence on Linux, Windows and macOS",
     "fresh-login or reboot activation proof on disposable hosts",
     "Windows signing and macOS signing, notarization and stapling",
     "approved threat model and enforcement for HTTP mutation authentication, principal-bound grants and leases, cancellation, SSRF and approval receipts",

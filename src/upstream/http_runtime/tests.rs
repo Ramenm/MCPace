@@ -7,7 +7,7 @@ use crate::json::{parse_str, JsonValue};
 use crate::{json_helpers, mcp_protocol as mcp, text_utils};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
 use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
@@ -229,13 +229,26 @@ fn initialize_response_body() -> String {
 
 #[test]
 fn initialized_notification_failure_is_not_reported_as_a_live_session() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let listener = crate::bind_loopback_test_listener();
+    listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
     let handle = thread::spawn(move || {
-        for step in 0..3 {
-            let (mut stream, _) = listener.accept().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut handled = 0usize;
+        while handled < 3 && Instant::now() < deadline {
+            let (mut stream, _) = match listener.accept() {
+                Ok(connection) => connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5));
+                    continue;
+                }
+                Err(error) => panic!("test listener accept failed: {error}"),
+            };
             let request = read_test_request(&mut stream);
-            match step {
+            match handled {
                 0 => write_test_response(&mut stream, "200 OK", &initialize_response_body(), true),
                 1 => write_test_response(
                     &mut stream,
@@ -248,7 +261,9 @@ fn initialized_notification_failure_is_not_reported_as_a_live_session() {
                     write_test_response(&mut stream, "204 No Content", "", false);
                 }
             }
+            handled += 1;
         }
+        handled
     });
 
     let error = run_http_request(
@@ -260,12 +275,19 @@ fn initialized_notification_failure_is_not_reported_as_a_live_session() {
     .expect_err("failed initialized notification must fail")
     .to_string();
     assert!(error.contains("status 500 for notifications/initialized"));
-    handle.join().unwrap();
+    assert_eq!(
+        handle.join().unwrap(),
+        3,
+        "initialize, failed notification, and session cleanup must stay bounded"
+    );
 }
 
 #[test]
 fn http_timeout_is_a_total_lifecycle_budget_not_a_per_step_multiplier() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let listener = crate::bind_loopback_test_listener();
     listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
     let stop = Arc::new(AtomicBool::new(false));
