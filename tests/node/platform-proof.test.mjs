@@ -49,6 +49,11 @@ test("platform proof covers Linux macOS and Windows with native smoke gates", ()
 	assert.ok(report.summary.publishedTargetCount >= 6);
 	assert.equal(report.summary.publicCommandCount, 10);
 	assert.ok(report.summary.smokeCommandCount >= 15);
+	assert.equal(
+		report.smokeCommands.find((item) => item.command === "status --json")
+			?.expects,
+		"jsonOrStatusOne",
+	);
 
 	const smokeCommands = new Set(
 		report.smokeCommands.map((item) => item.command),
@@ -123,6 +128,18 @@ test("platform docs assign source and launcher dry-runs to the correct commands"
 	assert.doesNotMatch(docs, /source-archive and launcher packaging only/);
 });
 
+test("native binary smoke and static platform proof share one canonical command matrix", () => {
+	const binarySmoke = read("scripts/platform-binary-smoke.mjs");
+	const platformProof = read("scripts/platform-proof.mjs");
+	for (const source of [binarySmoke, platformProof]) {
+		assert.match(source, /platformSmokeCommands/);
+		assert.match(source, /lib\/platform-smoke-commands\.mjs/);
+	}
+	assert.doesNotMatch(binarySmoke, /args:\s*\[\s*["']doctor["']/);
+	assert.doesNotMatch(binarySmoke, /jsonOrNonzero/);
+	assert.match(binarySmoke, /jsonOrStatusOne/);
+});
+
 test("platform proof scripts and reports are part of package checks and release bundle", () => {
 	const packageJson = readJson("package.json");
 	assert.match(packageJson.scripts.platform, /platform-proof\.mjs --write/);
@@ -140,6 +157,7 @@ test("platform proof scripts and reports are part of package checks and release 
 	for (const required of [
 		"scripts/platform-proof.mjs",
 		"scripts/platform-binary-smoke.mjs",
+		"scripts/lib/platform-smoke-commands.mjs",
 		"reports/platform-proof.md",
 		"reports/platform-proof.json",
 	]) {

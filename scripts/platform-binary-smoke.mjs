@@ -3,6 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { platformSmokeCommands } from './lib/platform-smoke-commands.mjs';
+import { childEnvForCommand } from './lib/safe-child-env.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, '..');
@@ -36,25 +38,17 @@ function defaultBinary() {
 }
 
 function commandMatrix() {
-  return [
-    { args: ['help'], expects: 'text', mustContain: /MCPace/ },
-    { args: ['version'], expects: 'text', mustContain: /\d+\.\d+\.\d+/ },
-    { args: ['doctor', '--json'], expects: 'json' },
-    { args: ['verify', 'readiness', '--json'], expects: 'json' },
-    { args: ['server', 'list', '--json'], expects: 'json' },
-    { args: ['server', 'capabilities', '--json'], expects: 'json' },
-    { args: ['server', 'sources', '--json'], expects: 'json' },
-    { args: ['client', 'list', '--json'], expects: 'json' },
-    { args: ['client', 'plan', '--json'], expects: 'json' },
-    { args: ['hub', 'status', '--json'], expects: 'json' },
-    { args: ['profile', '--json'], expects: 'json' },
-    { args: ['projects', '--json'], expects: 'json' },
-    { args: ['lab', 'report', '--json'], expects: 'json' },
-    { args: ['cleanup', 'status', '--json'], expects: 'json' },
-    { args: ['release', '--help'], expects: 'text', mustContain: /Usage:/ },
-    { args: ['service', '--help'], expects: 'text', mustContain: /Usage:/ },
-    { args: ['serve', 'status', '--json'], expects: 'jsonOrNonzero' },
-  ];
+  return platformSmokeCommands().map((item) => ({
+    ...item,
+    mustContain:
+      item.args.length === 1 && item.args[0] === 'help'
+        ? /MCPace/
+        : item.args.length === 1 && item.args[0] === 'version'
+          ? /\d+\.\d+\.\d+/
+          : item.expects === 'text'
+            ? /Usage:/
+            : null,
+  }));
 }
 
 function parseJson(output) {
@@ -96,20 +90,30 @@ function run(binary, item) {
   const result = spawnSync(binary, item.args, {
     cwd: repoRoot,
     encoding: 'utf8',
+    env: childEnvForCommand(binary),
     timeout: 15_000,
     windowsHide: true,
   });
   const stdout = result.stdout ?? '';
   const stderr = result.stderr ?? '';
-  let ok = result.status === 0;
-  let reason = ok ? 'ok' : `exit=${result.status}; ${stderr.trim() || stdout.trim()}`;
+  const failureDetail =
+    result.error?.message || stderr.trim() || stdout.trim() || `signal=${result.signal}`;
+  let ok = !result.error && result.status === 0;
+  let reason = ok ? 'ok' : `exit=${result.status}; ${failureDetail}`;
   if (ok && item.expects === 'json' && !parseJson(stdout)) {
     ok = false;
     reason = 'stdout was not valid JSON';
   }
-  if (item.expects === 'jsonOrNonzero') {
-    ok = result.status === 0 ? parseJson(stdout) : true;
-    reason = ok ? (result.status === 0 ? 'ok JSON' : 'accepted non-running daemon state') : 'expected JSON or a clean nonzero daemon-not-running status';
+  if (item.expects === 'jsonOrStatusOne') {
+    ok =
+      !result.error &&
+      (result.status === 0 || result.status === 1) &&
+      parseJson(stdout);
+    reason = ok
+      ? result.status === 0
+        ? 'ok JSON'
+        : 'accepted JSON not-ready status'
+      : 'expected valid JSON with exit status 0 or 1';
   }
   if (ok && item.mustContain && !item.mustContain.test(stdout)) {
     ok = false;

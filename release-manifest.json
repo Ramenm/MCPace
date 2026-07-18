@@ -68,6 +68,7 @@
     "scripts/lib/command-runner.mjs",
     "scripts/lib/process.mjs",
     "scripts/lib/project-metadata.mjs",
+    "scripts/lib/platform-smoke-commands.mjs",
     "scripts/lib/repo-files.mjs",
     "scripts/lib/safe-child-env.mjs",
     "scripts/lib/zip-writer.mjs",

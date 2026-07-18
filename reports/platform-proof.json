@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.platformProof.v1",
-  "generatedAt": "2026-07-18T00:44:26.430Z",
+  "generatedAt": "2026-07-18T02:59:25.199Z",
   "root": ".",
   "rootName": "mcpace",
   "evidenceKind": "static-plan-contract",
@@ -297,7 +297,7 @@
         "status",
         "--json"
       ],
-      "expects": "jsonOrNonzero",
+      "expects": "jsonOrStatusOne",
       "reason": "read-only aggregate runtime/startup status",
       "command": "status --json",
       "coveredTopLevel": true
