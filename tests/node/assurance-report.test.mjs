@@ -13,6 +13,7 @@ import {
 	rustBuildProvenance,
 	sha256File,
 	verifyRustProofBinding,
+	verifyRustProofRecord,
 } from "../../scripts/lib/rust-build-provenance.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
@@ -333,6 +334,15 @@ test("Rust proof binding rejects changed sources and foreign binaries", () => {
 			}).binarySha256,
 			report.releaseArtifact.sha256,
 		);
+		assert.equal(
+			verifyRustProofRecord({
+				repoRoot: root,
+				report,
+				proofGeneratorPath: generator,
+			}).binarySha256,
+			report.releaseArtifact.sha256,
+			"a clean source checkout can validate the tracked proof record without a local release binary",
+		);
 		const unstableGenerator = structuredClone(report);
 		unstableGenerator.proofInputSnapshots.after.proofGeneratorSha256 =
 			"0".repeat(64);
@@ -356,7 +366,7 @@ test("Rust proof binding rejects changed sources and foreign binaries", () => {
 					report: unstableArtifact,
 					proofGeneratorPath: generator,
 				}),
-			/not bound to the current Rust proof/,
+			/not internally bound/,
 		);
 		const privateCopy = path.join(root, "private-execution-copy");
 		createVerifiedArtifactCopy(binary, privateCopy, binarySha256);

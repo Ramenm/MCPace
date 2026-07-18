@@ -7,10 +7,9 @@ import { sameStringRecord } from "./lib/proof-records.mjs";
 import { generatedReportFreshness } from "./lib/report-freshness.mjs";
 import { deriveProjectName } from "./lib/project-metadata.mjs";
 import {
-	releaseBinaryPath,
 	rustBuildProvenance,
 	sha256File,
-	verifyRustProofBinding,
+	verifyRustProofRecord,
 } from "./lib/rust-build-provenance.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -78,9 +77,8 @@ function validLiveMcpProof(proof) {
 	const liveGenerator = expectedProofInputs["scripts/live-mcp-e2e-proof.mjs"];
 	let verifiedRust;
 	try {
-		verifiedRust = verifyRustProofBinding({
+		verifiedRust = verifyRustProofRecord({
 			repoRoot,
-			binaryPath: releaseBinaryPath(repoRoot),
 			report: readJson("reports/rust-live-proof.json"),
 			proofGeneratorPath: path.join(repoRoot, "scripts", "rust-live-proof.mjs"),
 		});
@@ -115,9 +113,8 @@ function validLiveMcpProof(proof) {
 
 function validRustLiveProof(proof) {
 	try {
-		verifyRustProofBinding({
+		verifyRustProofRecord({
 			repoRoot,
-			binaryPath: releaseBinaryPath(repoRoot),
 			report: proof,
 			proofGeneratorPath: path.join(repoRoot, "scripts", "rust-live-proof.mjs"),
 		});
