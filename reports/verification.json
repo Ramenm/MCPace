@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.workspaceVerification.v1",
-  "generatedAt": "2026-07-18T09:40:57Z",
+  "generatedAt": "2026-07-18T10:00:38Z",
   "project": "MCPace",
   "version": "0.8.2",
   "baseCommit": "577f01ffd4075ea0f837eccc0953b103de16ec88",
@@ -70,8 +70,8 @@
   },
   "releaseArtifact": {
     "path": "target/release/mcpace.exe",
-    "sha256": "dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a",
-    "rustSourceFingerprint": "30437034a9d96857215fa1b47f0fd9c67b418c81a24a4827a44a3da62a54e43a"
+    "sha256": "345815843f2c7e55c11362460c95edfb0da9cb0e233446257892e17b3b55f45f",
+    "rustSourceFingerprint": "39d80796e570274bdc254f6264b8c68069f044a0c2c98e8122ff6b79b42fe741"
   },
   "externalBlockers": [
     "the exact release commit must retain green disposable autostart lifecycle evidence on Linux, Windows and macOS",

@@ -1,21 +1,21 @@
 {
   "schema": "mcpace.liveMcpE2eProof.v1",
-  "generatedAt": "2026-07-18T09:40:44.074Z",
+  "generatedAt": "2026-07-18T10:00:19.337Z",
   "status": "pass",
   "root": ".",
   "rootName": "mcpace",
   "platform": "win32",
   "arch": "x64",
-  "binarySha256": "dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a",
+  "binarySha256": "345815843f2c7e55c11362460c95edfb0da9cb0e233446257892e17b3b55f45f",
   "binaryStability": {
-    "selectedBeforeSha256": "dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a",
-    "privateCopyBeforeSha256": "dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a",
-    "privateCopyAfterSha256": "dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a",
-    "selectedAfterSha256": "dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a",
+    "selectedBeforeSha256": "345815843f2c7e55c11362460c95edfb0da9cb0e233446257892e17b3b55f45f",
+    "privateCopyBeforeSha256": "345815843f2c7e55c11362460c95edfb0da9cb0e233446257892e17b3b55f45f",
+    "privateCopyAfterSha256": "345815843f2c7e55c11362460c95edfb0da9cb0e233446257892e17b3b55f45f",
+    "selectedAfterSha256": "345815843f2c7e55c11362460c95edfb0da9cb0e233446257892e17b3b55f45f",
     "strategy": "private-hash-verified-copy",
     "stable": true
   },
-  "sourceFingerprint": "30437034a9d96857215fa1b47f0fd9c67b418c81a24a4827a44a3da62a54e43a",
+  "sourceFingerprint": "39d80796e570274bdc254f6264b8c68069f044a0c2c98e8122ff6b79b42fe741",
   "sourceFileCount": 211,
   "sourceFiles": {
     "Cargo.lock": "2905de1b3a7e6d0e49fa9e645638ca469cdce5fa9c12926baaf1e4106f5c488e",
@@ -101,7 +101,7 @@
     "src/execution.rs": "6ed3a736b4bbe3218bb0ee4bfa359e9274af68effe1321d62f63b1b58ee8c19a",
     "src/execution/tests.rs": "f733c65e19257748367d6215d0c2985e39a4f094836bf2810b481c2a02c225a0",
     "src/http_client.rs": "adc2920ff181a387a5f016c942e181ba3230eed93eae40c5ad8418bfe3cd5371",
-    "src/http_probe.rs": "973c61f848a2189bfc7e77221742a30b95cea8b710b21fddaffccaa5b6f2a8d2",
+    "src/http_probe.rs": "5e47cd1b93eabba6a434aa14b58ad3993911a2e57450814333c753dca94e9086",
     "src/http_probe/tests.rs": "0765af77f674ff38c6023e4cc3ee4134151591bdf5c5cb975c95be127ea96def",
     "src/hub.rs": "f4c27a238cc0c6326128fc820fec0ef2c5f81e399503187a95062dc35b228e4d",
     "src/hub/args.rs": "042ebf383d712b18b1bf92569146e2e36f2ed19933caf3d402d7d75f04443f75",
@@ -231,46 +231,46 @@
     "src/windows_process/tests.rs": "c82ba392a72935b6275570f34754e2bce7839b6e08beb799b6da930acbcb6d4e"
   },
   "rustBuildBinding": {
-    "generatedAt": "2026-07-18T09:40:25.926Z",
+    "generatedAt": "2026-07-18T09:56:58.581Z",
     "proofGeneratorSha256": "d7818f047a4f0d92679ff5882e44773b49b44f593b8e978be3fc9945110f3e63",
     "provenanceGeneratorSha256": "054ee7c92ecec6d0c58d7d4dd72b5ff3c880bad52e844bb9cf6809b8b2f3ccf5",
     "releaseArtifact": {
       "path": "target/release/mcpace.exe",
-      "sha256": "dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a",
-      "sourceFingerprint": "30437034a9d96857215fa1b47f0fd9c67b418c81a24a4827a44a3da62a54e43a"
+      "sha256": "345815843f2c7e55c11362460c95edfb0da9cb0e233446257892e17b3b55f45f",
+      "sourceFingerprint": "39d80796e570274bdc254f6264b8c68069f044a0c2c98e8122ff6b79b42fe741"
     }
   },
   "proofGeneratorSha256": "4578f562b69a0b235748969979aea6325a98f61925f6d98cb92d7022451f13ba",
   "proofInputs": {
     "package.json": "5c186e484bbc0e2cd2325214b31772ae6e4c4a8936500f2879519dbc3b85c576",
-    "reports/rust-live-proof.json": "6a280c8969e42c00c02bf257c2f11eed0afeecec778c31a9700b190bcbe901a0",
+    "reports/rust-live-proof.json": "b6dbc9a5e06cc625d7ce476836ed99d0850589411fa7949f2252e53d302870f0",
     "scripts/lib/rust-build-provenance.mjs": "054ee7c92ecec6d0c58d7d4dd72b5ff3c880bad52e844bb9cf6809b8b2f3ccf5",
     "scripts/live-mcp-e2e-proof.mjs": "4578f562b69a0b235748969979aea6325a98f61925f6d98cb92d7022451f13ba"
   },
   "proofInputSnapshots": {
     "before": {
       "package.json": "5c186e484bbc0e2cd2325214b31772ae6e4c4a8936500f2879519dbc3b85c576",
-      "reports/rust-live-proof.json": "6a280c8969e42c00c02bf257c2f11eed0afeecec778c31a9700b190bcbe901a0",
+      "reports/rust-live-proof.json": "b6dbc9a5e06cc625d7ce476836ed99d0850589411fa7949f2252e53d302870f0",
       "scripts/lib/rust-build-provenance.mjs": "054ee7c92ecec6d0c58d7d4dd72b5ff3c880bad52e844bb9cf6809b8b2f3ccf5",
       "scripts/live-mcp-e2e-proof.mjs": "4578f562b69a0b235748969979aea6325a98f61925f6d98cb92d7022451f13ba"
     },
     "after": {
       "package.json": "5c186e484bbc0e2cd2325214b31772ae6e4c4a8936500f2879519dbc3b85c576",
-      "reports/rust-live-proof.json": "6a280c8969e42c00c02bf257c2f11eed0afeecec778c31a9700b190bcbe901a0",
+      "reports/rust-live-proof.json": "b6dbc9a5e06cc625d7ce476836ed99d0850589411fa7949f2252e53d302870f0",
       "scripts/lib/rust-build-provenance.mjs": "054ee7c92ecec6d0c58d7d4dd72b5ff3c880bad52e844bb9cf6809b8b2f3ccf5",
       "scripts/live-mcp-e2e-proof.mjs": "4578f562b69a0b235748969979aea6325a98f61925f6d98cb92d7022451f13ba"
     }
   },
   "processTreeCleanup": {
-    "leaderPid": 45672,
+    "leaderPid": 35920,
     "ownedPids": [
-      36952
+      45264
     ],
     "containment": "kill-on-close-job+verified-pids",
     "taskkillExitCode": 0,
     "verified": true
   },
-  "durationMs": 2172,
+  "durationMs": 2807,
   "steps": [
     {
       "id": "serve-ready",

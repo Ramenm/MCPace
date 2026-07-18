@@ -1,6 +1,6 @@
 # MCPace 0.8.2 verification summary
 
-Generated: 2026-07-18T09:40:57Z
+Generated: 2026-07-18T10:00:38Z
 Source lineage: base `577f01ffd4075ea0f837eccc0953b103de16ec88` plus the 0.8.2 hardening changes in this release candidate
 
 ## Decision
@@ -46,8 +46,8 @@ Generated and installed compatibility contracts remain callable but hidden: `std
 | Rust live proof and release build binding | PASS — 0 blockers |
 
 Current release binary: `target/release/mcpace.exe`
-SHA-256: `dbfc37e2cd4df61c346d116329af8dc469e77562eabcfce5b5335b2d3670b15a`
-Rust source fingerprint: `30437034a9d96857215fa1b47f0fd9c67b418c81a24a4827a44a3da62a54e43a`
+SHA-256: `345815843f2c7e55c11362460c95edfb0da9cb0e233446257892e17b3b55f45f`
+Rust source fingerprint: `39d80796e570274bdc254f6264b8c68069f044a0c2c98e8122ff6b79b42fe741`
 
 Machine-readable evidence:
 

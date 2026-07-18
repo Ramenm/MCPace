@@ -168,7 +168,7 @@ fn connect_probe_addr(addr: &SocketAddr, deadline: Instant) -> std::io::Result<T
             .ok_or_else(|| {
                 std::io::Error::new(ErrorKind::TimedOut, "connection deadline expired")
             })?;
-        return TcpStream::connect_timeout(addr, remaining);
+        TcpStream::connect_timeout(addr, remaining)
     }
 
     #[cfg(windows)]
