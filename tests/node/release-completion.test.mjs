@@ -534,6 +534,9 @@ test("release workflow builds platform installers and checksummed draft GitHub r
 	assert.match(workflow, /pattern: native-release-\*/);
 	assert.match(workflow, /Verify Ubuntu\/Debian installer/);
 	assert.match(workflow, /Verify Windows MSI installer/);
+	assert.match(workflow, /System32\\msiexec\.exe/);
+	assert.match(workflow, /-FilePath \$msiexec/);
+	assert.match(workflow, /\/L\*V/);
 	assert.match(workflow, /PassThru/);
 	assert.match(workflow, /msiexec failed/);
 	assert.match(workflow, /Verify macOS native architecture and dependencies/);

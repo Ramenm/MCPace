@@ -68,12 +68,21 @@ function parseJson(text, label) {
 	}
 }
 
+function lifecycleChildEnv() {
+	const env = { ...process.env };
+	// This proof intentionally starts a persistent user supervisor and verifies
+	// it from a later command. A Windows kill-on-exit job would terminate that
+	// supervisor as soon as the activating CLI process exits.
+	delete env.MCPACE_KILL_PROCESS_TREE_ON_EXIT;
+	return env;
+}
+
 function run(binary, args, timeoutMs, allowFailure = false) {
 	const result = spawnSync(binary, args, {
 		encoding: "utf8",
 		timeout: timeoutMs,
 		windowsHide: true,
-		env: { ...process.env, MCPACE_KILL_PROCESS_TREE_ON_EXIT: "1" },
+		env: lifecycleChildEnv(),
 	});
 	const output = {
 		command: [binary, ...args].join(" "),

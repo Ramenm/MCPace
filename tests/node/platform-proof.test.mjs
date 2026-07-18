@@ -113,6 +113,11 @@ test("destructive autostart proof is double-gated to disposable users", () => {
 	assert.match(script, /refusing to modify the current user's login startup/);
 	assert.match(script, /supervisorVerified/);
 	assert.match(script, /evidence\.recoveryOwnership/);
+	assert.match(script, /delete env\.MCPACE_KILL_PROCESS_TREE_ON_EXIT/);
+	assert.doesNotMatch(
+		script,
+		/MCPACE_KILL_PROCESS_TREE_ON_EXIT\s*:\s*["']1["']/,
+	);
 });
 
 test("platform docs assign source and launcher dry-runs to the correct commands", () => {

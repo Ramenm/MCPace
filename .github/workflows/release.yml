@@ -320,13 +320,24 @@ jobs:
             -Filter *.msi |
             Select-Object -First 1
           if (-not $installer) { throw 'missing MSI installer' }
+          $msiexec = Join-Path $env:SystemRoot 'System32\msiexec.exe'
+          if (-not (Test-Path -LiteralPath $msiexec -PathType Leaf)) {
+            throw "Windows Installer executable not found: $msiexec"
+          }
           function Invoke-Msi([string[]] $Arguments) {
-            $process = Start-Process msiexec.exe `
-              -ArgumentList $Arguments `
+            $operation = if ($Arguments[0] -eq '/i') { 'install' } else { 'uninstall' }
+            $logPath = Join-Path $env:RUNNER_TEMP "mcpace-msi-$operation.log"
+            $msiArguments = @($Arguments) + @('/L*V', $logPath)
+            $process = Start-Process `
+              -FilePath $msiexec `
+              -ArgumentList $msiArguments `
               -Wait `
               -NoNewWindow `
               -PassThru
             if ($process.ExitCode -ne 0) {
+              if (Test-Path -LiteralPath $logPath) {
+                Get-Content -LiteralPath $logPath -Tail 120
+              }
               $detail = $Arguments -join ' '
               throw "msiexec failed ($($process.ExitCode)): $detail"
             }
