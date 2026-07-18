@@ -518,10 +518,7 @@ test("release workflow builds platform installers and checksummed draft GitHub r
 	assert.doesNotMatch(workflow, /AcceptEula|WIXTOOLSET_WIX_EULA/);
 	const wixNugetConfig = read(".github/nuget-wix.config");
 	assert.match(wixNugetConfig, /<clear\s*\/>/);
-	assert.match(
-		wixNugetConfig,
-		/https:\/\/api\.nuget\.org\/v3\/index\.json/,
-	);
+	assert.ok(wixNugetConfig.includes("https://api.nuget.org/v3/index.json"));
 	assert.match(
 		workflow,
 		/Build Linux native binary in glibc baseline container/,
