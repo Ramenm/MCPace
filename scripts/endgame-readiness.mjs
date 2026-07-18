@@ -6,18 +6,25 @@ import { repoRoot as defaultRepoRoot } from "./lib/project-metadata.mjs";
 import { childEnvForCommand } from "./lib/safe-child-env.mjs";
 
 const SHORT_TIMEOUT_MS = 3 * 60 * 1000;
-const LONG_TIMEOUT_MS = 45 * 60 * 1000;
+// The live Rust proof has a 123-minute theoretical sequential command budget.
+const LONG_TIMEOUT_MS = 130 * 60 * 1000;
 
 function parseArgs(argv) {
-	const args = { json: false, enforce: false, repoRoot: defaultRepoRoot };
+	const args = {
+		json: false,
+		enforce: false,
+		writeRustProof: false,
+		repoRoot: defaultRepoRoot,
+	};
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		if (arg === "--json") args.json = true;
 		else if (arg === "--enforce") args.enforce = true;
+		else if (arg === "--write-rust-proof") args.writeRustProof = true;
 		else if (arg === "--repo") args.repoRoot = path.resolve(argv[++index]);
 		else if (arg === "--help" || arg === "-h") {
 			console.log(
-				"Usage: node scripts/endgame-readiness.mjs [--json] [--enforce] [--repo DIR]",
+				"Usage: node scripts/endgame-readiness.mjs [--json] [--enforce] [--write-rust-proof] [--repo DIR]",
 			);
 			process.exit(0);
 		} else {
@@ -90,9 +97,12 @@ function statusFromReport(step) {
 }
 
 function detailFromReport(step) {
-	if (!step.ok) return step.error || "script did not return valid JSON";
 	const report = step.report;
+	if (!report) return step.error || "script did not return valid JSON";
 	const pieces = [`status=${report.status || "unknown"}`];
+	if (step.exitCode !== 0 && step.exitCode !== null)
+		pieces.push(`exitCode=${step.exitCode}`);
+	if (step.error) pieces.push(`error=${step.error}`);
 	if (Number.isFinite(report.blockers))
 		pieces.push(`blockers=${report.blockers}`);
 	if (Number.isFinite(report.failures))
@@ -125,7 +135,10 @@ function run(args) {
 			repoRoot,
 			"rust-live-proof",
 			"scripts/rust-live-proof.mjs",
-			args.enforce ? ["--enforce"] : [],
+			[
+				...(args.enforce ? ["--enforce"] : []),
+				...(args.writeRustProof ? ["--write"] : []),
+			],
 			LONG_TIMEOUT_MS,
 		),
 		runJson(

@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import {
+	deriveProjectName,
 	deriveProjectVersion,
 	repoRoot,
 } from "../../scripts/lib/project-metadata.mjs";
@@ -138,7 +139,7 @@ test("release artifact builder creates a verified single-root source ZIP from th
 			".",
 			"artifact manifest must not leak a machine-local absolute root",
 		);
-		assert.equal(artifactManifest.sourceRootName, path.basename(repoRoot));
+		assert.equal(artifactManifest.sourceRootName, deriveProjectName());
 		const archiveSha256 = sha256File(payload.archive.path);
 		assert.equal(payload.archive.sha256, archiveSha256);
 		assert.equal(artifactManifest.archive.sha256, archiveSha256);

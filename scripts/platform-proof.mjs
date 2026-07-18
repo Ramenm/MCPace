@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileAtomicSync } from "./lib/atomic-fs.mjs";
 import { generatedReportFreshness } from "./lib/report-freshness.mjs";
+import { deriveProjectName } from "./lib/project-metadata.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(here, "..");
@@ -298,7 +299,7 @@ function buildReport() {
 		schema: "mcpace.platformProof.v1",
 		generatedAt: new Date().toISOString(),
 		root: ".",
-		rootName: path.basename(repoRoot),
+		rootName: deriveProjectName(),
 		evidenceKind: "static-plan-contract",
 		executionEvidence: false,
 		scope:

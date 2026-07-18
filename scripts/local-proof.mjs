@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { readTextIfFileSync, writeFileAtomicSync } from './lib/atomic-fs.mjs';
 import { commandExists, runCommand, runCommandInherited } from './lib/command-runner.mjs';
-import { repoRoot } from './lib/project-metadata.mjs';
+import { deriveProjectName, repoRoot } from './lib/project-metadata.mjs';
 import { trustedNpmCliPath } from './lib/process.mjs';
 const rawArgs = process.argv.slice(2);
 const args = new Set(rawArgs);
@@ -197,7 +197,7 @@ function buildReport() {
     generatedAt: new Date().toISOString(),
     mode: { full, install, planOnly },
     host: hostInfo(),
-    rootName: path.basename(repoRoot),
+    rootName: deriveProjectName(),
     overall: fail > 0 ? 'fail' : warn > 0 ? 'warn' : 'pass',
     summary: { pass, warn, fail, total: effective.length },
     results: effective,

@@ -29,7 +29,8 @@ All notable user-facing changes are recorded here. Keep entries focused on behav
 - The destructive crash-recovery harness now requires an explicit disposable-user flag and environment marker before changing login startup, and confirms the recovered endpoint is still owned by the registered user supervisor.
 - Rust lifecycle/projection/serve tests now isolate process-global environment state, use collision-free temporary roots and deterministic unavailable-port probes, and retain bounded but load-tolerant deadlines, removing the known CI-only flakes.
 - Installed-binary smoke tests now drop inherited developer overrides, and `up` checks the raw readiness contract rather than the grouped doctor report.
-- Platform, assurance, and inventory checks now fail when their checked-in reports are stale while ignoring timestamp-only regeneration noise.
+- Platform, assurance, and inventory checks now fail when their checked-in reports are stale while ignoring timestamp-only regeneration noise; report identity is stable across checkout-directory casing.
+- CI now runs the expensive Rust endgame only in the Rust matrix, keeps Node-version jobs on the fast source/package suite, and gives cold Windows Cargo commands a load-tolerant deadline.
 - Autostart migration removes known legacy Windows Startup-folder launchers and Linux XDG entries to avoid duplicate owners.
 
 ### Migration

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { writeFileAtomicSync } from "./lib/atomic-fs.mjs";
 import { sameStringRecord } from "./lib/proof-records.mjs";
 import { generatedReportFreshness } from "./lib/report-freshness.mjs";
+import { deriveProjectName } from "./lib/project-metadata.mjs";
 import {
 	releaseBinaryPath,
 	rustBuildProvenance,
@@ -538,7 +539,7 @@ function buildAssurance() {
 		schema: "mcpace.projectAssurance.v1",
 		generatedAt: new Date().toISOString(),
 		root: ".",
-		rootName: path.basename(repoRoot),
+		rootName: deriveProjectName(),
 		overall,
 		summary: {
 			pass: passCount,

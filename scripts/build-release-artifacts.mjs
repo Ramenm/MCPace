@@ -651,7 +651,7 @@ function build() {
 						status: dryRun ? "dry-run" : "verified",
 					},
 					sourceRoot: ".",
-					sourceRootName: path.basename(repoRoot),
+					sourceRootName: deriveProjectName(),
 					includePaths: manifest.includePaths,
 					runtimeDirectories: manifest.runtimeDirectories,
 					files: stagedFiles,

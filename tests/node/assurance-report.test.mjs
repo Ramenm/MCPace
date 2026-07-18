@@ -472,6 +472,20 @@ test("generated proof reports use environment-neutral root metadata", () => {
 			".",
 			`${script} must not leak a machine-local absolute root`,
 		);
-		assert.equal(report.rootName, path.basename(repoRoot));
+		assert.equal(
+			report.rootName,
+			"mcpace",
+			`${script} must not depend on checkout directory casing`,
+		);
+	}
+
+	for (const script of [
+		"scripts/build-release-artifacts.mjs",
+		"scripts/live-mcp-e2e-proof.mjs",
+		"scripts/local-proof.mjs",
+	]) {
+		const source = read(script);
+		assert.doesNotMatch(source, /path\.basename\(repoRoot\)/);
+		assert.match(source, /deriveProjectName\(\)/);
 	}
 });

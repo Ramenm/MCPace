@@ -1108,7 +1108,7 @@ fn recorded_runtime_supervision(root: &Path) -> Option<bool> {
         .and_then(|state| state.supervisor_managed)
 }
 
-#[cfg(any(test, target_os = "linux", target_os = "macos"))]
+#[cfg(test)]
 fn recorded_runtime_is_explicitly_direct(root: &Path) -> bool {
     recorded_runtime_supervision(root) == Some(false)
 }
