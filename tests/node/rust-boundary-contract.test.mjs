@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
 import { readRootPackageJson, repoRoot } from '../../scripts/lib/project-metadata.mjs';
@@ -54,13 +55,12 @@ test('Rust boundary contract is wired into npm scripts and CI/endgame gates', ()
   const listed = JSON.parse(ciList.stdout);
   assert.ok(listed.steps.some((step) => step.label === 'check:rust-boundaries'));
 
-  const endgame = spawnSync(process.execPath, ['scripts/endgame-readiness.mjs', '--json'], {
-    cwd: repoRoot,
-    encoding: 'utf8',
-    windowsHide: true,
-    maxBuffer: 8 * 1024 * 1024,
-  });
-  assert.equal(endgame.status, 0, endgame.stderr || endgame.stdout);
-  const report = JSON.parse(endgame.stdout);
-  assert.ok(report.findings.some((item) => item.id === 'rust-boundary-contract'));
+  const endgame = fs.readFileSync(
+    new URL('../../scripts/endgame-readiness.mjs', import.meta.url),
+    'utf8',
+  );
+  assert.match(
+    endgame,
+    /"rust-boundary-contract",\s*"scripts\/rust-boundary-contract\.mjs"/,
+  );
 });

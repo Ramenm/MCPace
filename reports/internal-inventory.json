@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.projectInventory.v1",
-  "generatedAt": "2026-07-18T03:42:31.146Z",
+  "generatedAt": "2026-07-18T04:33:52.631Z",
   "root": ".",
   "rootName": "mcpace",
   "commands": [
@@ -244,8 +244,8 @@
     ]
   },
   "counts": {
-    "rustFiles": 194,
-    "rustFunctions": 2634,
+    "rustFiles": 195,
+    "rustFunctions": 2637,
     "publicCommands": 10,
     "hiddenCompatibilityCommands": 6,
     "implementedPublicCommands": 10,
@@ -389,7 +389,7 @@
     },
     {
       "file": "src/hub/leases.rs",
-      "lines": 1323
+      "lines": 1348
     },
     {
       "file": "src/mcp_server/tool_surface.rs",

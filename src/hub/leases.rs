@@ -13,6 +13,9 @@ use std::path::{Path, PathBuf};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
+#[cfg(all(test, windows))]
+mod tests;
+
 const LEASE_STORE_VERSION: usize = 2;
 const DEFAULT_LEASE_TTL_MS: u128 = 120_000;
 const MAX_LEASE_TTL_MS: u128 = 3_600_000;
@@ -705,6 +708,12 @@ where
     Ok(result)
 }
 
+fn retryable_windows_lock_contention(error: &std::io::Error) -> bool {
+    cfg!(windows)
+        && (error.kind() == ErrorKind::PermissionDenied
+            || matches!(error.raw_os_error(), Some(32 | 33)))
+}
+
 fn acquire_lease_store_lock(state_root: &Path) -> Result<LeaseStoreGuard, String> {
     runtimepaths::ensure_hub_dir(state_root)?;
     let lock_path = runtimepaths::hub_lease_lock_path(state_root);
@@ -714,6 +723,7 @@ fn acquire_lease_store_lock(state_root: &Path) -> Result<LeaseStoreGuard, String
     ])
     .to_pretty_string();
 
+    let mut final_retryable_error = None;
     for _ in 0..LEASE_LOCK_ATTEMPTS {
         match OpenOptions::new()
             .create_new(true)
@@ -727,9 +737,16 @@ fn acquire_lease_store_lock(state_root: &Path) -> Result<LeaseStoreGuard, String
                 return Ok(LeaseStoreGuard { path: lock_path });
             }
             Err(error) if error.kind() == ErrorKind::AlreadyExists => {
+                final_retryable_error = None;
                 if remove_stale_lease_store_lock(&lock_path)? {
                     continue;
                 }
+                thread::sleep(Duration::from_millis(LEASE_LOCK_SLEEP_MS));
+            }
+            Err(error) if retryable_windows_lock_contention(&error) => {
+                // CREATE_NEW can transiently report access denied while another
+                // thread still has the soon-to-be-removed lock file open.
+                final_retryable_error = Some(error.to_string());
                 thread::sleep(Duration::from_millis(LEASE_LOCK_SLEEP_MS));
             }
             Err(error) => {
@@ -742,6 +759,13 @@ fn acquire_lease_store_lock(state_root: &Path) -> Result<LeaseStoreGuard, String
         }
     }
 
+    if let Some(error) = final_retryable_error {
+        return Err(format!(
+            "failed to acquire lease store lock at {}: {}",
+            lock_path.display(),
+            error
+        ));
+    }
     Err(format!(
         "lease store lock is busy at {}; another MCPace runtime worker may be updating leases",
         lock_path.display()
@@ -752,6 +776,7 @@ fn remove_stale_lease_store_lock(lock_path: &Path) -> Result<bool, String> {
     let raw = match fs::read_to_string(lock_path) {
         Ok(value) => value,
         Err(error) if error.kind() == ErrorKind::NotFound => return Ok(true),
+        Err(error) if retryable_windows_lock_contention(&error) => return Ok(false),
         Err(error) => {
             return Err(format!(
                 "failed to inspect lease store lock at {}: {}",
