@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.projectInventory.v1",
-  "generatedAt": "2026-07-18T03:21:45.356Z",
+  "generatedAt": "2026-07-18T03:42:31.146Z",
   "root": ".",
   "rootName": "mcpace",
   "commands": [
@@ -245,7 +245,7 @@
   },
   "counts": {
     "rustFiles": 194,
-    "rustFunctions": 2633,
+    "rustFunctions": 2634,
     "publicCommands": 10,
     "hiddenCompatibilityCommands": 6,
     "implementedPublicCommands": 10,

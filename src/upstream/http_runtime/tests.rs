@@ -184,7 +184,12 @@ fn write_test_bytes(stream: &mut TcpStream, bytes: &[u8]) -> std::io::Result<()>
     Ok(())
 }
 
-fn write_test_response(stream: &mut TcpStream, status: &str, body: &str, session: bool) {
+fn try_write_test_response(
+    stream: &mut TcpStream,
+    status: &str,
+    body: &str,
+    session: bool,
+) -> std::io::Result<()> {
     let session = if session {
         "Mcp-Session-Id: fault-session\r\n"
     } else {
@@ -194,7 +199,11 @@ fn write_test_response(stream: &mut TcpStream, status: &str, body: &str, session
         "HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{session}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
-    write_test_bytes(stream, response.as_bytes()).unwrap();
+    write_test_bytes(stream, response.as_bytes())
+}
+
+fn write_test_response(stream: &mut TcpStream, status: &str, body: &str, session: bool) {
+    try_write_test_response(stream, status, body, session).unwrap();
 }
 
 fn initialize_response_body() -> String {
@@ -283,7 +292,8 @@ fn http_timeout_is_a_total_lifecycle_budget_not_a_per_step_multiplier() {
             }
             thread::sleep(Duration::from_millis(600));
             if step == 1 {
-                write_test_response(&mut stream, "202 Accepted", "", false);
+                // The global client deadline can close this delayed connection first.
+                let _ = try_write_test_response(&mut stream, "202 Accepted", "", false);
             } else {
                 let body = request
                     .split_once("\r\n\r\n")

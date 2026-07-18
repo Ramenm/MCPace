@@ -165,6 +165,25 @@ test("endgame readiness aggregates final gates while preserving exact blockers",
 				`${id} should be part of endgame readiness`,
 			);
 		}
+		const rustFinding = report.findings.find(
+			(item) => item.id === "rust-live-proof",
+		);
+		assert.equal(rustFinding?.status, "blocker");
+		assert.ok(
+			rustFinding?.diagnostics?.blockingFindings.some((item) =>
+				item.id.startsWith("tool-"),
+			),
+			JSON.stringify(rustFinding),
+		);
+		assert.equal("stdoutTail" in rustFinding.diagnostics, false);
+		assert.equal("stderrTail" in rustFinding.diagnostics, false);
+		for (const finding of report.findings.filter(
+			(item) => item.status === "blocker" && item.id !== "rust-live-proof",
+		)) {
+			for (const diagnostic of finding.diagnostics.blockingFindings) {
+				assert.deepEqual(Object.keys(diagnostic).sort(), ["id", "status"]);
+			}
+		}
 		assert.ok(
 			report.endgameDefinition.some((item) =>
 				item.includes("cargo check/test/fmt/clippy/build"),
@@ -177,6 +196,79 @@ test("endgame readiness aggregates final gates while preserving exact blockers",
 		);
 	} finally {
 		fs.rmSync(emptyPath, { recursive: true, force: true });
+	}
+});
+
+test("endgame readiness does not publish unparsed child output", () => {
+	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "mcpace-endgame-redaction-"));
+	const scriptDir = path.join(dir, "scripts");
+	const secret = "SUPER_SECRET_PARSE_PAYLOAD";
+	try {
+		fs.mkdirSync(scriptDir, { recursive: true });
+		for (const script of [
+			"mcp-transport-contract.mjs",
+			"rust-boundary-contract.mjs",
+			"supply-chain-evidence.mjs",
+			"release-readiness.mjs",
+			"modernization-inventory.mjs",
+			"verify-modernization-budget.mjs",
+			"verify-clean-archive.mjs",
+		]) {
+			fs.writeFileSync(
+				path.join(scriptDir, script),
+				`console.log(${JSON.stringify(JSON.stringify({ status: "pass", findings: [] }))});\n`,
+			);
+		}
+		fs.writeFileSync(
+			path.join(scriptDir, "rust-live-proof.mjs"),
+			`process.stdout.write(${JSON.stringify(secret)});\n`,
+		);
+
+		const result = run("scripts/endgame-readiness.mjs", ["--repo", dir]);
+		assert.equal(result.status, 0, result.stderr || result.stdout);
+		assert.doesNotMatch(result.stdout, new RegExp(secret));
+		const report = parseJson(result.stdout, "redacted endgame readiness");
+		const rustFinding = report.findings.find(
+			(item) => item.id === "rust-live-proof",
+		);
+		assert.equal(rustFinding.status, "blocker");
+		assert.equal(rustFinding.detail, "script failed (INVALID_JSON)");
+		assert.deepEqual(rustFinding.diagnostics.blockingFindings, []);
+
+		fs.writeFileSync(
+			path.join(scriptDir, "rust-live-proof.mjs"),
+			`console.log(JSON.stringify({ schema: "untrusted", status: "blocked", findings: [{ id: "cargo-test-locked", status: "blocker", detail: ${JSON.stringify(secret)}, stdoutTail: ${JSON.stringify(secret)} }] }));\n`,
+		);
+		const untrustedResult = run("scripts/endgame-readiness.mjs", [
+			"--repo",
+			dir,
+		]);
+		assert.equal(
+			untrustedResult.status,
+			0,
+			untrustedResult.stderr || untrustedResult.stdout,
+		);
+		assert.doesNotMatch(untrustedResult.stdout, new RegExp(secret));
+		const untrustedReport = parseJson(
+			untrustedResult.stdout,
+			"untrusted-schema endgame readiness",
+		);
+		const untrustedRustFinding = untrustedReport.findings.find(
+			(item) => item.id === "rust-live-proof",
+		);
+		assert.deepEqual(untrustedRustFinding.diagnostics.blockingFindings, [
+			{ id: "cargo-test-locked", status: "blocker" },
+		]);
+		assert.equal(untrustedRustFinding.command.startsWith("node "), true);
+		assert.deepEqual(untrustedReport.releaseBlockingFindings, [
+			{
+				gate: "rust-live-proof",
+				id: "cargo-test-locked",
+				detail: "blocked",
+			},
+		]);
+	} finally {
+		fs.rmSync(dir, { recursive: true, force: true });
 	}
 });
 
