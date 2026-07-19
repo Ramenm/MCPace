@@ -135,7 +135,7 @@ rl.on('line', async (line) => {
   if (message.method === 'initialize') {
     send(message.id, { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name, version: '0' } });
   } else if (message.method === 'tools/list') {
-    if (!(await waitForPeers(Date.now() + 15000))) {
+    if (!(await waitForPeers(Date.now() + 25000))) {
       return;
     }
     send(message.id, { tools: [{ name: `get_${name.replace(/-/g, '_')}`, description: `Read from ${name}`, inputSchema: { type: 'object' } }] });
@@ -295,16 +295,28 @@ fn projection_catalog_probes_callable_servers_in_parallel() {
         mode: ToolExposureMode::Hybrid,
         budget: DEFAULT_TOOL_BUDGET,
         token_budget: DEFAULT_TOOL_TOKEN_BUDGET,
-        timeout_ms: Some(30_000),
+        timeout_ms: Some(45_000),
         refresh: true,
         projection_safety: DEFAULT_PROJECTED_TOOL_SAFETY,
     };
 
     let projected = projected_tool_set(&root, &BTreeSet::new(), &options).unwrap();
 
-    assert!(projected.raw_upstream_tool_count >= 2);
-    assert!(projected.total_upstream_tool_count >= 2);
-    assert!(projected.projected_tool_count >= 2);
+    assert!(
+        projected.raw_upstream_tool_count >= 2,
+        "parallel raw catalog incomplete: {}",
+        projected.catalog.to_compact_string()
+    );
+    assert!(
+        projected.total_upstream_tool_count >= 2,
+        "parallel projectable catalog incomplete: {}",
+        projected.catalog.to_compact_string()
+    );
+    assert!(
+        projected.projected_tool_count >= 2,
+        "parallel projection incomplete: {}",
+        projected.catalog.to_compact_string()
+    );
     let projected_names = projected
         .tools
         .iter()

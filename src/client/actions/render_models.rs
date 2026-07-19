@@ -113,7 +113,7 @@ impl ClientExportPreview {
                     .unwrap_or("documented install path");
                 vec![
                 format!(
-                    "Run 'mcpace client install {} --root <path>' to patch the MCPace entry in {} automatically using the shared {} scope.",
+                    "Run 'mcpace advanced client install {} --root <path>' to patch the MCPace entry in {} automatically using the shared {} scope.",
                     target.id,
                     path,
                     scope
@@ -132,7 +132,7 @@ impl ClientExportPreview {
             }
             "local-streamable-http" => vec![
                 format!(
-                    "Run 'mcpace serve' and point this client at the resolved MCPace URL: {}.",
+                    "Run 'mcpace advanced runtime foreground' and point this client at the resolved MCPace URL: {}.",
                     configured_local_mcp_url
                 ),
                 "Keep export as the source of truth for the HTTP MCPace contract until that client gets a dedicated config patcher.".to_string(),

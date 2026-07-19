@@ -95,7 +95,7 @@ pub(super) fn collect_status(root_path: &Path) -> HubStatusResult<HubStatus> {
     if !corrupted_files.is_empty() {
         status = "corrupt".to_string();
         warnings.push(format!(
-            "hub runtime metadata is corrupted in {} file(s); run 'mcpace hub repair' to archive and reseed them",
+            "hub runtime metadata is corrupted in {} file(s); run 'mcpace advanced runtime repair' to archive and reseed them",
             corrupted_files.len()
         ));
     }

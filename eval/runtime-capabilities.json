@@ -136,7 +136,7 @@
       "title": "Human-readable lab evidence report",
       "status": "implemented",
       "priority": "p1",
-      "summary": "mcpace lab defaults to report and shows server -> evidence -> inferred classes -> policy.",
+      "summary": "mcpace advanced dev lab defaults to report and shows server -> evidence -> inferred classes -> policy.",
       "evidence": [
         "src/lab",
         "eval/fixtures/runtime"
@@ -181,7 +181,7 @@
         "src/lab/render.rs",
         "eval/fixtures/runtime"
       ],
-      "nextStep": "Persist the same evidence ledger from live mcpace auto runs into the dashboard."
+      "nextStep": "Persist the same evidence ledger from live mcpace advanced server auto runs into the dashboard."
     },
     {
       "id": "browser-session-classifier",
@@ -223,7 +223,7 @@
         "eval/fixtures/runtime/popular-npm-postgres.json",
         "eval/fixtures/runtime/popular-npm-redis.json"
       ],
-      "nextStep": "Expose database connection conflict domains in mcpace server instances output."
+      "nextStep": "Expose database connection conflict domains in mcpace advanced server instances output."
     },
     {
       "id": "project-readonly-analysis-classifier",

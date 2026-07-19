@@ -65,7 +65,7 @@ Use the included GitHub Actions workflow:
 Actions → platform-proof → Run workflow → full=true
 ```
 
-That workflow runs Node contracts, Rust tests, native binary smoke, and an isolated installed-runtime lifecycle (`init` → `up` → MCP initialize/tools/list → `serve stop`) on:
+That workflow runs Node contracts, Rust tests, native binary smoke, and an isolated installed-runtime lifecycle (`up --no-autostart` → MCP initialize/tools/list → `stop`) on:
 
 ```text
 ubuntu-latest
@@ -102,3 +102,20 @@ target\release\mcpace.exe
 ```
 
 The helper command `npm run proof:local -- --full` runs this sequence and writes the proof report.
+
+## Autostart testing without rebooting a developer machine
+
+`mcpace advanced autostart prove --json` is the product-level action proof. It does not rewrite registration: it records whether the runtime was running, stops it without disabling login startup, activates the exact installed OS target, verifies endpoint response plus PID/process identity, and restores the initial running/stopped state. Use `--dry-run` to inspect the target without stopping anything.
+
+The destructive release harness, `scripts/autostart-lifecycle-proof.mjs`, also installs and removes the current user's login registration and kills a test runtime to prove recovery. It refuses to run unless both `--confirm-disposable-user` and `MCPACE_DISPOSABLE_AUTOSTART_PROOF=1` are present. Never set those on a contributor workstation; the workflows set them only on disposable hosted runner users.
+
+The release matrix keeps claims separate:
+
+| Platform | No-reboot CI proof | What still requires a disposable real session |
+| --- | --- | --- |
+| Windows | Verify HKCU Run value/plan; invoke the installed `mcpace-agent-launcher.exe --from-login`; assert launcher/agent identity and recovery. Windows Sandbox is acceptable for destructive smoke. | Sign into a disposable VM user and observe Explorer processing the Run entry. `schtasks /run` or manual launcher invocation is not a logon proof. |
+| Linux | Install a temporary user unit; `systemctl --user daemon-reload`, enable/start/restart/stop; kill the child and assert `Restart=on-failure`. | PAM/login ordering and lingering behavior, when claimed, require a disposable VM user manager. A container/private manager is not equivalent. |
+| WSL | In a disposable distro, enable systemd, run `wsl --shutdown`, relaunch the distro, and assert the user unit. | Windows host boot/login starting WSL is a separate Windows VM test; distro startup is not host boot. |
+| macOS | On a hosted Mac with a GUI domain, use `launchctl bootstrap gui/$UID`, `print`, `kickstart -k`, kill/recovery, and `bootout` with a unique temporary label. | First GUI-session/login ordering, Keychain/Finder/WindowServer dependencies, quarantine, signing, notarization, and stapling require a disposable Mac VM or dedicated Mac. |
+
+Every destructive test uses a temporary root inside a disposable OS user/runner, bounded timeout, observable marker/PID, and `finally`/`trap` cleanup. MCPace keeps its stable production login label, so OS-user isolation—not a renamed label—is the collision boundary. Manual manager activation is reported as lifecycle evidence, never mislabeled as reboot or fresh-login evidence. Actual login/reboot belongs in a separate nightly/release-validation workflow against disposable snapshots; it must never reboot a contributor's active workstation.

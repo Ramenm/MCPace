@@ -7,6 +7,7 @@ import { spawn } from "node:child_process";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import { writeFileAtomicSync } from "./lib/atomic-fs.mjs";
+import { deriveProjectName } from "./lib/project-metadata.mjs";
 import {
 	createVerifiedArtifactCopy,
 	releaseBinaryPath,
@@ -300,7 +301,17 @@ async function runProof() {
 		fs.writeFileSync(fixture, fixtureSource());
 		child = spawn(
 			executionBinary,
-			["serve", "--root", root, "--host", "127.0.0.1", "--port", String(port)],
+			[
+				"advanced",
+				"runtime",
+				"foreground",
+				"--root",
+				root,
+				"--host",
+				"127.0.0.1",
+				"--port",
+				String(port),
+			],
 			{
 				cwd: repoRoot,
 				detached: process.platform !== "win32",
@@ -520,7 +531,7 @@ async function runProof() {
 		generatedAt: new Date().toISOString(),
 		status: "pass",
 		root: ".",
-		rootName: path.basename(repoRoot),
+		rootName: deriveProjectName(),
 		platform: process.platform,
 		arch: process.arch,
 		binarySha256: bindingAfter.binarySha256,

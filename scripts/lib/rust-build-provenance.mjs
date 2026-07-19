@@ -146,9 +146,8 @@ export function releaseBinaryPath(repoRoot) {
 	);
 }
 
-export function verifyRustProofBinding({
+export function verifyRustProofRecord({
 	repoRoot,
-	binaryPath,
 	report,
 	proofGeneratorPath,
 }) {
@@ -201,16 +200,16 @@ export function verifyRustProofBinding({
 			"Rust live proof does not match the current Rust build inputs",
 		);
 	}
-	const binarySha256 = sha256File(binaryPath);
+	const binarySha256 = report.releaseArtifact?.sha256;
 	if (
-		report.releaseArtifact?.sha256 !== binarySha256 ||
+		!/^[a-f0-9]{64}$/.test(binarySha256 || "") ||
 		report.releaseArtifact?.sourceFingerprint !== provenance.fingerprint ||
 		report.releaseArtifactStability?.stable !== true ||
 		report.releaseArtifactStability?.beforeSha256 !== binarySha256 ||
 		report.releaseArtifactStability?.afterSha256 !== binarySha256
 	) {
 		throw new Error(
-			"selected release binary is not bound to the current Rust proof",
+			"Rust live proof release artifact record is not internally bound",
 		);
 	}
 	return {
@@ -223,4 +222,23 @@ export function verifyRustProofBinding({
 			releaseArtifact: report.releaseArtifact,
 		},
 	};
+}
+
+export function verifyRustProofBinding({
+	repoRoot,
+	binaryPath,
+	report,
+	proofGeneratorPath,
+}) {
+	const verified = verifyRustProofRecord({
+		repoRoot,
+		report,
+		proofGeneratorPath,
+	});
+	if (sha256File(binaryPath) !== verified.binarySha256) {
+		throw new Error(
+			"selected release binary is not bound to the current Rust proof",
+		);
+	}
+	return verified;
 }

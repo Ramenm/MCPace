@@ -25,7 +25,7 @@ pub(super) struct ParsedArgs {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace client",
+    name = "mcpace advanced client",
     disable_version_flag = true,
     about = "Plan, export, install, restore, and list MCPace client integrations"
 )]
@@ -54,11 +54,7 @@ struct ClientCli {
     #[arg(long = "project-root", value_name = "PATH")]
     project_root: Option<String>,
 
-    #[arg(
-        long = "transport",
-        alias = "ingress",
-        value_name = "stdio|streamable-http"
-    )]
+    #[arg(long = "transport", value_name = "stdio|streamable-http")]
     transport: Option<String>,
 
     #[arg(long = "metadata-json", value_name = "JSON")]
@@ -148,7 +144,7 @@ fn parsed_from_cli(cli: ClientCli) -> ParsedArgs {
             if parsed.client_id.is_none() {
                 let action = parsed.action.clone().unwrap_or_default();
                 parsed.error = Some(format!(
-                    "client {action} requires a client target; use 'mcpace client list' to inspect supported surfaces"
+                    "client {action} requires a client target; use 'mcpace advanced client list' to inspect supported surfaces"
                 ));
             }
         }
@@ -165,47 +161,32 @@ fn parsed_from_cli(cli: ClientCli) -> ParsedArgs {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace client"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced client"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_arg(arg: &str) -> String {
-    match normalize_flag(arg).as_str() {
-        "-json" => "--json".to_string(),
-        "-root" => "--root".to_string(),
-        "-client-id" => "--client-id".to_string(),
-        "-session-id" => "--session-id".to_string(),
-        "-project-root" => "--project-root".to_string(),
-        "-transport" => "--transport".to_string(),
-        "-ingress" => "--ingress".to_string(),
-        "-metadata-json" => "--metadata-json".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace client <plan|list|install|restore|export> [options]"
+        "Usage: mcpace advanced client <plan|list|install|restore|export> [options]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(stdout, "Implemented now:");
-    let _ = writeln!(stdout, "  mcpace client list [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]");
     let _ = writeln!(
         stdout,
-        "  mcpace client install <client|all> [--json] [--root <path>] [--dry-run] [--diff]"
+        "  mcpace advanced client list [--json] [--root <path>]"
+    );
+    let _ = writeln!(stdout, "  mcpace advanced client plan [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--metadata-json <json>]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced client install <client|all> [--json] [--root <path>] [--dry-run] [--diff]"
     );
     let _ = writeln!(
         stdout,
-        "  mcpace client restore <client|all> [--json] [--root <path>] [--backup <id|latest>]"
+        "  mcpace advanced client restore <client|all> [--json] [--root <path>] [--backup <id|latest>]"
     );
-    let _ = writeln!(stdout, "  mcpace client export <client> [--json] [--root <path>] [--transport <stdio|streamable-http>] [--session-id <id>] [--project-root <path>] [--metadata-json <json>]");
+    let _ = writeln!(stdout, "  mcpace advanced client export <client> [--json] [--root <path>] [--transport <stdio|streamable-http>] [--session-id <id>] [--project-root <path>] [--metadata-json <json>]");
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,

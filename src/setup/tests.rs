@@ -17,39 +17,33 @@ fn setup_supports_an_explicit_session_only_opt_out() {
 }
 
 #[test]
-fn setup_keeps_legacy_autostart_opt_in_flags_compatible() {
+fn setup_rejects_removed_autostart_opt_in_aliases() {
     for flag in ["--autostart", "--install-autostart", "--install-service"] {
         let parsed = parse_cli(&[flag.to_string()]);
-        assert!(parsed.install_service, "{}", flag);
-        assert_eq!(parsed.error, None, "{}", flag);
+        assert!(parsed.error.is_some(), "removed flag still parsed: {flag}");
     }
 }
 
 #[test]
-fn setup_flags_after_a_positional_server_spec_are_not_consumed_as_server_arguments() {
-    let args = [
-        "pypi:mcp-server-fetch==2026.6.4",
-        "--as",
-        "fetch",
-        "--client",
-        "none",
-        "--json",
-        "--root",
-        "/tmp/mcpace-test-root",
-        "--port",
-        "43123",
-    ]
-    .into_iter()
-    .map(ToString::to_string)
-    .collect::<Vec<_>>();
+fn setup_rejects_positional_server_installs_and_accepts_canonical_controls() {
+    let positional = parse_cli(&["pypi:mcp-server-fetch==2026.6.4".to_string()]);
+    assert!(positional.error.is_some());
 
-    let parsed = parse_cli(&args);
-
-    assert_eq!(
-        parsed.server_spec.as_deref(),
-        Some("pypi:mcp-server-fetch==2026.6.4")
+    let parsed = parse_cli(
+        &[
+            "--client",
+            "none",
+            "--json",
+            "--root",
+            "/tmp/mcpace-test-root",
+            "--port",
+            "43123",
+        ]
+        .into_iter()
+        .map(ToString::to_string)
+        .collect::<Vec<_>>(),
     );
-    assert_eq!(parsed.server_name.as_deref(), Some("fetch"));
+
     assert!(parsed.skip_client_install);
     assert!(parsed.json_output);
     assert_eq!(
@@ -57,7 +51,6 @@ fn setup_flags_after_a_positional_server_spec_are_not_consumed_as_server_argumen
         Some(PathBuf::from("/tmp/mcpace-test-root"))
     );
     assert_eq!(parsed.port, 43123);
-    assert!(parsed.server_paths.is_empty());
     assert_eq!(parsed.error, None);
 }
 

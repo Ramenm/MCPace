@@ -2594,7 +2594,7 @@ fn evidence_decision(
             score: score.min(0.49),
             level: "low",
             automatic_action: "needs-safe-probe",
-            next_step: "run mcpace lab probe to collect initialize and tools/list evidence before widening policy",
+            next_step: "run mcpace advanced dev lab probe to collect initialize and tools/list evidence before widening policy",
             sources,
         };
     }

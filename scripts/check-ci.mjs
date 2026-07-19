@@ -12,7 +12,13 @@ import {
 
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 const SHORT_TIMEOUT_MS = 3 * 60 * 1000;
-const ENDGAME_TIMEOUT_MS = 45 * 60 * 1000;
+// The Rust proof permits four 30-minute Cargo commands plus a bounded fmt
+// check; keep the parent deadline above that theoretical sequential budget.
+const ENDGAME_TIMEOUT_MS = 135 * 60 * 1000;
+const NATIVE_PROOF_LABELS = new Set([
+	"check:endgame",
+	"proof:live-mcp-e2e",
+]);
 const RELEASE_BINARY = path.join(
 	repoRoot,
 	"target",
@@ -147,12 +153,13 @@ export const CI_STEPS = Object.freeze([
 			SHORT_TIMEOUT_MS,
 		),
 	},
-	// Endgame owns the one live Rust proof invocation to avoid running the full Cargo suite twice.
+	// Endgame owns the one live Rust proof invocation. Full CI writes host-local
+	// binding evidence so the following live MCP proof can verify this OS binary.
 	{
 		label: "check:endgame",
 		...nodeScript(
 			"scripts/endgame-readiness.mjs",
-			["--json", "--enforce"],
+			["--json", "--enforce", "--write-rust-proof"],
 			ENDGAME_TIMEOUT_MS,
 		),
 	},
@@ -198,7 +205,14 @@ function parseArgs(argv) {
 	return {
 		json: argv.includes("--json"),
 		list: argv.includes("--list"),
+		skipNativeProofs: argv.includes("--skip-native-proofs"),
 	};
+}
+
+function selectedSteps(args) {
+	return args.skipNativeProofs
+		? CI_STEPS.filter((step) => !NATIVE_PROOF_LABELS.has(step.label))
+		: CI_STEPS;
 }
 
 function displayCommand(step) {
@@ -258,10 +272,12 @@ function runStep(step) {
 
 function main() {
 	const args = parseArgs(process.argv.slice(2));
+	const steps = selectedSteps(args);
 	if (args.list) {
 		const payload = {
 			schema: "mcpace.ciEntrypoint.v1",
-			steps: CI_STEPS.map((step) => ({
+			profile: args.skipNativeProofs ? "without-native-proofs" : "full",
+			steps: steps.map((step) => ({
 				label: step.label,
 				command: displayCommand(step),
 				timeoutMs: step.timeoutMs,
@@ -276,7 +292,7 @@ function main() {
 	}
 
 	const results = [];
-	for (const step of CI_STEPS) {
+	for (const step of steps) {
 		const result = runStep(step);
 		results.push(result);
 		if (result.status !== 0 || result.signal || result.error) {

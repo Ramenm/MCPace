@@ -5,7 +5,7 @@ MCPace should not treat `legacy` as a normal feature bucket. Legacy code is allo
 1. **Retired** — old files, flags, wrappers, or registry entries are removed and guarded by tests.
 2. **Cleanup-only** — code exists only to delete an old user/system artifact, for example the retired `MCPace` autostart entry.
 3. **Quarantined compatibility** — the input is still recognized for migration, but runtime behavior is disabled, plan-only, or routed through an explicit adapter.
-4. **Migration alias** — a public alias remains temporarily so existing client configs do not break, but the new command is documented as canonical.
+4. **Hidden compatibility entrypoint** — an old generated command remains callable so existing client configs do not break, but it is absent from human help/completion and new configs use the canonical entrypoint.
 
 Anything else is a bug. New legacy markers must either be rejected by `scripts/legacy-boundary-guard.mjs --enforce` or added to the allowlist with a retirement reason.
 
@@ -15,7 +15,7 @@ Anything else is a bug. New legacy markers must either be rejected by `scripts/l
 | --- | --- | --- | --- |
 | Windows autostart cleanup | `src/service/legacy.rs`, coordinated from `src/service.rs`, tested by `src/service/tests.rs` | Remove old `MCPace` Run entry and keep only `MCPace Agent` using the hidden launcher plan. | Keep cleanup-only code quarantined in `src/service/legacy.rs`; delete it after a documented grace period and after support docs show no old entry remains. |
 | Legacy SSE transport aliases | `src/source_type.rs`, `src/server/loader.rs`, `src/upstream.rs`, `src/client/plan.rs`, `src/hub/leases.rs` | Accept old names such as `sse`, `remote-sse`, and `sse-legacy`, normalize them, block direct forwarding, and keep them out of automatic parallel routing. | Move all literals behind a `transport`/`legacy_transport` boundary, then require explicit adapter config. |
-| `stdio-shim` alias | `src/app.rs`, `src/stdio_shim.rs`, client import/export paths | Keep `mcpace stdio` as canonical; retain `stdio-shim` only for existing client configs. The exact preview/apply/restore migration is documented in `docs/supported-clients.md`. | Stop writing aliases in new configs now; announce deprecation before removal, and remove the command alias no earlier than `1.0.0`. |
+| Hidden stdio compatibility | `src/catalog.rs`, `src/app.rs`, `src/stdio_shim.rs`, client import/export paths | Keep hidden `mcpace stdio` canonical for generated configs; retain hidden `stdio-shim` and `mcp-server` only for existing configs. The preview/apply/restore migration is documented in `docs/supported-clients.md`. | Stop writing compatibility names in new configs now; remove them no earlier than `1.0.0` after migration evidence. |
 | Versioned schema compatibility values | `schemas/*.json` | Preserve old enum values only because config/profile schemas are versioned contracts. | Introduce v2 schema names that describe behavior (`blocked-transport`, `adapter-required`) rather than `legacy`. |
 | Release ZIP writer | `scripts/lib/zip-writer.mjs` | Keep contract tests while no maintained packager is wired. | Replace with a maintained ZIP implementation or cargo-dist/cargo-packager flow. |
 | Raw HTTP/TCP | `src/http_probe.rs`, `src/dashboard*.rs` | Keep bounded by timeouts/limits and security tests. | Move outbound HTTP to a maintained client first; migrate dashboard server later under route/security contract tests. |

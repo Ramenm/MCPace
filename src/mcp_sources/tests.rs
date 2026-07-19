@@ -78,7 +78,10 @@ fn temp_root() -> PathBuf {
 
 #[test]
 fn new_fragment_is_detected_and_removed_without_process_restart() {
-    let _environment_lock = crate::LOCAL_SERVER_TEST_LOCK
+    let _local_server_lock = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _environment_lock = crate::resources::TEST_ENV_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
     let _environment = EnvGuard::remove(&["MCPACE_MCP_SETTINGS", "MCPACE_MCP_SETTINGS_DIRS"]);

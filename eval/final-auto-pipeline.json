@@ -3,12 +3,12 @@
   "generatedAt": "2026-05-26T00:00:00Z",
   "status": "production-grade-conservative-auto-ready",
   "summary": "MCPace now has a name-minimized evidence pipeline: static metadata triage for strong cases, live safe probe for weak configured servers, conservative plan-only/blocked handling for untrusted or high-risk packages, and evidence scoring in profileEvidence output. Full policy widening still requires probe evidence on the target machine because random third-party packages must not be executed blindly.",
-  "userFacingCommand": "mcpace auto",
+  "userFacingCommand": "mcpace advanced server auto",
   "maintainerVerificationCommands": [
-    "mcpace lab report",
-    "mcpace lab coverage",
-    "mcpace lab probe --refresh --timeout-ms 30000",
-    "mcpace server test --refresh",
+    "mcpace advanced dev lab report",
+    "mcpace advanced dev lab coverage",
+    "mcpace advanced dev lab probe --refresh --timeout-ms 30000",
+    "mcpace advanced server test --refresh",
     "mcpace upstream_policy_audit --refresh",
     "mcpace upstream_policy_suggest --refresh"
   ],
@@ -74,7 +74,7 @@
       "random 500 per-server second-pass audit",
       "name-free indirect evidence model",
       "profileEvidence evidenceScore/evidenceLevel/automaticAction output",
-      "mcpace lab probe wrapper for safe initialize + tools/list probing",
+      "mcpace advanced dev lab probe wrapper for safe initialize + tools/list probing",
       "tool schema advisory parser for path/sql/url/credential/command/mutation signals",
       "release hygiene: no node_modules, no downloaded package archives, no sandbox paths"
     ],

@@ -13,6 +13,7 @@ use std::path::{Path, PathBuf};
 mod cli;
 mod config;
 mod legacy;
+mod proof;
 mod verify;
 
 use cli::{parse_cli, write_help};
@@ -24,11 +25,15 @@ use config::quote_shellish_token;
 use config::{normalized_linux_path, quote_systemd_token};
 use config::{
     service_config, start_user_supervisor_after_enable, stop_user_supervisor_before_disable,
+    write_autostart_plan,
 };
 use legacy::{
     cleanup_legacy_autostart, cleanup_machine_wide_autostart, legacy_autostart_absent_detail,
     LegacyCleanup,
 };
+use proof::service_prove;
+#[cfg(test)]
+use proof::{report_with_supervisor_proof, SupervisorProof};
 use verify::{
     launches_mcpace_agent, persistent_env_alignment_detail, resources_forwarded,
     service_applied_state_json, target_arg_value, target_root_path_valid, verification_check,
@@ -162,6 +167,7 @@ pub fn run(
         "uninstall" | "disable" => service_uninstall(&launcher, &config, parsed.dry_run),
         "status" => service_status(&launcher, &config),
         "verify" | "doctor" => service_verify(&launcher, &config),
+        "prove" => service_prove(&launcher, &config, parsed.dry_run),
         "print" | "plan" => service_print(&config),
         other => {
             diagnostics::stderr_line(
@@ -389,58 +395,6 @@ fn service_print(config: &ServiceConfig) -> JsonValue {
     report("print", true, false, config, config.warnings.clone(), None)
 }
 
-fn write_autostart_plan(
-    config: &ServiceConfig,
-    dry_run: bool,
-) -> Result<Vec<String>, ServiceConfigError> {
-    write_autostart_plan_impl(config, dry_run)
-}
-
-#[cfg(windows)]
-fn write_autostart_plan_impl(
-    config: &ServiceConfig,
-    dry_run: bool,
-) -> Result<Vec<String>, ServiceConfigError> {
-    let Some(plan_path) = config.autostart_plan_path.as_deref() else {
-        return Err(ServiceConfigError::Autostart(
-            "Windows autostart plan path could not be resolved".to_string(),
-        ));
-    };
-    if dry_run {
-        return Ok(vec![format!(
-            "Dry run: would write Windows autostart plan to '{}'.",
-            plan_path
-        )]);
-    }
-    let plan = expected_windows_autostart_plan(config);
-    let body = serde_json::to_string_pretty(&plan).map_err(|error| {
-        ServiceConfigError::Autostart(format!(
-            "failed to render Windows autostart plan: {}",
-            error
-        ))
-    })?;
-    let path = Path::new(plan_path);
-    runtimepaths::write_text_atomic(path, &format!("{}\n", body)).map_err(|error| {
-        ServiceConfigError::Autostart(format!(
-            "failed to atomically write Windows autostart plan '{}': {}",
-            path.display(),
-            error
-        ))
-    })?;
-    Ok(vec![format!(
-        "Wrote Windows autostart plan to '{}'; Run registry only needs to start the hidden launcher.",
-        plan_path
-    )])
-}
-
-#[cfg(not(windows))]
-fn write_autostart_plan_impl(
-    _config: &ServiceConfig,
-    _dry_run: bool,
-) -> Result<Vec<String>, ServiceConfigError> {
-    Ok(Vec::new())
-}
-
 fn remove_autostart_plan(config: &ServiceConfig, dry_run: bool) -> LegacyCleanup {
     remove_autostart_plan_impl(config, dry_run)
 }
@@ -541,7 +495,7 @@ fn service_verify(launcher: &AutoLaunch, config: &ServiceConfig) -> JsonValue {
                 ("appliedState", service_applied_state_json(config)),
                 (
                     "healthCheckHint",
-                    JsonValue::string("run `mcpace agent status --json` or `mcpace serve status --json` after login/reboot to verify the runtime PID and health endpoint"),
+                    JsonValue::string("run `mcpace status --json` after login/reboot to verify the runtime PID, health endpoint, and login-startup registration"),
                 ),
             ]),
         );
@@ -689,7 +643,7 @@ fn autostart_plan_matches_config_impl(config: &ServiceConfig) -> (bool, String) 
         (
             false,
             format!(
-                "Windows autostart plan '{}' does not match current targetAppPath/targetArgs; run `mcpace autostart repair --json`",
+                "Windows autostart plan '{}' does not match current targetAppPath/targetArgs; run `mcpace advanced autostart repair --json`",
                 plan_path
             ),
         )

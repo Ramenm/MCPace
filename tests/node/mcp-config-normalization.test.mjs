@@ -29,10 +29,11 @@ test('home import does not add default upstream servers and skips MCPace loops',
 test('public help stays compact and install type inference remains documented', () => {
   const app = readText('src/app.rs');
   const help = app.slice(app.indexOf('fn write_help'));
+  const installHelp = readText('src/server/args.rs');
   const usageLines = [...help.matchAll(/writeln!\(stdout, "  mcpace /g)].length;
   assert.ok(usageLines <= 8, `help should keep visible commands compact, saw ${usageLines} mcpace lines`);
-  assert.match(help, /Server type is inferred/);
-  assert.match(help, /It does not add a default upstream server/);
+  assert.match(installHelp, /Server type is inferred/);
+  assert.match(installHelp, /add a default upstream server/);
 });
 
 

@@ -172,7 +172,7 @@ pub fn load_runtime_profile_selection(
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace profile [show] [--json] [--root <path>]"
+        "Usage: mcpace advanced dev profile [show] [--json] [--root <path>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
@@ -183,7 +183,7 @@ fn write_help(stdout: &mut dyn Write) {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace profile",
+    name = "mcpace advanced dev profile",
     disable_version_flag = true,
     about = "Inspect MCPace runtime profiles"
 )]
@@ -261,23 +261,9 @@ fn compose_profile_args(cli: ProfileCli) -> ParsedArgs {
 
 fn profile_argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace profile"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_profile_flag(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced dev profile"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_profile_flag(arg: &str) -> &str {
-    match arg {
-        "-json" => "--json",
-        "-root" => "--root",
-        "-name" => "--name",
-        "-apply" => "--apply",
-        "-?" => "--help",
-        other => other,
-    }
 }
 
 fn build_profile_catalog_from_config(root_path: &Path) -> RuntimeProfileResult<ProfileCatalog> {

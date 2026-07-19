@@ -34,7 +34,9 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
-      - run: npm run check:ci
+      # Preserve the full CI policy/smoke suite in every Node lane while the
+      # Rust matrix below owns the native build and live-runtime proofs.
+      - run: npm run check:ci -- --skip-native-proofs
       - run: npm run pack:npm:dry-run
 
   source-bundle:
@@ -59,11 +61,8 @@ jobs:
 
   rust:
     name: rust / ${{ matrix.os }}
-    if: >-
-      ${{ github.event_name == 'workflow_dispatch' ||
-      github.repository_visibility == 'public' }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 60
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
@@ -81,5 +80,5 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund --omit=optional
       # Endgame is the single owner of locked check/test/fmt/clippy and
       # release-build proof.
-      - run: npm run check:endgame:enforce
-      - run: npm run proof:live-mcp-e2e -- --write
+      - run: npm run check:endgame:enforce -- --write-rust-proof
+      - run: npm run proof:live-mcp-e2e:write

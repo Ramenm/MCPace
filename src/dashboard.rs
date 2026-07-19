@@ -246,6 +246,7 @@ impl Drop for HttpRuntimeMetricsGuard<'_> {
 struct DashboardConfig {
     root_path: PathBuf,
     max_requests: Option<usize>,
+    accept_timeout: Option<Duration>,
     max_connections: usize,
     io_timeout: Duration,
     max_body_bytes: usize,
@@ -411,6 +412,7 @@ fn run_internal(
         DashboardConfig {
             root_path,
             max_requests: parsed.max_requests,
+            accept_timeout: None,
             max_connections: parsed.max_connections,
             io_timeout: parsed.io_timeout,
             max_body_bytes: parsed.max_body_bytes,
@@ -488,7 +490,7 @@ fn is_loopback_bind_host(host: &str) -> bool {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace dashboard",
+    name = "mcpace advanced runtime foreground",
     disable_version_flag = true,
     about = "Serve the local MCPace dashboard UI"
 )]
@@ -624,41 +626,20 @@ fn parsed_from_cli(cli: DashboardCli) -> ParsedArgs {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace dashboard"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced runtime foreground"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_arg(arg: &str) -> String {
-    match arg {
-        "-root" => "--root".to_string(),
-        "-host" => "--host".to_string(),
-        "-port" => "--port".to_string(),
-        "-max-requests" => "--max-requests".to_string(),
-        "-max-connections" => "--max-connections".to_string(),
-        "-io-timeout-ms" => "--io-timeout-ms".to_string(),
-        "-max-body-bytes" => "--max-body-bytes".to_string(),
-        "-overview-cache-ms" => "--overview-cache-ms".to_string(),
-        "-allow-nonlocal-bind" => "--allow-nonlocal-bind".to_string(),
-        "-insecure-nonlocal-bind" => "--insecure-nonlocal-bind".to_string(),
-        "-auth-token-env" => "--auth-token-env".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
 }
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace dashboard [--root <path>] [--host <loopback>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--auth-token-env <NAME>]"
+        "Usage: mcpace advanced runtime foreground [--root <path>] [--host <loopback>] [--port <n>] [--max-requests <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--auth-token-env <NAME>]"
     );
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
-        "dashboard serves a local web UI for hub status, verification, servers, clients, and logs."
+        "The foreground runtime serves the local web UI plus the MCP endpoint."
     );
     let _ = writeln!(
         stdout,
@@ -702,6 +683,18 @@ fn new_upstream_session_pool() -> upstream::UpstreamSessionPool {
 
 fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut dyn Write) -> i32 {
     let max_requests = config.max_requests;
+    let accept_deadline = config
+        .accept_timeout
+        .map(|timeout| Instant::now() + timeout);
+    if accept_deadline.is_some() {
+        if let Err(error) = listener.set_nonblocking(true) {
+            stderr_diagnostics::stderr_line(
+                stderr,
+                format_args!("dashboard failed to bound listener acceptance: {}", error),
+            );
+            return 1;
+        }
+    }
     let worker_count = config.max_connections.max(1);
     let config = Arc::new(config);
     // Keep the listener accepting short-lived local HTTP connections even when
@@ -760,28 +753,127 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
     drop(log_tx);
 
     let mut accepted = 0usize;
-    for incoming in listener.incoming() {
+    let mut exit_code = 0;
+    let mut cancellation_streams = Vec::new();
+    'accept_loop: loop {
         drain_request_worker_logs(&log_rx, stderr);
-        let stream = match incoming {
-            Ok(value) => value,
+        if accept_deadline
+            .map(|deadline| Instant::now() >= deadline)
+            .unwrap_or(false)
+        {
+            stderr_diagnostics::stderr_line(
+                stderr,
+                format_args!(
+                    "dashboard accept deadline expired after {} request(s)",
+                    accepted
+                ),
+            );
+            exit_code = 1;
+            break;
+        }
+
+        let stream = match listener.accept() {
+            Ok((value, _)) => value,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::WouldBlock && accept_deadline.is_some() =>
+            {
+                let retry_delay = accept_deadline
+                    .and_then(|deadline| deadline.checked_duration_since(Instant::now()))
+                    .unwrap_or_default()
+                    .min(Duration::from_millis(5));
+                if !retry_delay.is_zero() {
+                    thread::sleep(retry_delay);
+                }
+                continue;
+            }
             Err(error) => {
                 stderr_diagnostics::stderr_line(
                     stderr,
                     format_args!("dashboard accept failed: {}", error),
                 );
-                drop(request_tx);
-                join_request_workers(handles, stderr);
-                drain_request_worker_logs(&log_rx, stderr);
-                return 1;
+                exit_code = 1;
+                break;
             }
         };
+        if accept_deadline.is_some() {
+            if let Err(error) = stream.set_nonblocking(false) {
+                stderr_diagnostics::stderr_line(
+                    stderr,
+                    format_args!("dashboard failed to normalize accepted stream: {}", error),
+                );
+                exit_code = 1;
+                break;
+            }
+            match stream.try_clone() {
+                Ok(cancellation_stream) => cancellation_streams.push(cancellation_stream),
+                Err(error) => {
+                    stderr_diagnostics::stderr_line(
+                        stderr,
+                        format_args!(
+                            "dashboard failed to retain test stream cancellation: {}",
+                            error
+                        ),
+                    );
+                    exit_code = 1;
+                    break;
+                }
+            }
+        }
 
         accepted = accepted.saturating_add(1);
-        if request_tx.send(stream).is_err() {
+        if let Some(deadline) = accept_deadline {
+            let mut pending = stream;
+            loop {
+                if Instant::now() >= deadline {
+                    stderr_diagnostics::stderr_line(
+                        stderr,
+                        format_args!(
+                            "dashboard accept deadline expired before dispatching request {}",
+                            accepted
+                        ),
+                    );
+                    exit_code = 1;
+                    break 'accept_loop;
+                }
+                match request_tx.try_send(pending) {
+                    Ok(()) => break,
+                    Err(mpsc::TrySendError::Full(returned)) => {
+                        if Instant::now() >= deadline {
+                            stderr_diagnostics::stderr_line(
+                                stderr,
+                                format_args!(
+                                    "dashboard accept deadline expired while dispatching request {}",
+                                    accepted
+                                ),
+                            );
+                            exit_code = 1;
+                            break 'accept_loop;
+                        }
+                        pending = returned;
+                        let retry_delay = deadline
+                            .checked_duration_since(Instant::now())
+                            .unwrap_or_default()
+                            .min(Duration::from_millis(5));
+                        if !retry_delay.is_zero() {
+                            thread::sleep(retry_delay);
+                        }
+                    }
+                    Err(mpsc::TrySendError::Disconnected(_)) => {
+                        stderr_diagnostics::stderr_line(
+                            stderr,
+                            format_args!("dashboard request worker pool stopped unexpectedly"),
+                        );
+                        exit_code = 1;
+                        break 'accept_loop;
+                    }
+                }
+            }
+        } else if request_tx.send(stream).is_err() {
             stderr_diagnostics::stderr_line(
                 stderr,
                 format_args!("dashboard request worker pool stopped unexpectedly"),
             );
+            exit_code = 1;
             break;
         }
         drain_request_worker_logs(&log_rx, stderr);
@@ -792,9 +884,47 @@ fn serve_listener(listener: TcpListener, config: DashboardConfig, stderr: &mut d
     }
 
     drop(request_tx);
-    join_request_workers(handles, stderr);
+    if exit_code != 0 && accept_deadline.is_some() {
+        for stream in &cancellation_streams {
+            let _ = stream.shutdown(Shutdown::Both);
+        }
+        join_request_workers_until(handles, Instant::now() + Duration::from_millis(250), stderr);
+    } else {
+        join_request_workers(handles, stderr);
+    }
     drain_request_worker_logs(&log_rx, stderr);
-    0
+    exit_code
+}
+
+fn join_request_workers_until(
+    handles: Vec<thread::JoinHandle<()>>,
+    deadline: Instant,
+    stderr: &mut dyn Write,
+) {
+    while Instant::now() < deadline && handles.iter().any(|handle| !handle.is_finished()) {
+        let retry_delay = deadline
+            .checked_duration_since(Instant::now())
+            .unwrap_or_default()
+            .min(Duration::from_millis(5));
+        if !retry_delay.is_zero() {
+            thread::sleep(retry_delay);
+        }
+    }
+    for handle in handles {
+        if !handle.is_finished() {
+            stderr_diagnostics::stderr_line(
+                stderr,
+                format_args!("dashboard request worker exceeded its cancellation deadline"),
+            );
+            continue;
+        }
+        if handle.join().is_err() {
+            stderr_diagnostics::stderr_line(
+                stderr,
+                format_args!("dashboard request worker panicked"),
+            );
+        }
+    }
 }
 
 fn join_request_workers(handles: Vec<thread::JoinHandle<()>>, stderr: &mut dyn Write) {
@@ -2713,7 +2843,7 @@ pub(super) fn run_json_command_vec(
 
     let mut stdout_buffer = Vec::new();
     let mut stderr_buffer = Vec::new();
-    let exit_code = app::run(args, &mut stdout_buffer, &mut stderr_buffer);
+    let exit_code = app::run_internal(args, &mut stdout_buffer, &mut stderr_buffer);
     if exit_code != 0 {
         let stderr_text = String::from_utf8(stderr_buffer).unwrap_or_default();
         let stdout_text = String::from_utf8(stdout_buffer).unwrap_or_default();

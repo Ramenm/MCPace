@@ -53,10 +53,10 @@ struct HubCli {
     #[arg(long = "foreground")]
     foreground: bool,
 
-    #[arg(long = "takeover", alias = "replace-existing")]
+    #[arg(long = "takeover")]
     takeover: bool,
 
-    #[arg(long = "server", alias = "name", value_name = "NAME")]
+    #[arg(long = "server", value_name = "NAME")]
     server_name: Option<String>,
 
     #[arg(long = "lease-id", value_name = "ID")]
@@ -71,11 +71,7 @@ struct HubCli {
     #[arg(long = "project-root", value_name = "PATH")]
     project_root: Option<String>,
 
-    #[arg(
-        long = "transport",
-        alias = "ingress",
-        value_name = "stdio|streamable-http"
-    )]
+    #[arg(long = "transport", value_name = "stdio|streamable-http")]
     transport: Option<String>,
 
     #[arg(long = "metadata-json", value_name = "JSON")]
@@ -190,69 +186,32 @@ fn parsed_from_cli(cli: HubCli) -> ParsedArgs {
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
     argv.push(OsString::from("mcpace hub"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.extend(args.iter().map(OsString::from));
     argv
 }
 
-fn normalize_compat_arg(arg: &str) -> String {
-    match normalize_flag(arg).as_str() {
-        "-json" => "--json".to_string(),
-        "-root" => "--root".to_string(),
-        "-tail" => "--tail".to_string(),
-        "-foreground" => "--foreground".to_string(),
-        "-takeover" => "--takeover".to_string(),
-        "-replace-existing" => "--replace-existing".to_string(),
-        "-server" => "--server".to_string(),
-        "-name" => "--name".to_string(),
-        "-lease-id" => "--lease-id".to_string(),
-        "-client-id" => "--client-id".to_string(),
-        "-session-id" => "--session-id".to_string(),
-        "-project-root" => "--project-root".to_string(),
-        "-transport" => "--transport".to_string(),
-        "-ingress" => "--ingress".to_string(),
-        "-metadata-json" => "--metadata-json".to_string(),
-        "-ttl-ms" => "--ttl-ms".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
-}
-
 pub(super) fn write_help(stdout: &mut dyn Write) {
+    let _ = writeln!(stdout, "`mcpace hub` is a hidden internal entrypoint.");
+    let _ = writeln!(stdout, "Use grouped advanced commands instead:");
     let _ = writeln!(
         stdout,
-        "Usage: mcpace hub <up|down|repair|status|logs|lease> [--json] [--root <path>] [options]"
-    );
-    let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Implemented now:");
-    let _ = writeln!(
-        stdout,
-        "  mcpace hub up [--json] [--root <path>] [--foreground]"
-    );
-    let _ = writeln!(stdout, "  mcpace hub down [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace hub repair [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace hub status [--json] [--root <path>]");
-    let _ = writeln!(
-        stdout,
-        "  mcpace hub logs [--json] [--root <path>] [--tail <n>]"
-    );
-    let _ = writeln!(stdout, "  mcpace hub lease list [--json] [--root <path>]");
-    let _ = writeln!(
-        stdout,
-        "  mcpace hub lease acquire --server <name> [--json] [--root <path>] [--client-id <id>] [--session-id <id>] [--project-root <path>] [--transport <stdio|streamable-http>] [--ttl-ms <n>] [--metadata-json <json>]"
+        "  mcpace advanced runtime logs [--json] [--root <path>] [--tail <n>]"
     );
     let _ = writeln!(
         stdout,
-        "    add --takeover to replace an existing conflicting lease owned by the same sessionLeaseId"
+        "  mcpace advanced runtime repair [--json] [--root <path>]"
     );
     let _ = writeln!(
         stdout,
-        "  mcpace hub lease renew --lease-id <id> [--json] [--root <path>] [--ttl-ms <n>]"
+        "  mcpace advanced lease list [--json] [--root <path>]"
     );
     let _ = writeln!(
         stdout,
-        "  mcpace hub lease release --lease-id <id> [--json] [--root <path>]"
+        "  mcpace advanced lease acquire --server <name> [lease options]"
     );
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced lease renew --lease-id <id> [--ttl-ms <n>]"
+    );
+    let _ = writeln!(stdout, "  mcpace advanced lease release --lease-id <id>");
 }

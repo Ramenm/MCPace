@@ -6,12 +6,14 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import test from "node:test";
 import { sameStringRecord } from "../../scripts/lib/proof-records.mjs";
+import { generatedReportFreshness } from "../../scripts/lib/report-freshness.mjs";
 import {
 	createVerifiedArtifactCopy,
 	provenanceGeneratorSha256,
 	rustBuildProvenance,
 	sha256File,
 	verifyRustProofBinding,
+	verifyRustProofRecord,
 } from "../../scripts/lib/rust-build-provenance.mjs";
 
 const repoRoot = path.resolve(import.meta.dirname, "..", "..");
@@ -56,6 +58,44 @@ test("proof record validation rejects omitted and substituted inputs", () => {
 		sameStringRecord({ ...expected, "scripts/unrelated.mjs": "c" }, expected),
 		false,
 	);
+});
+
+test("generated report freshness ignores time but rejects substituted content", () => {
+	const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "mcpace-report-freshness-"));
+	try {
+		fs.mkdirSync(path.join(tmp, "reports"));
+		const expected = {
+			schema: "example.v1",
+			generatedAt: "2026-07-18T00:00:00.000Z",
+			status: "pass",
+		};
+		fs.writeFileSync(
+			path.join(tmp, "reports", "example.json"),
+			JSON.stringify({ ...expected, generatedAt: "2026-07-17T00:00:00.000Z" }),
+		);
+		fs.writeFileSync(path.join(tmp, "reports", "example.md"), "current\n");
+		const options = {
+			repoRoot: tmp,
+			jsonPath: "reports/example.json",
+			expectedReport: expected,
+			markdownPath: "reports/example.md",
+			expectedMarkdown: "current\n",
+		};
+		assert.deepEqual(generatedReportFreshness(options), []);
+		fs.writeFileSync(
+			path.join(tmp, "reports", "example.json"),
+			JSON.stringify({ ...expected, status: "stale" }),
+		);
+		assert.match(generatedReportFreshness(options).join("\n"), /is stale/);
+	} finally {
+		fs.rmSync(tmp, { recursive: true, force: true });
+	}
+});
+
+test("aggregate endgame enforcement does not rewrite source-bound proof evidence", () => {
+	const endgame = read("scripts/endgame-readiness.mjs");
+	assert.match(endgame, /args\.enforce \? \["--enforce"\] : \[\]/);
+	assert.doesNotMatch(endgame, /args\.enforce \? \["--write"\] : \[\]/);
 });
 
 test("project assurance model checks user-visible truth, safety, and unverified gates", () => {
@@ -112,6 +152,7 @@ test("assurance artifacts are part of the release bundle contract", () => {
 		"reports/live-mcp-e2e-proof.json",
 		"scripts/live-mcp-e2e-proof.mjs",
 		"scripts/lib/proof-records.mjs",
+		"scripts/lib/report-freshness.mjs",
 		"scripts/lib/rust-build-provenance.mjs",
 		"reports/rust-live-proof.json",
 		"reports/supply-chain-evidence.json",
@@ -129,6 +170,15 @@ test("assurance artifacts are part of the release bundle contract", () => {
 		/project-assurance\.mjs --check/,
 	);
 	assert.match(packageJson.scripts.check, /check:assurance/);
+	assert.match(packageJson.scripts["check:inventory"], /project-inventory\.mjs --check/);
+	assert.match(packageJson.scripts.check, /check:inventory/);
+	for (const script of [
+		"scripts/project-assurance.mjs",
+		"scripts/platform-proof.mjs",
+		"scripts/project-inventory.mjs",
+	]) {
+		assert.match(read(script), /generatedReportFreshness/);
+	}
 	assert.match(
 		packageJson.scripts["proof:live-mcp-e2e"],
 		/live-mcp-e2e-proof\.mjs/,
@@ -284,6 +334,15 @@ test("Rust proof binding rejects changed sources and foreign binaries", () => {
 			}).binarySha256,
 			report.releaseArtifact.sha256,
 		);
+		assert.equal(
+			verifyRustProofRecord({
+				repoRoot: root,
+				report,
+				proofGeneratorPath: generator,
+			}).binarySha256,
+			report.releaseArtifact.sha256,
+			"a clean source checkout can validate the tracked proof record without a local release binary",
+		);
 		const unstableGenerator = structuredClone(report);
 		unstableGenerator.proofInputSnapshots.after.proofGeneratorSha256 =
 			"0".repeat(64);
@@ -307,7 +366,7 @@ test("Rust proof binding rejects changed sources and foreign binaries", () => {
 					report: unstableArtifact,
 					proofGeneratorPath: generator,
 				}),
-			/not bound to the current Rust proof/,
+			/not internally bound/,
 		);
 		const privateCopy = path.join(root, "private-execution-copy");
 		createVerifiedArtifactCopy(binary, privateCopy, binarySha256);
@@ -423,6 +482,27 @@ test("generated proof reports use environment-neutral root metadata", () => {
 			".",
 			`${script} must not leak a machine-local absolute root`,
 		);
-		assert.equal(report.rootName, path.basename(repoRoot));
+		assert.equal(
+			report.rootName,
+			"mcpace",
+			`${script} must not depend on checkout directory casing`,
+		);
+		if (schema === "mcpace.projectInventory.v1") {
+			assert.deepEqual(report.npmLauncher, {
+				binPath: "packages/npm/cli/bin/mcpace.js",
+				exists: true,
+				executable: true,
+			});
+		}
+	}
+
+	for (const script of [
+		"scripts/build-release-artifacts.mjs",
+		"scripts/live-mcp-e2e-proof.mjs",
+		"scripts/local-proof.mjs",
+	]) {
+		const source = read(script);
+		assert.doesNotMatch(source, /path\.basename\(repoRoot\)/);
+		assert.match(source, /deriveProjectName\(\)/);
 	}
 });

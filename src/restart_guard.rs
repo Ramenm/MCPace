@@ -56,7 +56,7 @@ impl fmt::Display for RestartGuardError {
                 window_ms,
             } => write!(
                 formatter,
-                "{} restart guard blocked launch after {} starts within {} ms; inspect serve logs/status, then run 'mcpace serve stop' to clear the guard after fixing the cause",
+                "{} restart guard blocked launch after {} starts within {} ms; inspect `mcpace status` and `mcpace advanced runtime logs`, then run 'mcpace stop' after fixing the cause",
                 label, attempts, window_ms
             ),
             Self::WriteFailed { path, reason } => {

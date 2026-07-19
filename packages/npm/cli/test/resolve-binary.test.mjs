@@ -315,7 +315,7 @@ test("resolveBinary accepts a matching installed optional native package", () =>
 				ignoreDevBinary: true,
 				ignoreVendoredBinary: true,
 			}),
-			path.resolve(bin),
+			fs.realpathSync(bin),
 		);
 	} finally {
 		fs.rmSync(tmp, { recursive: true, force: true });
@@ -353,7 +353,7 @@ test("resolveBinary requires matching release SHA when the launcher declares one
 				ignoreDevBinary: true,
 				ignoreVendoredBinary: true,
 			}),
-			path.resolve(bin),
+			fs.realpathSync(bin),
 		);
 	} finally {
 		fs.rmSync(tmp, { recursive: true, force: true });
@@ -714,7 +714,7 @@ test("resolveBinary accepts Windows optional native package only when the hidden
 				ignoreDevBinary: true,
 				ignoreVendoredBinary: true,
 			}),
-			path.resolve(bin),
+			fs.realpathSync(bin),
 		);
 	} finally {
 		fs.rmSync(tmp, { recursive: true, force: true });

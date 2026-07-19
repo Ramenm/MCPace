@@ -42,6 +42,27 @@ impl From<ClientRuntimePlanError> for String {
 
 type ClientRuntimePlanResult<T> = Result<T, ClientRuntimePlanError>;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct ClientIntegrationError {
+    message: String,
+}
+
+impl fmt::Display for ClientIntegrationError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for ClientIntegrationError {}
+
+impl From<String> for ClientIntegrationError {
+    fn from(message: String) -> Self {
+        Self { message }
+    }
+}
+
+pub(crate) type ClientIntegrationResult<T> = Result<T, ClientIntegrationError>;
+
 #[derive(Debug, Default, Clone)]
 pub(crate) struct RuntimePlanRequest {
     pub(crate) client_id: Option<String>,
@@ -73,6 +94,13 @@ pub(crate) fn runtime_plan_json(
     actions::build_plan_json(parsed, root_path).map_err(ClientRuntimePlanError::from)
 }
 
+pub(crate) fn remove_owned_integrations(
+    root_path: &Path,
+    dry_run: bool,
+) -> ClientIntegrationResult<JsonValue> {
+    actions::remove_owned_client_integrations(root_path, dry_run)
+}
+
 pub fn run(
     args: &[String],
     default_root: Option<PathBuf>,
@@ -94,7 +122,7 @@ pub fn run(
         diagnostics::stderr_line(
             stderr,
             format_args!(
-                "--dry-run and --diff are currently supported only for 'mcpace client install'"
+                "--dry-run and --diff are currently supported only for 'mcpace advanced client install'"
             ),
         );
         return 2;
@@ -103,7 +131,7 @@ pub fn run(
         diagnostics::stderr_line(
             stderr,
             format_args!(
-                "--backup and --latest are currently supported only for 'mcpace client restore'"
+                "--backup and --latest are currently supported only for 'mcpace advanced client restore'"
             ),
         );
         return 2;

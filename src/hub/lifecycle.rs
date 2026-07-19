@@ -40,7 +40,7 @@ pub(super) fn run_up(
         }
     }
     if current_status.status == "corrupt" {
-        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"));
+        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace advanced runtime repair' to archive bad files and reseed a clean baseline"));
         return 1;
     }
 
@@ -137,7 +137,7 @@ pub(super) fn run_down(
     }
 
     if current_status.status == "corrupt" {
-        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"));
+        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace advanced runtime repair' to archive bad files and reseed a clean baseline"));
         return 1;
     }
 
@@ -197,7 +197,7 @@ pub(super) fn run_repair(
         }
     };
     if status::is_live_status(&current_status.status) {
-        diagnostics::stderr_line(stderr, format_args!("hub repair refuses to run while the runtime is active; stop it first with 'mcpace hub down'"));
+        diagnostics::stderr_line(stderr, format_args!("hub repair refuses to run while the runtime is active; stop MCPace first with 'mcpace stop'"));
         return 1;
     }
 
@@ -318,11 +318,11 @@ fn run_loop(root_path: &Path, stderr: &mut dyn Write) -> i32 {
         return 1;
     }
     if existing_status.status == "stale" {
-        diagnostics::stderr_line(stderr, format_args!("hub runtime state is stale; run 'mcpace hub down' to clean it up before starting again"));
+        diagnostics::stderr_line(stderr, format_args!("hub runtime state is stale; run 'mcpace advanced runtime repair' before starting again"));
         return 1;
     }
     if existing_status.status == "corrupt" {
-        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace hub repair' to archive bad files and reseed a clean baseline"));
+        diagnostics::stderr_line(stderr, format_args!("hub runtime state is corrupt; run 'mcpace advanced runtime repair' to archive bad files and reseed a clean baseline"));
         return 1;
     }
 

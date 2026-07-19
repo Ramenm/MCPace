@@ -1,6 +1,6 @@
 {
   "schema": "mcpace.projectAssurance.v1",
-  "generatedAt": "2026-07-16T14:40:07.427Z",
+  "generatedAt": "2026-07-18T10:00:28.596Z",
   "root": ".",
   "rootName": "mcpace",
   "overall": "pass",
@@ -72,7 +72,7 @@
         "src/dashboard/frontend/app.render.js:renderServerRunbook"
       ],
       "failureMode": "Frontend invents readiness from partial fields and drifts away from backend runtime truth.",
-      "nextCheck": "Compare each server row with mcpace server capabilities <name> --json and verify the same launch/evidence/policy direction."
+      "nextCheck": "Compare each server row with mcpace advanced server capabilities <name> --json and verify the same launch/evidence/policy direction."
     },
     {
       "id": "runtime-control-plane",

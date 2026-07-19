@@ -6,6 +6,7 @@ import process from "node:process";
 import net from "node:net";
 import { spawnSync } from "node:child_process";
 import { commandNeedsShell, windowsCommandShell } from "./lib/process.mjs";
+import { childEnvForCommand } from "./lib/safe-child-env.mjs";
 
 const args = process.argv.slice(2);
 const DEFAULT_TIMEOUT_MS = 90_000;
@@ -59,6 +60,7 @@ function run(command, commandArgs, timeoutMs) {
 			: commandArgs,
 		{
 			encoding: "utf8",
+			env: childEnvForCommand(command),
 			timeout: timeoutMs,
 			windowsHide: true,
 			maxBuffer: 16 * 1024 * 1024,
@@ -204,7 +206,11 @@ async function smoke(parsed) {
 
 		init = parseJson(
 			"init",
-			run(command, ["init", "--root", root, "--json"], parsed.timeoutMs).stdout,
+			run(
+				command,
+				["advanced", "dev", "init", "--root", root, "--json"],
+				parsed.timeoutMs,
+			).stdout,
 		);
 		requireCondition(
 			init.readyForRuntimeOps === true,
@@ -274,16 +280,16 @@ async function smoke(parsed) {
 		);
 
 		stop = parseJson(
-			"serve stop",
+			"stop",
 			run(
 				command,
-				["serve", "stop", "--root", root, "--json"],
+				["stop", "--root", root, "--json"],
 				parsed.timeoutMs,
 			).stdout,
 		);
 		requireCondition(
 			stop.status === "stopped",
-			`serve stop status was ${stop.status}, expected stopped`,
+			`stop status was ${stop.status}, expected stopped`,
 		);
 
 		return {
@@ -307,7 +313,7 @@ async function smoke(parsed) {
 			try {
 				run(
 					command,
-					["serve", "stop", "--root", root, "--json"],
+					["stop", "--root", root, "--json"],
 					parsed.timeoutMs,
 				);
 			} catch (error) {

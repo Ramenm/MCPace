@@ -22,7 +22,7 @@ import {
 // Windows debug linking and antivirus scanning can make a cold locked Cargo
 // command exceed eight minutes even when it is still making progress.
 const SCRIPT_PATH = fileURLToPath(import.meta.url);
-const DEFAULT_TIMEOUT_MS = 20 * 60 * 1000;
+const DEFAULT_TIMEOUT_MS = 30 * 60 * 1000;
 const SHORT_TIMEOUT_MS = 20_000;
 
 function parseArgs(argv) {

@@ -112,6 +112,31 @@ test("rust live proof enforce mode fails closed on a minimal stale Rust tree", (
 
 test("rust live proof scripts are exposed in package metadata and CI list", () => {
 	const packageJson = readRootPackageJson();
+	const proofSource = fs.readFileSync(
+		path.join(repoRoot, "scripts", "rust-live-proof.mjs"),
+		"utf8",
+	);
+	assert.match(
+		proofSource,
+		/DEFAULT_TIMEOUT_MS\s*=\s*30\s*\*\s*60\s*\*\s*1000/,
+		"cold Windows release checks need a load-tolerant per-command deadline",
+	);
+	const endgameSource = fs.readFileSync(
+		path.join(repoRoot, "scripts", "endgame-readiness.mjs"),
+		"utf8",
+	);
+	assert.match(
+		endgameSource,
+		/LONG_TIMEOUT_MS\s*=\s*130\s*\*\s*60\s*\*\s*1000/,
+	);
+	const ciSource = fs.readFileSync(
+		path.join(repoRoot, "scripts", "check-ci.mjs"),
+		"utf8",
+	);
+	assert.match(
+		ciSource,
+		/ENDGAME_TIMEOUT_MS\s*=\s*135\s*\*\s*60\s*\*\s*1000/,
+	);
 	assert.equal(
 		packageJson.scripts["proof:rust-live"],
 		"node scripts/rust-live-proof.mjs --json",
@@ -135,7 +160,45 @@ test("rust live proof scripts are exposed in package metadata and CI list", () =
 		listed.steps.some((step) => step.label === "proof:rust-live"),
 		false,
 	);
-	assert.ok(listed.steps.some((step) => step.label === "check:endgame"));
+	const endgameStep = listed.steps.find(
+		(step) => step.label === "check:endgame",
+	);
+	assert.ok(endgameStep);
+	assert.match(endgameStep.command, /--write-rust-proof/);
+	const filteredList = spawnSync(
+		process.execPath,
+		[
+			"scripts/check-ci.mjs",
+			"--list",
+			"--json",
+			"--skip-native-proofs",
+		],
+		{
+			cwd: repoRoot,
+			encoding: "utf8",
+			windowsHide: true,
+		},
+	);
+	assert.equal(filteredList.status, 0, filteredList.stderr || filteredList.stdout);
+	const filtered = parseJson(filteredList.stdout, "filtered check:ci list");
+	assert.equal(filtered.profile, "without-native-proofs");
+	const filteredLabels = new Set(filtered.steps.map((step) => step.label));
+	assert.deepEqual(
+		listed.steps
+			.filter((step) => !filteredLabels.has(step.label))
+			.map((step) => step.label),
+		["check:endgame", "proof:live-mcp-e2e"],
+	);
+	for (const retained of [
+		"check:security-policy",
+		"check:package",
+		"check:install-smoke",
+		"proof:browser-lifecycle",
+		"check:publish-trust",
+		"release:dry-run",
+	]) {
+		assert.equal(filteredLabels.has(retained), true, `${retained} must remain`);
+	}
 	const workflow = fs.readFileSync(
 		path.join(repoRoot, ".github", "workflows", "ci.yml"),
 		"utf8",
@@ -144,6 +207,16 @@ test("rust live proof scripts are exposed in package metadata and CI list", () =
 		(workflow.match(/npm run check:endgame:enforce/g) || []).length,
 		1,
 	);
+	assert.match(workflow, /npm run check:ci -- --skip-native-proofs/);
+	assert.match(
+		workflow,
+		/npm run check:endgame:enforce -- --write-rust-proof/,
+	);
+	assert.equal(
+		(workflow.match(/npm run proof:live-mcp-e2e:write/g) || []).length,
+		1,
+	);
+	assert.doesNotMatch(workflow, /repository_visibility/);
 	assert.equal(/npm run proof:rust-live:enforce/.test(workflow), false);
 	assert.equal(/cargo build --release --locked --bins/.test(workflow), false);
 });

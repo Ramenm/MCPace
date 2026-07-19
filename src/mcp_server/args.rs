@@ -78,24 +78,8 @@ pub(super) fn parse_cli(args: &[String]) -> ParsedArgs {
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
     argv.push(OsString::from("mcpace stdio"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_flag(arg))),
-    );
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_flag(arg: &str) -> &str {
-    match arg {
-        "-root" => "--root",
-        "-client-id" => "--client-id",
-        "-session-id" => "--session-id",
-        "-project-root" => "--project-root",
-        "-transport" => "--transport",
-        "-json" => "--json",
-        "-?" => "--help",
-        other => other,
-    }
 }
 
 pub(super) fn write_help(stdout: &mut dyn Write) {

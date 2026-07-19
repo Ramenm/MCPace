@@ -35,8 +35,8 @@ body:
     attributes:
       label: Steps run
       placeholder: |
-        mcpace serve --port 39022
-        mcpace server test ...
+        mcpace start --port 39022
+        mcpace advanced server test ...
         client action ...
     validations:
       required: true

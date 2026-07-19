@@ -1309,7 +1309,9 @@ fn build_dashboard_automation_json(
                 ("importSupported", JsonValue::bool(true)),
                 (
                     "importCommand",
-                    JsonValue::string("mcpace server import --from <mcp-settings.json> --dry-run"),
+                    JsonValue::string(
+                        "mcpace advanced server import --from <mcp-settings.json> --dry-run",
+                    ),
                 ),
             ]),
         ),
@@ -3056,25 +3058,25 @@ fn operator_commands(
     let mut commands = Vec::new();
     commands.push(command_json(
         "Inspect",
-        &format!("mcpace server capabilities {} --json", quoted),
+        &format!("mcpace advanced server capabilities {} --json", quoted),
     ));
     if !enabled || lane == "off" {
         commands.push(command_json(
             "Enable",
-            &format!("mcpace server enable {} --json", quoted),
+            &format!("mcpace advanced server enable {} --json", quoted),
         ));
     }
     if enabled || lane == "off" {
         commands.push(command_json(
             "Test",
-            &format!("mcpace server test {} --refresh --json", quoted),
+            &format!("mcpace advanced server test {} --refresh --json", quoted),
         ));
     }
     if needs_policy_change {
         commands.push(command_json(
             "Apply policy",
             &format!(
-                "mcpace server set-policy {} --mode {} --max-workers {} --max-in-flight-per-worker {} --json",
+                "mcpace advanced server set-policy {} --mode {} --max-workers {} --max-in-flight-per-worker {} --json",
                 quoted, recommended_mode, recommended_workers, recommended_in_flight
             ),
         ));

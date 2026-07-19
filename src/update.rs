@@ -179,7 +179,7 @@ enum UpdateSourceArg {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace update",
+    name = "mcpace advanced update",
     disable_version_flag = true,
     about = "Check whether a newer MCPace npm package is available"
 )]
@@ -309,28 +309,13 @@ fn derive_update_source(
 
 fn update_argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace update"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_update_flag(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced update"));
+    argv.extend(args.iter().map(OsString::from));
     argv
 }
 
-fn normalize_update_flag(arg: &str) -> &str {
-    match arg {
-        "-json" => "--json",
-        "-latest-version" => "--latest-version",
-        "-source" => "--source",
-        "-package" => "--package",
-        "-root" => "--root",
-        "-?" => "--help",
-        other => other,
-    }
-}
-
 fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace update check [--json] [--source none|env|npm] [--latest-version <semver>] [--package <name>]");
+    let _ = writeln!(stdout, "Usage: mcpace advanced update check [--json] [--source none|env|npm] [--latest-version <semver>] [--package <name>]");
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,
@@ -594,7 +579,7 @@ fn parse_semver(value: &str) -> Option<(u64, u64, u64)> {
 
 fn recommended_commands(package_name: &str) -> Vec<String> {
     vec![
-        "mcpace update check --source npm".to_string(),
+        "mcpace advanced update check --source npm".to_string(),
         format!("npm install -g {}@latest", package_name),
         format!("npx {}@latest help", package_name),
     ]

@@ -92,7 +92,7 @@ fn discover_servers(
     parsed: &ParsedArgs,
 ) -> Result<JsonValue, String> {
     let config = read_optional_json(&root_path.join("mcpace.config.json"))?;
-    let auto_mode = parsed.auto_mode || parsed.action.as_deref() == Some("auto");
+    let auto_mode = parsed.action.as_deref() == Some("auto");
     let auto_requested = auto_mode || parsed.auto_install;
     let trust_default = config
         .as_ref()
@@ -380,11 +380,11 @@ fn discover_servers(
                 ),
                 (
                     "automaticSweep",
-                    JsonValue::string("mcpace server auto performs the user-facing automatic path: use embedded/local approved candidates without a registry-wide download, refresh query-specific registry metadata for named searches, install up to maxAutoInstallsPerRun trusted/approved candidates, probe live tools/list, and leave unknown/review-only registry entries as plan-only"),
+                    JsonValue::string("mcpace advanced server auto performs the automatic path: use embedded/local approved candidates without a registry-wide download, refresh query-specific registry metadata for named searches, install up to maxAutoInstallsPerRun trusted/approved candidates, probe live tools/list, and leave unknown/review-only registry entries as plan-only"),
                 ),
                 (
                     "nextDynamicStep",
-                    JsonValue::string("after install, MCPace can probe trusted servers automatically when dynamicDiscovery.probeAfterInstall=true; otherwise run mcpace server test <name> --refresh"),
+                    JsonValue::string("after install, MCPace can probe trusted servers automatically when dynamicDiscovery.probeAfterInstall=true; otherwise run mcpace advanced server test <name> --refresh"),
                 ),
             ]),
         ),
@@ -1466,7 +1466,7 @@ fn missing_candidate_configuration(
 ) -> Option<String> {
     if !candidate.required_variables.is_empty() {
         return Some(format!(
-            "candidate '{}' requires Registry URL variable(s): {}. Resolve them and use 'mcpace server install <resolved-url> --as <name>' explicitly",
+            "candidate '{}' requires Registry URL variable(s): {}. Resolve them and use 'mcpace install <resolved-url> --as <name>' explicitly",
             candidate.name,
             candidate.required_variables.join(", ")
         ));
@@ -1806,7 +1806,7 @@ fn render_discovery(result: &JsonValue, stdout: &mut dyn Write) {
     }
     let _ = writeln!(
         stdout,
-        "Next: use `mcpace server auto` or top-level `mcpace auto` for one-command setup/probe; advanced flags remain for debugging."
+        "Next: use `mcpace advanced server auto` for one-command discovery/setup/probe; detailed discovery flags remain for debugging."
     );
 }
 

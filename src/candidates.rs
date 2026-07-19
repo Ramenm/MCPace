@@ -166,12 +166,15 @@ pub fn read_candidates(path: &Path) -> Result<Vec<CandidateSummary>, CandidateCa
 }
 
 fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace candidates [--json] [--root <path>]");
+    let _ = writeln!(
+        stdout,
+        "Usage: mcpace advanced dev candidates [--json] [--root <path>]"
+    );
 }
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace candidates",
+    name = "mcpace advanced dev candidates",
     disable_version_flag = true,
     about = "Inspect candidate MCP servers"
 )]
@@ -213,21 +216,9 @@ fn parse_cli(args: &[String]) -> ParsedArgs {
 
 fn candidates_argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace candidates"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_candidates_flag(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced dev candidates"));
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_candidates_flag(arg: &str) -> &str {
-    match arg {
-        "-json" => "--json",
-        "-root" => "--root",
-        "-?" => "--help",
-        other => other,
-    }
 }
 
 fn normalize_candidate(value: &JsonValue) -> Option<CandidateSummary> {

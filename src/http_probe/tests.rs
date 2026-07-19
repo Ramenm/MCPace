@@ -1,15 +1,37 @@
 use super::*;
 use std::io::{Read, Write};
-use std::net::TcpListener;
 use std::thread;
 use std::time::{Duration, Instant};
 
 #[test]
 fn raw_probe_timeout_is_a_total_deadline_against_trickle_responses() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let listener = crate::bind_loopback_test_listener();
+    listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let server_stop = std::sync::Arc::clone(&stop);
     let handle = thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(3);
+        let (mut stream, _) = loop {
+            if server_stop.load(std::sync::atomic::Ordering::Acquire) || Instant::now() >= deadline
+            {
+                return false;
+            }
+            match listener.accept() {
+                Ok(connection) => break connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("test listener accept failed: {error}"),
+            }
+        };
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
         let mut request = Vec::new();
         let mut buffer = [0u8; 256];
         while request.len() < 4096 {
@@ -30,6 +52,7 @@ fn raw_probe_timeout_is_a_total_deadline_against_trickle_responses() {
             }
             thread::sleep(Duration::from_millis(40));
         }
+        true
     });
     let started = Instant::now();
     let result = raw_response(
@@ -41,7 +64,11 @@ fn raw_probe_timeout_is_a_total_deadline_against_trickle_responses() {
     );
     assert!(result.is_err());
     assert!(started.elapsed() < Duration::from_millis(600));
-    handle.join().unwrap();
+    stop.store(true, std::sync::atomic::Ordering::Release);
+    assert!(
+        handle.join().unwrap(),
+        "trickle-response fixture must accept the bounded probe"
+    );
 }
 
 #[test]

@@ -6,18 +6,25 @@ import { repoRoot as defaultRepoRoot } from "./lib/project-metadata.mjs";
 import { childEnvForCommand } from "./lib/safe-child-env.mjs";
 
 const SHORT_TIMEOUT_MS = 3 * 60 * 1000;
-const LONG_TIMEOUT_MS = 45 * 60 * 1000;
+// The live Rust proof has a 123-minute theoretical sequential command budget.
+const LONG_TIMEOUT_MS = 130 * 60 * 1000;
 
 function parseArgs(argv) {
-	const args = { json: false, enforce: false, repoRoot: defaultRepoRoot };
+	const args = {
+		json: false,
+		enforce: false,
+		writeRustProof: false,
+		repoRoot: defaultRepoRoot,
+	};
 	for (let index = 0; index < argv.length; index += 1) {
 		const arg = argv[index];
 		if (arg === "--json") args.json = true;
 		else if (arg === "--enforce") args.enforce = true;
+		else if (arg === "--write-rust-proof") args.writeRustProof = true;
 		else if (arg === "--repo") args.repoRoot = path.resolve(argv[++index]);
 		else if (arg === "--help" || arg === "-h") {
 			console.log(
-				"Usage: node scripts/endgame-readiness.mjs [--json] [--enforce] [--repo DIR]",
+				"Usage: node scripts/endgame-readiness.mjs [--json] [--enforce] [--write-rust-proof] [--repo DIR]",
 			);
 			process.exit(0);
 		} else {
@@ -52,14 +59,15 @@ function runJson(
 		parseError = error?.message || String(error);
 	}
 	const ok = !result.error && result.status === 0 && parsed && !parseError;
+	const errorCode = result.error?.code || (parseError ? "INVALID_JSON" : null);
 	return {
 		label,
 		script,
-		command: [process.execPath, script, "--json", ...args].join(" "),
+		command: ["node", script, "--json", ...args].join(" "),
 		ok,
 		exitCode: result.status,
 		signal: result.signal,
-		error: result.error?.message || parseError || null,
+		errorCode,
 		stdoutTail: String(result.stdout || "")
 			.split(/\r?\n/)
 			.slice(-30)
@@ -90,9 +98,15 @@ function statusFromReport(step) {
 }
 
 function detailFromReport(step) {
-	if (!step.ok) return step.error || "script did not return valid JSON";
 	const report = step.report;
+	if (!report)
+		return step.errorCode
+			? `script failed (${step.errorCode})`
+			: "script did not return valid JSON";
 	const pieces = [`status=${report.status || "unknown"}`];
+	if (step.exitCode !== 0 && step.exitCode !== null)
+		pieces.push(`exitCode=${step.exitCode}`);
+	if (step.errorCode) pieces.push(`errorCode=${step.errorCode}`);
 	if (Number.isFinite(report.blockers))
 		pieces.push(`blockers=${report.blockers}`);
 	if (Number.isFinite(report.failures))
@@ -125,7 +139,10 @@ function run(args) {
 			repoRoot,
 			"rust-live-proof",
 			"scripts/rust-live-proof.mjs",
-			args.enforce ? ["--write"] : [],
+			[
+				...(args.enforce ? ["--enforce"] : []),
+				...(args.writeRustProof ? ["--write"] : []),
+			],
 			LONG_TIMEOUT_MS,
 		),
 		runJson(
@@ -145,13 +162,48 @@ function run(args) {
 			["--source-tree"],
 		),
 	];
-	const findings = steps.map((step) => ({
-		id: step.label,
-		status: statusFromReport(step),
-		detail: detailFromReport(step),
-		command: step.command,
-		durationMs: step.durationMs,
-	}));
+	const findings = steps.map((step) => {
+		const status = statusFromReport(step);
+		const hasSanitizedRustSchema =
+			step.label === "rust-live-proof" &&
+			step.report?.schema === "mcpace.rustLiveProof.v1";
+		const blockingFindings = (step.report?.findings || [])
+			.filter((item) => ["blocker", "failed", "fail"].includes(item.status))
+			.map((item) =>
+				hasSanitizedRustSchema
+					? {
+							id: item.id,
+							status: item.status,
+							detail: item.detail,
+							command: item.command,
+							exitCode: item.exitCode,
+							signal: item.signal,
+							timedOut: item.timedOut,
+							error: item.error,
+							stdoutTail: item.stdoutTail,
+							stderrTail: item.stderrTail,
+							durationMs: item.durationMs,
+						}
+					: { id: item.id, status: item.status },
+			);
+		return {
+			id: step.label,
+			status,
+			detail: detailFromReport(step),
+			command: step.command,
+			durationMs: step.durationMs,
+			...(status === "blocker"
+				? {
+					diagnostics: {
+						exitCode: step.exitCode,
+						signal: step.signal,
+						// Only rust-live-proof's explicitly sanitized fields are projected.
+						blockingFindings,
+					},
+				}
+				: {}),
+		};
+	});
 
 	const blockers = findings.filter((item) => item.status === "blocker");
 	const warnings = findings.filter((item) => item.status === "warn");
@@ -171,7 +223,7 @@ function run(args) {
 				releaseBlockingFindings.push({
 					gate: step.label,
 					id: item.id,
-					detail: item.detail || item.title || item.reason || "blocked",
+					detail: "blocked",
 				});
 			}
 		}

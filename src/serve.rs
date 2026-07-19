@@ -343,63 +343,29 @@ fn push_path_arg(args: &mut Vec<String>, flag: &str, value: Option<&PathBuf>) {
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
     argv.push(OsString::from("mcpace serve"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.extend(args.iter().map(OsString::from));
     argv
-}
-
-fn normalize_compat_arg(arg: &str) -> String {
-    match arg {
-        "-json" => "--json".to_string(),
-        "-root" => "--root".to_string(),
-        "-host" => "--host".to_string(),
-        "-port" => "--port".to_string(),
-        "-max-requests" => "--max-requests".to_string(),
-        "-max-connections" => "--max-connections".to_string(),
-        "-io-timeout-ms" => "--io-timeout-ms".to_string(),
-        "-max-body-bytes" => "--max-body-bytes".to_string(),
-        "-overview-cache-ms" => "--overview-cache-ms".to_string(),
-        "-allow-nonlocal-bind" => "--allow-nonlocal-bind".to_string(),
-        "-insecure-nonlocal-bind" => "--insecure-nonlocal-bind".to_string(),
-        "-auth-token-env" => "--auth-token-env".to_string(),
-        "-managed-service" => "--managed-service".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
 }
 
 fn write_help(stdout: &mut dyn Write) {
     let _ = writeln!(
         stdout,
-        "Usage: mcpace serve [start|restart|stop|status] [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--managed-service]"
+        "`mcpace serve` is a hidden compatibility entrypoint."
+    );
+    let _ = writeln!(stdout, "Use the public lifecycle commands instead:");
+    let _ = writeln!(stdout, "  mcpace start [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  mcpace stop [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  mcpace restart [--json] [--root <path>]");
+    let _ = writeln!(stdout, "  mcpace status [--json] [--root <path>]");
+    let _ = writeln!(
+        stdout,
+        "  mcpace advanced runtime foreground [--root <path>] [serve options]"
     );
     let _ = writeln!(stdout);
-    let _ = writeln!(stdout, "Public serve surface:");
     let _ = writeln!(
         stdout,
-        "  mcpace serve [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace serve start [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
-    );
-    let _ = writeln!(
-        stdout,
-        "  mcpace serve restart [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>]"
-    );
-    let _ = writeln!(stdout, "  mcpace serve stop [--json] [--root <path>]");
-    let _ = writeln!(stdout, "  mcpace serve status [--json] [--root <path>]");
-    let _ = writeln!(stdout);
-    let _ = writeln!(
-        stdout,
-        "serve is the public one-port MCPace surface. The default local MCP endpoint is {}; override with mcpace.config.json serve.* or MCPACE_SERVE_*/MCPACE_PUBLIC_MCP_URL when needed.",
+        "Default endpoint: {}. Internal service-only flags are intentionally omitted.",
         runtimepaths::default_local_mcp_url()
-    );
-    let _ = writeln!(
-        stdout,
-        "Autostart managers use the hidden --managed-service foreground mode so restart/resource controls own the actual HTTP runtime instead of a detached child."
     );
     let _ = writeln!(
         stdout,
@@ -1044,6 +1010,9 @@ fn agent_supervisor_pid_path(root: &Path) -> PathBuf {
 
 #[cfg(windows)]
 fn request_agent_supervisor_stop(root: &Path) -> Result<(), String> {
+    if !recorded_runtime_is_explicitly_managed(root) && !agent_supervisor_is_active(root) {
+        return Ok(());
+    }
     let path = agent_supervisor_stop_request_path(root);
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|error| {
@@ -1065,16 +1034,28 @@ fn request_agent_supervisor_stop(root: &Path) -> Result<(), String> {
 
 #[cfg(target_os = "linux")]
 fn request_agent_supervisor_stop(root: &Path) -> Result<(), String> {
-    let output = std::process::Command::new("systemctl")
+    if !recorded_runtime_is_explicitly_managed(root) {
+        return Ok(());
+    }
+    let explicitly_direct = false;
+    let output = match std::process::Command::new("systemctl")
         .env("LC_ALL", "C")
         .args(["--user", "stop", "mcpace-agent.service"])
         .output()
-        .map_err(|error| format!("failed to stop systemd user service: {}", error))?;
+    {
+        Ok(output) => output,
+        Err(error)
+            if systemd_command_launch_failure_is_ignorable(error.kind(), explicitly_direct) =>
+        {
+            return Ok(())
+        }
+        Err(error) => return Err(format!("failed to stop systemd user service: {}", error)),
+    };
     if output.status.success() {
         return Ok(());
     }
     let detail = String::from_utf8_lossy(&output.stderr).trim().to_string();
-    if systemd_stop_failure_is_ignorable(&detail, recorded_runtime_is_explicitly_direct(root)) {
+    if systemd_stop_failure_is_ignorable(&detail, explicitly_direct) {
         return Ok(());
     }
     Err(format!("failed to stop systemd user service: {}", detail))
@@ -1102,6 +1083,14 @@ fn systemd_user_manager_unavailable(detail: &str) -> bool {
 }
 
 #[cfg(any(test, target_os = "linux"))]
+fn systemd_command_launch_failure_is_ignorable(
+    kind: std::io::ErrorKind,
+    explicitly_direct: bool,
+) -> bool {
+    explicitly_direct && kind == std::io::ErrorKind::NotFound
+}
+
+#[cfg(any(test, target_os = "linux"))]
 fn systemd_stop_failure_is_ignorable(detail: &str, explicitly_direct: bool) -> bool {
     let normalized = detail.to_ascii_lowercase();
     if normalized.contains("access denied") || normalized.contains("permission denied") {
@@ -1111,16 +1100,29 @@ fn systemd_stop_failure_is_ignorable(detail: &str, explicitly_direct: bool) -> b
         || (explicitly_direct && systemd_user_manager_unavailable(detail))
 }
 
-#[cfg(any(test, target_os = "linux"))]
-fn recorded_runtime_is_explicitly_direct(root: &Path) -> bool {
+#[cfg(any(test, windows, target_os = "linux", target_os = "macos"))]
+fn recorded_runtime_supervision(root: &Path) -> Option<bool> {
     let state_root = runtimepaths::resolve_state_root(root);
     read_state(&runtimepaths::serve_state_path(&state_root))
         .ok()
-        .is_some_and(|state| state.supervisor_managed == Some(false))
+        .and_then(|state| state.supervisor_managed)
+}
+
+#[cfg(test)]
+fn recorded_runtime_is_explicitly_direct(root: &Path) -> bool {
+    recorded_runtime_supervision(root) == Some(false)
+}
+
+#[cfg(any(test, windows, target_os = "linux", target_os = "macos"))]
+fn recorded_runtime_is_explicitly_managed(root: &Path) -> bool {
+    recorded_runtime_supervision(root) == Some(true)
 }
 
 #[cfg(target_os = "macos")]
-fn request_agent_supervisor_stop(_root: &Path) -> Result<(), String> {
+fn request_agent_supervisor_stop(root: &Path) -> Result<(), String> {
+    if !recorded_runtime_is_explicitly_managed(root) {
+        return Ok(());
+    }
     crate::macos_launch_agent::stop(crate::service::APP_NAME).map_err(|error| error.to_string())
 }
 
@@ -1243,7 +1245,7 @@ fn stop_existing_serve_locked(canonical_root: &Path) -> Result<(), String> {
             ProcessMatch::Match => {
                 let token = state.stop_token.as_deref().ok_or_else(|| {
                     format!(
-                        "serve state for pid {} predates cooperative stop tokens; refusing an unsafe raw-PID signal. Verify and stop that older process through the OS supervisor or process manager, then run 'mcpace cleanup runtime' before retrying",
+                        "serve state for pid {} predates cooperative stop tokens; refusing an unsafe raw-PID signal. Verify and stop that older process through the OS supervisor or process manager, then run 'mcpace advanced runtime cleanup runtime' before retrying",
                         state.pid
                     )
                 })?;
@@ -1417,12 +1419,26 @@ struct ServeStatus {
     overview_cache_ms: Option<u64>,
     url: String,
     status: String,
+    identity_verified: bool,
     pid: Option<u32>,
     started_at_ms: Option<u128>,
     stdout_log_path: String,
     stderr_log_path: String,
     restart_guard_path: String,
     warnings: Vec<String>,
+}
+
+fn serve_state_process_identity_matches(state: &ServeState) -> bool {
+    let expected_executable =
+        (!state.runner_path.trim().is_empty()).then(|| Path::new(&state.runner_path));
+    matches!(
+        process_identity::match_process(
+            state.pid,
+            state.process_identity.as_deref(),
+            expected_executable,
+        ),
+        Ok(ProcessMatch::Match)
+    )
 }
 
 fn collect_status(
@@ -1440,20 +1456,28 @@ fn collect_status(
     let port = port_override
         .or_else(|| state.as_ref().map(|value| value.port))
         .unwrap_or(endpoint.port);
-    let running = health_check(&host, port, &endpoint.health_path).unwrap_or(false);
+    let endpoint_healthy = health_check(&host, port, &endpoint.health_path).unwrap_or(false);
+    let identity_verified = state
+        .as_ref()
+        .is_some_and(serve_state_process_identity_matches);
+    let running = endpoint_healthy && identity_verified;
     let mut warnings = Vec::new();
     let status = if running {
         if let Some(state) = &state {
             if let Some(warning) = stale_runner_warning(state) {
                 warnings.push(warning);
             }
-        } else {
-            warnings.push(
-                "serve endpoint is healthy, but no managed serve state file exists; it may be supervised directly by an autostart manager"
-                    .to_string(),
-            );
         }
         "running".to_string()
+    } else if endpoint_healthy {
+        warnings.push(if state.is_some() {
+            "serve endpoint answered, but the recorded PID/process identity does not match; refusing to trust an unrelated or reused process"
+                .to_string()
+        } else {
+            "serve endpoint answered, but no managed state file exists; refusing to trust endpoint health without process identity"
+                .to_string()
+        });
+        "unverified".to_string()
     } else if state.is_some() {
         warnings.push(
             "serve state exists but the MCPace HTTP endpoint did not answer the local health probe"
@@ -1475,6 +1499,7 @@ fn collect_status(
         overview_cache_ms: state.as_ref().and_then(|value| value.overview_cache_ms),
         url: runtimepaths::http_url(&host, port, &endpoint.mcp_path),
         status,
+        identity_verified,
         pid: state.as_ref().map(|value| value.pid).filter(|_| running),
         started_at_ms: state
             .as_ref()
@@ -1528,6 +1553,10 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
             JsonValue::string(status.status.clone()),
         );
         map.insert(
+            "identityVerified".to_string(),
+            JsonValue::bool(status.identity_verified),
+        );
+        map.insert(
             "pid".to_string(),
             match status.pid {
                 Some(value) => JsonValue::number(value),
@@ -1565,6 +1594,15 @@ fn write_status_response(status: &ServeStatus, json_output: bool, stdout: &mut d
     let _ = writeln!(stdout, "URL: {}", status.url);
     let _ = writeln!(stdout, "Host: {}", status.host);
     let _ = writeln!(stdout, "Port: {}", status.port);
+    let _ = writeln!(
+        stdout,
+        "Process identity verified: {}",
+        if status.identity_verified {
+            "yes"
+        } else {
+            "no"
+        }
+    );
     if let Some(value) = status.max_connections {
         let _ = writeln!(stdout, "Max connections: {}", value);
     }
@@ -1726,7 +1764,7 @@ fn acquire_serve_start_lock(state_root: &Path) -> Result<ServeStartLockGuard, St
                 })? {
                     ProcessMatch::Match => {
                         return Err(format!(
-                            "mcpace serve start is already in progress at {} (owner pid {})",
+                            "mcpace start is already in progress at {} (owner pid {})",
                             lock_path.display(),
                             existing_pid
                         ));
@@ -2112,7 +2150,7 @@ fn stale_runner_warning_for_paths(
     match files_have_same_contents(&runner_path, &current_runner_path) {
         Ok(true) => None,
         Ok(false) => Some(format!(
-            "running MCPace serve runner '{}' differs from current binary '{}'; run 'mcpace serve restart --root <project>' after rebuilding or upgrading",
+            "running MCPace serve runner '{}' differs from current binary '{}'; run 'mcpace restart --root <project>' after rebuilding or upgrading",
             sanitize_display(&runner_path),
             sanitize_display(&current_runner_path)
         )),

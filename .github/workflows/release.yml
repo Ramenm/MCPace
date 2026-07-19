@@ -96,7 +96,7 @@ jobs:
       contents: read
       id-token: write
       attestations: write
-    timeout-minutes: 90
+    timeout-minutes: 150
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10  # v6
         with:
@@ -257,10 +257,18 @@ jobs:
         if: matrix.platform == 'win32'
         shell: pwsh
         run: |
-          dotnet tool install --global wix --version 7.0.0
+          # WiX v6 introduced the OSMF and v7 enforces its EULA. Keep this
+          # exact pre-OSMF pin unless a separately reviewed legal decision
+          # approves migration to the fee-bearing toolchain.
+          dotnet tool install --global wix --version 5.0.2 --configfile .github/nuget-wix.config
           "$env:USERPROFILE\.dotnet\tools" |
             Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          & "$env:USERPROFILE\.dotnet\tools\wix.exe" --version
+          $wixPath = "$env:USERPROFILE\.dotnet\tools\wix.exe"
+          $wixVersion = (& $wixPath --version | Out-String).Trim()
+          if ($wixVersion -notmatch '^5\.0\.2(?:\+|$)') {
+            throw "unexpected WiX version: $wixVersion"
+          }
+          $wixVersion
 
       - name: Build GitHub native installer
         env:
@@ -279,6 +287,8 @@ jobs:
 
       - name: Verify Ubuntu/Debian installer
         if: matrix.platform == 'linux'
+        env:
+          MCPACE_DISPOSABLE_AUTOSTART_PROOF: "1"
         run: |
           set -euo pipefail
           installer="$(
@@ -293,11 +303,16 @@ jobs:
           dpkg -s mcpace >/dev/null
           npm run check:installer-runtime-smoke -- \
             --binary /usr/bin/mcpace --json
+          npm run proof:autostart -- \
+            --binary /usr/bin/mcpace --json --allow-manager-skip \
+            --confirm-disposable-user
           sudo apt-get remove -y mcpace
         shell: bash
 
       - name: Verify Windows MSI installer
         if: matrix.platform == 'win32'
+        env:
+          MCPACE_DISPOSABLE_AUTOSTART_PROOF: "1"
         shell: pwsh
         run: |
           $installer = Get-ChildItem `
@@ -305,13 +320,24 @@ jobs:
             -Filter *.msi |
             Select-Object -First 1
           if (-not $installer) { throw 'missing MSI installer' }
+          $msiexec = Join-Path $env:SystemRoot 'System32\msiexec.exe'
+          if (-not (Test-Path -LiteralPath $msiexec -PathType Leaf)) {
+            throw "Windows Installer executable not found: $msiexec"
+          }
           function Invoke-Msi([string[]] $Arguments) {
-            $process = Start-Process msiexec.exe `
-              -ArgumentList $Arguments `
+            $operation = if ($Arguments[0] -eq '/i') { 'install' } else { 'uninstall' }
+            $logPath = Join-Path $env:RUNNER_TEMP "mcpace-msi-$operation.log"
+            $msiArguments = @($Arguments) + @('/L*V', $logPath)
+            $process = Start-Process `
+              -FilePath $msiexec `
+              -ArgumentList $msiArguments `
               -Wait `
               -NoNewWindow `
               -PassThru
             if ($process.ExitCode -ne 0) {
+              if (Test-Path -LiteralPath $logPath) {
+                Get-Content -LiteralPath $logPath -Tail 120
+              }
               $detail = $Arguments -join ' '
               throw "msiexec failed ($($process.ExitCode)): $detail"
             }
@@ -332,7 +358,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $probeRoot | Out-Null
           $configPath = Join-Path $probeRoot 'mcpace.config.json'
           Set-Content -LiteralPath $configPath -Value '{}'
-          $planJson = & $installed autostart print `
+          $planJson = & $installed advanced autostart print `
             --root $probeRoot `
             --json
           $autostartPlan = $planJson | ConvertFrom-Json
@@ -365,12 +391,18 @@ jobs:
           }
           npm run check:installer-runtime-smoke -- `
             --binary $installed --json
+          npm run proof:autostart -- `
+            --binary $installed --json --confirm-disposable-user
+          if ($LASTEXITCODE -ne 0) {
+            throw "Windows autostart lifecycle proof failed: $LASTEXITCODE"
+          }
           Invoke-Msi @('/x', $installer.FullName, '/qn', '/norestart')
 
       - name: Verify macOS PKG installer, receipt, and runtime
         if: matrix.platform == 'darwin'
         env:
           MCPACE_MACOS_BINARY_ARCH: ${{ matrix.macos_binary_arch }}
+          MCPACE_DISPOSABLE_AUTOSTART_PROOF: "1"
         run: |
           set -euo pipefail
           installer="$(
@@ -396,6 +428,8 @@ jobs:
           otool -L /usr/local/bin/mcpace
           npm run check:installer-runtime-smoke -- \
             --binary /usr/local/bin/mcpace --json
+          npm run proof:autostart -- \
+            --binary /usr/local/bin/mcpace --json --confirm-disposable-user
           sudo rm -f /usr/local/bin/mcpace
           sudo rm -rf /usr/local/share/doc/mcpace
           sudo pkgutil --forget io.github.ramenm.mcpace || true

@@ -5,6 +5,11 @@ use crate::text_utils;
 use std::fmt;
 use std::path::Path;
 
+mod removal;
+pub(crate) use removal::{
+    remove_json_mcp_server_entry, remove_toml_mcp_server_block, remove_yaml_mcp_server_entry,
+};
+
 pub(crate) type ConfigEditResult<T> = Result<T, ConfigEditError>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -162,10 +167,6 @@ pub(crate) fn detect_newline(existing: &str) -> &'static str {
     }
 }
 
-fn empty_json_object() -> JsonValue {
-    json_helpers::empty_object()
-}
-
 pub(crate) fn build_toml_mcp_server_block(
     adapter_key_name: &str,
     server_url: &str,
@@ -173,7 +174,7 @@ pub(crate) fn build_toml_mcp_server_block(
 ) -> String {
     let lines = [
         format!("# BEGIN MCPACE MANAGED BLOCK: {}", adapter_key_name),
-        "# This block is managed by `mcpace client install`.".to_string(),
+        "# This block is managed by `mcpace advanced client install`.".to_string(),
         format!("[mcp_servers.{}]", format_toml_table_key(adapter_key_name)),
         format!("url = {}", toml_basic_string(server_url)),
         "enabled = true".to_string(),
@@ -216,7 +217,7 @@ pub(crate) fn apply_json_mcp_server_entry(
     };
     let servers_value = root_object
         .entry(servers_key.to_string())
-        .or_insert_with(empty_json_object);
+        .or_insert_with(json_helpers::empty_object);
     let servers_object = match servers_value {
         JsonValue::Object(map) => map,
         _ => {

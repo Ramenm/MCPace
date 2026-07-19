@@ -124,12 +124,12 @@ MCPace does not silently rewrite its running binary. The supported automatic-upd
 
 ```sh
 mcpace --version
-mcpace update check --source npm
+mcpace advanced update check --source npm
 npm install -g @mcpace/cli@latest
 ```
 
 `mcpace --version` reports the compiled binary/package version. Project configuration
-versions remain visible in `mcpace doctor` as `Config version`, so an installed npm
+versions remain visible in `mcpace advanced doctor` as `Config version`, so an installed npm
 binary is not masked by a local `mcpace.config.json` or a Windows autostart root.
 
 When the local dashboard is open, it checks this same npm metadata once and caches the result for six hours. If a newer version exists, the dashboard shows a copyable package-manager command. It never silently downloads, replaces, or restarts the running binary; set `MCPACE_UPDATE_SOURCE=none` to disable network update checks.

@@ -1,6 +1,6 @@
 use super::*;
-use std::net::TcpListener;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::Instant;
 
 static TEMP_COUNTER: AtomicU64 = AtomicU64::new(0);
 
@@ -17,14 +17,15 @@ fn temp_root() -> PathBuf {
 }
 
 fn free_port() -> u16 {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = crate::bind_loopback_test_listener();
     let port = listener.local_addr().unwrap().port();
     drop(listener);
     port
 }
 
 fn loopback_response_server(status: &str, body: &str) -> (u16, std::thread::JoinHandle<()>) {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let listener = crate::bind_loopback_test_listener();
+    listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
     let response = format!(
         "HTTP/1.1 {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
@@ -33,7 +34,23 @@ fn loopback_response_server(status: &str, body: &str) -> (u16, std::thread::Join
         body
     );
     let handle = std::thread::spawn(move || {
-        let (mut stream, _) = listener.accept().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let (mut stream, _) = loop {
+            if Instant::now() >= deadline {
+                panic!("loopback response fixture did not receive a request before its deadline");
+            }
+            match listener.accept() {
+                Ok(connection) => break connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(Duration::from_millis(5));
+                }
+                Err(error) => panic!("loopback response fixture accept failed: {error}"),
+            }
+        };
+        stream.set_nonblocking(false).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(2)))
+            .unwrap();
         let mut request = [0u8; 1024];
         let _ = std::io::Read::read(&mut stream, &mut request);
         std::io::Write::write_all(&mut stream, response.as_bytes()).unwrap();
@@ -43,6 +60,9 @@ fn loopback_response_server(status: &str, body: &str) -> (u16, std::thread::Join
 
 #[test]
 fn health_probe_accepts_complete_readiness_response() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (port, handle) =
         loopback_response_server("200 OK", r#"{"readiness":{"readyForRuntimeOps":true}}"#);
 
@@ -53,15 +73,19 @@ fn health_probe_accepts_complete_readiness_response() {
 
 #[test]
 fn startup_health_failure_retains_probe_detail() {
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
     let (port, handle) = loopback_response_server("503 Service Unavailable", "{}");
     let probe_error = health_probe_detail("127.0.0.1", port, "/healthz").unwrap_err();
     assert_eq!(probe_error, "health endpoint returned HTTP status 503");
     handle.join().unwrap();
 
-    let unavailable_port = free_port();
-    let startup_error =
-        wait_for_health("127.0.0.1", unavailable_port, "/healthz", 1, Duration::ZERO).unwrap_err();
-    assert!(startup_error.contains("probe failures: 1x connect 127.0.0.1:"));
+    let startup_error = wait_for_health("127.0.0.1", 0, "/healthz", 1, Duration::ZERO).unwrap_err();
+    assert!(
+        startup_error.contains("probe failures: 1x connect 127.0.0.1:0"),
+        "unexpected startup error: {startup_error}"
+    );
 }
 
 #[test]
@@ -113,6 +137,18 @@ fn systemd_stop_errors_are_classified_narrowly() {
     ));
     assert!(!systemd_stop_failure_is_ignorable(
         "Unit mcpace-agent.service not loaded; Permission denied",
+        true
+    ));
+    assert!(systemd_command_launch_failure_is_ignorable(
+        std::io::ErrorKind::NotFound,
+        true
+    ));
+    assert!(!systemd_command_launch_failure_is_ignorable(
+        std::io::ErrorKind::NotFound,
+        false
+    ));
+    assert!(!systemd_command_launch_failure_is_ignorable(
+        std::io::ErrorKind::PermissionDenied,
         true
     ));
 }
@@ -218,13 +254,16 @@ fn serve_start_status_stop_round_trip() {
     let direct_state = read_state(&state_path).unwrap();
     assert_eq!(direct_state.supervisor_managed, Some(false));
     assert!(recorded_runtime_is_explicitly_direct(&root));
+    assert!(!recorded_runtime_is_explicitly_managed(&root));
     let mut supervisor_state = direct_state.clone();
     supervisor_state.supervisor_managed = Some(true);
     write_state(&state_path, &supervisor_state).unwrap();
     assert!(!recorded_runtime_is_explicitly_direct(&root));
+    assert!(recorded_runtime_is_explicitly_managed(&root));
     supervisor_state.supervisor_managed = None;
     write_state(&state_path, &supervisor_state).unwrap();
     assert!(!recorded_runtime_is_explicitly_direct(&root));
+    assert!(!recorded_runtime_is_explicitly_managed(&root));
     write_state(&state_path, &direct_state).unwrap();
 
     let mut status_stdout = Vec::new();
@@ -286,6 +325,37 @@ fn serve_start_status_stop_round_trip() {
         restart_text
     );
 
+    let other_root = temp_root();
+    fs::write(
+        other_root.join("mcpace.config.json"),
+        r#"{"version":"0.8.2","servers":{}}"#,
+    )
+    .unwrap();
+    let mut other_stop_stdout = Vec::new();
+    let mut other_stop_stderr = Vec::new();
+    let other_stop = run(
+        &[
+            "stop".to_string(),
+            "--json".to_string(),
+            "--root".to_string(),
+            other_root.display().to_string(),
+        ],
+        None,
+        &mut other_stop_stdout,
+        &mut other_stop_stderr,
+    );
+    assert_eq!(
+        other_stop,
+        0,
+        "cross-root stop stderr: {}",
+        String::from_utf8_lossy(&other_stop_stderr)
+    );
+    assert!(
+        health_check("127.0.0.1", port, runtimepaths::DEFAULT_LOCAL_HEALTH_PATH).unwrap_or(false),
+        "stopping another root must not stop this runtime"
+    );
+    let _ = fs::remove_dir_all(other_root);
+
     let mut stop_stdout = Vec::new();
     let mut stop_stderr = Vec::new();
     let stop = run(
@@ -311,7 +381,7 @@ fn serve_start_status_stop_round_trip() {
 }
 
 #[test]
-fn status_reports_healthy_endpoint_without_managed_state() {
+fn status_refuses_to_trust_healthy_endpoint_without_managed_identity() {
     let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
@@ -385,12 +455,12 @@ fn status_reports_healthy_endpoint_without_managed_state() {
     );
     let status_text = String::from_utf8(status_stdout).unwrap();
     assert!(
-        status_text.contains(r#""status": "running""#),
+        status_text.contains(r#""status": "unverified""#),
         "stdout: {}",
         status_text
     );
     assert!(
-        status_text.contains("no managed serve state file exists"),
+        status_text.contains("no managed state file exists"),
         "stdout: {}",
         status_text
     );
@@ -686,11 +756,7 @@ fn stale_runner_warning_detects_outdated_runner_copy() {
     fs::write(&current, b"current binary").unwrap();
     fs::write(&runner, b"old").unwrap();
     let warning = stale_runner_warning_for_paths(&runner, &current).unwrap();
-    assert!(
-        warning.contains("mcpace serve restart"),
-        "warning: {}",
-        warning
-    );
+    assert!(warning.contains("mcpace restart"), "warning: {}", warning);
 
     fs::write(&runner, b"current binary").unwrap();
     assert!(stale_runner_warning_for_paths(&runner, &current).is_none());

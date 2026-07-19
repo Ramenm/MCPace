@@ -18,10 +18,11 @@ test('server discover is wired as safe dynamic discovery, not blind execution', 
   assert.match(server, /action\s*==\s*"discover"\s*\|\|\s*action\s*==\s*"auto"/);
   assert.match(args, /"discover"/);
   assert.match(args, /"auto"/);
-  assert.match(args, /--auto/);
-  assert.match(args, /auto_mode/);
+  assert.doesNotMatch(args, /long\s*=\s*"auto"/);
+  assert.doesNotMatch(args, /auto_mode/);
   assert.match(args, /auto_install/);
-  assert.match(app, /\"auto\"\s*\|\s*\"autodiscover\"/);
+  assert.match(app, /"server"\s*=>\s*server::run/);
+  assert.doesNotMatch(app, /"autodiscover"/);
   assert.match(args, /allow_review_install/);
   assert.match(discover, /dynamic-server-discovery/);
   assert.match(discover, /registry\.modelcontextprotocol\.io/);

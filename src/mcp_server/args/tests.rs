@@ -1,13 +1,13 @@
 use super::*;
 
 #[test]
-fn parses_live_stdio_context_with_compat_flags() {
+fn parses_live_stdio_context_with_canonical_flags() {
     let args = vec![
-        "-root".to_string(),
+        "--root".to_string(),
         "/tmp/mcpace".to_string(),
         "--client-id".to_string(),
         "codex".to_string(),
-        "-session-id".to_string(),
+        "--session-id".to_string(),
         "chat-a".to_string(),
         "--json".to_string(),
     ];

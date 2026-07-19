@@ -7,7 +7,11 @@ use crate::json::{parse_str, JsonValue};
 use crate::{json_helpers, mcp_protocol as mcp, text_utils};
 use std::collections::BTreeMap;
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -113,13 +117,24 @@ fn test_http_server(port: u16) -> UpstreamServerConfig {
 }
 
 fn read_test_request(stream: &mut TcpStream) -> String {
-    stream
-        .set_read_timeout(Some(Duration::from_secs(3)))
-        .unwrap();
+    stream.set_nonblocking(true).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(3);
     let mut raw = Vec::new();
     let mut buffer = [0u8; 4096];
     loop {
-        let count = stream.read(&mut buffer).unwrap();
+        let count = match stream.read(&mut buffer) {
+            Ok(count) => count,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < deadline =>
+            {
+                thread::sleep(Duration::from_millis(5));
+                continue;
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                panic!("test HTTP request read exceeded its total deadline")
+            }
+            Err(error) => panic!("test HTTP request read failed: {error}"),
+        };
         if count == 0 {
             break;
         }
@@ -145,7 +160,36 @@ fn read_test_request(stream: &mut TcpStream) -> String {
     String::from_utf8(raw).unwrap()
 }
 
-fn write_test_response(stream: &mut TcpStream, status: &str, body: &str, session: bool) {
+fn write_test_bytes(stream: &mut TcpStream, bytes: &[u8]) -> std::io::Result<()> {
+    stream.set_nonblocking(true)?;
+    let deadline = Instant::now() + Duration::from_secs(3);
+    let mut written = 0;
+    while written < bytes.len() {
+        match stream.write(&bytes[written..]) {
+            Ok(0) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::WriteZero,
+                    "test HTTP response write returned zero bytes",
+                ));
+            }
+            Ok(count) => written += count,
+            Err(error)
+                if error.kind() == std::io::ErrorKind::WouldBlock && Instant::now() < deadline =>
+            {
+                thread::sleep(Duration::from_millis(5));
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(())
+}
+
+fn try_write_test_response(
+    stream: &mut TcpStream,
+    status: &str,
+    body: &str,
+    session: bool,
+) -> std::io::Result<()> {
     let session = if session {
         "Mcp-Session-Id: fault-session\r\n"
     } else {
@@ -155,7 +199,11 @@ fn write_test_response(stream: &mut TcpStream, status: &str, body: &str, session
         "HTTP/1.1 {status}\r\nContent-Type: application/json\r\n{session}Content-Length: {}\r\nConnection: close\r\n\r\n{body}",
         body.len()
     );
-    stream.write_all(response.as_bytes()).unwrap();
+    write_test_bytes(stream, response.as_bytes())
+}
+
+fn write_test_response(stream: &mut TcpStream, status: &str, body: &str, session: bool) {
+    try_write_test_response(stream, status, body, session).unwrap();
 }
 
 fn initialize_response_body() -> String {
@@ -181,13 +229,26 @@ fn initialize_response_body() -> String {
 
 #[test]
 fn initialized_notification_failure_is_not_reported_as_a_live_session() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let listener = crate::bind_loopback_test_listener();
+    listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
     let handle = thread::spawn(move || {
-        for step in 0..3 {
-            let (mut stream, _) = listener.accept().unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        let mut handled = 0usize;
+        while handled < 3 && Instant::now() < deadline {
+            let (mut stream, _) = match listener.accept() {
+                Ok(connection) => connection,
+                Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                    thread::sleep(Duration::from_millis(5));
+                    continue;
+                }
+                Err(error) => panic!("test listener accept failed: {error}"),
+            };
             let request = read_test_request(&mut stream);
-            match step {
+            match handled {
                 0 => write_test_response(&mut stream, "200 OK", &initialize_response_body(), true),
                 1 => write_test_response(
                     &mut stream,
@@ -200,7 +261,9 @@ fn initialized_notification_failure_is_not_reported_as_a_live_session() {
                     write_test_response(&mut stream, "204 No Content", "", false);
                 }
             }
+            handled += 1;
         }
+        handled
     });
 
     let error = run_http_request(
@@ -212,16 +275,38 @@ fn initialized_notification_failure_is_not_reported_as_a_live_session() {
     .expect_err("failed initialized notification must fail")
     .to_string();
     assert!(error.contains("status 500 for notifications/initialized"));
-    handle.join().unwrap();
+    assert_eq!(
+        handle.join().unwrap(),
+        3,
+        "initialize, failed notification, and session cleanup must stay bounded"
+    );
 }
 
 #[test]
 fn http_timeout_is_a_total_lifecycle_budget_not_a_per_step_multiplier() {
-    let listener = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+    let _local_server_guard = crate::LOCAL_SERVER_TEST_LOCK
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let listener = crate::bind_loopback_test_listener();
+    listener.set_nonblocking(true).unwrap();
     let port = listener.local_addr().unwrap().port();
+    let stop = Arc::new(AtomicBool::new(false));
+    let server_stop = Arc::clone(&stop);
     let handle = thread::spawn(move || {
+        let server_deadline = Instant::now() + Duration::from_secs(3);
         for step in 0..3 {
-            let (mut stream, _) = listener.accept().unwrap();
+            let (mut stream, _) = loop {
+                if server_stop.load(Ordering::Relaxed) || Instant::now() >= server_deadline {
+                    return;
+                }
+                match listener.accept() {
+                    Ok(connection) => break connection,
+                    Err(error) if error.kind() == std::io::ErrorKind::WouldBlock => {
+                        thread::sleep(Duration::from_millis(5));
+                    }
+                    Err(error) => panic!("test listener accept failed: {error}"),
+                }
+            };
             let request = read_test_request(&mut stream);
             if step == 0 {
                 write_test_response(&mut stream, "200 OK", &initialize_response_body(), true);
@@ -229,7 +314,8 @@ fn http_timeout_is_a_total_lifecycle_budget_not_a_per_step_multiplier() {
             }
             thread::sleep(Duration::from_millis(600));
             if step == 1 {
-                write_test_response(&mut stream, "202 Accepted", "", false);
+                // The global client deadline can close this delayed connection first.
+                let _ = try_write_test_response(&mut stream, "202 Accepted", "", false);
             } else {
                 let body = request
                     .split_once("\r\n\r\n")
@@ -240,13 +326,11 @@ fn http_timeout_is_a_total_lifecycle_budget_not_a_per_step_multiplier() {
                             .to_compact_string()
                     })
                     .unwrap_or_default();
-                let _ = stream.write_all(
-                    format!(
-                        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
-                        body.len(), body
-                    )
-                    .as_bytes(),
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(), body
                 );
+                let _ = write_test_bytes(&mut stream, response.as_bytes());
             }
         }
     });
@@ -259,12 +343,13 @@ fn http_timeout_is_a_total_lifecycle_budget_not_a_per_step_multiplier() {
         Duration::from_secs(1),
     );
     let elapsed = started.elapsed();
+    stop.store(true, Ordering::Relaxed);
+    handle.join().unwrap();
     assert!(result.is_err());
     assert!(
         elapsed < Duration::from_millis(1_500),
         "global timeout was multiplied across lifecycle steps: {elapsed:?}"
     );
-    handle.join().unwrap();
 }
 
 #[test]

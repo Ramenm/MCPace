@@ -16,7 +16,7 @@ test('final auto pipeline records conservative readiness and remaining target-ma
   assert.equal(pipeline.random500Evidence.foreignPackageArtifactsExcludedFromRelease, true);
   assert.ok(pipeline.readinessScore.safeConservativeRuntime >= 80);
   assert.ok(pipeline.readinessScore.fullAutomaticPolicyWidening < pipeline.readinessScore.productionConfidenceAfterPassingTargetProbe);
-  assert.ok(pipeline.completionState.done.some((item) => /mcpace lab probe/.test(item)));
+  assert.ok(pipeline.completionState.done.some((item) => /mcpace advanced dev lab probe/.test(item)));
   assert.ok(pipeline.completionState.requiresTargetMachineEvidence.some((item) => /Rust cargo/.test(item)));
 });
 

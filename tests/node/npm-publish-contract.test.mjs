@@ -7,6 +7,7 @@ import test from "node:test";
 import zlib from "node:zlib";
 import { repoRoot } from "../../scripts/lib/project-metadata.mjs";
 import { trustedNpmCliPath } from "../../scripts/lib/process.mjs";
+import { cleanChildEnv } from "../../scripts/lib/safe-child-env.mjs";
 
 function runPublishContract(args = ["--json"]) {
 	const result = spawnSync(
@@ -15,6 +16,7 @@ function runPublishContract(args = ["--json"]) {
 		{
 			cwd: repoRoot,
 			encoding: "utf8",
+			env: cleanChildEnv(),
 			windowsHide: true,
 		},
 	);
@@ -120,6 +122,28 @@ test("npm publish contract detects missing native package artifacts before relea
 		(entry) => entry.id === "binary-packages-or-tarballs-exist",
 	);
 	assert.equal(binaryCheck?.status, "failed");
+});
+
+test("npm publish contract uses GitHub SHA only when the caller deliberately preserves it", () => {
+	const githubSha = "c".repeat(40);
+	const result = spawnSync(
+		process.execPath,
+		["scripts/verify-npm-publish-contract.mjs", "--json"],
+		{
+			cwd: repoRoot,
+			encoding: "utf8",
+			env: cleanChildEnv({ GITHUB_SHA: githubSha }),
+			windowsHide: true,
+		},
+	);
+	assert.equal(result.status, 0, result.stderr || result.stdout);
+	const report = parseJson(result.stdout, "GitHub SHA publish contract output");
+	assert.equal(report.releaseSha, githubSha);
+	assert.equal(
+		report.checks.find((entry) => entry.id === "release-sha-metadata")
+			?.status,
+		"failed",
+	);
 });
 
 test("npm publish workflow uses pinned npm for publish and enforces native package contract", () => {
@@ -379,7 +403,10 @@ test("npm publish contract rejects a native tarball from another release SHA", (
 				cwd: repoRoot,
 				encoding: "utf8",
 				windowsHide: true,
-				env: { ...process.env, MCPACE_RELEASE_SHA: expectedSha },
+				env: cleanChildEnv({
+					GITHUB_SHA: "c".repeat(40),
+					MCPACE_RELEASE_SHA: expectedSha,
+				}),
 			},
 		);
 		assert.equal(verify.status, 0, verify.stderr || verify.stdout);

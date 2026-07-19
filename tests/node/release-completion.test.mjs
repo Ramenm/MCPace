@@ -81,6 +81,19 @@ test("installed runtime smoke retains bounded detached-start diagnostics", () =>
 	assert.match(script, /serve stderr tail/);
 	assert.match(script, /serve stdout tail/);
 	assert.match(script, /serveLogDiagnostics\(root\)/);
+	assert.match(
+		script,
+		/env:\s*childEnvForCommand\(command\)/,
+		"the isolated installer root must not inherit developer MCPACE_* overrides",
+	);
+});
+
+test("up checks the raw readiness contract instead of the grouped doctor report", () => {
+	const setup = read("src/setup.rs");
+	assert.match(
+		setup,
+		/"advanced"\.to_string\(\),\s*"doctor"\.to_string\(\),\s*"readiness"\.to_string\(\),\s*"--json"\.to_string\(\)/,
+	);
 });
 
 test("native npm install smoke requires all standard-install inputs and fails closed", () => {
@@ -207,6 +220,8 @@ test("native GitHub installer builder emits installable package shapes", () => {
 		const wxs = fs.readFileSync(reportPath(winReport.wixSourcePath), "utf8");
 		assert.match(wxs, /<Package Name="MCPace"/);
 		assert.match(wxs, /<MajorUpgrade /);
+		assert.match(wxs, /<StandardDirectory Id="ProgramFiles6432Folder">/);
+		assert.doesNotMatch(wxs, /<StandardDirectory Id="ProgramFilesFolder">/);
 		assert.match(wxs, /<Environment Id="MCPacePath" Name="PATH"/);
 		assert.match(wxs, /Name="mcpace\.exe"/);
 		assert.match(wxs, /MCPaceAgentLauncher/);
@@ -495,7 +510,15 @@ test("release workflow builds platform installers and checksummed draft GitHub r
 	assert.match(workflow, /native-release-assets:/);
 	assert.match(workflow, /native GitHub installer/);
 	assert.match(workflow, /compose-release-assets:/);
-	assert.match(workflow, /dotnet tool install --global wix/);
+	assert.match(
+		workflow,
+		/dotnet tool install --global wix --version 5\.0\.2 --configfile \.github[\\/]nuget-wix\.config/,
+	);
+	assert.match(workflow, /\^5\\\.0\\\.2\(\?:\\\+\|\$\)/);
+	assert.doesNotMatch(workflow, /AcceptEula|WIXTOOLSET_WIX_EULA/);
+	const wixNugetConfig = read(".github/nuget-wix.config");
+	assert.match(wixNugetConfig, /<clear\s*\/>/);
+	assert.ok(wixNugetConfig.includes("https://api.nuget.org/v3/index.json"));
 	assert.match(
 		workflow,
 		/Build Linux native binary in glibc baseline container/,
@@ -510,6 +533,9 @@ test("release workflow builds platform installers and checksummed draft GitHub r
 	assert.match(workflow, /pattern: native-release-\*/);
 	assert.match(workflow, /Verify Ubuntu\/Debian installer/);
 	assert.match(workflow, /Verify Windows MSI installer/);
+	assert.match(workflow, /System32\\msiexec\.exe/);
+	assert.match(workflow, /-FilePath \$msiexec/);
+	assert.match(workflow, /\/L\*V/);
 	assert.match(workflow, /PassThru/);
 	assert.match(workflow, /msiexec failed/);
 	assert.match(workflow, /Verify macOS native architecture and dependencies/);

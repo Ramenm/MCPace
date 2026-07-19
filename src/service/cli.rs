@@ -43,12 +43,12 @@ impl Default for ParsedArgs {
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "mcpace autostart",
+    name = "mcpace advanced autostart",
     disable_version_flag = true,
     about = "Manage the visible MCPace Agent user-level autostart entry"
 )]
 struct ServiceCli {
-    #[arg(value_name = "enable|repair|status|verify|disable|print")]
+    #[arg(value_name = "enable|repair|status|verify|prove|disable|print")]
     action: Option<String>,
 
     #[arg(value_name = "EXTRA")]
@@ -152,31 +152,13 @@ fn parsed_from_cli(cli: ServiceCli) -> ParsedArgs {
 
 fn argv(args: &[String]) -> Vec<OsString> {
     let mut argv = Vec::with_capacity(args.len() + 1);
-    argv.push(OsString::from("mcpace autostart"));
-    argv.extend(
-        args.iter()
-            .map(|arg| OsString::from(normalize_compat_arg(arg))),
-    );
+    argv.push(OsString::from("mcpace advanced autostart"));
+    argv.extend(args.iter().map(OsString::from));
     argv
 }
 
-fn normalize_compat_arg(arg: &str) -> String {
-    match arg {
-        "-json" => "--json".to_string(),
-        "-root" => "--root".to_string(),
-        "-host" => "--host".to_string(),
-        "-port" => "--port".to_string(),
-        "-max-connections" => "--max-connections".to_string(),
-        "-io-timeout-ms" => "--io-timeout-ms".to_string(),
-        "-max-body-bytes" => "--max-body-bytes".to_string(),
-        "-overview-cache-ms" => "--overview-cache-ms".to_string(),
-        "-?" => "--help".to_string(),
-        _ => arg.to_string(),
-    }
-}
-
 pub(crate) fn write_help(stdout: &mut dyn Write) {
-    let _ = writeln!(stdout, "Usage: mcpace autostart <enable|repair|status|verify|disable|print> [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]");
+    let _ = writeln!(stdout, "Usage: mcpace advanced autostart <enable|repair|status|verify|prove|disable|print> [--json] [--root <path>] [--host <addr>] [--port <n>] [--max-connections <n>] [--io-timeout-ms <n>] [--max-body-bytes <n>] [--overview-cache-ms <n>] [--dry-run] [--no-enable]");
     let _ = writeln!(stdout);
     let _ = writeln!(
         stdout,

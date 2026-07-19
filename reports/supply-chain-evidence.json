@@ -1,17 +1,17 @@
 {
   "schema": "mcpace.supplyChainEvidence.v1",
-  "generatedAt": "2026-07-16T07:30:37.865Z",
+  "generatedAt": "2026-07-18T00:44:29.854Z",
   "repoRoot": ".",
   "status": "pass",
   "enforce": false,
   "blockers": 0,
   "warnings": 0,
   "fileHashes": {
-    "packageJson": "c44ad8154a9ed43bd850f702c8ad24b78e13dac9823a0dabac71aa18bb5523dc",
+    "packageJson": "5c186e484bbc0e2cd2325214b31772ae6e4c4a8936500f2879519dbc3b85c576",
     "packageLock": "b89a36bab5f2fe39a1c5dd98d1578e92101f18ce999bb730be18b477c408f1d8",
     "cargoToml": "ecdc8a7c6e08735ab7445eb3b0db4976a9a0808b381040dc6845885f4bd7b91c",
     "cargoLock": "2905de1b3a7e6d0e49fa9e645638ca469cdce5fa9c12926baaf1e4106f5c488e",
-    "releaseManifest": "b9ab4c822b402dadad9a298e462c4397253370bc8512f94e447008c70713b0fd"
+    "releaseManifest": "948babb2157b61f979e1d1423d2082c5a419681b7e839319aa19c894dfcd9fda"
   },
   "findings": [
     {
@@ -30,8 +30,8 @@
       "detail": "npm lifecycle scripts are disabled by local config and CI install commands",
       "hasIgnoreScripts": true,
       "ciUsesIgnoreScripts": true,
-      "packageScriptCount": 74,
-      "scriptBytes": 3784
+      "packageScriptCount": 76,
+      "scriptBytes": 3897
     },
     {
       "id": "cargo-dependency-evidence",

@@ -6,7 +6,6 @@ fn strips_preview_json_flag_before_forwarding_to_live_server() {
         "--json".to_string(),
         "--root".to_string(),
         "/tmp/mcpace".to_string(),
-        "-json".to_string(),
         "--client-id".to_string(),
         "codex".to_string(),
     ];

@@ -47,20 +47,25 @@ test("platform proof covers Linux macOS and Windows with native smoke gates", ()
 	assert.deepEqual(report.platforms.published, ["darwin", "linux", "win32"]);
 	assert.deepEqual(report.platforms.workflow, ["darwin", "linux", "win32"]);
 	assert.ok(report.summary.publishedTargetCount >= 6);
-	assert.ok(report.summary.publicCommandCount >= 20);
+	assert.equal(report.summary.publicCommandCount, 10);
 	assert.ok(report.summary.smokeCommandCount >= 15);
+	assert.equal(
+		report.smokeCommands.find((item) => item.command === "status --json")
+			?.expects,
+		"jsonOrStatusOne",
+	);
 
 	const smokeCommands = new Set(
 		report.smokeCommands.map((item) => item.command),
 	);
 	for (const command of [
-		"doctor --json",
-		"verify readiness --json",
-		"server list --json",
-		"server capabilities --json",
-		"client list --json",
-		"hub status --json",
-		"lab report --json",
+		"advanced doctor --json",
+		"advanced server list --json",
+		"advanced server capabilities --json",
+		"advanced client list --json",
+		"advanced dev lab report --json",
+		"advanced autostart --help",
+		"uninstall --help",
 	]) {
 		assert.ok(smokeCommands.has(command), `missing smoke command ${command}`);
 	}
@@ -93,6 +98,26 @@ test("platform proof workflow is manual and runs Node Rust and binary smoke on a
 	assert.match(workflow, /npm run platform:binary-smoke/);
 	assert.match(workflow, /Smoke isolated runtime lifecycle/);
 	assert.match(workflow, /npm run check:installer-runtime-smoke -- --binary/);
+	assert.match(workflow, /npm run proof:autostart/);
+	assert.match(workflow, /MCPACE_DISPOSABLE_AUTOSTART_PROOF:\s*["']?1/);
+	assert.match(workflow, /--confirm-disposable-user/);
+});
+
+test("destructive autostart proof is double-gated to disposable users", () => {
+	const script = read("scripts/autostart-lifecycle-proof.mjs");
+	const releaseWorkflow = read(".github/workflows/release.yml");
+	for (const source of [script, releaseWorkflow]) {
+		assert.match(source, /MCPACE_DISPOSABLE_AUTOSTART_PROOF/);
+		assert.match(source, /--confirm-disposable-user/);
+	}
+	assert.match(script, /refusing to modify the current user's login startup/);
+	assert.match(script, /supervisorVerified/);
+	assert.match(script, /evidence\.recoveryOwnership/);
+	assert.match(script, /delete env\.MCPACE_KILL_PROCESS_TREE_ON_EXIT/);
+	assert.doesNotMatch(
+		script,
+		/MCPACE_KILL_PROCESS_TREE_ON_EXIT\s*:\s*["']1["']/,
+	);
 });
 
 test("platform docs assign source and launcher dry-runs to the correct commands", () => {
@@ -106,6 +131,18 @@ test("platform docs assign source and launcher dry-runs to the correct commands"
 		/`pack:npm:dry-run` separately validates launcher packaging/,
 	);
 	assert.doesNotMatch(docs, /source-archive and launcher packaging only/);
+});
+
+test("native binary smoke and static platform proof share one canonical command matrix", () => {
+	const binarySmoke = read("scripts/platform-binary-smoke.mjs");
+	const platformProof = read("scripts/platform-proof.mjs");
+	for (const source of [binarySmoke, platformProof]) {
+		assert.match(source, /platformSmokeCommands/);
+		assert.match(source, /lib\/platform-smoke-commands\.mjs/);
+	}
+	assert.doesNotMatch(binarySmoke, /args:\s*\[\s*["']doctor["']/);
+	assert.doesNotMatch(binarySmoke, /jsonOrNonzero/);
+	assert.match(binarySmoke, /jsonOrStatusOne/);
 });
 
 test("platform proof scripts and reports are part of package checks and release bundle", () => {
@@ -125,6 +162,7 @@ test("platform proof scripts and reports are part of package checks and release 
 	for (const required of [
 		"scripts/platform-proof.mjs",
 		"scripts/platform-binary-smoke.mjs",
+		"scripts/lib/platform-smoke-commands.mjs",
 		"reports/platform-proof.md",
 		"reports/platform-proof.json",
 	]) {

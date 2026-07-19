@@ -376,7 +376,7 @@ pub(super) fn acquire_runtime_lock(
                 .and_then(|value| u128::try_from(value).ok());
             if let Some(reason) = existing.error {
                 return Err(format!(
-                    "hub runtime lock exists but is unreadable: {}. Run 'mcpace hub repair' to archive and reseed it",
+                    "hub runtime lock exists but is unreadable: {}. Run 'mcpace advanced runtime repair' to archive and reseed it",
                     reason
                 ).into());
             }
@@ -389,7 +389,7 @@ pub(super) fn acquire_runtime_lock(
                     format!("hub runtime lock is already held by pid {}", owner_pid)
                 }
                 _ => format!(
-                    "hub runtime lock already exists at {}; run 'mcpace hub down' or 'mcpace hub repair' to clean it up before starting again",
+                    "hub runtime lock already exists at {}; run 'mcpace advanced runtime repair' before starting again",
                     lock_path.display()
                 ),
             }.into())

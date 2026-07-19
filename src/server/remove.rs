@@ -20,7 +20,7 @@ pub(super) fn run(
         return 1;
     };
     let Some(name) = parsed.name_filter.clone() else {
-        diagnostics::stderr_line(stderr, format_args!("server remove requires a server name, for example: mcpace server remove filesystem"));
+        diagnostics::stderr_line(stderr, format_args!("server remove requires a server name, for example: mcpace advanced server remove filesystem"));
         return 2;
     };
     let result = match mcp_sources::remove_mcp_server_entry(

@@ -97,3 +97,16 @@ jobs:
           binary='target/release/mcpace'
           if [ "$RUNNER_OS" = 'Windows' ]; then binary+='.exe'; fi
           npm run check:installer-runtime-smoke -- --binary "$binary" --json
+      - name: Prove disposable user-login lifecycle without reboot
+        env:
+          MCPACE_DISPOSABLE_AUTOSTART_PROOF: "1"
+        shell: bash
+        run: |
+          set -euo pipefail
+          binary='target/release/mcpace'
+          if [ "$RUNNER_OS" = 'Windows' ]; then binary+='.exe'; fi
+          args=(--binary "$binary" --json --confirm-disposable-user)
+          if [ "$RUNNER_OS" = 'Linux' ]; then
+            args+=(--allow-manager-skip)
+          fi
+          npm run proof:autostart -- "${args[@]}"

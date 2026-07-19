@@ -1,15 +1,15 @@
 use super::*;
 
 #[test]
-fn parses_probe_options_with_compat_flags() {
+fn parses_probe_options_with_canonical_flags() {
     let parsed = parse_cli(&[
         "probe".to_string(),
-        "-id".to_string(),
+        "--id".to_string(),
         "filesystem".to_string(),
-        "-timeout-ms".to_string(),
+        "--timeout-ms".to_string(),
         "500".to_string(),
-        "-refresh".to_string(),
-        "-json".to_string(),
+        "--refresh".to_string(),
+        "--json".to_string(),
     ]);
     assert!(parsed.error.is_none());
     assert_eq!(parsed.action.as_deref(), Some("probe"));
