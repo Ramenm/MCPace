@@ -54,7 +54,7 @@ jobs:
           queries: security-extended
 
       - name: Analyze JavaScript
-        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4
+        uses: github/codeql-action/analyze@e0647621c2984b5ed2f768cb892365bf2a616ad1  # v4
         with:
           category: /language:javascript-typescript
 
@@ -79,7 +79,7 @@ jobs:
           build-mode: none
 
       - name: Analyze Rust
-        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9  # v4
+        uses: github/codeql-action/analyze@e0647621c2984b5ed2f768cb892365bf2a616ad1  # v4
         with:
           category: /language:rust
 
