@@ -101,7 +101,7 @@
     }
   },
   "devDependencies": {
-    "publint": "^0.3.21"
+    "publint": "^0.3.25"
   },
   "repository": {
     "type": "git",
